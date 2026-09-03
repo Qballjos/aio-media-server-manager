@@ -12,6 +12,12 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
+from api.routers import applications as applications_router
+from api.routers import auth as auth_router
+from api.routers import catalog as catalog_router
 from api.routers import health as health_router
 from api.routers import system as system_router
 from core.settings import settings
@@ -26,7 +32,10 @@ individual Docker containers for each application.
 
 ### Quick links
 - **[Health](/health)** — Service health check
-- **[System info](/api/system/info)** — Paths, permissions, process status
+- **[Auth](/api/auth/status)** — Session status and setup
+- **[Catalog](/api/catalog)** — Available applications and ports
+- **[Applications](/api/applications)** — Process status and lifecycle
+- **[System info](/api/system/info)** — Paths, permissions, system status
 """
 
 
@@ -57,7 +66,15 @@ def create_app() -> FastAPI:
     # Routers
     # ------------------------------------------------------------------
     app.include_router(health_router.router)
+    app.include_router(auth_router.router)
+    app.include_router(catalog_router.router)
+    app.include_router(applications_router.router)
     app.include_router(system_router.router)
+
+    # Mount frontend dist if built
+    frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if frontend_dist.is_dir():
+        app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 
     # ------------------------------------------------------------------
     # Lifecycle hooks

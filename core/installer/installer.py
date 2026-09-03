@@ -17,6 +17,8 @@ import json
 import logging
 import os
 import shutil
+import subprocess
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -127,14 +129,22 @@ class AppInstaller:
             progress_callback=progress_callback,
         )
 
-        # 5. Extract and atomically activate
+        # 5. Extract and atomically activate (or copy a raw binary)
         install_root = self.settings.install_dir / app_name
-        executable_path = self.activate_archive(
-            archive_path=archive_path,
-            target_install_dir=install_root,
-            executable_name=executable_name,
-            app_name=app_name,
-        )
+        if _looks_like_archive(archive_path):
+            executable_path = self.activate_archive(
+                archive_path=archive_path,
+                target_install_dir=install_root,
+                executable_name=executable_name,
+                app_name=app_name,
+            )
+        else:
+            executable_path = self.activate_binary(
+                binary_path=archive_path,
+                target_install_dir=install_root,
+                executable_name=executable_name,
+                app_name=app_name,
+            )
 
         # 6. Save installation metadata
         metadata = {
@@ -233,6 +243,93 @@ class AppInstaller:
             executable_path=executable_path,
             asset_name=filename,
             sha256=computed_sha,
+            installed_at=metadata["installed_at"],
+        )
+
+    def install_from_pypi(
+        self,
+        package: str,
+        app_name: str,
+        *,
+        extra_packages: Sequence[str] | None = None,
+    ) -> InstallResult:
+        """
+        Create a dedicated virtualenv and install an official PyPI package.
+        The executable is expected at ``{install_dir}/venv/bin/{package}``.
+        """
+        install_root = self.settings.install_dir / app_name
+        venv_dir = install_root / "venv"
+        install_root.mkdir(parents=True, exist_ok=True)
+
+        logger.info("Creating virtualenv for '%s' at %s", app_name, venv_dir)
+        subprocess.run(
+            [sys.executable, "-m", "venv", str(venv_dir)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        pip = venv_dir / "bin" / "pip"
+        if not pip.is_file():
+            pip = venv_dir / "Scripts" / "pip.exe"
+        packages = [package, *(extra_packages or ())]
+        logger.info("Installing PyPI packages for '%s': %s", app_name, ", ".join(packages))
+        subprocess.run(
+            [str(pip), "install", "--upgrade", "pip", *packages],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        executable = venv_dir / "bin" / package
+        if not executable.is_file():
+            executable = venv_dir / "Scripts" / f"{package}.exe"
+        if not executable.is_file():
+            raise FileNotFoundError(
+                f"PyPI package '{package}' installed but executable was not found in {venv_dir}."
+            )
+
+        version = "pypi"
+        try:
+            show = subprocess.run(
+                [str(pip), "show", package],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            for line in show.stdout.splitlines():
+                if line.lower().startswith("version:"):
+                    version = line.split(":", 1)[1].strip()
+                    break
+        except subprocess.CalledProcessError:
+            pass
+
+        metadata = {
+            "app_name": app_name,
+            "version": version,
+            "asset_name": package,
+            "sha256": "",
+            "source": "pypi",
+            "installed_at": time.time(),
+            "arch": detect_system_arch().value,
+        }
+        with open(install_root / ".amm_installed.json", "w", encoding="utf-8") as fh:
+            json.dump(metadata, fh, indent=2)
+
+        self.storage_manager.apply_permissions(
+            install_root,
+            puid=self.settings.puid,
+            pgid=self.settings.pgid,
+            recursive=True,
+        )
+
+        return InstallResult(
+            app_name=app_name,
+            version=version,
+            install_dir=install_root,
+            executable_path=executable,
+            asset_name=package,
+            sha256="",
             installed_at=metadata["installed_at"],
         )
 
@@ -363,6 +460,22 @@ class AppInstaller:
             if previous_backup_dir.exists():
                 shutil.rmtree(previous_backup_dir, ignore_errors=True)
 
+    def activate_binary(
+        self,
+        binary_path: Path,
+        target_install_dir: Path,
+        executable_name: str,
+        app_name: str,
+    ) -> Path:
+        """Copy a standalone binary into the install directory."""
+        target_install_dir = Path(target_install_dir).resolve()
+        target_install_dir.mkdir(parents=True, exist_ok=True)
+        dest = target_install_dir / executable_name
+        shutil.copy2(binary_path, dest)
+        dest.chmod(dest.stat().st_mode | 0o755)
+        logger.info("Installed standalone binary for '%s' at %s", app_name, dest)
+        return dest
+
     @staticmethod
     def _find_executable(base_dir: Path, name: str) -> Path | None:
         """
@@ -377,3 +490,10 @@ class AppInstaller:
                 return candidate
 
         return None
+
+
+def _looks_like_archive(path: Path) -> bool:
+    name = path.name.lower()
+    return name.endswith(
+        (".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".tar", ".zip", ".deb", ".7z")
+    )

@@ -1,0 +1,186 @@
+"""
+api/routers/applications.py — Application Lifecycle & Subprocess Management
+
+Provides controls to start, stop, restart, poll status, and view logs of
+managed applications.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Request, status
+
+from applications.catalog import ApplicationCatalog
+from core.auth import auth_manager
+from core.settings import settings
+from core.supervisor import ProcessSupervisor
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/applications", tags=["Applications"])
+
+catalog = ApplicationCatalog(app_settings=settings)
+
+
+def _ensure_authenticated(request: Request) -> None:
+    if not auth_manager.setup_required():
+        auth_manager.authenticate_request(request)
+
+
+@router.get("", summary="List managed applications and live statuses")
+async def list_applications(request: Request) -> dict[str, Any]:
+    """
+    Returns live process and health state for all catalog applications.
+    """
+    _ensure_authenticated(request)
+    supervisor = ProcessSupervisor.get()
+    active_procs = {p["name"]: p for p in supervisor.list_processes()}
+
+    results = []
+    for plugin in catalog.all_plugins():
+        name = plugin.name
+        proc_info = active_procs.get(name)
+
+        is_installed = plugin.is_installed()
+        meta = plugin.installed_metadata() if is_installed else {}
+
+        state = proc_info["state"] if proc_info else "stopped"
+        pid = proc_info["pid"] if proc_info else None
+        started_at = proc_info["started_at"] if proc_info else None
+        uptime = int(time.monotonic() - started_at) if (started_at and state == "running") else 0
+
+        results.append(
+            {
+                "name": name,
+                "display_name": plugin.manifest.display_name,
+                "category": plugin.manifest.category.value,
+                "tier": plugin.manifest.tier.value,
+                "port": plugin.port,
+                "installed": is_installed,
+                "installed_version": meta.get("version"),
+                "state": state,
+                "pid": pid,
+                "uptime_seconds": uptime,
+                "health_url": plugin.health_check_url(),
+                "web_ui_url": f"http://{request.url.hostname}:{plugin.port}",
+            }
+        )
+
+    return {"applications": results}
+
+
+@router.post("/{name}/start", summary="Start an application process")
+async def start_application(name: str, request: Request) -> dict[str, Any]:
+    """
+    Launches the application's executable via ProcessSupervisor.
+    """
+    _ensure_authenticated(request)
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    if not plugin.is_installed():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot start '{name}' because it is not installed.",
+        )
+
+    supervisor = ProcessSupervisor.get()
+    cmd = plugin.start_command()
+    env = plugin.extra_env()
+    cwd = plugin.working_directory()
+    log_dir = settings.config_dir / "logs"
+
+    try:
+        await supervisor.start(
+            name=name,
+            cmd=cmd,
+            cwd=cwd,
+            env=env,
+            log_dir=log_dir,
+        )
+    except RuntimeError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
+
+    return {
+        "status": "started",
+        "name": name,
+        "state": supervisor.status(name).value,
+    }
+
+
+@router.post("/{name}/stop", summary="Stop an application process")
+async def stop_application(name: str, request: Request) -> dict[str, Any]:
+    """
+    Gracefully stops the application process.
+    """
+    _ensure_authenticated(request)
+    try:
+        catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    supervisor = ProcessSupervisor.get()
+    await supervisor.stop(name)
+
+    return {
+        "status": "stopped",
+        "name": name,
+        "state": supervisor.status(name).value,
+    }
+
+
+@router.post("/{name}/restart", summary="Restart an application process")
+async def restart_application(name: str, request: Request) -> dict[str, Any]:
+    """
+    Stops then restarts the application process.
+    """
+    _ensure_authenticated(request)
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    supervisor = ProcessSupervisor.get()
+    if supervisor.status(name).value == "stopped":
+        # If stopped, simply start it
+        cmd = plugin.start_command()
+        await supervisor.start(
+            name=name,
+            cmd=cmd,
+            cwd=plugin.working_directory(),
+            env=plugin.extra_env(),
+            log_dir=settings.config_dir / "logs",
+        )
+    else:
+        await supervisor.restart(name)
+
+    return {
+        "status": "restarted",
+        "name": name,
+        "state": supervisor.status(name).value,
+    }
+
+
+@router.get("/{name}/logs", summary="Get application process logs")
+async def get_application_logs(name: str, request: Request) -> dict[str, Any]:
+    """
+    Returns recent stdout/stderr output lines for an application.
+    """
+    _ensure_authenticated(request)
+    try:
+        catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    supervisor = ProcessSupervisor.get()
+    logs = supervisor.get_logs(name)
+
+    return {
+        "name": name,
+        "lines": logs,
+    }

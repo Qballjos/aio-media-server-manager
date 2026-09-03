@@ -1,6 +1,11 @@
 # Development Roadmap
 
+Aligned with [PROMPT.md](PROMPT.md). Phases follow the methodology defined in §37.
+
+---
+
 ## Phase 1: Architecture & Foundation
+
 * [x] Research DUMB Architecture
 * [x] Define Target Architecture & Deployment Modes
 * [x] Initialize project structure (Python, FastAPI, Frontend framework)
@@ -10,86 +15,135 @@
 ---
 
 ## Phase 2: MVP Core Applications & Installer
+
+Per PROMPT.md §37 Phase 3 — MVP stack only: manager, dashboard, catalog, process manager, installer, storage configuration, and the seven core applications below.
+
 * [x] Implement Generic App Installer:
-  * [x] Multi-architecture detection (`x86_64`, `ARM64`)
+  * [x] Multi-architecture detection (`x86_64`, `ARM64`, `ARMv7` where upstream supports it)
   * [x] GitHub release scraper & binary extractor (`.tar.gz`, `.zip`, `.deb`)
   * [x] Hash / checksum validation
+* [ ] Extend installer for additional upstream formats (Python apps, Node apps, official `.deb` packages)
 * [ ] Application Catalog & Manifest System:
   * Application metadata, tier definitions (Core, Recommended, Optional, Experimental)
   * Dependency graph resolution
+  * ARM64 availability indicator per application
 * [ ] Port Manager & Conflict Detection:
   * Registry of active and requested application ports
   * Automatic collision detection and alternative port recommendation
-* [ ] Build Application Plugins for Core Stack:
+* [ ] Manager Authentication (**required before dashboard/API exposure**):
+  * Local admin account (created during first-run wizard or initial setup)
+  * bcrypt password hashing and JWT session management
+  * CSRF protection on state-changing requests
+  * API rate limiting
+  * No anonymous access to management endpoints
+* [ ] Build Application Plugins for **MVP Core Stack**:
   * **Prowlarr** (Indexer manager)
   * **Sonarr** (TV automation)
   * **Radarr** (Movie automation)
-  * **SABnzbd** & **NZBGet** (Usenet downloaders — user choice)
-  * **qBittorrent** (BitTorrent downloader)
-  * **Jellyfin** & **Plex** (Media servers — support either or both concurrently)
+  * **SABnzbd** (Usenet downloader — NZBGet deferred to Phase 4)
+  * **qBittorrent** (BitTorrent downloader — normal WebUI/API)
+  * **Jellyfin** (Media server — Plex deferred to Phase 4)
   * **Seerr** (Request management)
 * [ ] Web Dashboard MVP:
-  * Real-time service status, health checks, and process controls (Start / Stop / Restart)
-  * Subprocess log inspector
+  * Real-time service status, health, version, and uptime per application
+  * Process controls (Start / Stop / Restart / Open WebUI)
+  * Per-application CPU and RAM usage (basic)
+  * Subprocess log inspector (basic; full centralized viewer in Phase 3)
 
 ---
 
 ## Phase 3: Automatic Integration Engine & First-Run Wizard
+
+* [ ] Encrypted Secret Storage for application credentials (Fernet, filesystem permissions, masked UI fields)
 * [ ] Develop Automatic Integration Engine via APIs:
-  * Configure categories (`sonarr`, `radarr`) in SABnzbd, NZBGet, and qBittorrent
-  * Register download clients inside Sonarr and Radarr
-  * Register Sonarr/Radarr applications in Prowlarr with automatic indexer synchronization
-  * Link Seerr to Sonarr, Radarr, and Jellyfin/Plex
-* [ ] Guided 12-Step First-Run Wizard:
-  * Storage path setup & hardlink validation
-  * PUID/PGID and permissions configuration
-  * Interactive selection of download clients, *Arrs, media servers, and optimization tools
-  * Real-time installation progress display
+  * **Core wiring (automatic at install):**
+    * Configure categories (`sonarr`, `radarr`) in SABnzbd and qBittorrent
+    * Register download clients inside Sonarr and Radarr
+    * Register Sonarr/Radarr in Prowlarr with automatic indexer synchronization
+    * Link Seerr to Sonarr, Radarr, and Jellyfin
+    * Configure root folders and basic download handling defaults
+  * **Sensible defaults only (not full TRaSH tuning):**
+    * Basic naming templates and quality profile placeholders
+  * **Deferred to Phase 4 optimization tools (not duplicated by the integration engine):**
+    * TRaSH Guides quality profiles and custom formats → **Recyclarr**
+    * Advanced profile management → **Profilarr**
+    * *Arr ecosystem optimization → **NeutArr**
+* [ ] Guided 12-Step First-Run Wizard (PROMPT.md §26):
+  1. Welcome
+  2. Platform detection
+  3. Storage configuration (with hardlink validation warnings)
+  4. User / permissions (PUID / PGID)
+  5. Download clients (SABnzbd, qBittorrent)
+  6. VPN (optional — full implementation in Phase 5; wizard allows skip / configure later)
+  7. *Arr selection (Prowlarr, Sonarr, Radarr)
+  8. Media server (Jellyfin)
+  9. Request system (Seerr)
+  10. Recommended tools (preview selections — installed in Phase 4)
+  11. Review
+  12. Install (real-time progress display)
 * [ ] Crash Loop Detection & Resilience:
   * Detection of repeated process failures (≥5 crashes in 10 mins)
-  * Backoff scheduling & UI alert states
+  * Backoff scheduling, halt auto-restart, and UI alert states
 * [ ] Centralized Live Log Viewer:
-  * WebSocket log streaming
-  * Search, error filtering, and automatic credential/secret redaction
+  * WebSocket log streaming (all logs and per-application)
+  * Search, error filtering, download, and automatic credential/secret redaction
 
 ---
 
-## Phase 4: Extended Tools, Updates & Backups
-* [ ] Build Recommended & Optional Application Plugins:
+## Phase 4: Extended Applications, Updates & Backups
+
+Per PROMPT.md §37 Phase 4.
+
+* [ ] MVP-deferred core applications:
+  * **Plex** (media server — can run concurrently with Jellyfin on shared media library)
+  * **NZBGet** (alternative Usenet client — user choice alongside or instead of SABnzbd)
+* [ ] Recommended & Optional Application Plugins:
   * **Bazarr** (Subtitles)
   * **Unpackerr** (Archive extraction)
-  * **Recyclarr** (TRaSH guides synchronization)
+  * **Recyclarr** (TRaSH Guides synchronization)
   * **Profilarr** (Profile management)
   * **NeutArr** (Automation optimizer)
-  * **Extended *Arr**: Lidarr, Readarr, Whisparr
-  * **Maintenance Tools**: Cleanuparr, Maintainerr, Tautulli
+  * **Extended *Arr:** Lidarr, Readarr, Whisparr, Mylar3
+  * **Maintenance:** Cleanuparr, Maintainerr, Tautulli
+  * **Optional catalog entries** (implement when upstream APIs are stable): Autobrr, Kometa, Huntarr
+* [ ] Extend integration engine for Phase 4 apps:
+  * Bazarr ↔ Sonarr/Radarr library pairing
+  * Post-install hooks for Recyclarr, Profilarr, and NeutArr
+  * Plex and NZBGet wiring into existing download/indexer/request flows
 * [ ] Safe Application Updater:
   * Pre-update snapshot of configuration and database
   * Automated post-update health check validation
   * Automatic rollback to prior version on startup failure
 * [ ] Centralized Backup & Restore System:
-  * Automated and manual backups of configuration, API keys, and databases
-  * Retention policy management (keep last N backups)
-* [ ] Secret Management & Manager Authentication:
-  * Local admin account with bcrypt password hashing and JWT sessions
-  * Encrypted credential storage (Fernet)
+  * Automated and manual backups of manager config, application config, API credentials, and databases
+  * Excludes media, torrent payloads, temp files, and large caches
+  * Configurable local backup path, retention (keep last N), and scheduled backups
 * [ ] Application Uninstallation Workflow:
-  * Clean binary removal with optional configuration/data purge (safeguards against deleting media)
+  * Clean binary removal with optional configuration/data purge
+  * Explicit confirmation required; never delete media without user confirmation
 
 ---
 
 ## Phase 5: Advanced Features & Packaging
+
+Per PROMPT.md §37 Phase 5.
+
 * [ ] VPN Integration for qBittorrent:
-  * Isolated network namespace / routing table for torrent traffic
-  * WireGuard / OpenVPN runner with PrivadoVPN pre-configuration and generic provider support
-  * Kill switch and DNS leak protection
+  * Isolated network namespace / routing table for torrent traffic only (Usenet bypasses VPN)
+  * WireGuard / OpenVPN runner with PrivadoVPN pre-configuration
+  * Generic provider abstraction: Mullvad, Proton VPN, AirVPN, IVPN, custom configs
+  * Kill switch, DNS leak protection, connection monitoring, automatic reconnect
+  * Dashboard warning if qBittorrent runs unprotected when VPN enforcement is enabled
 * [ ] Hardware Transcoding Auto-Detection:
-  * Automatic probe for Intel QuickSync, AMD, NVIDIA, and VAAPI (`/dev/dri`)
-  * Dynamic configuration of Jellyfin and Plex hardware acceleration
+  * Automatic probe for Intel Quick Sync, AMD, NVIDIA, and VAAPI (`/dev/dri`)
+  * Dynamic configuration of Jellyfin and Plex hardware acceleration (graceful fallback when unavailable)
 * [ ] Advanced System Monitoring:
   * Per-core CPU, RAM, disk I/O, network throughput, and hardware temperatures
-* [ ] Reverse Proxy Readiness:
-  * Trusted proxy header support (Traefik, Caddy, Nginx)
+  * Enhanced per-application resource metrics on the dashboard
+* [ ] Reverse Proxy Readiness (optional — not mandatory for operation):
+  * Trusted proxy header support for Traefik, Caddy, and Nginx
+  * Manager continues to work via `http://server-ip:port` without a reverse proxy
 * [ ] Deployment Packaging:
-  * Mode A: Single all-in-one Dockerfile and docker-compose deployment
-  * Mode C: Unraid Community Applications template & Synology Container Manager guide
+  * **Mode A:** Single all-in-one Dockerfile plus optional compose file for the **one AIO container only** — not per-application containers
+  * **Mode B:** Native Linux / LXC deployment with systemd unit file and built-in supervisor fallback when systemd is unavailable
+  * **Mode C:** Unraid Community Applications template, Synology Container Manager guide, TrueNAS SCALE app definition
