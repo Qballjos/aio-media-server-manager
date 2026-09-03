@@ -10,10 +10,10 @@
 ---
 
 ## Phase 2: MVP Core Applications & Installer
-* [ ] Implement Generic App Installer:
-  * Multi-architecture detection (`x86_64`, `ARM64`)
-  * GitHub release scraper & binary extractor (`.tar.gz`, `.zip`, `.deb`)
-  * Hash / checksum validation
+* [x] Implement Generic App Installer:
+  * [x] Multi-architecture detection (`x86_64`, `ARM64`)
+  * [x] GitHub release scraper & binary extractor (`.tar.gz`, `.zip`, `.deb`)
+  * [x] Hash / checksum validation
 * [ ] Application Catalog & Manifest System:
   * Application metadata, tier definitions (Core, Recommended, Optional, Experimental)
   * Dependency graph resolution

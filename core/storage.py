@@ -138,9 +138,11 @@ class StorageManager:
         pgid = self._settings.pgid
 
         dirs_to_create = [
-            # Config & logs
+            # Config, logs, cache, apps
             self._settings.config_dir / "logs",
-            self._settings.config_dir / "apps",
+            self._settings.install_dir,
+            self._settings.cache_dir,
+            self._settings.cache_dir / "downloads",
             # Downloads
             self._settings.download_dir / "complete",
             self._settings.download_dir / "incomplete",

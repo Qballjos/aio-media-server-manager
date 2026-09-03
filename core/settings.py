@@ -55,6 +55,25 @@ class Settings(BaseSettings):
         description="Root media library directory.",
         validation_alias="AMM_MEDIA_DIR",
     )
+    cache_dir: Path | None = Field(
+        default=None,
+        description="Cache directory for downloaded archives. Defaults to {config_dir}/cache.",
+        validation_alias="AMM_CACHE_DIR",
+    )
+    install_dir: Path | None = Field(
+        default=None,
+        description="Installation directory for managed applications. Defaults to {config_dir}/apps.",
+        validation_alias="AMM_INSTALL_DIR",
+    )
+
+    # ------------------------------------------------------------------
+    # External APIs / Integrations
+    # ------------------------------------------------------------------
+    github_token: str | None = Field(
+        default=None,
+        description="Optional GitHub personal access token to avoid API rate limits (60/hr -> 5000/hr).",
+        validation_alias="GITHUB_TOKEN",
+    )
 
     # ------------------------------------------------------------------
     # User / Permissions
@@ -111,6 +130,14 @@ class Settings(BaseSettings):
         self.config_dir = self.config_dir.expanduser().resolve()
         self.download_dir = self.download_dir.expanduser().resolve()
         self.media_dir = self.media_dir.expanduser().resolve()
+        if self.cache_dir is None:
+            self.cache_dir = self.config_dir / "cache"
+        else:
+            self.cache_dir = self.cache_dir.expanduser().resolve()
+        if self.install_dir is None:
+            self.install_dir = self.config_dir / "apps"
+        else:
+            self.install_dir = self.install_dir.expanduser().resolve()
         return self
 
     # ------------------------------------------------------------------
@@ -127,11 +154,14 @@ class Settings(BaseSettings):
             "config_dir": str(self.config_dir),
             "download_dir": str(self.download_dir),
             "media_dir": str(self.media_dir),
+            "cache_dir": str(self.cache_dir),
+            "install_dir": str(self.install_dir),
             "puid": self.puid,
             "pgid": self.pgid,
             "api_host": self.api_host,
             "api_port": self.api_port,
             "log_level": self.log_level,
+            "github_token_configured": bool(self.github_token),
         }
 
     def save(self) -> None:
