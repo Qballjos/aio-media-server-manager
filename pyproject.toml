@@ -1,0 +1,51 @@
+[project]
+name = "aio-media-manager"
+version = "0.1.0"
+description = "All-in-One Media Server Manager — a self-hosted supervisor for the *Arr ecosystem and media servers."
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+authors = []
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+fastapi = ">=0.111.0,<1.0.0"
+uvicorn = {extras = ["standard"], version = ">=0.30.0,<1.0.0"}
+pydantic = ">=2.7.0,<3.0.0"
+pydantic-settings = ">=2.3.0,<3.0.0"
+psutil = ">=6.0.0,<8.0.0"
+python-dotenv = ">=1.0.0,<2.0.0"
+colorlog = ">=6.8.0,<7.0.0"
+requests = ">=2.32.0,<3.0.0"
+packaging = ">=24.0,<27.0"
+aiofiles = ">=23.0.0,<25.0.0"
+
+[tool.poetry.group.dev.dependencies]
+black = ">=25.0.0,<27.0.0"
+ruff = ">=0.5.0,<1.0.0"
+pytest = ">=8.0.0,<9.0.0"
+pytest-asyncio = ">=0.23.0,<1.0.0"
+httpx = ">=0.27.0,<1.0.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+include = '''/(core|api|applications|tests)/.*\.py$'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+include = ["core/**/*.py", "api/**/*.py", "applications/**/*.py", "tests/**/*.py"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
