@@ -124,12 +124,15 @@ class ProcessSupervisor:
         self._shutting_down = False
         self._start_order: list[str] = []  # Ordered list for reverse-shutdown
 
-        # Register OS-level signal handlers
-        loop = asyncio.get_event_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, lambda s=sig: asyncio.ensure_future(self._shutdown(s)))
-        # SIGCHLD: reap zombie children
-        signal.signal(signal.SIGCHLD, self._sigchld_handler)
+        # Register OS-level signal handlers (if running in main thread)
+        try:
+            loop = asyncio.get_event_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, lambda s=sig: asyncio.ensure_future(self._shutdown(s)))
+            # SIGCHLD: reap zombie children
+            signal.signal(signal.SIGCHLD, self._sigchld_handler)
+        except (ValueError, RuntimeError, NotImplementedError):
+            logger.debug("Signal handlers could not be installed (not running in main thread).")
 
         # Background auto-restart task
         self._restart_task: asyncio.Task | None = None

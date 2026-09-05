@@ -35,6 +35,7 @@ class Settings(BaseSettings):
         extra="ignore",
         # Allow mutation after construction (useful for tests)
         frozen=False,
+        populate_by_name=True,
     )
 
     # ------------------------------------------------------------------

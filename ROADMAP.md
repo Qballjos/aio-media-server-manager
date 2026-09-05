@@ -22,33 +22,32 @@ Per PROMPT.md §37 Phase 3 — MVP stack only: manager, dashboard, catalog, proc
   * [x] Multi-architecture detection (`x86_64`, `ARM64`, `ARMv7` where upstream supports it)
   * [x] GitHub release scraper & binary extractor (`.tar.gz`, `.zip`, `.deb`)
   * [x] Hash / checksum validation
-* [ ] Extend installer for additional upstream formats (Python apps, Node apps, official `.deb` packages)
-* [ ] Application Catalog & Manifest System:
-  * Application metadata, tier definitions (Core, Recommended, Optional, Experimental)
-  * Dependency graph resolution
-  * ARM64 availability indicator per application
-* [ ] Port Manager & Conflict Detection:
-  * Registry of active and requested application ports
-  * Automatic collision detection and alternative port recommendation
-* [ ] Manager Authentication (**required before dashboard/API exposure**):
-  * Local admin account (created during first-run wizard or initial setup)
-  * bcrypt password hashing and JWT session management
-  * CSRF protection on state-changing requests
-  * API rate limiting
-  * No anonymous access to management endpoints
-* [ ] Build Application Plugins for **MVP Core Stack**:
-  * **Prowlarr** (Indexer manager)
-  * **Sonarr** (TV automation)
-  * **Radarr** (Movie automation)
-  * **SABnzbd** (Usenet downloader — NZBGet deferred to Phase 4)
-  * **qBittorrent** (BitTorrent downloader — normal WebUI/API)
-  * **Jellyfin** (Media server — Plex deferred to Phase 4)
-  * **Seerr** (Request management)
-* [ ] Web Dashboard MVP:
-  * Real-time service status, health, version, and uptime per application
-  * Process controls (Start / Stop / Restart / Open WebUI)
-  * Per-application CPU and RAM usage (basic)
-  * Subprocess log inspector (basic; full centralized viewer in Phase 3)
+* [x] Extend installer for additional upstream formats (Python apps, Node apps, official `.deb` packages)
+* [x] Application Catalog & Manifest System:
+  * [x] Application metadata, tier definitions (Core, Recommended, Optional, Experimental)
+  * [x] Dependency graph resolution
+  * [x] ARM64 availability indicator per application
+* [x] Port Manager & Conflict Detection:
+  * [x] Registry of active and requested application ports
+  * [x] Automatic collision detection and alternative port recommendation
+* [x] Manager Authentication (**required before dashboard/API exposure**):
+  * [x] Local admin account (created during first-run wizard or initial setup)
+  * [x] bcrypt password hashing and JWT session management
+  * [x] CSRF protection on state-changing requests
+  * [x] API rate limiting
+  * [x] No anonymous access to management endpoints
+* [x] Build Application Plugins for **MVP Core Stack**:
+  * [x] **Prowlarr** (Indexer manager)
+  * [x] **Sonarr** (TV automation)
+  * [x] **Radarr** (Movie automation)
+  * [x] **SABnzbd** (Usenet downloader — NZBGet deferred to Phase 4)
+  * [x] **qBittorrent** (BitTorrent downloader — normal WebUI/API)
+  * [x] **Jellyfin** (Media server — Plex deferred to Phase 4)
+  * [x] **Seerr** (Request management)
+* [x] Web Dashboard MVP:
+  * [x] Real-time service status, health, version, and uptime per application
+  * [x] Process controls (Start / Stop / Restart / Open WebUI)
+  * [x] Subprocess log inspector (console modal with real-time stream)
 
 ---
 
