@@ -44,8 +44,25 @@ const activeLogApp = ref(null)
 const logLines = ref([])
 const logLoading = ref(false)
 const autoScrollLogs = ref(true)
+const logFilter = ref('')
+const logOnlyErrors = ref(false)
 const logContainerRef = ref(null)
 let logPollInterval = null
+let logWs = null
+
+const filteredLogLines = computed(() => {
+  let lines = logLines.value
+  if (logOnlyErrors.value) {
+    lines = lines.filter(l => /error|fatal|fail|exception/i.test(l))
+  }
+  if (logFilter.value) {
+    const q = logFilter.value.toLowerCase()
+    lines = lines.filter(l => l.toLowerCase().includes(q))
+  }
+  return lines
+})
+
+const wiringRunning = ref(false)
 
 // Live Clock
 const currentTime = ref(new Date().toLocaleTimeString())
@@ -362,16 +379,89 @@ async function openLogs(app) {
   activeLogApp.value = app
   showLogModal.value = true
   logLines.value = []
+  logFilter.value = ''
+  logOnlyErrors.value = false
   await fetchLogs(app.name)
-  startLogPolling(app.name)
+  startLiveWebSocket(app.name)
 }
 
 function closeLogs() {
   showLogModal.value = false
   activeLogApp.value = null
+  if (logWs) {
+    logWs.close()
+    logWs = null
+  }
   if (logPollInterval) {
     clearInterval(logPollInterval)
     logPollInterval = null
+  }
+}
+
+function startLiveWebSocket(name) {
+  if (logWs) {
+    logWs.close()
+    logWs = null
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${protocol}//${window.location.host}/api/logs/ws/${encodeURIComponent(name)}`
+  try {
+    logWs = new WebSocket(wsUrl)
+    logWs.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data && data.line) {
+          logLines.value.push(data.line)
+          if (autoScrollLogs.value) {
+            nextTick(() => {
+              if (logContainerRef.value) {
+                logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight
+              }
+            })
+          }
+        }
+      } catch (e) {}
+    }
+    logWs.onerror = () => {
+      startLogPolling(name)
+    }
+  } catch (e) {
+    startLogPolling(name)
+  }
+}
+
+function downloadLogs(name) {
+  if (!name) return
+  window.open(`/api/logs/download?app=${encodeURIComponent(name)}`, '_blank')
+}
+
+async function resetCrashLoop(name) {
+  try {
+    const res = await apiRequest(`/api/applications/${name}/reset-crash-loop`, { method: 'POST' })
+    if (res.ok) {
+      showToast(`Crash loop reset for ${name}`, 'success')
+      await refreshDashboard()
+    }
+  } catch (err) {
+    showToast(`Failed to reset crash loop: ${err}`, 'error')
+  }
+}
+
+async function runAutomatedWiring() {
+  wiringRunning.value = true
+  try {
+    const res = await apiRequest('/api/integrations/run', { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json()
+      showToast(`Auto-wiring completed (${data.steps?.length || 0} tasks executed)`, 'success')
+      await refreshDashboard()
+    } else {
+      showToast('Automated wiring failed', 'error')
+    }
+  } catch (err) {
+    showToast(`Wiring error: ${err}`, 'error')
+  } finally {
+    wiringRunning.value = false
   }
 }
 
@@ -413,7 +503,8 @@ function formatUptime(seconds) {
   return `${s}s`
 }
 
-function statusBadgeClass(state) {
+function statusBadgeClass(state, isCrashLoop = false) {
+  if (isCrashLoop || state === 'crash_loop') return 'badge-failed font-bold'
   switch (state) {
     case 'healthy':
     case 'running':
@@ -474,6 +565,17 @@ onUnmounted(() => {
           <span class="metric-label">ARCH</span>
           <span class="metric-val font-mono">{{ hostArch.toUpperCase() }}</span>
         </div>
+        <button
+          v-if="authStatus.authenticated"
+          @click="runAutomatedWiring"
+          class="metric-pill"
+          style="cursor: pointer; background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.4); color: #60a5fa;"
+          :disabled="wiringRunning"
+          title="Trigger automatic integration wiring across applications"
+        >
+          <span v-if="wiringRunning" class="spinner spinner-sm"></span>
+          <span v-else>⚡ Auto-Wire Services</span>
+        </button>
         <div v-if="authStatus.authenticated" class="user-pill">
           <span class="user-avatar">{{ authStatus.username?.[0]?.toUpperCase() || 'A' }}</span>
           <span class="user-name">{{ authStatus.username }}</span>
@@ -717,9 +819,10 @@ onUnmounted(() => {
               </div>
 
               <!-- Status Badge -->
-              <span class="status-badge" :class="statusBadgeClass(service.state)">
+              <span class="status-badge" :class="statusBadgeClass(service.state, service.is_crash_loop)">
                 <span class="badge-dot"></span>
-                {{ service.state.toUpperCase().replace('_', ' ') }}
+                <span v-if="service.is_crash_loop">CRASH LOOP ({{ service.recent_crashes || 5 }})</span>
+                <span v-else>{{ service.state.toUpperCase().replace('_', ' ') }}</span>
               </span>
             </div>
 
@@ -755,9 +858,20 @@ onUnmounted(() => {
               <!-- Installed -> Lifecycle buttons -->
               <template v-else>
                 <div class="action-btn-group">
+                  <!-- Reset Crash Loop button -->
+                  <button
+                    v-if="service.is_crash_loop"
+                    @click="resetCrashLoop(service.name)"
+                    class="btn-action"
+                    style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171;"
+                    title="Clear crash history and unlock auto-restart"
+                  >
+                    Reset Crash
+                  </button>
+
                   <!-- Start button -->
                   <button
-                    v-if="service.state === 'stopped' || service.state === 'not_installed' || service.state === 'crashed'"
+                    v-if="(service.state === 'stopped' || service.state === 'not_installed' || service.state === 'crashed' || service.state === 'failed') && !service.is_crash_loop"
                     @click="startApp(service.name)"
                     class="btn-action btn-start"
                     :disabled="!!actionLoading[service.name]"
@@ -829,10 +943,28 @@ onUnmounted(() => {
           </div>
 
           <div class="modal-controls">
+            <input
+              type="text"
+              v-model="logFilter"
+              placeholder="Search logs..."
+              class="input-control font-mono"
+              style="padding: 4px 8px; font-size: 11px; width: 140px; height: 28px;"
+            />
+            <label class="toggle-control font-mono">
+              <input type="checkbox" v-model="logOnlyErrors" />
+              <span>Errors Only</span>
+            </label>
             <label class="toggle-control font-mono">
               <input type="checkbox" v-model="autoScrollLogs" />
               <span>Auto-Scroll</span>
             </label>
+            <button @click="downloadLogs(activeLogApp?.name)" class="btn-icon" title="Download Logs">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </button>
             <button @click="fetchLogs(activeLogApp?.name)" class="btn-icon" title="Refresh">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ 'spin-anim': logLoading }">
                 <polyline points="23 4 23 10 17 10"></polyline>
@@ -850,14 +982,16 @@ onUnmounted(() => {
         </div>
 
         <div class="log-console font-mono" ref="logContainerRef">
-          <div v-if="logLines.length === 0" class="log-empty">
+          <div v-if="filteredLogLines.length === 0" class="log-empty">
             <span v-if="logLoading">Streaming output buffer...</span>
+            <span v-else-if="logLines.length > 0">No logs matching filter criteria.</span>
             <span v-else>No output received yet for this process.</span>
           </div>
           <div
-            v-for="(line, idx) in logLines"
+            v-for="(line, idx) in filteredLogLines"
             :key="idx"
             class="log-line"
+            :style="/error|fatal|fail|exception/i.test(line) ? 'color: #f87171;' : ''"
           >
             <span class="line-num">{{ idx + 1 }}</span>
             <span class="line-content">{{ line }}</span>

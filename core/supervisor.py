@@ -39,6 +39,8 @@ _STOP_TIMEOUT = 10.0            # Seconds before SIGKILL is sent
 _RESTART_MAX_ATTEMPTS = 5       # Give up after this many consecutive failures
 _RESTART_BASE_DELAY = 2.0       # First backoff delay (seconds)
 _RESTART_MAX_DELAY = 60.0       # Upper cap for backoff delay
+_CRASH_WINDOW_SECONDS = 600.0   # 10 minutes sliding window
+_CRASH_THRESHOLD = 5            # Halt auto-restart if >= 5 crashes in window
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +53,7 @@ class ProcessState(str, enum.Enum):
     RUNNING = "running"
     FAILED = "failed"
     STOPPING = "stopping"
+    CRASH_LOOP = "crash_loop"
 
 
 class RestartPolicy(str, enum.Enum):
@@ -82,6 +85,7 @@ class ProcessEntry:
     exit_code: int | None = None
     restart_attempts: int = 0
     next_restart_at: float = 0.0
+    crash_timestamps: list[float] = field(default_factory=list)
     # In-memory ring buffer: last N lines of stdout+stderr interleaved
     log_ring: collections.deque = field(
         default_factory=lambda: collections.deque(maxlen=_LOG_RING_MAXLEN)
@@ -123,6 +127,7 @@ class ProcessSupervisor:
         self._lock = asyncio.Lock()
         self._shutting_down = False
         self._start_order: list[str] = []  # Ordered list for reverse-shutdown
+        self._subscribers: list[tuple[asyncio.Queue, str | None]] = []
 
         # Register OS-level signal handlers (if running in main thread)
         try:
@@ -218,6 +223,8 @@ class ProcessSupervisor:
                     "started_at": entry.started_at or None,
                     "restart_attempts": entry.restart_attempts,
                     "restart_policy": entry.spec.restart_policy.value,
+                    "is_crash_loop": entry.state == ProcessState.CRASH_LOOP,
+                    "recent_crashes": len(entry.crash_timestamps),
                 }
             )
         return result
@@ -228,6 +235,25 @@ class ProcessSupervisor:
         if entry is None:
             return []
         return list(entry.log_ring)
+
+    def subscribe_logs(self, app_name: str | None = None) -> asyncio.Queue:
+        """Subscribe to live log output for all or a specific app."""
+        q: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        self._subscribers.append((q, app_name))
+        return q
+
+    def unsubscribe_logs(self, queue: asyncio.Queue) -> None:
+        """Unsubscribe a previously subscribed log queue."""
+        self._subscribers = [sub for sub in self._subscribers if sub[0] is not queue]
+
+    def reset_crash_loop(self, name: str) -> None:
+        """Manually clear crash history and reset state from CRASH_LOOP to STOPPED."""
+        entry = self._entries.get(name)
+        if entry:
+            entry.crash_timestamps.clear()
+            entry.restart_attempts = 0
+            if entry.state in (ProcessState.CRASH_LOOP, ProcessState.FAILED):
+                entry.state = ProcessState.STOPPED
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -337,6 +363,22 @@ class ProcessSupervisor:
                 if log_file:
                     log_file.write(line + "\n")
                     log_file.flush()
+
+                # Broadcast to subscribers
+                if self._subscribers:
+                    payload = {
+                        "app": entry.spec.name,
+                        "stream": stream_name,
+                        "line": line,
+                        "timestamp": time.time(),
+                    }
+                    for q, target_app in list(self._subscribers):
+                        if target_app is None or target_app == entry.spec.name:
+                            try:
+                                q.put_nowait(payload)
+                            except asyncio.QueueFull:
+                                pass
+
                 # Surface stderr at WARNING, stdout at DEBUG
                 if stream_name == "stderr":
                     logger.warning("[%s] %s", entry.spec.name, line)
@@ -354,12 +396,27 @@ class ProcessSupervisor:
         await proc.wait()
         entry.exit_code = proc.returncode
         if entry.state != ProcessState.STOPPING:
-            entry.state = ProcessState.FAILED
-            logger.warning(
-                "Process '%s' exited unexpectedly (exit code %s).",
-                entry.spec.name,
-                entry.exit_code,
-            )
+            now = time.monotonic()
+            # Retain crashes in sliding window
+            entry.crash_timestamps = [
+                t for t in entry.crash_timestamps if now - t <= _CRASH_WINDOW_SECONDS
+            ]
+            entry.crash_timestamps.append(now)
+            if len(entry.crash_timestamps) >= _CRASH_THRESHOLD:
+                entry.state = ProcessState.CRASH_LOOP
+                logger.error(
+                    "Process '%s' entered CRASH_LOOP: %d crashes in last %ds. Auto-restart halted.",
+                    entry.spec.name,
+                    len(entry.crash_timestamps),
+                    int(_CRASH_WINDOW_SECONDS),
+                )
+            else:
+                entry.state = ProcessState.FAILED
+                logger.warning(
+                    "Process '%s' exited unexpectedly (exit code %s).",
+                    entry.spec.name,
+                    entry.exit_code,
+                )
         # Schedule a restart evaluation (handled by _restart_watcher)
         entry.next_restart_at = time.monotonic()  # Evaluate immediately
 
@@ -368,43 +425,46 @@ class ProcessSupervisor:
         Periodically evaluates all FAILED processes and restarts eligible ones
         according to their restart policy with exponential backoff.
         """
-        while not self._shutting_down:
-            await asyncio.sleep(1.0)
-            now = time.monotonic()
-            async with self._lock:
-                for entry in list(self._entries.values()):
-                    if entry.state != ProcessState.FAILED:
-                        continue
-                    policy = entry.spec.restart_policy
-                    if policy == RestartPolicy.NEVER:
-                        continue
-                    if policy == RestartPolicy.ON_FAILURE and entry.exit_code == 0:
-                        entry.state = ProcessState.STOPPED
-                        continue
-                    if entry.restart_attempts >= _RESTART_MAX_ATTEMPTS:
-                        logger.error(
-                            "Process '%s' has failed %d times. Giving up.",
+        try:
+            while not self._shutting_down:
+                await asyncio.sleep(1.0)
+                now = time.monotonic()
+                async with self._lock:
+                    for entry in list(self._entries.values()):
+                        if entry.state != ProcessState.FAILED:
+                            continue
+                        policy = entry.spec.restart_policy
+                        if policy == RestartPolicy.NEVER:
+                            continue
+                        if policy == RestartPolicy.ON_FAILURE and entry.exit_code == 0:
+                            entry.state = ProcessState.STOPPED
+                            continue
+                        if entry.restart_attempts >= _RESTART_MAX_ATTEMPTS:
+                            logger.error(
+                                "Process '%s' has failed %d times. Giving up.",
+                                entry.spec.name,
+                                entry.restart_attempts,
+                            )
+                            continue
+                        if now < entry.next_restart_at:
+                            continue
+                        # Calculate next backoff delay
+                        delay = min(
+                            _RESTART_BASE_DELAY * (2 ** entry.restart_attempts),
+                            _RESTART_MAX_DELAY,
+                        )
+                        entry.restart_attempts += 1
+                        entry.next_restart_at = now + delay
+                        logger.info(
+                            "Auto-restarting '%s' (attempt %d/%d, next in %.0fs if this fails).",
                             entry.spec.name,
                             entry.restart_attempts,
+                            _RESTART_MAX_ATTEMPTS,
+                            delay,
                         )
-                        continue
-                    if now < entry.next_restart_at:
-                        continue
-                    # Calculate next backoff delay
-                    delay = min(
-                        _RESTART_BASE_DELAY * (2 ** entry.restart_attempts),
-                        _RESTART_MAX_DELAY,
-                    )
-                    entry.restart_attempts += 1
-                    entry.next_restart_at = now + delay
-                    logger.info(
-                        "Auto-restarting '%s' (attempt %d/%d, next in %.0fs if this fails).",
-                        entry.spec.name,
-                        entry.restart_attempts,
-                        _RESTART_MAX_ATTEMPTS,
-                        delay,
-                    )
-                    await self._do_start(entry)
+                        await self._do_start(entry)
+        except asyncio.CancelledError:
+            pass
 
     async def _shutdown(self, sig: signal.Signals) -> None:
         """Graceful shutdown: stop all processes in reverse-start order."""

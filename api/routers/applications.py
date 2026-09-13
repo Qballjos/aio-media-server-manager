@@ -51,6 +51,8 @@ async def list_applications(request: Request) -> dict[str, Any]:
         pid = proc_info["pid"] if proc_info else None
         started_at = proc_info["started_at"] if proc_info else None
         uptime = int(time.monotonic() - started_at) if (started_at and state == "running") else 0
+        is_crash_loop = proc_info.get("is_crash_loop", False) if proc_info else False
+        recent_crashes = proc_info.get("recent_crashes", 0) if proc_info else 0
 
         results.append(
             {
@@ -64,6 +66,8 @@ async def list_applications(request: Request) -> dict[str, Any]:
                 "state": state,
                 "pid": pid,
                 "uptime_seconds": uptime,
+                "is_crash_loop": is_crash_loop,
+                "recent_crashes": recent_crashes,
                 "health_url": plugin.health_check_url(),
                 "web_ui_url": f"http://{request.url.hostname}:{plugin.port}",
             }
@@ -166,10 +170,13 @@ async def restart_application(name: str, request: Request) -> dict[str, Any]:
     }
 
 
+from core.log_redactor import redact_log_line
+
+
 @router.get("/{name}/logs", summary="Get application process logs")
 async def get_application_logs(name: str, request: Request) -> dict[str, Any]:
     """
-    Returns recent stdout/stderr output lines for an application.
+    Returns recent stdout/stderr output lines for an application with secrets redacted.
     """
     _ensure_authenticated(request)
     try:
@@ -178,9 +185,32 @@ async def get_application_logs(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
     supervisor = ProcessSupervisor.get()
-    logs = supervisor.get_logs(name)
+    raw_logs = supervisor.get_logs(name)
+    scrubbed_logs = [redact_log_line(line) for line in raw_logs]
 
     return {
         "name": name,
-        "lines": logs,
+        "lines": scrubbed_logs,
     }
+
+
+@router.post("/{name}/reset-crash-loop", summary="Reset crash loop state")
+async def reset_application_crash_loop(name: str, request: Request) -> dict[str, Any]:
+    """
+    Clears recorded crash timestamps and allows the supervisor to restart the application.
+    """
+    _ensure_authenticated(request)
+    try:
+        catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    supervisor = ProcessSupervisor.get()
+    supervisor.reset_crash_loop(name)
+
+    return {
+        "status": "reset",
+        "name": name,
+        "state": supervisor.status(name).value,
+    }
+

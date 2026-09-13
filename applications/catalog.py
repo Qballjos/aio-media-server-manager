@@ -70,6 +70,12 @@ class ApplicationCatalog:
             raise KeyError(f"Unknown application: {name!r}")
         return plugin
 
+    def has(self, name: str) -> bool:
+        return name in self._plugins
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._plugins
+
     def names(self) -> list[str]:
         return list(self._plugins)
 

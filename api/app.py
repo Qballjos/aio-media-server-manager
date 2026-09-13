@@ -19,7 +19,10 @@ from api.routers import applications as applications_router
 from api.routers import auth as auth_router
 from api.routers import catalog as catalog_router
 from api.routers import health as health_router
+from api.routers import integrations as integrations_router
+from api.routers import logs as logs_router
 from api.routers import system as system_router
+from api.routers import wizard as wizard_router
 from core.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -69,7 +72,10 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router)
     app.include_router(catalog_router.router)
     app.include_router(applications_router.router)
+    app.include_router(integrations_router.router)
+    app.include_router(logs_router.router)
     app.include_router(system_router.router)
+    app.include_router(wizard_router.router)
 
     # Mount frontend dist if built
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"

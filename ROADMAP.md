@@ -53,21 +53,21 @@ Per PROMPT.md §37 Phase 3 — MVP stack only: manager, dashboard, catalog, proc
 
 ## Phase 3: Automatic Integration Engine & First-Run Wizard
 
-* [ ] Encrypted Secret Storage for application credentials (Fernet, filesystem permissions, masked UI fields)
-* [ ] Develop Automatic Integration Engine via APIs:
+* [x] Encrypted Secret Storage for application credentials (Fernet, filesystem permissions, masked UI fields)
+* [x] Develop Automatic Integration Engine via APIs:
   * **Core wiring (automatic at install):**
-    * Configure categories (`sonarr`, `radarr`) in SABnzbd and qBittorrent
-    * Register download clients inside Sonarr and Radarr
-    * Register Sonarr/Radarr in Prowlarr with automatic indexer synchronization
-    * Link Seerr to Sonarr, Radarr, and Jellyfin
-    * Configure root folders and basic download handling defaults
+    * [x] Configure categories (`sonarr`, `radarr`) in SABnzbd and qBittorrent
+    * [x] Register download clients inside Sonarr and Radarr
+    * [x] Register Sonarr/Radarr in Prowlarr with automatic indexer synchronization
+    * [x] Link Seerr to Sonarr, Radarr, and Jellyfin
+    * [x] Configure root folders and basic download handling defaults
   * **Sensible defaults only (not full TRaSH tuning):**
-    * Basic naming templates and quality profile placeholders
+    * [x] Basic naming templates and quality profile placeholders
   * **Deferred to Phase 4 optimization tools (not duplicated by the integration engine):**
     * TRaSH Guides quality profiles and custom formats → **Recyclarr**
     * Advanced profile management → **Profilarr**
     * *Arr ecosystem optimization → **NeutArr**
-* [ ] Guided 12-Step First-Run Wizard (PROMPT.md §26):
+* [x] Guided 12-Step First-Run Wizard (PROMPT.md §26):
   1. Welcome
   2. Platform detection
   3. Storage configuration (with hardlink validation warnings)
@@ -80,12 +80,12 @@ Per PROMPT.md §37 Phase 3 — MVP stack only: manager, dashboard, catalog, proc
   10. Recommended tools (preview selections — installed in Phase 4)
   11. Review
   12. Install (real-time progress display)
-* [ ] Crash Loop Detection & Resilience:
-  * Detection of repeated process failures (≥5 crashes in 10 mins)
-  * Backoff scheduling, halt auto-restart, and UI alert states
-* [ ] Centralized Live Log Viewer:
-  * WebSocket log streaming (all logs and per-application)
-  * Search, error filtering, download, and automatic credential/secret redaction
+* [x] Crash Loop Detection & Resilience:
+  * [x] Detection of repeated process failures (≥5 crashes in 10 mins)
+  * [x] Backoff scheduling, halt auto-restart, and UI alert states
+* [x] Centralized Live Log Viewer:
+  * [x] WebSocket log streaming (all logs and per-application)
+  * [x] Search, error filtering, download, and automatic credential/secret redaction
 
 ---
 
