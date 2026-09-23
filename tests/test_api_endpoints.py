@@ -46,6 +46,9 @@ def test_health_endpoint(client: TestClient):
 
 def test_frontend_root_served(client: TestClient):
     """GET / serves the dashboard HTML when frontend/dist is built."""
+    dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if not dist.is_dir():
+        pytest.skip("frontend/dist is not built in this environment")
     resp = client.get("/")
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
