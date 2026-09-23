@@ -4,6 +4,7 @@ core/auth.py — Local admin authentication, JWT sessions, CSRF, rate limiting.
 
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 import time
@@ -18,6 +19,8 @@ from fastapi import HTTPException, Request, Response, status
 from core.settings import Settings, settings
 
 logger = logging.getLogger(__name__)
+
+_UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 COOKIE_ACCESS = "amm_access"
 COOKIE_CSRF = "amm_csrf"
@@ -85,7 +88,6 @@ class AuthManager:
         path = self._auth_path
         if not path.is_file():
             return {}
-        import json
 
         try:
             return json.loads(path.read_text(encoding="utf-8"))
@@ -93,8 +95,6 @@ class AuthManager:
             return {}
 
     def _write_auth(self, payload: dict[str, Any]) -> None:
-        import json
-
         path = self._auth_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -231,12 +231,12 @@ class AuthManager:
     def _validate_password(password: str) -> None:
         if len(password) < MIN_PASSWORD_LENGTH:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=_UNPROCESSABLE,
                 detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
             )
         if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=_UNPROCESSABLE,
                 detail=f"Password must be at most {MAX_PASSWORD_BYTES} bytes (bcrypt limit).",
             )
 

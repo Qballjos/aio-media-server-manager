@@ -621,6 +621,10 @@ onUnmounted(() => {
           <span class="metric-label">ARCH</span>
           <span class="metric-val font-mono">{{ hostArch.toUpperCase() }}</span>
         </div>
+        <div v-if="transcodingAvailable" class="metric-pill">
+          <span class="metric-label">GPU</span>
+          <span class="metric-val font-mono">HW</span>
+        </div>
         <button
           v-if="authStatus.authenticated"
           @click="runAutomatedWiring"

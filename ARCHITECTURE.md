@@ -439,7 +439,7 @@ Vue 3 + Vite responsive UI backed by FastAPI.
 
 **System panel:**
 
-* CPU (per-core in Phase 5), RAM, disk usage per mount, network I/O, uptime, temperature where available.
+* CPU (per-core), RAM, disk usage, network I/O, uptime, and temperatures when the host exposes them.
 
 **Applications panel (per service):**
 
@@ -451,5 +451,5 @@ Vue 3 + Vite responsive UI backed by FastAPI.
 * Application catalog browser (enable/disable modular services by tier).
 * Centralized live log viewer (§14).
 * Backup management (§13).
-* VPN status (Phase 5).
+* VPN status and optional Cloudflare Tunnel connector status.
 * Storage layout and hardlink status (§7.2).
