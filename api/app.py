@@ -8,6 +8,7 @@ and wires startup/shutdown lifecycle hooks to the ProcessSupervisor.
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +48,16 @@ individual Docker containers for each application.
 def create_app() -> FastAPI:
     """Construct and return the FastAPI application."""
 
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        logger.info(
+            "FastAPI application starting on %s:%d",
+            settings.api_host,
+            settings.api_port,
+        )
+        yield
+        logger.info("FastAPI application shutting down.")
+
     app = FastAPI(
         title="AIO Media Server Manager",
         description=_APP_DESCRIPTION,
@@ -55,6 +66,7 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
         openapi_url="/openapi.json",
         root_path=settings.root_path or "",
+        lifespan=lifespan,
     )
 
     trusted = [item.strip() for item in settings.trusted_proxies.split(",") if item.strip()]
@@ -93,22 +105,6 @@ def create_app() -> FastAPI:
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
     if frontend_dist.is_dir():
         app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
-
-    # ------------------------------------------------------------------
-    # Lifecycle hooks
-    # ------------------------------------------------------------------
-
-    @app.on_event("startup")
-    async def on_startup() -> None:
-        logger.info(
-            "FastAPI application starting on %s:%d",
-            settings.api_host,
-            settings.api_port,
-        )
-
-    @app.on_event("shutdown")
-    async def on_shutdown() -> None:
-        logger.info("FastAPI application shutting down.")
 
     return app
 
