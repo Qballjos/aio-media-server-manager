@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Single AIO appliance image — all apps run as supervised processes inside this container.
 
-FROM node:22-alpine AS frontend
+FROM node:25-alpine AS frontend
 WORKDIR /ui
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
