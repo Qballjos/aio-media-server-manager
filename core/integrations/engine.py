@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any
+from pathlib import Path
 
 from applications.catalog import ApplicationCatalog
 from core.crypto import mask_secret
@@ -22,7 +23,8 @@ from core.integrations.hooks import (
     write_unpackerr_config,
 )
 from core.integrations.jellyfin import JellyfinClient
-from core.integrations.nzbget import NZBGetClient
+from core.integrations.local_auth import apply_shared_local_logins
+from core.integrations.nzbget import NZBGetClient, nzbget_credentials
 from core.integrations.plex import PlexClient
 from core.integrations.prowlarr import ProwlarrClient
 from core.integrations.qbittorrent import QBittorrentClient, qbittorrent_credentials
@@ -123,6 +125,7 @@ class IntegrationEngine:
         )
 
         qb_user, qb_pass = qbittorrent_credentials()
+        nzb_user, nzb_pass = nzbget_credentials()
         sab_port = self._port("sabnzbd", 8085)
         nzb_port = self._port("nzbget", 6789)
         qb_port = self._port("qbittorrent", 8081)
@@ -180,7 +183,9 @@ class IntegrationEngine:
             sonarr_dl = any(
                 [
                     sonarr_client.add_sabnzbd_client(port=sab_port, api_key=sab_key or "", category="sonarr"),
-                    sonarr_client.add_nzbget_client(port=nzb_port, category="sonarr"),
+                    sonarr_client.add_nzbget_client(
+                        port=nzb_port, username=nzb_user, password=nzb_pass, category="sonarr"
+                    ),
                     sonarr_client.add_qbittorrent_client(
                         port=qb_port, username=qb_user, password=qb_pass, category="sonarr"
                     ),
@@ -202,7 +207,9 @@ class IntegrationEngine:
             radarr_dl = any(
                 [
                     radarr_client.add_sabnzbd_client(port=sab_port, api_key=sab_key or "", category="radarr"),
-                    radarr_client.add_nzbget_client(port=nzb_port, category="radarr"),
+                    radarr_client.add_nzbget_client(
+                        port=nzb_port, username=nzb_user, password=nzb_pass, category="radarr"
+                    ),
                     radarr_client.add_qbittorrent_client(
                         port=qb_port, username=qb_user, password=qb_pass, category="radarr"
                     ),
@@ -232,6 +239,8 @@ class IntegrationEngine:
                 sab_port=sab_port,
                 sab_key=sab_key or "",
                 nzb_port=nzb_port,
+                nzb_username=nzb_user,
+                nzb_password=nzb_pass,
                 qb_port=qb_port,
                 qb_username=qb_user,
                 qb_password=qb_pass,
@@ -352,6 +361,23 @@ class IntegrationEngine:
         except Exception as exc:
             steps.append(_step("unpackerr", "write_starter_config", False, str(exc)))
 
+        def _api_key(name: str) -> str | None:
+            return get_application_api_key(name)
+
+        def _config_dir(name: str) -> Path:
+            if self._catalog.has(name):
+                return self._catalog.get(name).config_dir
+            return self._settings.config_dir / name
+
+        steps.extend(
+            apply_shared_local_logins(
+                installed=self._installed,
+                port_for=self._port,
+                api_key_for=_api_key,
+                config_dir_for=_config_dir,
+            )
+        )
+
         return {"timestamp": time.time(), "status": "completed", "steps": steps, "layout": layout.as_dict()}
 
 
@@ -366,12 +392,16 @@ def _wire_arr_app(
     category: str,
     qb_username: str = "admin",
     qb_password: str = "adminadmin",
+    nzb_username: str = "nzbget",
+    nzb_password: str = "tegbzn6789",
 ) -> bool:
     root_ok = all(client.add_root_folder(str(path)) for path in roots)
     dl_ok = any(
         [
             client.add_sabnzbd_client(port=sab_port, api_key=sab_key, category=category),
-            client.add_nzbget_client(port=nzb_port, category=category),
+            client.add_nzbget_client(
+                port=nzb_port, username=nzb_username, password=nzb_password, category=category
+            ),
             client.add_qbittorrent_client(
                 port=qb_port, username=qb_username, password=qb_password, category=category
             ),

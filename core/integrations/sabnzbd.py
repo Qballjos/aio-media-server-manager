@@ -63,3 +63,8 @@ class SABnzbdClient:
             {"section": "misc", "keyword": "download_dir", "value": incomplete_dir},
         )
         return bool(complete_ok.get("status", False)) and bool(incomplete_ok.get("status", False))
+
+    def set_login(self, username: str, password: str) -> bool:
+        user_ok = self._request("set_config", {"section": "misc", "keyword": "username", "value": username})
+        pass_ok = self._request("set_config", {"section": "misc", "keyword": "password", "value": password})
+        return bool(user_ok.get("status", False)) and bool(pass_ok.get("status", False))

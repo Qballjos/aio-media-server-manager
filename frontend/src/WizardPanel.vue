@@ -279,8 +279,9 @@ onMounted(async () => {
             </label>
             <label class="form-group">
               qBittorrent WebUI password
-              <input v-model="selections.qbittorrent_password" type="password" class="input-control" placeholder="Leave blank to keep existing" />
+              <input v-model="selections.qbittorrent_password" type="password" class="input-control" placeholder="Leave blank to use the manager password" />
             </label>
+            <p class="wizard-muted">Blank qBittorrent fields use the same username and password as AIO Media Server Manager. Plex still uses a Plex account.</p>
           </template>
         </template>
 

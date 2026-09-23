@@ -102,3 +102,53 @@ class JellyfinClient:
         except Exception as exc:
             logger.debug("Jellyfin set_transcoding_temp_path error: %s", exc)
             return False
+
+    def ensure_local_admin(self, username: str, password: str) -> bool:
+        """Create or align a local Jellyfin user with the manager login."""
+        try:
+            startup = requests.get(f"{self.base_url}/Startup/User", timeout=5.0)
+            if startup.status_code == 200:
+                created = requests.post(
+                    f"{self.base_url}/Startup/User",
+                    json={"Name": username, "Password": password},
+                    timeout=8.0,
+                )
+                if created.status_code in (200, 204):
+                    requests.post(f"{self.base_url}/Startup/Complete", timeout=8.0)
+                    return True
+        except Exception as exc:
+            logger.debug("Jellyfin startup user error: %s", exc)
+
+        try:
+            resp = requests.get(f"{self.base_url}/Users", headers=self._headers(), timeout=5.0)
+            if resp.status_code != 200:
+                return False
+            users = resp.json()
+            if not isinstance(users, list):
+                return False
+            match = next(
+                (
+                    user
+                    for user in users
+                    if isinstance(user, dict) and str(user.get("Name") or "").lower() == username.lower()
+                ),
+                None,
+            )
+            if match and match.get("Id"):
+                pw = requests.post(
+                    f"{self.base_url}/Users/{match['Id']}/Password",
+                    headers=self._headers(),
+                    json={"CurrentPw": "", "NewPw": password, "ResetPassword": False},
+                    timeout=8.0,
+                )
+                return pw.status_code in (200, 204)
+            created = requests.post(
+                f"{self.base_url}/Users/New",
+                headers=self._headers(),
+                json={"Name": username, "Password": password},
+                timeout=8.0,
+            )
+            return created.status_code in (200, 204)
+        except Exception as exc:
+            logger.debug("Jellyfin ensure_local_admin error: %s", exc)
+            return False

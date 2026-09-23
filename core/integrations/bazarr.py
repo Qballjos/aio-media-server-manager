@@ -48,3 +48,20 @@ class BazarrClient:
             except Exception as exc:
                 logger.debug("Bazarr pair %s via %s failed: %s", kind, endpoint, exc)
         return False
+
+    def set_ui_auth(self, username: str, password: str, config_dir) -> bool:
+        from pathlib import Path
+
+        from core.integrations.local_auth import patch_bazarr_auth_yaml, sha256_hex
+
+        hashed = sha256_hex(password)
+        payload = {"auth": {"type": "form", "username": username, "password": hashed}}
+        endpoints = (f"{self.base_url}/system/settings", f"{self.base_url}/settings")
+        for endpoint in endpoints:
+            try:
+                resp = requests.post(endpoint, headers=self._headers(), json=payload, timeout=5.0)
+                if resp.status_code in (200, 201, 204):
+                    return True
+            except Exception as exc:
+                logger.debug("Bazarr set_ui_auth via %s failed: %s", endpoint, exc)
+        return patch_bazarr_auth_yaml(Path(config_dir) / "config" / "config.yaml", username, password)

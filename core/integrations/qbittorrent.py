@@ -9,17 +9,24 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+import json
 import requests
 
 from core.crypto import secret_store
+from core.shared_credentials import shared_admin_credentials
 
 logger = logging.getLogger(__name__)
 
 
 def qbittorrent_credentials() -> tuple[str, str]:
-    username = secret_store.get_secret("qbittorrent_username") or "admin"
-    password = secret_store.get_secret("qbittorrent_password") or "adminadmin"
-    return username, password
+    username = secret_store.get_secret("qbittorrent_username")
+    password = secret_store.get_secret("qbittorrent_password")
+    if username and password:
+        return username, password
+    shared = shared_admin_credentials()
+    if shared:
+        return shared
+    return "admin", "adminadmin"
 
 
 class QBittorrentClient:
@@ -33,20 +40,50 @@ class QBittorrentClient:
 
     def login(self) -> bool:
         """Authenticate with qBittorrent WebUI session cookie."""
+        attempts: list[tuple[str, str]] = [(self.username, self.password)]
+        shared = shared_admin_credentials()
+        if shared:
+            attempts.append(shared)
+        attempts.extend([("admin", "adminadmin"), ("admin", "")])
+        seen: set[tuple[str, str]] = set()
+        for username, password in attempts:
+            if (username, password) in seen:
+                continue
+            seen.add((username, password))
+            try:
+                resp = self.session.post(
+                    f"{self.base_url}/auth/login",
+                    data={"username": username, "password": password},
+                    timeout=5.0,
+                )
+                cookie = resp.headers.get("Set-Cookie") or resp.headers.get("set-cookie") or ""
+                if resp.status_code == 200 and (resp.text.strip() == "Ok." or "SID" in cookie):
+                    self.username = username
+                    self.password = password
+                    self._authenticated = True
+                    return True
+            except Exception as exc:
+                logger.debug("qBittorrent login failed: %s", exc)
+        return False
+
+    def set_webui_login(self, username: str, password: str) -> bool:
+        """Set the WebUI username and password to the shared manager login."""
         try:
+            payload = json.dumps({"web_ui_username": username, "web_ui_password": password})
             resp = self.session.post(
-                f"{self.base_url}/auth/login",
-                data={"username": self.username, "password": self.password},
+                f"{self.base_url}/app/setPreferences",
+                data={"json": payload},
                 timeout=5.0,
             )
-            if resp.status_code == 200 and "set-cookie" in resp.headers.get("set-cookie", "").lower() or resp.text == "Ok.":
-                self._authenticated = True
+            if resp.status_code in (200, 201):
+                self.username = username
+                self.password = password
+                secret_store.save_secret("qbittorrent_username", username)
+                secret_store.save_secret("qbittorrent_password", password)
                 return True
-            self._authenticated = True  # Or no auth required
-            return True
         except Exception as exc:
-            logger.debug("qBittorrent login failed: %s", exc)
-            return False
+            logger.debug("qBittorrent set_webui_login error: %s", exc)
+        return False
 
     def get_categories(self) -> dict[str, Any]:
         """Fetch existing categories."""
@@ -82,8 +119,6 @@ class QBittorrentClient:
     def set_download_paths(self, save_path: str, incomplete_path: str) -> bool:
         """Set default completed and incomplete torrent directories."""
         try:
-            import json
-
             payload = json.dumps(
                 {
                     "save_path": save_path,

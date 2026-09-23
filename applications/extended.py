@@ -84,6 +84,19 @@ class NzbgetApp(SimpleApplication):
             "--option",
             "DaemonUsername=root",
         ]
+        from core.shared_credentials import shared_admin_credentials
+
+        creds = shared_admin_credentials()
+        if creds:
+            user, password = creds
+            args.extend(
+                [
+                    "--option",
+                    f"ControlUsername={user}",
+                    "--option",
+                    f"ControlPassword={password}",
+                ]
+            )
         webui = self._bundled_webui()
         if webui is not None:
             args.extend(["--option", f"WebDir={webui}"])
@@ -108,8 +121,7 @@ class NzbgetApp(SimpleApplication):
                     f"InterDir={self.download_dir / 'incomplete'}",
                     "ControlIP=0.0.0.0",
                     f"ControlPort={self.port}",
-                    "ControlUsername=nzbget",
-                    "ControlPassword=tegbzn6789",
+                    *self._control_auth_lines(),
                     "OutputMode=log",
                     "DaemonUsername=root",
                     "",
@@ -117,6 +129,15 @@ class NzbgetApp(SimpleApplication):
             ),
             encoding="utf-8",
         )
+
+    def _control_auth_lines(self) -> list[str]:
+        from core.shared_credentials import shared_admin_credentials
+
+        creds = shared_admin_credentials()
+        if creds:
+            user, password = creds
+            return [f"ControlUsername={user}", f"ControlPassword={password}"]
+        return ["ControlUsername=nzbget", "ControlPassword=tegbzn6789"]
 
     def _bundled_conf(self) -> Path | None:
         if not self.install_dir.exists():

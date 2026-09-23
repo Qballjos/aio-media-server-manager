@@ -380,10 +380,13 @@ class WizardEngine:
         except Exception as exc:
             logger.warning("Could not persist wizard settings: %s", exc)
 
-        username = selections.get("qbittorrent_username") or "admin"
+        from core.shared_credentials import shared_admin_credentials
+
+        shared = shared_admin_credentials()
+        username = selections.get("qbittorrent_username") or (shared[0] if shared else "admin")
+        password = selections.get("qbittorrent_password") or (shared[1] if shared else "")
         try:
             secret_store.save_secret("qbittorrent_username", str(username))
-            password = selections.get("qbittorrent_password")
             if password:
                 secret_store.save_secret("qbittorrent_password", str(password))
                 selections["qbittorrent_password"] = ""

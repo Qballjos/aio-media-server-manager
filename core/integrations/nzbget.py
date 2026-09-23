@@ -7,7 +7,16 @@ from typing import Any, Optional
 
 import requests
 
+from core.shared_credentials import shared_admin_credentials
+
 logger = logging.getLogger(__name__)
+
+
+def nzbget_credentials() -> tuple[str, str]:
+    shared = shared_admin_credentials()
+    if shared:
+        return shared
+    return "nzbget", "tegbzn6789"
 
 
 class NZBGetClient:
@@ -15,11 +24,33 @@ class NZBGetClient:
         self,
         host: str = "127.0.0.1",
         port: int = 6789,
-        username: str = "nzbget",
-        password: str = "tegbzn6789",
+        username: str | None = None,
+        password: str | None = None,
     ) -> None:
+        stored_user, stored_pass = nzbget_credentials()
         self.url = f"http://{host}:{port}/jsonrpc"
-        self.auth = (username, password)
+        self.username = username if username is not None else stored_user
+        self.password = password if password is not None else stored_pass
+        self.auth = (self.username, self.password)
+
+    def set_login(self, username: str, password: str) -> bool:
+        candidates = [(self.username, self.password), nzbget_credentials(), ("nzbget", "tegbzn6789")]
+        seen: set[tuple[str, str]] = set()
+        for user, pw in candidates:
+            if (user, pw) in seen:
+                continue
+            seen.add((user, pw))
+            self.auth = (user, pw)
+            if self._call("version") is None:
+                continue
+            name_ok = self._call("configset", ["ControlUsername", username])
+            pass_ok = self._call("configset", ["ControlPassword", password])
+            if name_ok is not None and name_ok is not False and pass_ok is not None and pass_ok is not False:
+                self.username = username
+                self.password = password
+                self.auth = (username, password)
+                return True
+        return False
 
     def _call(self, method: str, params: Optional[list[Any]] = None) -> Any:
         payload = {"jsonrpc": "2.0", "method": method, "params": params or [], "id": 1}

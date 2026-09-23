@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from core.auth import COOKIE_CSRF, auth_manager
+from core.shared_credentials import save_shared_admin_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ async def setup_admin(req: SetupRequest, response: Response) -> dict:
     Creates the first local administrator account if none exists.
     """
     auth_manager.create_admin(username=req.username, password=req.password)
+    save_shared_admin_credentials(req.username, req.password)
     token = auth_manager.issue_token(req.username)
     csrf = auth_manager.set_session_cookies(response, token)
     return {
@@ -102,6 +104,8 @@ async def login(req: LoginRequest, request: Request, response: Response) -> dict
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password.",
         )
+
+    save_shared_admin_credentials(req.username, req.password)
 
     token = auth_manager.issue_token(req.username)
     csrf = auth_manager.set_session_cookies(response, token)
