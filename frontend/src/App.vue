@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { appIconSrc } from './appIcons.js'
 
 // --- State Variables ---
 const authStatus = ref({
@@ -27,6 +28,7 @@ const systemInfo = ref(null)
 const hostArch = ref('')
 const isLoadingData = ref(false)
 const actionLoading = ref({}) // map appName -> action ("start", "stop", etc.)
+const iconFailed = ref({})
 
 // Toast messages
 const toasts = ref([])
@@ -314,6 +316,7 @@ const combinedServices = computed(() => {
       displayName: cat.display_name,
       description: cat.description,
       category: cat.category,
+      iconSrc: appIconSrc(cat.name),
       tier: cat.tier,
       port: cat.port || cat.default_port,
       installed: cat.installed || (live && live.installed) || false,
@@ -637,7 +640,11 @@ onUnmounted(() => {
     <header class="top-nav">
       <div class="nav-brand">
         <div class="logo-orb">
-          <span class="logo-icon">⚡</span>
+          <img
+            src="/logo-aio-media-manager.png"
+            alt="AIO Media Server Manager"
+            class="brand-logo"
+          />
         </div>
         <div class="brand-titles">
           <h1 class="brand-name">AIO Media Manager</h1>
@@ -691,6 +698,11 @@ onUnmounted(() => {
         <div class="glass-card auth-card">
           <div class="card-glow"></div>
           <div class="card-header-accent">
+            <img
+              src="/logo-aio-media-manager.png"
+              alt="AIO Media Server Manager"
+              class="auth-logo"
+            />
             <span class="accent-badge">INITIAL SETUP</span>
             <h2>Create Administrator</h2>
             <p>Welcome! Set up the initial administrator account to protect and manage your server.</p>
@@ -747,6 +759,11 @@ onUnmounted(() => {
         <div class="glass-card auth-card">
           <div class="card-glow"></div>
           <div class="card-header-accent">
+            <img
+              src="/logo-aio-media-manager.png"
+              alt="AIO Media Server Manager"
+              class="auth-logo"
+            />
             <span class="accent-badge">SIGN IN</span>
             <h2>Manager Access</h2>
             <p>Enter your administrator credentials to manage services and server config.</p>
@@ -903,7 +920,14 @@ onUnmounted(() => {
             <div class="service-header">
               <div class="service-ident">
                 <div class="app-badge" :class="service.category">
-                  {{ service.name.substring(0, 2).toUpperCase() }}
+                  <img
+                    v-if="service.iconSrc && !iconFailed[service.name]"
+                    :src="service.iconSrc"
+                    :alt="service.displayName"
+                    class="app-icon"
+                    @error="iconFailed[service.name] = true"
+                  />
+                  <span v-else>{{ service.name.substring(0, 2).toUpperCase() }}</span>
                 </div>
                 <div>
                   <div class="service-name-row">
@@ -1070,6 +1094,12 @@ onUnmounted(() => {
         <div class="modal-header">
           <div class="modal-title-group">
             <span class="modal-dot"></span>
+            <img
+              v-if="activeLogApp?.iconSrc && !iconFailed[activeLogApp.name]"
+              :src="activeLogApp.iconSrc"
+              :alt="activeLogApp.displayName"
+              class="app-icon app-icon-sm"
+            />
             <h3>{{ activeLogApp?.displayName }} Process Logs</h3>
             <span class="font-mono text-dim">({{ activeLogApp?.name }})</span>
           </div>
@@ -1177,15 +1207,35 @@ onUnmounted(() => {
 }
 
 .logo-orb {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #6366f1, #a855f7);
+  background: #05070c;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.35);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+  flex-shrink: 0;
+}
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.auth-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  object-fit: cover;
+  display: block;
+  margin-bottom: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .brand-titles {
@@ -1606,8 +1656,8 @@ onUnmounted(() => {
 }
 
 .app-badge {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 10px;
   background: #1e293b;
   display: flex;
@@ -1616,6 +1666,21 @@ onUnmounted(() => {
   font-weight: 700;
   font-size: 0.85rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.app-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.app-icon-sm {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
 }
 
 .app-badge.indexers { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.1); }

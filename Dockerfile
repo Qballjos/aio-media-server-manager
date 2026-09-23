@@ -6,6 +6,7 @@ WORKDIR /ui
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+COPY logo-aio-media-manager.png ./public/logo-aio-media-manager.png
 RUN npm run build
 
 FROM python:3.14-slim-bookworm
