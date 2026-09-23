@@ -1,0 +1,26 @@
+# One AIO container only — not a per-application compose stack.
+services:
+  aio-media-manager:
+    build: .
+    image: aio-media-manager:latest
+    container_name: aio-media-manager
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/config
+      - ./downloads:/downloads
+      - ./media:/media
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      AMM_VPN_ENABLED: "false"
+      AMM_VPN_ENFORCE: "false"
+      AMM_TRUSTED_PROXIES: ""
+    devices:
+      - /dev/dri:/dev/dri
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    # Required for WireGuard/OpenVPN + netns isolation of qBittorrent.
+    privileged: true

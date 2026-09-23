@@ -127,22 +127,22 @@ Per PROMPT.md §37 Phase 4.
 
 Per PROMPT.md §37 Phase 5.
 
-* [ ] VPN Integration for qBittorrent:
+* [x] VPN Integration for qBittorrent:
   * Isolated network namespace / routing table for torrent traffic only (Usenet bypasses VPN)
   * WireGuard / OpenVPN runner with PrivadoVPN pre-configuration
   * Generic provider abstraction: Mullvad, Proton VPN, AirVPN, IVPN, custom configs
   * Kill switch, DNS leak protection, connection monitoring, automatic reconnect
   * Dashboard warning if qBittorrent runs unprotected when VPN enforcement is enabled
-* [ ] Hardware Transcoding Auto-Detection:
+* [x] Hardware Transcoding Auto-Detection:
   * Automatic probe for Intel Quick Sync, AMD, NVIDIA, and VAAPI (`/dev/dri`)
   * Dynamic configuration of Jellyfin and Plex hardware acceleration (graceful fallback when unavailable)
-* [ ] Advanced System Monitoring:
+* [x] Advanced System Monitoring:
   * Per-core CPU, RAM, disk I/O, network throughput, and hardware temperatures
   * Enhanced per-application resource metrics on the dashboard
-* [ ] Reverse Proxy Readiness (optional — not mandatory for operation):
+* [x] Reverse Proxy Readiness (optional — not mandatory for operation):
   * Trusted proxy header support for Traefik, Caddy, and Nginx
   * Manager continues to work via `http://server-ip:port` without a reverse proxy
-* [ ] Deployment Packaging:
+* [x] Deployment Packaging:
   * **Mode A:** Single all-in-one Dockerfile plus optional compose file for the **one AIO container only** — not per-application containers
   * **Mode B:** Native Linux / LXC deployment with systemd unit file and built-in supervisor fallback when systemd is unavailable
   * **Mode C:** Unraid Community Applications template, Synology Container Manager guide, TrueNAS SCALE app definition

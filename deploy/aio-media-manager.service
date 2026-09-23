@@ -1,0 +1,21 @@
+[Unit]
+Description=AIO Media Server Manager
+Documentation=https://github.com/Qballjos/aio-media-server-manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/aio-media-manager
+Environment=AMM_CONFIG_DIR=/var/lib/aio-media-manager/config
+Environment=AMM_DOWNLOAD_DIR=/var/lib/aio-media-manager/downloads
+Environment=AMM_MEDIA_DIR=/var/lib/aio-media-manager/media
+ExecStart=/opt/aio-media-manager/.venv/bin/python main.py
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
+
+# Child applications are supervised by the manager, not by extra systemd units.
+
+[Install]
+WantedBy=multi-user.target

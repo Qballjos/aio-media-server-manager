@@ -11,9 +11,12 @@ import logging
 
 from fastapi import APIRouter
 
+from core.metrics import collect_metrics
 from core.settings import settings
 from core.storage import StorageManager
 from core.supervisor import ProcessSupervisor
+from core.transcoding import probe_transcoding
+from core.vpn import vpn_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/system", tags=["System"])
@@ -51,6 +54,9 @@ async def system_info() -> dict:
         "settings": settings.as_serialisable_dict(),
         "storage": paths_summary,
         "processes": processes,
+        "metrics": collect_metrics(),
+        "transcoding": probe_transcoding(),
+        "vpn": vpn_manager.status(),
     }
 
 

@@ -301,6 +301,11 @@ const installedAppCount = computed(() => {
   return combinedServices.value.filter(s => s.installed).length
 })
 
+const cpuPercent = computed(() => systemInfo.value?.metrics?.cpu_percent)
+const memPercent = computed(() => systemInfo.value?.metrics?.memory?.percent)
+const vpnUnprotected = computed(() => systemInfo.value?.vpn?.qbittorrent_unprotected)
+const transcodingAvailable = computed(() => systemInfo.value?.transcoding?.available)
+
 // --- App Control Actions ---
 async function startApp(name) {
   actionLoading.value[name] = 'start'
@@ -786,9 +791,10 @@ onUnmounted(() => {
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">STORAGE ATOMICITY</div>
+              <div class="stat-label">CPU / RAM</div>
               <div class="stat-value font-mono">
-                <span class="status-indicator-tag">SINGLE-VOLUME</span>
+                <span class="text-glow-cyan">{{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</span>
+                <span class="stat-sub"> / {{ memPercent != null ? Math.round(memPercent) + '%' : '—' }}</span>
               </div>
             </div>
           </div>
@@ -809,6 +815,14 @@ onUnmounted(() => {
             </div>
           </div>
         </section>
+
+        <div
+          v-if="vpnUnprotected"
+          class="alert-banner alert-error"
+          style="margin-bottom: 1.25rem;"
+        >
+          qBittorrent is running without an active VPN tunnel while VPN enforcement is enabled. Usenet traffic is not routed through the VPN.
+        </div>
 
         <!-- Services Section Header -->
         <div class="section-title-row">

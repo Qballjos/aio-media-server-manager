@@ -24,6 +24,7 @@ from api.routers import integrations as integrations_router
 from api.routers import logs as logs_router
 from api.routers import system as system_router
 from api.routers import wizard as wizard_router
+from api.routers import vpn as vpn_router
 from core.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,15 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        root_path=settings.root_path or "",
     )
+
+    trusted = [item.strip() for item in settings.trusted_proxies.split(",") if item.strip()]
+    if trusted:
+        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+        hosts = "*" if "*" in trusted else trusted
+        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=hosts)
 
     # ------------------------------------------------------------------
     # CORS — allow all origins in development; tighten in production.
@@ -78,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(system_router.router)
     app.include_router(wizard_router.router)
     app.include_router(backups_router.router)
+    app.include_router(vpn_router.router)
 
     # Mount frontend dist if built
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"

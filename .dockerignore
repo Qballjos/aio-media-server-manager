@@ -1,0 +1,17 @@
+# git
+.git
+.github
+**/.venv
+**/node_modules
+frontend/dist
+**/__pycache__
+**/*.pyc
+.env
+config
+downloads
+media
+DUMB
+DUMB_docs
+tests
+*.md
+!README.md

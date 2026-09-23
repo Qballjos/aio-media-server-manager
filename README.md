@@ -37,7 +37,7 @@ Inspired by the process supervision and declarative concepts of DUMB, with **zer
 - [Architecture](ARCHITECTURE.md)
 - [Roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
+- [Deployment](deploy/README.md)
 
 ---
 

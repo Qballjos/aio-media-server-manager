@@ -4,6 +4,7 @@ from pathlib import Path
 
 from applications.base import BaseApplication
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
+from core.vpn import vpn_manager
 
 MANIFEST = AppManifest(
     name="qbittorrent",
@@ -33,9 +34,10 @@ class QBittorrentApp(BaseApplication):
     manifest = MANIFEST
 
     def build_start_command(self, executable: Path) -> list[str]:
-        return [
+        cmd = [
             str(executable),
             f"--webui-port={self.port}",
             f"--profile={self.config_dir}",
             "--confirm-legal-notice",
         ]
+        return vpn_manager.wrap_torrent_command(cmd)

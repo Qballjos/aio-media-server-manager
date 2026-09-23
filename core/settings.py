@@ -116,6 +116,33 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
+    # Reverse proxy (optional)
+    # ------------------------------------------------------------------
+    trusted_proxies: str = Field(
+        default="",
+        description="Comma-separated proxy IPs/CIDRs. Empty disables forwarded-header trust.",
+        validation_alias="AMM_TRUSTED_PROXIES",
+    )
+    root_path: str = Field(
+        default="",
+        description="Optional URL prefix when served behind a reverse proxy subpath.",
+        validation_alias="AMM_ROOT_PATH",
+    )
+
+    # ------------------------------------------------------------------
+    # VPN (torrent traffic only)
+    # ------------------------------------------------------------------
+    vpn_enabled: bool = Field(default=False, validation_alias="AMM_VPN_ENABLED")
+    vpn_enforce: bool = Field(
+        default=False,
+        description="Warn/block qBittorrent when the tunnel is down.",
+        validation_alias="AMM_VPN_ENFORCE",
+    )
+    vpn_provider: str = Field(default="privadovpn", validation_alias="AMM_VPN_PROVIDER")
+    vpn_protocol: str = Field(default="wireguard", validation_alias="AMM_VPN_PROTOCOL")
+    vpn_config_path: Path | None = Field(default=None, validation_alias="AMM_VPN_CONFIG")
+
+    # ------------------------------------------------------------------
     # Validators
     # ------------------------------------------------------------------
 
@@ -159,6 +186,13 @@ class Settings(BaseSettings):
             self.backup_dir = self.backup_dir.expanduser().resolve()
         if self.backup_retention < 1:
             raise ValueError("backup_retention must be at least 1.")
+        if self.vpn_config_path is None:
+            self.vpn_config_path = self.config_dir / "vpn" / "wg0.conf"
+        else:
+            self.vpn_config_path = self.vpn_config_path.expanduser().resolve()
+        self.vpn_protocol = str(self.vpn_protocol).lower()
+        if self.vpn_protocol not in {"wireguard", "openvpn"}:
+            raise ValueError("vpn_protocol must be 'wireguard' or 'openvpn'.")
         return self
 
     # ------------------------------------------------------------------
@@ -185,6 +219,12 @@ class Settings(BaseSettings):
             "api_port": self.api_port,
             "log_level": self.log_level,
             "github_token_configured": bool(self.github_token),
+            "trusted_proxies": self.trusted_proxies,
+            "root_path": self.root_path,
+            "vpn_enabled": self.vpn_enabled,
+            "vpn_enforce": self.vpn_enforce,
+            "vpn_provider": self.vpn_provider,
+            "vpn_protocol": self.vpn_protocol,
         }
 
     def save(self) -> None:
