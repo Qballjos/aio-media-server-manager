@@ -36,7 +36,7 @@ Inspired by the process supervision and declarative concepts of DUMB, with **zer
 ## Documentation
 
 - [Installation](docs/INSTALL.md)
-- [Docker](deploy/DOCKER.md) · [Linux / LXC](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md)
+- [Docker](deploy/DOCKER.md) · [Linux / LXC](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md) · [Cloudflare Tunnel](deploy/CLOUDFLARE.md)
 - [Architecture](ARCHITECTURE.md)
 - [Roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)

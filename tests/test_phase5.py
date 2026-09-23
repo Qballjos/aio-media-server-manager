@@ -67,6 +67,7 @@ def test_system_info_includes_phase5_fields():
     assert "metrics" in data
     assert "transcoding" in data
     assert "vpn" in data
+    assert "cloudflare_tunnel" in data
 
 
 def test_vpn_status_endpoint():

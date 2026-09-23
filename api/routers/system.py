@@ -16,6 +16,7 @@ from core.settings import settings
 from core.storage import StorageManager
 from core.supervisor import ProcessSupervisor
 from core.transcoding import probe_transcoding
+from core.cloudflare_tunnel import cloudflare_tunnel
 from core.vpn import vpn_manager
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ async def system_info() -> dict:
         "metrics": collect_metrics(),
         "transcoding": probe_transcoding(),
         "vpn": vpn_manager.status(),
+        "cloudflare_tunnel": cloudflare_tunnel.status(),
     }
 
 

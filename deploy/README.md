@@ -11,5 +11,6 @@ Published image: [`ghcr.io/qballjos/aio-media-server-manager`](https://github.co
 | C — Unraid | [UNRAID.md](UNRAID.md) |
 | C — Synology Container Manager project | [SYNOLOGY.md](SYNOLOGY.md), [`synology/`](synology/) |
 | C — TrueNAS SCALE | [TRUENAS.md](TRUENAS.md) |
+| Optional Cloudflare Tunnel | [CLOUDFLARE.md](CLOUDFLARE.md) |
 
 Full overview: [docs/INSTALL.md](../docs/INSTALL.md)

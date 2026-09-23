@@ -304,6 +304,10 @@ const installedAppCount = computed(() => {
 const cpuPercent = computed(() => systemInfo.value?.metrics?.cpu_percent)
 const memPercent = computed(() => systemInfo.value?.metrics?.memory?.percent)
 const vpnUnprotected = computed(() => systemInfo.value?.vpn?.qbittorrent_unprotected)
+const cloudflareTunnelIssue = computed(() => {
+  const tunnel = systemInfo.value?.cloudflare_tunnel
+  return Boolean(tunnel?.enabled && !tunnel?.connected)
+})
 const transcodingAvailable = computed(() => systemInfo.value?.transcoding?.available)
 
 // --- App Control Actions ---
@@ -823,6 +827,15 @@ onUnmounted(() => {
         >
           qBittorrent is running without an active VPN tunnel while VPN enforcement is enabled. Usenet traffic is not routed through the VPN.
         </div>
+
+        <div
+          v-if="cloudflareTunnelIssue"
+          class="alert-banner alert-error"
+          style="margin-bottom: 1.25rem;"
+        >
+          Cloudflare Tunnel is enabled but cloudflared is not connected. The manager is still available at http://server-ip:8080.
+        </div>
+
 
         <!-- Services Section Header -->
         <div class="section-title-row">

@@ -17,6 +17,7 @@ IMAGE="${IMAGE:-ghcr.io/qballjos/aio-media-server-manager:latest}"
 
 mkdir -p \
   "${PROJECT}/config/vpn" \
+  "${PROJECT}/config/cloudflare" \
   "${DOWNLOADS}" \
   "${MEDIA}/movies" \
   "${MEDIA}/tv"
@@ -41,6 +42,8 @@ services:
       PGID: "${PGID}"
       AMM_VPN_ENABLED: "false"
       AMM_VPN_ENFORCE: "false"
+      AMM_CLOUDFLARE_TUNNEL_ENABLED: "false"
+      AMM_CLOUDFLARE_TUNNEL_TOKEN_FILE: /config/cloudflare/tunnel.token
       AMM_TRUSTED_PROXIES: ""
     cap_add:
       - NET_ADMIN

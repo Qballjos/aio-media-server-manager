@@ -26,6 +26,7 @@ from api.routers import logs as logs_router
 from api.routers import system as system_router
 from api.routers import wizard as wizard_router
 from api.routers import vpn as vpn_router
+from api.routers import cloudflare_tunnel as cloudflare_tunnel_router
 from core.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,12 @@ def create_app() -> FastAPI:
             settings.api_host,
             settings.api_port,
         )
+        if settings.cloudflare_tunnel_enabled:
+            from core.cloudflare_tunnel import cloudflare_tunnel
+
+            result = await cloudflare_tunnel.start()
+            if result.get("status") == "error":
+                logger.warning("Cloudflare Tunnel did not start: %s", result.get("detail"))
         yield
         logger.info("FastAPI application shutting down.")
 
@@ -70,6 +77,8 @@ def create_app() -> FastAPI:
     )
 
     trusted = [item.strip() for item in settings.trusted_proxies.split(",") if item.strip()]
+    if settings.cloudflare_tunnel_enabled and "127.0.0.1" not in trusted:
+        trusted.append("127.0.0.1")
     if trusted:
         from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -100,6 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(wizard_router.router)
     app.include_router(backups_router.router)
     app.include_router(vpn_router.router)
+    app.include_router(cloudflare_tunnel_router.router)
 
     # Mount frontend dist if built
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"

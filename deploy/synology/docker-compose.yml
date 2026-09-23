@@ -26,6 +26,8 @@ services:
       PGID: "100"
       AMM_VPN_ENABLED: "false"
       AMM_VPN_ENFORCE: "false"
+      AMM_CLOUDFLARE_TUNNEL_ENABLED: "false"
+      AMM_CLOUDFLARE_TUNNEL_TOKEN_FILE: /config/cloudflare/tunnel.token
       AMM_TRUSTED_PROXIES: ""
     cap_add:
       - NET_ADMIN

@@ -130,6 +130,27 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
+    # Cloudflare Tunnel (optional remotely managed cloudflared)
+    # ------------------------------------------------------------------
+    cloudflare_tunnel_enabled: bool = Field(
+        default=False,
+        validation_alias="AMM_CLOUDFLARE_TUNNEL_ENABLED",
+    )
+    cloudflare_tunnel_token: str = Field(
+        default="",
+        description="Tunnel token from the Cloudflare dashboard. Prefer the token file.",
+        validation_alias="AMM_CLOUDFLARE_TUNNEL_TOKEN",
+    )
+    cloudflare_tunnel_token_file: Path | None = Field(
+        default=None,
+        validation_alias="AMM_CLOUDFLARE_TUNNEL_TOKEN_FILE",
+    )
+    cloudflare_tunnel_metrics_addr: str = Field(
+        default="127.0.0.1:2000",
+        validation_alias="AMM_CLOUDFLARE_TUNNEL_METRICS",
+    )
+
+    # ------------------------------------------------------------------
     # VPN (torrent traffic only)
     # ------------------------------------------------------------------
     vpn_enabled: bool = Field(default=False, validation_alias="AMM_VPN_ENABLED")
@@ -190,6 +211,15 @@ class Settings(BaseSettings):
             self.vpn_config_path = self.config_dir / "vpn" / "wg0.conf"
         else:
             self.vpn_config_path = self.vpn_config_path.expanduser().resolve()
+        if self.cloudflare_tunnel_token_file is None:
+            self.cloudflare_tunnel_token_file = (
+                self.config_dir / "cloudflare" / "tunnel.token"
+            )
+        else:
+            self.cloudflare_tunnel_token_file = (
+                self.cloudflare_tunnel_token_file.expanduser().resolve()
+            )
+        self.cloudflare_tunnel_token = (self.cloudflare_tunnel_token or "").strip()
         self.vpn_protocol = str(self.vpn_protocol).lower()
         if self.vpn_protocol not in {"wireguard", "openvpn"}:
             raise ValueError("vpn_protocol must be 'wireguard' or 'openvpn'.")
@@ -225,6 +255,7 @@ class Settings(BaseSettings):
             "vpn_enforce": self.vpn_enforce,
             "vpn_provider": self.vpn_provider,
             "vpn_protocol": self.vpn_protocol,
+            "cloudflare_tunnel_enabled": self.cloudflare_tunnel_enabled,
         }
 
     def save(self) -> None:

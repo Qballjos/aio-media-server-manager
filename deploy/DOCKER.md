@@ -94,3 +94,5 @@ Privileged mode is required for network namespaces and `/dev/net/tun`.
 ## Reverse proxy
 
 The manager works at `http://server-ip:8080` with no proxy. If you put Traefik, Caddy, or Nginx in front, set `AMM_TRUSTED_PROXIES` to the proxy address and `AMM_ROOT_PATH` if the UI is not at `/`.
+
+To expose the appliance with **Cloudflare Tunnel** (no inbound ports), see [CLOUDFLARE.md](CLOUDFLARE.md). `cloudflared` runs inside this container — do not add a second Compose service.

@@ -82,6 +82,18 @@ sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
 
 Set `AMM_VPN_ENABLED=true` in the project compose (and `AMM_VPN_ENFORCE=true` if torrents must not run without a tunnel), then start the project again.
 
+## Cloudflare Tunnel
+
+Do not add a second project service. Write the token on the NAS, then set `AMM_CLOUDFLARE_TUNNEL_ENABLED=true` in the project compose. See [CLOUDFLARE.md](CLOUDFLARE.md).
+
+```bash
+sudo mkdir -p /volume1/docker/aio-media-manager/config/cloudflare
+sudo tee /volume1/docker/aio-media-manager/config/cloudflare/tunnel.token >/dev/null <<'EOF'
+eyJ...paste-token...
+EOF
+sudo chmod 600 /volume1/docker/aio-media-manager/config/cloudflare/tunnel.token
+```
+
 ## Permissions
 
 `PUID`/`PGID` in the compose file must match the `chown` the script applied. If apps cannot write, fix ownership over SSH rather than running as root.

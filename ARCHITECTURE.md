@@ -401,11 +401,12 @@ Remove Lidarr?
 
 A reverse proxy is **not required**. The manager and all application WebUIs are accessible via `http://server-ip:port` out of the box.
 
-The architecture supports optional future reverse proxy integration (Phase 5):
+The architecture supports optional reverse proxy and Cloudflare Tunnel integration:
 
-* Trusted proxy header parsing (`X-Forwarded-For`, `X-Forwarded-Proto`) for Traefik, Caddy, and Nginx.
+* Trusted proxy header parsing (`X-Forwarded-For`, `X-Forwarded-Proto`) for Traefik, Caddy, Nginx, and Cloudflare Tunnel (`cloudflared` on localhost).
+* Optional **Cloudflare Tunnel** connector supervised inside the appliance (remotely managed token, published hostnames in the Cloudflare dashboard). Not a second container.
 * Configurable base URL / subpath prefix for the manager UI.
-* No hard dependency on any specific proxy product.
+* No hard dependency on any specific proxy product or on Cloudflare.
 
 ---
 

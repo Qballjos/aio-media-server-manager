@@ -11,6 +11,7 @@ Published image: `ghcr.io/qballjos/aio-media-server-manager:latest` (`linux/amd6
 | Unraid | [deploy/UNRAID.md](../deploy/UNRAID.md) |
 | Synology DSM (Container Manager project) | [deploy/SYNOLOGY.md](../deploy/SYNOLOGY.md) |
 | TrueNAS SCALE | [deploy/TRUENAS.md](../deploy/TRUENAS.md) |
+| Cloudflare Tunnel (optional) | [deploy/CLOUDFLARE.md](../deploy/CLOUDFLARE.md) |
 
 After the process is running, open `http://<host>:8080` and complete the first-run wizard.
 

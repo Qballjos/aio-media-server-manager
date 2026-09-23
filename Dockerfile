@@ -9,6 +9,7 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.12-slim-bookworm
+ARG TARGETARCH
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     POETRY_VIRTUALENVS_CREATE=false \
@@ -26,6 +27,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         openvpn \
         wireguard-tools \
     && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) cfarch=amd64 ;; \
+      arm64) cfarch=arm64 ;; \
+      arm) cfarch=arm ;; \
+      *) cfarch=amd64 ;; \
+    esac; \
+    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfarch}" \
+      -o /usr/local/bin/cloudflared; \
+    chmod +x /usr/local/bin/cloudflared; \
+    cloudflared --version
 
 WORKDIR /app
 COPY pyproject.toml poetry.lock ./

@@ -26,6 +26,7 @@ services:
       PGID: "1000"
       AMM_VPN_ENABLED: "false"
       AMM_VPN_ENFORCE: "false"
+      AMM_CLOUDFLARE_TUNNEL_ENABLED: "false"
       AMM_TRUSTED_PROXIES: ""
     devices:
       - /dev/dri:/dev/dri
