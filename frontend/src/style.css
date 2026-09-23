@@ -238,28 +238,6 @@ body {
   text-decoration: none;
 }
 
-.btn-primary {
-  background: var(--color-primary);
-  color: white;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-hover);
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.5);
-}
-
-.btn-secondary {
-  background: var(--bg-surface-elevated);
-  border-color: var(--border-subtle);
-  color: var(--text-main);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  border-color: var(--border-hover);
-  background: rgba(255, 255, 255, 0.05);
-}
-
 .btn-danger {
   background: var(--color-danger-bg);
   color: var(--color-danger);
@@ -626,4 +604,192 @@ body {
   border-radius: 50%;
   border-top-color: white;
   animation: spin 0.8s linear infinite;
+}
+
+/* Shared controls — same values as the first-run wizard */
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #cbd5e1;
+}
+
+.ui-input,
+.wizard-input,
+.input-control,
+select.ui-input {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  box-sizing: border-box;
+  font-family: inherit;
+  appearance: none;
+  color-scheme: dark;
+  transition: all 0.2s;
+}
+
+.ui-input:focus,
+.wizard-input:focus,
+.input-control:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.ui-input:read-only {
+  color: #e2e8f0;
+}
+
+.ui-btn,
+.wizard-btn {
+  min-height: 2.6rem;
+  padding: 0.7rem 1.15rem;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.ui-btn-primary,
+.wizard-btn-main,
+.btn-primary {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  border: none;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+}
+
+.ui-btn-primary:hover:not(:disabled),
+.wizard-btn-main:hover:not(:disabled),
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.ui-btn-ghost,
+.wizard-btn-ghost,
+.btn-secondary {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+}
+
+.ui-btn-ghost:hover:not(:disabled),
+.wizard-btn-ghost:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(51, 65, 85, 0.8);
+  color: #fff;
+}
+
+.ui-btn:disabled,
+.wizard-btn:disabled,
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ui-btn.btn-block,
+.btn-primary.btn-block {
+  width: 100%;
+}
+
+.ui-alert,
+.wizard-alert,
+.alert-banner {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.ui-alert-error,
+.alert-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.ui-switch-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ui-switch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.ui-switch-copy strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.ui-switch-copy span {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.ui-switch {
+  appearance: none;
+  flex-shrink: 0;
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(71, 85, 105, 0.7);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.ui-switch[aria-checked="true"] {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+}
+
+.ui-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s;
+}
+
+.ui-switch[aria-checked="true"] .ui-switch-thumb {
+  transform: translateX(20px);
 }

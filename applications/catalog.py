@@ -10,19 +10,12 @@ from typing import Iterable
 
 from applications.base import BaseApplication
 from applications.extended import (
-    AutobrrApp,
     BazarrApp,
-    CleanuparrApp,
-    KometaApp,
     LidarrApp,
-    MaintainerrApp,
-    Mylar3App,
     NeutarrApp,
     NzbgetApp,
     ProfilarrApp,
     RecyclarrApp,
-    TautulliApp,
-    UnpackerrApp,
 )
 from applications.community import FlaresolverrApp, GrimmoryApp, ShelfmarkApp
 from applications.jellyfin import JellyfinApp
@@ -51,17 +44,10 @@ PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
     PlexApp,
     SeerrApp,
     BazarrApp,
-    UnpackerrApp,
     RecyclarrApp,
     ProfilarrApp,
     NeutarrApp,
     LidarrApp,
-    Mylar3App,
-    CleanuparrApp,
-    MaintainerrApp,
-    TautulliApp,
-    AutobrrApp,
-    KometaApp,
     FlaresolverrApp,
     GrimmoryApp,
     ShelfmarkApp,

@@ -44,7 +44,10 @@ class QBittorrentClient:
         shared = shared_admin_credentials()
         if shared:
             attempts.append(shared)
-        attempts.extend([("admin", "adminadmin"), ("admin", "")])
+        # Localhost is often allowed with a blank password after LocalHostAuth=false.
+        attempts.append((self.username or "admin", ""))
+        if not secret_store.get_secret("qbittorrent_password"):
+            attempts.append(("admin", ""))
         seen: set[tuple[str, str]] = set()
         for username, password in attempts:
             if (username, password) in seen:
@@ -61,10 +64,40 @@ class QBittorrentClient:
                     self.username = username
                     self.password = password
                     self._authenticated = True
+                    if username and password:
+                        secret_store.save_secret("qbittorrent_username", username)
+                        secret_store.save_secret("qbittorrent_password", password)
+                    self.relax_local_auth()
                     return True
+                if resp.status_code == 403:
+                    logger.warning("qBittorrent login blocked (banned or CSRF); skipping further attempts")
+                    return False
             except Exception as exc:
                 logger.debug("qBittorrent login failed: %s", exc)
         return False
+
+    def relax_local_auth(self) -> bool:
+        """Bypass WebUI auth for 127.0.0.1 and clear any IP bans from wiring retries."""
+        try:
+            payload = json.dumps(
+                {
+                    "bypass_local_auth": True,
+                    "web_ui_auth_subnet_whitelist_enabled": True,
+                    "web_ui_auth_subnet_whitelist": "127.0.0.0/8, ::1",
+                    "web_ui_csrf_protection_enabled": False,
+                    "web_ui_host_header_validation_enabled": False,
+                    "banned_IPs": "",
+                }
+            )
+            resp = self.session.post(
+                f"{self.base_url}/app/setPreferences",
+                data={"json": payload},
+                timeout=5.0,
+            )
+            return resp.status_code in (200, 201)
+        except Exception as exc:
+            logger.debug("qBittorrent relax_local_auth error: %s", exc)
+            return False
 
     def set_webui_login(self, username: str, password: str) -> bool:
         """Set the WebUI username and password to the shared manager login."""

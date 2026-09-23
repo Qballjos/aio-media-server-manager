@@ -75,6 +75,12 @@ async function revokeShare() {
   }
 }
 
+async function setDebugEnabled(enabled) {
+  if (enabled === share.value.active) return
+  if (enabled) await createShare()
+  else await revokeShare()
+}
+
 async function copyUrl() {
   if (!share.value.url) return
   try {
@@ -103,7 +109,7 @@ onMounted(loadStatus)
     <div class="settings-header">
       <div>
         <h2 class="section-title">Settings</h2>
-        <p class="section-subtitle">Testing and debug tools. Do not leave a share link active longer than you need it.</p>
+        <p class="section-subtitle">Testing tools. Turn debug off when you are done sharing a report.</p>
       </div>
     </div>
 
@@ -117,31 +123,36 @@ onMounted(loadStatus)
         </p>
       </div>
 
-      <div v-if="error" class="alert-banner alert-error">{{ error }}</div>
+      <div v-if="error" class="ui-alert ui-alert-error">{{ error }}</div>
+
+      <div class="ui-switch-row">
+        <div class="ui-switch-copy">
+          <strong>Debug share URL</strong>
+          <span>
+            When on, a time-limited link is available for support. Secrets are redacted.
+            The link expires after {{ share.ttl_hours || 24 }} hours.
+          </span>
+        </div>
+        <button
+          type="button"
+          class="ui-switch"
+          role="switch"
+          :aria-checked="share.active ? 'true' : 'false'"
+          :disabled="loading"
+          :title="share.active ? 'Turn debug sharing off' : 'Turn debug sharing on'"
+          @click="setDebugEnabled(!share.active)"
+        >
+          <span class="ui-switch-thumb"></span>
+        </button>
+      </div>
 
       <div v-if="share.active && share.url" class="share-box">
-        <label class="catalog-filter-label" for="debug-share-url">Share URL</label>
+        <label class="ui-field" for="debug-share-url">Share URL</label>
         <div class="share-row">
-          <input id="debug-share-url" class="input-control font-mono" :value="share.url" readonly />
-          <button type="button" class="btn-secondary" @click="copyUrl">{{ copied ? 'Copied' : 'Copy' }}</button>
+          <input id="debug-share-url" class="ui-input font-mono" :value="share.url" readonly />
+          <button type="button" class="ui-btn ui-btn-ghost" @click="copyUrl">{{ copied ? 'Copied' : 'Copy' }}</button>
         </div>
         <p class="share-meta font-mono">Expires {{ formatExpiry(share.expires_at) }}</p>
-      </div>
-      <p v-else class="share-idle">No debug link is active.</p>
-
-      <div class="settings-actions">
-        <button type="button" class="btn-primary" :disabled="loading" @click="createShare">
-          {{ share.active ? 'Rotate debug link' : 'Create debug link' }}
-        </button>
-        <button
-          v-if="share.active"
-          type="button"
-          class="btn-secondary"
-          :disabled="loading"
-          @click="revokeShare"
-        >
-          Revoke
-        </button>
       </div>
     </div>
 
@@ -167,12 +178,24 @@ onMounted(loadStatus)
   justify-content: space-between;
   align-items: flex-end;
 }
+.section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  color: #fff;
+}
+.section-subtitle {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0.2rem 0 0;
+}
 .settings-card {
   padding: 1.4rem 1.5rem;
 }
 .settings-card-head h3 {
   margin: 0.4rem 0 0.35rem;
   font-size: 1.05rem;
+  color: #fff;
 }
 .settings-card-head p {
   color: #94a3b8;
@@ -183,7 +206,7 @@ onMounted(loadStatus)
   display: flex;
   gap: 0.6rem;
 }
-.share-row .input-control {
+.share-row .ui-input {
   flex: 1;
 }
 .share-meta,
@@ -192,9 +215,7 @@ onMounted(loadStatus)
   font-size: 0.85rem;
   margin-top: 0.55rem;
 }
-.settings-actions {
-  display: flex;
-  gap: 0.6rem;
+.share-box {
   margin-top: 1rem;
 }
 .error-log {

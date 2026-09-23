@@ -16,7 +16,7 @@ AIO Media Server Manager is **one appliance**. The manager and every *Arr app, d
 | TrueNAS SCALE | [deploy/TRUENAS.md](../deploy/TRUENAS.md) |
 | Cloudflare Tunnel (optional) | [deploy/CLOUDFLARE.md](../deploy/CLOUDFLARE.md) |
 
-When the process is up, open `http://<host>:8080` and follow [Usage](USAGE.md).
+When the process is up, open `http://<host>:8080` and follow [Usage](USAGE.md). After `docker compose pull`, recreate the container so published WebUI ports and the Python 3.13 child runtime (Bazarr) match the current image.
 
 ## Host directories
 
@@ -47,7 +47,7 @@ Those paths are wired into Sonarr, Radarr, Lidarr, download clients, Jellyfin, a
 
 ## Ports
 
-The manager UI listens on **8080**. Child applications bind inside the same appliance. Publish the ports you need, or run with host networking.
+The manager UI listens on **8080**. Child applications bind in the same container. Compose, the Synology project file, Unraid XML, and the Docker run example publish their WebUI ports on the host so **Open UI** on the dashboard works (`http://<host>:8989` for Sonarr, and so on). Host networking is an alternative if you prefer not to map each port. An older compose file that only mapped `8080` will leave child UIs unreachable until you copy the current `ports:` list and recreate.
 
 | Application | Default port |
 |-------------|--------------|
@@ -56,13 +56,10 @@ The manager UI listens on **8080**. Child applications bind inside the same appl
 | Shelfmark | 8084 |
 | SABnzbd | 8085 |
 | Jellyfin | 8096 |
-| Tautulli | 8181 |
 | Flaresolverr | 8191 |
-| Maintainerr | 6246 |
 | Bazarr | 6767 |
 | NZBGet | 6789 |
 | Profilarr | 6868 |
-| Autobrr | 7474 |
 | Lidarr | 8686 |
 | Sonarr | 8989 |
 | Radarr | 7878 |
@@ -70,10 +67,8 @@ The manager UI listens on **8080**. Child applications bind inside the same appl
 | Seerr | 5055 |
 | Grimmory | 6060 |
 | NeutArr | 9705 |
-| Cleanuparr | 11083 |
+| Recyclarr | 19001 |
 | Plex | 32400 |
-
-Unpackerr, Recyclarr, Kometa, and Mylar3 use the ports shown on their catalog cards.
 
 ## Development clone
 

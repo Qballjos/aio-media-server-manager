@@ -84,8 +84,11 @@ class RadarrClient:
             ],
         }
         try:
-            resp = requests.post(f"{self.base_url}/downloadclient", headers=self._headers(), json=payload, timeout=5.0)
-            return resp.status_code in (200, 201)
+            resp = requests.post(f"{self.base_url}/downloadclient", headers=self._headers(), json=payload, timeout=8.0)
+            if resp.status_code in (200, 201):
+                return True
+            logger.warning("Radarr add SABnzbd failed (%s): %s", resp.status_code, resp.text[:500])
+            return False
         except Exception as exc:
             logger.debug("Radarr add SABnzbd error: %s", exc)
             return False
@@ -111,8 +114,11 @@ class RadarrClient:
             ],
         }
         try:
-            resp = requests.post(f"{self.base_url}/downloadclient", headers=self._headers(), json=payload, timeout=5.0)
-            return resp.status_code in (200, 201)
+            resp = requests.post(f"{self.base_url}/downloadclient", headers=self._headers(), json=payload, timeout=8.0)
+            if resp.status_code in (200, 201):
+                return True
+            logger.warning("Radarr add qBittorrent failed (%s): %s", resp.status_code, resp.text[:500])
+            return False
         except Exception as exc:
             logger.debug("Radarr add qBittorrent error: %s", exc)
             return False
@@ -148,9 +154,12 @@ class RadarrClient:
                 f"{self.base_url}/downloadclient",
                 headers=self._headers(),
                 json=payload,
-                timeout=5.0,
+                timeout=8.0,
             )
-            return resp.status_code in (200, 201)
+            if resp.status_code in (200, 201):
+                return True
+            logger.warning("Radarr add NZBGet failed (%s): %s", resp.status_code, resp.text[:500])
+            return False
         except Exception as exc:
             logger.debug("Radarr add NZBGet error: %s", exc)
             return False
@@ -163,7 +172,7 @@ class RadarrClient:
                 return False
             cfg = resp.json()
             cfg["renameMovies"] = True
-            cfg["standardMovieFormat"] = "{Movie CleanTitle} ({Release Year}) [imdbid-{ImdbId}] - [{Quality Title}]"
+            cfg["standardMovieFormat"] = "{Movie CleanTitle} ({Release Year}) [imdbid-{ImdbId}] - [{Quality Full}]"
             put_resp = requests.put(f"{self.base_url}/config/naming", headers=self._headers(), json=cfg, timeout=5.0)
             return put_resp.status_code in (200, 202)
         except Exception as exc:

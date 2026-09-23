@@ -8,15 +8,24 @@ services:
     container_name: aio-media-manager
     restart: unless-stopped
     ports:
-      - "8080:8080"
-      # - "8081:8081"   # qBittorrent
-      # - "8085:8085"   # SABnzbd
-      # - "8096:8096"   # Jellyfin
-      # - "8989:8989"   # Sonarr
-      # - "7878:7878"   # Radarr
-      # - "9696:9696"   # Prowlarr
-      # - "5055:5055"   # Seerr
-      # - "32400:32400" # Plex
+      - "8080:8080"     # manager
+      - "8081:8081"     # qBittorrent
+      - "8084:8084"     # Shelfmark
+      - "8085:8085"     # SABnzbd
+      - "8096:8096"     # Jellyfin
+      - "8191:8191"     # Flaresolverr
+      - "5055:5055"     # Seerr
+      - "6060:6060"     # Grimmory
+      - "6767:6767"     # Bazarr
+      - "6789:6789"     # NZBGet
+      - "6868:6868"     # Profilarr
+      - "7878:7878"     # Radarr
+      - "8686:8686"     # Lidarr
+      - "8989:8989"     # Sonarr
+      - "9696:9696"     # Prowlarr
+      - "9705:9705"     # NeutArr
+      - "19001:19001"   # Recyclarr
+      - "32400:32400"   # Plex
     volumes:
       - /volume1/docker/aio-media-manager/config:/config
       # Same shared folder (not two separate DSM shares) so *Arr can hardlink.

@@ -819,10 +819,8 @@ onUnmounted(() => {
         <button
           v-if="authStatus.authenticated && wizardCompleted"
           @click="currentView = currentView === 'settings' ? 'dashboard' : 'settings'"
-          class="metric-pill"
-          :style="currentView === 'settings'
-            ? 'cursor: pointer; background: rgba(99, 102, 241, 0.25); border-color: rgba(99, 102, 241, 0.45); color: #c7d2fe;'
-            : 'cursor: pointer;'"
+          class="metric-pill metric-pill-action"
+          :class="{ 'is-active': currentView === 'settings' }"
           title="Settings and debug share link"
         >
           {{ currentView === 'settings' ? 'Dashboard' : 'Settings' }}
@@ -830,8 +828,7 @@ onUnmounted(() => {
         <button
           v-if="authStatus.authenticated"
           @click="runAutomatedWiring"
-          class="metric-pill"
-          style="cursor: pointer; background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.4); color: #60a5fa;"
+          class="metric-pill metric-pill-action"
           :disabled="wiringRunning"
           title="Trigger automatic integration wiring across applications"
         >
@@ -875,39 +872,42 @@ onUnmounted(() => {
             </div>
 
             <div class="form-group">
-              <label>Administrator Username</label>
+              <label class="ui-field">Administrator Username
               <input
                 v-model="authForm.username"
                 type="text"
                 placeholder="admin"
                 required
-                class="input-control font-mono"
+                class="ui-input font-mono"
               />
+              </label>
             </div>
 
             <div class="form-group">
-              <label>Admin Password (minimum 8 characters)</label>
+              <label class="ui-field">Admin Password (minimum 8 characters)
               <input
                 v-model="authForm.password"
                 type="password"
                 placeholder="••••••••••••"
                 required
-                class="input-control"
+                class="ui-input"
               />
+              </label>
             </div>
 
             <div class="form-group">
-              <label>Confirm Password</label>
+              <label class="ui-field">Confirm Password
               <input
                 v-model="authForm.confirmPassword"
                 type="password"
                 placeholder="••••••••••••"
                 required
-                class="input-control"
+                class="ui-input"
               />
+              </label>
             </div>
 
-            <button type="submit" :disabled="authLoading" class="btn-primary btn-block">
+            <button type="submit" :disabled="authLoading" class="ui-btn ui-btn-primary btn-block">
               <span v-if="authLoading" class="spinner"></span>
               <span v-else>Initialize System & Log In</span>
             </button>
@@ -936,29 +936,31 @@ onUnmounted(() => {
             </div>
 
             <div class="form-group">
-              <label>Username</label>
+              <label class="ui-field">Username
               <input
                 v-model="authForm.username"
                 type="text"
                 placeholder="admin"
                 required
                 autofocus
-                class="input-control font-mono"
+                class="ui-input font-mono"
               />
+              </label>
             </div>
 
             <div class="form-group">
-              <label>Password</label>
+              <label class="ui-field">Password
               <input
                 v-model="authForm.password"
                 type="password"
                 placeholder="••••••••••••"
                 required
-                class="input-control"
+                class="ui-input"
               />
+              </label>
             </div>
 
-            <button type="submit" :disabled="authLoading" class="btn-primary btn-block">
+            <button type="submit" :disabled="authLoading" class="ui-btn ui-btn-primary btn-block">
               <span v-if="authLoading" class="spinner"></span>
               <span v-else>Authenticate Session</span>
             </button>
@@ -1111,7 +1113,7 @@ onUnmounted(() => {
             <h2 class="section-title">Core Applications Stack</h2>
             <p class="section-subtitle">Supervised media pipeline components running bare-metal inside a unified container.</p>
           </div>
-          <button @click="refreshDashboard" class="btn-secondary" :disabled="isLoadingData">
+          <button @click="refreshDashboard" class="ui-btn ui-btn-ghost" :disabled="isLoadingData">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ 'spin-anim': isLoadingData }">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
@@ -1128,7 +1130,7 @@ onUnmounted(() => {
               id="catalog-search"
               v-model="catalogSearch"
               type="search"
-              class="catalog-search-input"
+              class="ui-input catalog-search-input"
               placeholder="Search apps…"
               autocomplete="off"
               spellcheck="false"
@@ -1216,7 +1218,7 @@ onUnmounted(() => {
           </div>
           <div class="catalog-filter-group catalog-sort-group">
             <label class="catalog-filter-label" for="catalog-sort">Sort</label>
-            <select id="catalog-sort" v-model="catalogSort" class="catalog-sort-select">
+            <select id="catalog-sort" v-model="catalogSort" class="ui-input catalog-sort-select">
               <option value="popularity">Popularity</option>
               <option value="az">A to Z</option>
             </select>
@@ -1435,7 +1437,7 @@ onUnmounted(() => {
               type="text"
               v-model="logFilter"
               placeholder="Search logs..."
-              class="input-control font-mono"
+              class="ui-input font-mono"
               style="padding: 4px 8px; font-size: 11px; width: 140px; height: 28px;"
             />
             <label class="toggle-control font-mono">
@@ -1600,6 +1602,26 @@ onUnmounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
   font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.metric-pill-action {
+  cursor: pointer;
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+  font: inherit;
+}
+
+.metric-pill-action.is-active {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: #c7d2fe;
+}
+
+.metric-pill-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .pulse-dot {
@@ -1756,66 +1778,6 @@ onUnmounted(() => {
   gap: 0.4rem;
 }
 
-.form-group label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: #cbd5e1;
-}
-
-.input-control {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 0.7rem 0.9rem;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-}
-
-.input-control:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-}
-
-.alert-banner {
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  line-height: 1.4;
-}
-
-.alert-error {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  border: none;
-  color: #fff;
-  font-weight: 600;
-  padding: 0.8rem 1.2rem;
-  border-radius: 8px;
-  font-size: 0.92rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
-}
-
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-}
-
-.btn-block {
-  width: 100%;
-}
-
 /* Dashboard Metrics */
 .metrics-grid {
   display: grid;
@@ -1945,25 +1907,6 @@ onUnmounted(() => {
   margin: 0.2rem 0 0;
 }
 
-.btn-secondary {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
-  padding: 0.5rem 0.9rem;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  transition: all 0.2s;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: rgba(51, 65, 85, 0.8);
-  color: #fff;
-}
-
 .catalog-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1988,25 +1931,6 @@ onUnmounted(() => {
 .catalog-search-group {
   flex: 1 1 14rem;
   max-width: 22rem;
-}
-
-.catalog-search-input {
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #e2e8f0;
-  padding: 0.4rem 0.7rem;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  width: 100%;
-}
-
-.catalog-search-input::placeholder {
-  color: #64748b;
-}
-
-.catalog-search-input:focus {
-  outline: none;
-  border-color: rgba(56, 189, 248, 0.5);
 }
 
 .catalog-filter-label {
@@ -2067,12 +1991,6 @@ onUnmounted(() => {
 }
 
 .catalog-sort-select {
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #e2e8f0;
-  padding: 0.4rem 0.7rem;
-  border-radius: 8px;
-  font-size: 0.8rem;
   min-width: 10rem;
 }
 

@@ -258,7 +258,6 @@ class WizardEngine:
                 "options": self._annotate_options(
                     [
                         {"id": "bazarr", "name": "Bazarr (Subtitles)"},
-                        {"id": "unpackerr", "name": "Unpackerr (Archive Extraction)"},
                         {"id": "recyclarr", "name": "Recyclarr (TRaSH Guides Sync)"},
                         {"id": "profilarr", "name": "Profilarr (Profile Management)"},
                         {"id": "neutarr", "name": "NeutArr (Automation Optimizer)"},

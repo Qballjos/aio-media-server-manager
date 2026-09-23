@@ -48,7 +48,7 @@ If GHCR is private: `sudo docker login ghcr.io` before starting the project.
 4. **Source:** use the **existing** `docker-compose.yml` (do not paste a second compose file or add more services).
 5. Start the project.
 
-The UI should show a single service `aio-media-manager`. Open `http://<nas-ip>:8080` and complete the wizard.
+The UI should show a single service `aio-media-manager`. Open `http://<nas-ip>:8080` for the manager. **Open UI** on catalog cards uses the app ports (Sonarr `8989`, Radarr `7878`, …), which the project compose now publishes. If you generated compose before that change, copy the `ports:` list from [`synology/docker-compose.yml`](synology/docker-compose.yml) into the project file and recreate the container.
 
 To start from SSH instead of the UI:
 

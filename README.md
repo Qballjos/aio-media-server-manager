@@ -55,30 +55,31 @@ Typical *Arr deployments become a Compose file per application: Sonarr, Radarr, 
 - **Catalog installers** — GitHub releases, official binaries (Jellyfin, Plex), and PyPI applications.
 - **First-run wizard** — pick *Arr apps, download clients, media servers, VPN, and recommended tools; persist paths and credentials; start installs.
 - **Shared local login** — the manager admin username and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin). Plex still uses a Plex account.
-- **Automatic wiring** — categories, root folders, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr / Profilarr / NeutArr / Unpackerr.
+- **Automatic wiring** — categories, root folders, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr / Profilarr / NeutArr.
 - **Storage model** — `config`, `downloads`, and `media` with `PUID` / `PGID` and hardlink checks.
 - **VPN isolation** — qBittorrent and Prowlarr can run in a Linux network namespace bound to WireGuard or OpenVPN; Usenet stays off the tunnel.
 - **Hardware transcoding** — VAAPI / QSV / NVIDIA when the host exposes devices.
 - **Optional Cloudflare Tunnel** — `cloudflared` runs inside this appliance, not as a second Compose service.
 - **Dashboard** — official app logos, help/wiki links, search and sort, updates, backups, and uninstall.
+- **Open UI** — each catalog card opens `http://<host>:<app-port>`. Compose (and the NAS templates) publish those ports; host networking is an alternative.
+- **Settings** — admin **Error manager** with an on/off debug-share toggle (time-limited `/debug/{token}` URL). Account, storage, VPN, and update-schedule screens are not built yet.
 
 ---
 
 ## Application catalog
 
-Twenty-four applications ship in the catalog. Install only what you select.
+Seventeen applications ship in the catalog. Install only what you select.
 
 | Role | Applications |
 |------|----------------|
 | Indexers | Prowlarr, Flaresolverr |
-| Automation | Sonarr, Radarr, Lidarr, Mylar3 |
+| Automation | Sonarr, Radarr, Lidarr |
 | Downloaders | SABnzbd, NZBGet, qBittorrent |
 | Media servers | Jellyfin, Plex (may share the same libraries) |
 | Requests | Seerr, Shelfmark |
-| Books / comics | Grimmory |
-| Subtitles / extract | Bazarr, Unpackerr |
-| Profiles / cleanup | Recyclarr, Profilarr, NeutArr, Cleanuparr |
-| Library / stats | Maintainerr, Kometa, Tautulli, Autobrr |
+| Books | Grimmory |
+| Subtitles | Bazarr |
+| Profiles | Recyclarr, Profilarr, NeutArr |
 
 Each catalog card includes a help control that opens that project's official wiki or documentation.
 
@@ -109,7 +110,7 @@ docker compose up -d
 
 Open `http://<host>:8080`. Create the administrator, complete the stack wizard, then use the dashboard to install and start applications.
 
-Image tags: `latest` (main), `sha-<git>`, and semver when a `v*` tag is pushed. Architectures: `linux/amd64`, `linux/arm64`.
+Image tags: `latest` (main), `sha-<git>`, and semver when a `v*` tag is pushed. Architectures: `linux/amd64`, `linux/arm64`. The image runs the manager on Python 3.14 and ships a Python 3.13 runtime for child apps that need it (Bazarr). After a pull, **recreate** the container so new port mappings and the 3.13 runtime take effect.
 
 Full steps: [docs/INSTALL.md](docs/INSTALL.md) · [deploy/DOCKER.md](deploy/DOCKER.md).
 

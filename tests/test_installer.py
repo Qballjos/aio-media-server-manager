@@ -338,11 +338,26 @@ def test_bazarr_start_uses_python_not_raw_script(tmp_path: Path):
     (install_root / "bazarr").mkdir(parents=True)
     script = install_root / "bazarr" / "bazarr.py"
     script.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    venv_python = install_root / "bazarr" / "venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    venv_python.chmod(0o755)
 
     app = BazarrApp(base_config_dir=tmp_path / "config", base_install_dir=install_root)
     cmd = app.start_command()
     runner = install_root / "bazarr" / "run-bazarr"
     assert runner.is_file()
+    assert str(venv_python) in runner.read_text(encoding="utf-8")
     assert cmd[0] == str(runner)
     assert "--no-update" in cmd
     assert str(app.port) in cmd
+
+
+def test_child_python_prefers_env_override(tmp_path: Path, monkeypatch):
+    from applications.install_helpers import child_python
+
+    fake = tmp_path / "python3.13"
+    fake.write_text("#!/bin/sh\n", encoding="utf-8")
+    fake.chmod(0o755)
+    monkeypatch.setenv("AMM_CHILD_PYTHON", str(fake))
+    assert child_python() == str(fake)

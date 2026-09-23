@@ -14,3 +14,5 @@ AIO Media Server Manager is **one process tree** (typically **one container**). 
 | Optional Cloudflare Tunnel | [CLOUDFLARE.md](CLOUDFLARE.md) |
 
 Overview: [docs/INSTALL.md](../docs/INSTALL.md) · first-run: [docs/USAGE.md](../docs/USAGE.md)
+
+The published image is one container. Recreate after pull so WebUI port mappings and the Python 3.13 child runtime apply.

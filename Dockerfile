@@ -13,6 +13,8 @@ FROM node:22-bookworm-slim AS nodebin
 
 FROM eclipse-temurin:25-jre-noble AS jre
 
+FROM python:3.13-slim-bookworm AS py313
+
 FROM python:3.14-slim-bookworm
 ARG TARGETARCH
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -24,11 +26,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     AMM_API_HOST=0.0.0.0 \
     AMM_API_PORT=8080 \
     JAVA_HOME=/opt/java \
+    AMM_CHILD_PYTHON=/usr/local/bin/python3.13 \
     PATH="/opt/java/bin:${PATH}"
 
 COPY --from=jre /opt/java/openjdk /opt/java
+COPY --from=py313 /usr/local /opt/python3.13
 COPY --from=nodebin /usr/local/bin/node /usr/local/bin/node
 COPY --from=nodebin /usr/local/lib/node_modules /usr/local/lib/node_modules
+
+RUN printf '%s\n' \
+        '#!/bin/sh' \
+        'export LD_LIBRARY_PATH=/opt/python3.13/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}' \
+        'exec /opt/python3.13/bin/python3.13 "$@"' \
+        > /usr/local/bin/python3.13 \
+    && chmod +x /usr/local/bin/python3.13
 
 # Servarr/.NET self-contained builds need ICU, OpenSSL, and SQLite from the OS.
 RUN apt-get update \
@@ -46,6 +57,8 @@ RUN apt-get update \
         libsqlite3-0 \
         sqlite3 \
         libxml2 \
+        libxslt1.1 \
+        libjpeg62-turbo \
         libncurses6 \
         libfontconfig1 \
         fonts-liberation \

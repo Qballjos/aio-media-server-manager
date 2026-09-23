@@ -83,12 +83,7 @@ class SonarrClient:
                 {"name": "useSsl", "value": False},
             ],
         }
-        try:
-            resp = requests.post(f"{self.base_url}/downloadclient", headers=self._headers(), json=payload, timeout=5.0)
-            return resp.status_code in (200, 201)
-        except Exception as exc:
-            logger.debug("Sonarr add SABnzbd error: %s", exc)
-            return False
+        return self._post_download_client("SABnzbd", payload)
 
     def add_qbittorrent_client(self, host: str = "127.0.0.1", port: int = 8085, username: str = "admin", password: str = "adminadmin", category: str = "sonarr") -> bool:
         clients = self.get_download_clients()
@@ -110,12 +105,7 @@ class SonarrClient:
                 {"name": "useSsl", "value": False},
             ],
         }
-        try:
-            resp = requests.post(f"{self.base_url}/downloadclient", headers=self._headers(), json=payload, timeout=5.0)
-            return resp.status_code in (200, 201)
-        except Exception as exc:
-            logger.debug("Sonarr add qBittorrent error: %s", exc)
-            return False
+        return self._post_download_client("qBittorrent", payload)
 
     def add_nzbget_client(
         self,
@@ -143,30 +133,46 @@ class SonarrClient:
                 {"name": "useSsl", "value": False},
             ],
         }
+        return self._post_download_client("NZBGet", payload)
+
+    def _post_download_client(self, label: str, payload: dict[str, Any]) -> bool:
         try:
             resp = requests.post(
                 f"{self.base_url}/downloadclient",
                 headers=self._headers(),
                 json=payload,
-                timeout=5.0,
+                timeout=8.0,
             )
-            return resp.status_code in (200, 201)
+            if resp.status_code in (200, 201):
+                return True
+            logger.warning("Sonarr add %s failed (%s): %s", label, resp.status_code, resp.text[:500])
+            return False
         except Exception as exc:
-            logger.debug("Sonarr add NZBGet error: %s", exc)
+            logger.debug("Sonarr add %s error: %s", label, exc)
             return False
 
     def configure_naming_defaults(self) -> bool:
-        """Set standard episode naming format."""
+        """Set Servarr episode naming tokens (not Python format strings)."""
         try:
             resp = requests.get(f"{self.base_url}/config/naming", headers=self._headers(), timeout=5.0)
             if resp.status_code != 200:
                 return False
             cfg = resp.json()
             cfg["renameEpisodes"] = True
-            cfg["standardEpisodeFormat"] = "{Series Title} - S{season:02d}E{episode:02d} - {Episode Title} [{Quality Title}]"
+            cfg["standardEpisodeFormat"] = (
+                "{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Full}]"
+            )
+            cfg["dailyEpisodeFormat"] = "{Series Title} - {Air-Date} - {Episode Title} [{Quality Full}]"
+            cfg["animeEpisodeFormat"] = (
+                "{Series Title} - S{season:00}E{episode:00} - {Episode Title} [{Quality Full}]"
+            )
+            cfg["seasonFolderFormat"] = "Season {season:00}"
             cfg["multiEpisodeStyle"] = 0
             put_resp = requests.put(f"{self.base_url}/config/naming", headers=self._headers(), json=cfg, timeout=5.0)
-            return put_resp.status_code in (200, 202)
+            if put_resp.status_code in (200, 202):
+                return True
+            logger.warning("Sonarr naming update failed (%s): %s", put_resp.status_code, put_resp.text[:500])
+            return False
         except Exception as exc:
             logger.debug("Sonarr configure_naming_defaults error: %s", exc)
             return False

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import stat
 import subprocess
@@ -24,10 +25,24 @@ def write_runner(path: Path, lines: list[str]) -> Path:
     return target
 
 
-def create_venv(install_root: Path) -> Path:
+def child_python() -> str:
+    """Interpreter for apps that do not support the manager's Python (e.g. 3.14)."""
+    for candidate in (
+        os.environ.get("AMM_CHILD_PYTHON"),
+        os.environ.get("AMM_PYTHON_313"),
+        "/opt/python3.13/bin/python3.13",
+        "/opt/python3.13/bin/python3",
+    ):
+        if candidate and Path(candidate).is_file():
+            return candidate
+    return sys.executable
+
+
+def create_venv(install_root: Path, python: str | None = None) -> Path:
     venv_dir = install_root / "venv"
+    interpreter = python or python_bin()
     subprocess.run(
-        [sys.executable, "-m", "venv", str(venv_dir)],
+        [interpreter, "-m", "venv", str(venv_dir)],
         check=True,
         capture_output=True,
         text=True,

@@ -296,7 +296,7 @@ onMounted(async () => {
         </ol>
       </div>
 
-      <p v-if="error" class="wizard-alert">{{ error }}</p>
+      <p v-if="error" class="ui-alert ui-alert-error">{{ error }}</p>
       <p v-if="loading" class="wizard-muted">Loading…</p>
 
       <div v-else class="wizard-body">
@@ -342,30 +342,30 @@ onMounted(async () => {
         </template>
 
         <template v-else-if="step === 3">
-          <label class="wizard-field">
+          <label class="ui-field">
             <span>Media directory</span>
-            <input v-model="selections.media_dir" class="wizard-input font-mono" />
+            <input v-model="selections.media_dir" class="ui-input font-mono" />
           </label>
-          <label class="wizard-field">
+          <label class="ui-field">
             <span>Download directory</span>
-            <input v-model="selections.download_dir" class="wizard-input font-mono" />
+            <input v-model="selections.download_dir" class="ui-input font-mono" />
           </label>
-          <label class="wizard-field">
+          <label class="ui-field">
             <span>Config directory</span>
-            <input v-model="selections.config_dir" class="wizard-input font-mono" />
+            <input v-model="selections.config_dir" class="ui-input font-mono" />
           </label>
           <p class="wizard-muted">{{ payload.hardlink_message }} Put both media and downloads under one host folder (for example <code>/data/media</code> and <code>/data/downloads</code>) so *Arr can hardlink instead of copying.</p>
         </template>
 
         <template v-else-if="step === 4">
           <p class="wizard-muted">Filled from this host’s PUID/PGID (compose <code>PUID</code>/<code>PGID</code>, otherwise 1000). Change only if the media user is different.</p>
-          <label class="wizard-field">
+          <label class="ui-field">
             <span>PUID</span>
-            <input v-model="selections.puid" type="number" min="1" class="wizard-input font-mono" />
+            <input v-model="selections.puid" type="number" min="1" class="ui-input font-mono" />
           </label>
-          <label class="wizard-field">
+          <label class="ui-field">
             <span>PGID</span>
-            <input v-model="selections.pgid" type="number" min="1" class="wizard-input font-mono" />
+            <input v-model="selections.pgid" type="number" min="1" class="ui-input font-mono" />
           </label>
         </template>
 
@@ -386,13 +386,13 @@ onMounted(async () => {
             </label>
           </div>
           <template v-if="showQbitCreds">
-            <label class="wizard-field">
+            <label class="ui-field">
               <span>qBittorrent WebUI username</span>
-              <input v-model="selections.qbittorrent_username" class="wizard-input font-mono" />
+              <input v-model="selections.qbittorrent_username" class="ui-input font-mono" />
             </label>
-            <label class="wizard-field">
+            <label class="ui-field">
               <span>qBittorrent WebUI password</span>
-              <input v-model="selections.qbittorrent_password" type="password" class="wizard-input" placeholder="Leave blank to use the manager password" />
+              <input v-model="selections.qbittorrent_password" type="password" class="ui-input" placeholder="Leave blank to use the manager password" />
             </label>
             <p class="wizard-muted">Blank qBittorrent fields use the same username and password as AIO Media Server Manager.</p>
           </template>
@@ -411,13 +411,13 @@ onMounted(async () => {
             </label>
           </div>
           <template v-if="showVpnFields">
-            <label class="wizard-field">
+            <label class="ui-field">
               <span>VPN config path</span>
-              <input v-model="selections.vpn_config_path" class="wizard-input font-mono" placeholder="/config/vpn/wg0.conf" />
+              <input v-model="selections.vpn_config_path" class="ui-input font-mono" placeholder="/config/vpn/wg0.conf" />
             </label>
-            <label class="wizard-field">
+            <label class="ui-field">
               <span>Protocol</span>
-              <select v-model="selections.vpn_protocol" class="wizard-input">
+              <select v-model="selections.vpn_protocol" class="ui-input">
                 <option value="wireguard">WireGuard</option>
                 <option value="openvpn">OpenVPN</option>
               </select>
@@ -463,9 +463,9 @@ onMounted(async () => {
               <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
             </label>
           </div>
-          <label v-if="showPlexClaim" class="wizard-field">
+          <label v-if="showPlexClaim" class="ui-field">
             <span>Plex claim token</span>
-            <input v-model="selections.plex_claim" class="wizard-input font-mono" placeholder="claim-…" />
+            <input v-model="selections.plex_claim" class="ui-input font-mono" placeholder="claim-…" />
             <span class="wizard-muted">Optional. Get a token from plex.tv/claim, or sign in from the Plex UI later.</span>
           </label>
         </template>
@@ -523,13 +523,13 @@ onMounted(async () => {
       </div>
 
       <div class="wizard-actions">
-        <button type="button" class="wizard-btn wizard-btn-ghost" :disabled="saving || installing" @click="skip">Skip for now</button>
+        <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || installing" @click="skip">Skip for now</button>
         <div class="wizard-nav">
-          <button type="button" class="wizard-btn wizard-btn-ghost" :disabled="step === FIRST || saving || installing" @click="back">Back</button>
-          <button v-if="step !== LAST" type="button" class="wizard-btn wizard-btn-main" :disabled="saving || loading" @click="next">
+          <button type="button" class="ui-btn ui-btn-ghost" :disabled="step === FIRST || saving || installing" @click="back">Back</button>
+          <button v-if="step !== LAST" type="button" class="ui-btn ui-btn-primary" :disabled="saving || loading" @click="next">
             {{ saving ? 'Saving…' : 'Next' }}
           </button>
-          <button v-else type="button" class="wizard-btn wizard-btn-main" :disabled="installing" @click="finish">
+          <button v-else type="button" class="ui-btn ui-btn-primary" :disabled="installing" @click="finish">
             <span v-if="installing" class="spinner spinner-sm"></span>
             {{ installing ? 'Installing…' : 'Save & install' }}
           </button>
@@ -642,32 +642,6 @@ onMounted(async () => {
   gap: 1rem;
   margin: 0 0 1.5rem;
   position: relative;
-}
-.wizard-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: #cbd5e1;
-}
-.wizard-input {
-  width: 100%;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 0.7rem 0.9rem;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 0.9rem;
-  line-height: 1.3;
-  box-sizing: border-box;
-  font-family: inherit;
-  transition: all 0.2s;
-}
-.wizard-input:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 .wizard-options {
   display: flex;
@@ -862,51 +836,7 @@ onMounted(async () => {
   display: flex;
   gap: 0.55rem;
 }
-.wizard-btn {
-  min-height: 2.6rem;
-  padding: 0.7rem 1.15rem;
-  border-radius: 8px;
-  font-size: 0.92rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  font-family: inherit;
-}
-.wizard-btn-main {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  border: none;
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
-}
-.wizard-btn-main:hover:not(:disabled) {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-}
-.wizard-btn-ghost {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
-}
-.wizard-btn-ghost:hover:not(:disabled) {
-  background: rgba(51, 65, 85, 0.8);
-  color: #fff;
-}
-.wizard-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-.wizard-alert {
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  line-height: 1.4;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+.ui-alert {
   margin-bottom: 1rem;
 }
 .spinner {

@@ -20,7 +20,6 @@ from core.integrations.hooks import (
     write_neutarr_config,
     write_profilarr_config,
     write_recyclarr_config,
-    write_unpackerr_config,
 )
 from core.integrations.jellyfin import JellyfinClient
 from core.integrations.local_auth import apply_shared_local_logins
@@ -39,6 +38,7 @@ from core.library_layout import (
     jellyfin_libraries,
 )
 from core.settings import settings
+from core.shared_credentials import shared_admin_credentials
 from core.storage import StorageManager
 from core.supervisor import ProcessSupervisor
 
@@ -61,7 +61,6 @@ _STATUS_APPS = (
     "recyclarr",
     "profilarr",
     "neutarr",
-    "unpackerr",
 )
 
 
@@ -83,14 +82,25 @@ class IntegrationEngine:
         return self._catalog.has(name) and self._catalog.get(name).is_installed()
 
     def _skip_uninstalled(self, steps: list[dict[str, Any]], name: str, action: str) -> bool:
-        if self._installed(name):
+        return self._skip_unavailable(steps, name, action, require_running=False)
+
+    def _skip_unavailable(
+        self,
+        steps: list[dict[str, Any]],
+        name: str,
+        action: str,
+        *,
+        require_running: bool = True,
+    ) -> bool:
+        if self._installed(name) and (not require_running or self._is_app_running(name)):
             return False
+        detail = "not installed" if not self._installed(name) else "not running"
         steps.append(
             {
                 "target": name,
                 "action": action,
                 "status": "skipped",
-                "detail": "not installed",
+                "detail": detail,
             }
         )
         return True
@@ -126,6 +136,7 @@ class IntegrationEngine:
 
         qb_user, qb_pass = qbittorrent_credentials()
         nzb_user, nzb_pass = nzbget_credentials()
+        downloader_register: list[str] = []
         sab_port = self._port("sabnzbd", 8085)
         nzb_port = self._port("nzbget", 6789)
         qb_port = self._port("qbittorrent", 8081)
@@ -151,45 +162,57 @@ class IntegrationEngine:
         radarr_url = f"http://127.0.0.1:{radarr_port}"
         lidarr_url = f"http://127.0.0.1:{lidarr_port}"
 
-        if not self._skip_uninstalled(steps, "sabnzbd", "configure_folders_and_categories"):
+        if not self._skip_unavailable(steps, "sabnzbd", "configure_folders_and_categories"):
             sab_client = SABnzbdClient(port=sab_port, api_key=sab_key)
             sab_ok = sab_client.set_folders(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
                 sab_ok = sab_client.add_category(category.name, dir_path=category.library) and sab_ok
+            if sab_ok and sab_key:
+                downloader_register.append("sabnzbd")
             steps.append(_step("sabnzbd", "configure_folders_and_categories", sab_ok, str(layout.complete)))
 
-        if not self._skip_uninstalled(steps, "nzbget", "configure_folders_and_categories"):
+        if not self._skip_unavailable(steps, "nzbget", "configure_folders_and_categories"):
             nzb = NZBGetClient(port=nzb_port)
             nzb_ok = nzb.set_download_dirs(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
                 nzb_ok = nzb.add_category(category.name, dest_dir=str(layout.complete_path(category.library))) and nzb_ok
+            if nzb_ok:
+                downloader_register.append("nzbget")
             steps.append(_step("nzbget", "configure_folders_and_categories", nzb_ok, str(layout.complete)))
 
-        if not self._skip_uninstalled(steps, "qbittorrent", "configure_folders_and_categories"):
+        if not self._skip_unavailable(steps, "qbittorrent", "configure_folders_and_categories"):
             qb_client = QBittorrentClient(port=qb_port)
-            qb_client.login()
-            qb_ok = qb_client.set_download_paths(str(layout.torrents), str(layout.incomplete))
-            for category in DOWNLOAD_CATEGORIES:
-                qb_ok = qb_client.create_category(
-                    category.name,
-                    save_path=str(layout.torrent_path(category.library)),
-                ) and qb_ok
+            logged_in = qb_client.login()
+            qb_ok = False
+            if logged_in:
+                shared = shared_admin_credentials()
+                if shared:
+                    qb_client.set_webui_login(shared[0], shared[1])
+                qb_user, qb_pass = qb_client.username, qb_client.password
+                qb_ok = qb_client.set_download_paths(str(layout.torrents), str(layout.incomplete))
+                for category in DOWNLOAD_CATEGORIES:
+                    qb_ok = qb_client.create_category(
+                        category.name,
+                        save_path=str(layout.torrent_path(category.library)),
+                    ) and qb_ok
+                downloader_register.append("qbittorrent")
             steps.append(_step("qbittorrent", "configure_folders_and_categories", qb_ok, str(layout.torrents)))
 
         roots = arr_root_folders(layout)
         if not self._skip_uninstalled(steps, "sonarr", "wire_clients_and_storage"):
             sonarr_client = SonarrClient(port=sonarr_port, api_key=sonarr_key)
             sonarr_root = all(sonarr_client.add_root_folder(str(path)) for path in roots["sonarr"])
-            sonarr_dl = any(
-                [
-                    sonarr_client.add_sabnzbd_client(port=sab_port, api_key=sab_key or "", category="sonarr"),
-                    sonarr_client.add_nzbget_client(
-                        port=nzb_port, username=nzb_user, password=nzb_pass, category="sonarr"
-                    ),
-                    sonarr_client.add_qbittorrent_client(
-                        port=qb_port, username=qb_user, password=qb_pass, category="sonarr"
-                    ),
-                ]
+            sonarr_dl = _register_download_clients(
+                downloader_register,
+                add_sab=lambda: sonarr_client.add_sabnzbd_client(
+                    port=sab_port, api_key=sab_key or "", category="sonarr"
+                ),
+                add_nzb=lambda: sonarr_client.add_nzbget_client(
+                    port=nzb_port, username=nzb_user, password=nzb_pass, category="sonarr"
+                ),
+                add_qb=lambda: sonarr_client.add_qbittorrent_client(
+                    port=qb_port, username=qb_user, password=qb_pass, category="sonarr"
+                ),
             )
             sonarr_naming = sonarr_client.configure_naming_defaults()
             steps.append(
@@ -204,16 +227,17 @@ class IntegrationEngine:
         if not self._skip_uninstalled(steps, "radarr", "wire_clients_and_storage"):
             radarr_client = RadarrClient(port=radarr_port, api_key=radarr_key)
             radarr_root = all(radarr_client.add_root_folder(str(path)) for path in roots["radarr"])
-            radarr_dl = any(
-                [
-                    radarr_client.add_sabnzbd_client(port=sab_port, api_key=sab_key or "", category="radarr"),
-                    radarr_client.add_nzbget_client(
-                        port=nzb_port, username=nzb_user, password=nzb_pass, category="radarr"
-                    ),
-                    radarr_client.add_qbittorrent_client(
-                        port=qb_port, username=qb_user, password=qb_pass, category="radarr"
-                    ),
-                ]
+            radarr_dl = _register_download_clients(
+                downloader_register,
+                add_sab=lambda: radarr_client.add_sabnzbd_client(
+                    port=sab_port, api_key=sab_key or "", category="radarr"
+                ),
+                add_nzb=lambda: radarr_client.add_nzbget_client(
+                    port=nzb_port, username=nzb_user, password=nzb_pass, category="radarr"
+                ),
+                add_qb=lambda: radarr_client.add_qbittorrent_client(
+                    port=qb_port, username=qb_user, password=qb_pass, category="radarr"
+                ),
             )
             radarr_naming = radarr_client.configure_naming_defaults()
             steps.append(
@@ -245,6 +269,7 @@ class IntegrationEngine:
                 qb_username=qb_user,
                 qb_password=qb_pass,
                 category="lidarr",
+                register=downloader_register,
             )
             steps.append(_step("lidarr", "wire_clients_and_storage", lidarr_ok, str(layout.music)))
 
@@ -341,26 +366,6 @@ class IntegrationEngine:
         except Exception as exc:
             steps.append(_step("neutarr", "write_starter_config", False, str(exc)))
 
-        try:
-            unpack_dir = (
-                self._catalog.get("unpackerr").config_dir
-                if self._catalog.has("unpackerr")
-                else self._settings.config_dir / "unpackerr"
-            )
-            unpack_path = write_unpackerr_config(
-                unpack_dir,
-                complete_paths=[str(layout.complete_path(cat.library)) for cat in DOWNLOAD_CATEGORIES],
-                sonarr_url=sonarr_url,
-                sonarr_key=sonarr_key or "",
-                radarr_url=radarr_url,
-                radarr_key=radarr_key or "",
-                lidarr_url=lidarr_url,
-                lidarr_key=lidarr_key or "",
-            )
-            steps.append(_step("unpackerr", "write_starter_config", True, str(unpack_path)))
-        except Exception as exc:
-            steps.append(_step("unpackerr", "write_starter_config", False, str(exc)))
-
         def _api_key(name: str) -> str | None:
             return get_application_api_key(name)
 
@@ -381,6 +386,23 @@ class IntegrationEngine:
         return {"timestamp": time.time(), "status": "completed", "steps": steps, "layout": layout.as_dict()}
 
 
+def _register_download_clients(
+    register: list[str],
+    *,
+    add_sab,
+    add_nzb,
+    add_qb,
+) -> bool:
+    results: list[bool] = []
+    if "sabnzbd" in register:
+        results.append(bool(add_sab()))
+    if "nzbget" in register:
+        results.append(bool(add_nzb()))
+    if "qbittorrent" in register:
+        results.append(bool(add_qb()))
+    return all(results) if results else True
+
+
 def _wire_arr_app(
     client: ArrAppClient,
     roots,
@@ -394,18 +416,18 @@ def _wire_arr_app(
     qb_password: str = "adminadmin",
     nzb_username: str = "nzbget",
     nzb_password: str = "tegbzn6789",
+    register: list[str] | None = None,
 ) -> bool:
     root_ok = all(client.add_root_folder(str(path)) for path in roots)
-    dl_ok = any(
-        [
-            client.add_sabnzbd_client(port=sab_port, api_key=sab_key, category=category),
-            client.add_nzbget_client(
-                port=nzb_port, username=nzb_username, password=nzb_password, category=category
-            ),
-            client.add_qbittorrent_client(
-                port=qb_port, username=qb_username, password=qb_password, category=category
-            ),
-        ]
+    dl_ok = _register_download_clients(
+        register or [],
+        add_sab=lambda: client.add_sabnzbd_client(port=sab_port, api_key=sab_key, category=category),
+        add_nzb=lambda: client.add_nzbget_client(
+            port=nzb_port, username=nzb_username, password=nzb_password, category=category
+        ),
+        add_qb=lambda: client.add_qbittorrent_client(
+            port=qb_port, username=qb_username, password=qb_password, category=category
+        ),
     )
     return root_ok and dl_ok
 

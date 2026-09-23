@@ -158,9 +158,18 @@ class ArrAppClient:
                 f"{self.base_url}/downloadclient",
                 headers=self._headers(),
                 json=payload,
-                timeout=5.0,
+                timeout=8.0,
             )
-            return resp.status_code in (200, 201)
+            if resp.status_code in (200, 201):
+                return True
+            logger.warning(
+                "%s add %s failed (%s): %s",
+                self.label,
+                implementation,
+                resp.status_code,
+                resp.text[:500],
+            )
+            return False
         except Exception as exc:
             logger.debug("%s add %s error: %s", self.label, implementation, exc)
             return False

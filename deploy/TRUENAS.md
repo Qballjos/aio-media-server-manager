@@ -41,7 +41,7 @@ Keep downloads and media as **directories on one dataset**. Two ZFS datasets can
 
 1. **Apps → Discover → Custom App** (or Launch Docker Image).
 2. Image: `ghcr.io/qballjos/aio-media-server-manager:latest`
-3. Port forwarding: `8080` → `8080` (and child WebUI ports, or host network).
+3. Port forwarding: `8080` → `8080` plus the child WebUI ports from [INSTALL.md](../docs/INSTALL.md#ports) (or host network).
 4. Storage (paths from the SSH commands above):
    - `/mnt/tank/apps/aio-media-manager` → `/config`
    - `/mnt/tank/data` → `/data`
@@ -49,7 +49,7 @@ Keep downloads and media as **directories on one dataset**. Two ZFS datasets can
 6. Privileged / `NET_ADMIN` if you enable qBittorrent VPN.
 7. GPU: pass `/dev/dri` (Intel/AMD) or NVIDIA runtime when transcoding.
 
-The manager UI is `http://<truenas-ip>:8080`.
+The manager UI is `http://<truenas-ip>:8080`. Recreate the custom app after an image update so new published ports apply.
 
 ## Updates
 

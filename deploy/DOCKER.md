@@ -40,7 +40,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Open `http://<host>:8080`. Create the administrator, then complete or skip the stack wizard ([Usage](../docs/USAGE.md)).
+Open `http://<host>:8080`. Create the administrator, then complete or skip the stack wizard ([Usage](../docs/USAGE.md)). If you already ran an older compose that only published `8080`, merge the current `ports:` list and `docker compose up -d --force-recreate`.
 
 To rebuild from this checkout instead of GHCR:
 
@@ -58,6 +58,11 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   --cap-add NET_ADMIN --cap-add SYS_MODULE \
   --device /dev/dri:/dev/dri \
   -p 8080:8080 \
+  -p 8081:8081 -p 8084:8084 -p 8085:8085 -p 8096:8096 \
+  -p 8191:8191 -p 5055:5055 -p 6060:6060 \
+  -p 6767:6767 -p 6789:6789 -p 6868:6868 \
+  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 \
+  -p 19001:19001 -p 32400:32400 \
   -e PUID="${PUID}" -e PGID="${PGID}" \
   -v /opt/aio-media-manager/config:/config \
   -v /opt/aio-media-manager/data:/data \
@@ -66,7 +71,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   ghcr.io/qballjos/aio-media-server-manager:latest
 ```
 
-Add `-p` mappings for child WebUIs you want on the host, or use `--network host` (then the manager is still on port 8080).
+Add `-p` mappings for child WebUIs (the example above publishes the catalog defaults), or use `--network host` (then the manager is still on port 8080).
 
 ## Private GHCR image
 

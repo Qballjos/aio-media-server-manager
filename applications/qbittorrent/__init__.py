@@ -4,6 +4,7 @@ from pathlib import Path
 
 from applications.base import BaseApplication
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
+from applications.qbittorrent.webui import ensure_webui_localhost_access
 from core.vpn import vpn_manager
 
 MANIFEST = AppManifest(
@@ -34,6 +35,7 @@ class QBittorrentApp(BaseApplication):
     manifest = MANIFEST
 
     def build_start_command(self, executable: Path) -> list[str]:
+        ensure_webui_localhost_access(self.config_dir)
         cmd = [
             str(executable),
             f"--webui-port={self.port}",

@@ -30,16 +30,20 @@ qBittorrent username and password in the wizard may be left blank. Blank fields 
 
 ## 3. Catalog dashboard
 
-The dashboard lists every catalog application.
+The dashboard lists the **17** catalog applications (installed vs available counts are separate).
 
-- Filter by **category**
+- Filter by **status** and **category**
 - Sort by **popularity** or **A–Z**
 - **Search** by name
 - **?** opens that application's official wiki or documentation
 - **Download & Install** fetches the upstream binary and starts the process when it is a daemon
 - Installed apps expose Start, Stop, Restart, Open UI, Logs, Update, and Uninstall
 
-Wiring (indexers, download clients, libraries) runs after relevant apps are installed and healthy.
+**Open UI** uses `http://<host>:<app-port>` (for example Sonarr `8989`). That only works if the appliance compose/template publishes those ports, or the container uses host networking. Recreate the container after pulling an image that added port mappings.
+
+Wiring (indexers, download clients, libraries) runs after relevant apps are installed **and running**. Clients that are not installed or not healthy are skipped so Sonarr/Radarr are not pointed at a dead NZBGet/SABnzbd/qBittorrent. qBittorrent on localhost is allowed without the WebUI login prompt.
+
+Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Rebuild/recreate the image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`.
 
 ## 4. Shared local login
 
@@ -56,7 +60,7 @@ These remain separate accounts inside each product. They are created to **match*
 
 - **Plex** — Plex account or claim token
 - **Seerr** — typically Jellyfin or Plex sign-in
-- Tools with no web login (Unpackerr, Recyclarr, Flaresolverr, and similar)
+- Tools with no web login (Recyclarr, Flaresolverr, and similar)
 
 Open **Open UI** on each app the first time to confirm that product's own setup finished (especially Jellyfin and Plex).
 
@@ -67,4 +71,15 @@ Open **Open UI** on each app the first time to confirm that product's own setup 
 
 ## 6. Backups and updates
 
-Use the dashboard to update an application (snapshot, health check, rollback on failure) and to run configuration backups. Media libraries and torrent payloads are never deleted by uninstall or backup jobs.
+Use the dashboard to update an application (snapshot, health check, rollback on failure) and to run configuration backups. Media libraries and torrent payloads are never deleted by uninstall or backup jobs. There is no scheduled update checker yet — updates run when you click **Update** on a card.
+
+## 7. Settings
+
+The **Settings** nav item opens an admin page (separate from the catalog). Today it includes:
+
+- **Error manager** — recent ERROR+ events from this process
+- **Debug share URL** — a toggle. On creates a time-limited, secret-redacted report at `/debug/{token}` (24 hours). Off revokes it. Copy the URL only while the toggle is on.
+
+Do not leave debug sharing on after you finish a support conversation.
+
+Inputs and buttons across login, wizard, catalog, and Settings use the same control styles as the first-run wizard.

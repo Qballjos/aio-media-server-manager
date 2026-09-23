@@ -54,7 +54,7 @@ sudo systemctl enable --now aio-media-manager
 
 Open `http://<host>:8080`.
 
-If the host has no systemd, run `poetry run python main.py` under the built-in supervisor (tmux/screen, or your process manager). Do not add one systemd unit per *Arr application.
+If systemd-managed Python is 3.14+, install a 3.13 interpreter for Bazarr (`AMM_CHILD_PYTHON` pointing at `python3.13`) or Bazarr will fail on missing `PIL` / unsupported Python.
 
 ## Service file
 

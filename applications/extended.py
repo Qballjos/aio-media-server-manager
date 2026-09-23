@@ -8,7 +8,7 @@ from pathlib import Path
 
 from applications.arr import ArrApplication
 from applications.base import SimpleApplication
-from applications.install_helpers import create_venv, python_bin, venv_bin, write_runner
+from applications.install_helpers import child_python, create_venv, venv_bin, write_runner
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
 from core.installer import AppInstaller, InstallResult
 from core.installer.arch import PlatformArch, detect_system_arch
@@ -190,21 +190,51 @@ class BazarrApp(SimpleApplication):
         return super().executable_path()
 
     def start_command(self) -> list[str]:
+        self._ensure_runtime()
         self._write_runner()
         return super().start_command()
+
+    def _venv_python(self) -> Path:
+        return venv_bin(self.install_dir / "venv", "python")
+
+    def _pillow_ok(self, python: Path) -> bool:
+        if not python.is_file():
+            return False
+        probe = subprocess.run(
+            [str(python), "-c", "import PIL"],
+            capture_output=True,
+            text=True,
+        )
+        return probe.returncode == 0
+
+    def _ensure_runtime(self) -> Path:
+        venv_python = self._venv_python()
+        if venv_python.is_file() and self._pillow_ok(venv_python):
+            return venv_python
+        venv_dir = create_venv(self.install_dir, python=child_python())
+        pip = venv_bin(venv_dir, "pip")
+        requirements = self.install_dir / "requirements.txt"
+        cmd = [str(pip), "install"]
+        if requirements.is_file():
+            cmd.extend(["-r", str(requirements)])
+        else:
+            cmd.extend(["Pillow>=9.0.0", "lxml>=4.3.0", "numpy>=1.12.0,<2.4.0", "setuptools"])
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return venv_bin(venv_dir, "python")
 
     def _write_runner(self) -> Path | None:
         script = self.install_dir / "bazarr.py"
         if not script.is_file():
             return None
-        python = python_bin()
-        return write_runner(
-            self.install_dir / "run-bazarr",
-            [
-                "#!/bin/sh",
-                f'exec "{python}" "{script}" "$@"',
-            ],
-        )
+        venv_python = self._venv_python()
+        interpreter = str(venv_python) if venv_python.is_file() else child_python()
+        lines = ["#!/bin/sh"]
+        if Path("/opt/python3.13/lib").is_dir():
+            lines.append(
+                'export LD_LIBRARY_PATH="/opt/python3.13/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"'
+            )
+        lines.append(f'exec "{interpreter}" "{script}" "$@"')
+        return write_runner(self.install_dir / "run-bazarr", lines)
 
     def install(self) -> InstallResult:
         installer = AppInstaller()
@@ -214,33 +244,13 @@ class BazarrApp(SimpleApplication):
             executable_name="bazarr.py",
             preferred_patterns=self.preferred_patterns(),
         )
+        self._ensure_runtime()
         self._write_runner()
         self.post_install()
         return result
 
     def start_args(self) -> list[str]:
         return ["--no-update", "--config", str(self.config_dir), "--port", str(self.port)]
-
-
-class UnpackerrApp(SimpleApplication):
-    manifest = AppManifest(
-        name="unpackerr",
-        display_name="Unpackerr",
-        description="Extracts completed archives from download clients automatically.",
-        github_repo="Unpackerr/unpackerr",
-        upstream_url="https://github.com/Unpackerr/unpackerr",
-        tier=AppTier.RECOMMENDED,
-        category=AppCategory.MAINTENANCE,
-        default_port=5656,
-        executable_name="unpackerr",
-        supported_architectures=("x86_64", "arm64", "armv7"),
-        install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=("linux",),
-        health_path="/",
-    )
-
-    def start_args(self) -> list[str]:
-        return [f"--config={self.config_dir / 'unpackerr.conf'}"]
 
 
 class RecyclarrApp(SimpleApplication):
@@ -478,119 +488,3 @@ def _ensure_deno(bin_dir: Path) -> Path:
     deno.chmod(deno.stat().st_mode | 0o755)
     shutil.rmtree(staging, ignore_errors=True)
     return deno
-
-
-class Mylar3App(SimpleApplication):
-    manifest = AppManifest(
-        name="mylar3",
-        display_name="Mylar3",
-        description="Comic book automation compatible with the *Arr workflow.",
-        github_repo="MylarComics/mylar3",
-        upstream_url="https://github.com/MylarComics/mylar3",
-        tier=AppTier.OPTIONAL,
-        category=AppCategory.AUTOMATION,
-        default_port=8090,
-        executable_name="mylar3",
-        supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.PYPI,
-        optional_dependencies=("sabnzbd", "qbittorrent"),
-        health_path="/",
-    )
-
-
-class CleanuparrApp(SimpleApplication):
-    manifest = AppManifest(
-        name="cleanuparr",
-        display_name="Cleanuparr",
-        description="Cleans stalled and leftover downloads in the *Arr stack.",
-        github_repo="Cleanuparr/Cleanuparr",
-        upstream_url="https://github.com/Cleanuparr/Cleanuparr",
-        tier=AppTier.OPTIONAL,
-        category=AppCategory.MAINTENANCE,
-        default_port=11083,
-        executable_name="Cleanuparr",
-        supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=("linux",),
-        health_path="/",
-    )
-
-
-class MaintainerrApp(SimpleApplication):
-    manifest = AppManifest(
-        name="maintainerr",
-        display_name="Maintainerr",
-        description="Rules-based media library maintenance for Plex and Jellyfin.",
-        github_repo="jorenn92/maintainerr",
-        upstream_url="https://github.com/jorenn92/maintainerr",
-        tier=AppTier.OPTIONAL,
-        category=AppCategory.MAINTENANCE,
-        default_port=6246,
-        executable_name="maintainerr",
-        supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=("linux",),
-        optional_dependencies=("jellyfin", "plex"),
-        health_path="/api/health",
-    )
-
-
-class TautulliApp(SimpleApplication):
-    manifest = AppManifest(
-        name="tautulli",
-        display_name="Tautulli",
-        description="Watch history and statistics for Plex Media Server.",
-        github_repo="Tautulli/Tautulli",
-        upstream_url="https://github.com/Tautulli/Tautulli",
-        tier=AppTier.OPTIONAL,
-        category=AppCategory.MAINTENANCE,
-        default_port=8181,
-        executable_name="tautulli",
-        supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.PYPI,
-        optional_dependencies=("plex",),
-        health_path="/status",
-    )
-
-    def start_args(self) -> list[str]:
-        return ["--nolaunch", "--config", str(self.config_dir / "config.ini"), "--datadir", str(self.data_dir)]
-
-
-class AutobrrApp(SimpleApplication):
-    manifest = AppManifest(
-        name="autobrr",
-        display_name="Autobrr",
-        description="Automation for IRC and torrent announce workflows.",
-        github_repo="autobrr/autobrr",
-        upstream_url="https://github.com/autobrr/autobrr",
-        tier=AppTier.OPTIONAL,
-        category=AppCategory.DOWNLOADING,
-        default_port=7474,
-        executable_name="autobrr",
-        supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=("linux",),
-        health_path="/api/healthz/liveness",
-    )
-
-    def extra_env(self) -> dict[str, str]:
-        return {"AUTOBRR__SERVER__PORT": str(self.port), "AUTOBRR__CONFIG_PATH": str(self.config_dir)}
-
-
-class KometaApp(SimpleApplication):
-    manifest = AppManifest(
-        name="kometa",
-        display_name="Kometa",
-        description="Kometa (formerly Plex Meta Manager) for collections and overlays.",
-        github_repo="Kometa-Team/Kometa",
-        upstream_url="https://github.com/Kometa-Team/Kometa",
-        tier=AppTier.OPTIONAL,
-        category=AppCategory.MAINTENANCE,
-        default_port=19002,
-        executable_name="kometa",
-        supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.PYPI,
-        optional_dependencies=("plex",),
-        health_path="/",
-        daemon=False,
-    )

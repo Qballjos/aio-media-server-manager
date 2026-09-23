@@ -14,16 +14,16 @@ from core.integrations.hooks import (
     write_neutarr_config,
     write_profilarr_config,
     write_recyclarr_config,
-    write_unpackerr_config,
 )
 from core.integrations.nzbget import NZBGetClient
 from core.integrations.prowlarr import ProwlarrClient
+from applications.qbittorrent.webui import ensure_webui_localhost_access
 from core.integrations.qbittorrent import QBittorrentClient
 from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient
 from core.integrations.seerr import SeerrClient
 from core.integrations.sonarr import SonarrClient
-from core.integrations.engine import WIRE_AFTER_INSTALL
+from core.integrations.engine import WIRE_AFTER_INSTALL, _register_download_clients
 
 
 def test_credentials_discovery(tmp_path: Path):
@@ -96,6 +96,42 @@ def test_sonarr_client(mock_post, mock_get):
     assert client.add_sabnzbd_client(api_key="sab_key") is True
     assert client.add_qbittorrent_client() is True
     assert client.add_nzbget_client() is True
+
+
+@patch("requests.get")
+@patch("requests.put")
+def test_sonarr_naming_uses_servarr_tokens(mock_put, mock_get):
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {"id": 1}
+    mock_put.return_value.status_code = 202
+
+    assert SonarrClient(api_key="k").configure_naming_defaults() is True
+    payload = mock_put.call_args.kwargs["json"]
+    assert "{season:00}" in payload["standardEpisodeFormat"]
+    assert "{episode:00}" in payload["standardEpisodeFormat"]
+    assert "{season:02d}" not in payload["standardEpisodeFormat"]
+
+
+def test_register_download_clients_skips_clients_that_are_not_ready():
+    called: list[str] = []
+    assert (
+        _register_download_clients(
+            ["qbittorrent"],
+            add_sab=lambda: called.append("sab") or True,
+            add_nzb=lambda: called.append("nzb") or True,
+            add_qb=lambda: called.append("qb") or True,
+        )
+        is True
+    )
+    assert called == ["qb"]
+    assert _register_download_clients([], add_sab=lambda: False, add_nzb=lambda: False, add_qb=lambda: False) is True
+
+
+def test_qbittorrent_profile_bypasses_localhost_auth(tmp_path: Path):
+    conf = ensure_webui_localhost_access(tmp_path)
+    text = conf.read_text(encoding="utf-8")
+    assert "WebUI\\LocalHostAuth=false" in text
+    assert "127.0.0.0/8" in text
 
 
 @patch("requests.get")
@@ -250,15 +286,3 @@ def test_optimization_hooks(tmp_path: Path):
     assert "hourly_cap" in sonarr_hunt
     assert "http://127.0.0.1:8989" in sonarr_hunt
     assert (tmp_path / "neutarr" / "lidarr.json").is_file()
-    unpack = write_unpackerr_config(
-        tmp_path / "unpackerr",
-        complete_paths=["/downloads/complete/tv", "/downloads/complete/movies"],
-        sonarr_url="http://127.0.0.1:8989",
-        sonarr_key="s",
-        radarr_url="http://127.0.0.1:7878",
-        radarr_key="r",
-    )
-    assert unpack.is_file()
-    text = unpack.read_text(encoding="utf-8")
-    assert "/downloads/complete/tv" in text
-    assert "[[sonarr]]" in text

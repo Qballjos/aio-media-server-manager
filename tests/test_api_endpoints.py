@@ -112,8 +112,8 @@ def test_catalog_endpoints(client: TestClient):
     assert "prowlarr" in names
     assert "sonarr" in names
     sonarr = next(a for a in apps if a["name"] == "sonarr")
-    mylar = next(a for a in apps if a["name"] == "mylar3")
-    assert sonarr["popularity"] > mylar["popularity"]
+    shelfmark = next(a for a in apps if a["name"] == "shelfmark")
+    assert sonarr["popularity"] > shelfmark["popularity"]
     assert "category" in sonarr
 
     # 2. Get single app details

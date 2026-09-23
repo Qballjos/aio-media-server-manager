@@ -77,8 +77,8 @@ def test_topological_sort_order():
 def test_catalog_entries_include_popularity():
     catalog = ApplicationCatalog()
     sonarr = catalog.get("sonarr").catalog_entry()
-    mylar = catalog.get("mylar3").catalog_entry()
-    assert sonarr["popularity"] > mylar["popularity"]
+    shelfmark = catalog.get("shelfmark").catalog_entry()
+    assert sonarr["popularity"] > shelfmark["popularity"]
     assert sonarr["category"] == AppCategory.AUTOMATION.value
     assert sonarr["help_url"] == "https://wiki.servarr.com/sonarr"
 
@@ -103,14 +103,9 @@ def test_catalog_help_urls_and_icons():
         "flaresolverr": "flaresolverr.png",
         "grimmory": "grimmory.svg",
         "shelfmark": "shelfmark.png",
-        "autobrr": "autobrr.svg",
         "bazarr": "bazarr.svg",
-        "cleanuparr": "cleanuparr.png",
         "jellyfin": "jellyfin.svg",
-        "kometa": "kometa.svg",
         "lidarr": "lidarr.svg",
-        "maintainerr": "maintainerr.svg",
-        "mylar3": "mylar.png",
         "neutarr": "neutarr.svg",
         "nzbget": "nzbget.svg",
         "plex": "plex.svg",
@@ -122,8 +117,6 @@ def test_catalog_help_urls_and_icons():
         "sabnzbd": "sabnzbd.svg",
         "seerr": "seerr.svg",
         "sonarr": "sonarr.svg",
-        "tautulli": "tautulli.svg",
-        "unpackerr": "unpackerr.png",
     }
     for plugin in catalog.all_plugins():
         name = plugin.name

@@ -41,7 +41,7 @@ chown -R 99:100 /mnt/cache/appdata/aio-media-manager /mnt/cache/data
 4. Network: `bridge` (or `host` if you want every app WebUI on the Unraid IP).
 5. Privileged: **On** (needed for qBittorrent VPN isolation).
 6. Extra parameters: `--device /dev/dri:/dev/dri --cap-add=NET_ADMIN --cap-add=SYS_MODULE`
-7. Port: `8080` → `8080` (plus any child ports you want published).
+7. Ports (TCP): publish **8080** for the manager and the child WebUIs you installed (Sonarr **8989**, Radarr **7878**, qBittorrent **8081**, SABnzbd **8085**, Jellyfin **8096**, Prowlarr **9696**, Seerr **5055**, Plex **32400**, …). Full list: [INSTALL.md](../docs/INSTALL.md#ports). Or use Network `host`.
 8. Paths (must match the SSH folders):
    - `/config` → `/mnt/user/appdata/aio-media-manager`
    - `/data` → `/mnt/cache/data`
@@ -49,7 +49,7 @@ chown -R 99:100 /mnt/cache/appdata/aio-media-manager /mnt/cache/data
 
 A starting XML template is in [`unraid.xml`](unraid.xml) (copy into `/boot/config/plugins/dockerMan/templates-user/` if you maintain local templates).
 
-Open `http://<unraid-ip>:8080` and run the wizard.
+Open `http://<unraid-ip>:8080` and run the wizard. After updating the image, recreate the container so added WebUI port mappings take effect.
 
 ## FUSE / hardlinks
 
