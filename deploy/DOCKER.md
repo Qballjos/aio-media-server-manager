@@ -40,7 +40,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Open `http://<host>:8080`.
+Open `http://<host>:8080`. Create the administrator, then complete or skip the stack wizard ([Usage](../docs/USAGE.md)).
 
 To rebuild from this checkout instead of GHCR:
 

@@ -1,12 +1,12 @@
 # Contributing
 
-Thanks for helping improve AIO Media Server Manager.
+Thank you for contributing to AIO Media Server Manager.
 
 ## Development setup
 
-- Python 3.11+
+- Python 3.11 or newer
 - [Poetry](https://python-poetry.org/)
-- Node.js 18+ (frontend)
+- Node.js 22 (dashboard)
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git
@@ -16,19 +16,19 @@ poetry install
 cd frontend && npm ci && cd ..
 ```
 
-Run the API:
+API:
 
 ```bash
 poetry run python main.py
 ```
 
-Run the dashboard (optional, Vite proxy to the API):
+Dashboard with Vite (optional; proxies API requests):
 
 ```bash
 cd frontend && npm run dev
 ```
 
-## Checks before opening a PR
+## Checks before a pull request
 
 ```bash
 poetry run pytest
@@ -36,20 +36,20 @@ poetry run ruff check core api applications tests
 cd frontend && npm run build
 ```
 
-Optional: `pre-commit install` to run Ruff and basic file checks on commit.
+Optional: `pre-commit install` for Ruff and basic file checks on commit.
 
 ## Project rules
 
-- One AIO manager, many **managed processes** — do not add per-application Docker Compose services.
+- One manager, many **managed processes**. Do not add per-application Docker Compose services.
 - No Debrid functionality (Real-Debrid, Zurg, Riven, mounts, caches).
-- Application-specific logic belongs in `applications/` plugins, not in `core/`.
+- Application-specific behaviour lives in `applications/` plugins, not in `core/`.
 - Do not log or return secrets in API responses.
-- Never delete media libraries in uninstall/backup paths.
+- Never delete media libraries in uninstall or backup paths.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) and [ROADMAP.md](ROADMAP.md) for the intended design.
+Report vulnerabilities through [GitHub private advisories](https://github.com/Qballjos/aio-media-server-manager/security/advisories/new), not public issues.
 
 ## Pull requests
 
-- Keep changes focused and describe *why* in the PR body.
-- Add or update tests when you change behaviour.
+- Keep the change focused and explain *why* in the PR body.
+- Add or update tests when behaviour changes.
 - Squash merge is preferred.

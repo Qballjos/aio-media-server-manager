@@ -1,51 +1,83 @@
 # Installation
 
-AIO Media Server Manager is **one appliance**: the manager plus every *Arr app, downloader, and media server run as supervised processes. Do not deploy a Compose stack or NAS app per application.
+AIO Media Server Manager is **one appliance**. The manager and every *Arr app, downloader, and media server run as supervised processes inside it. Do not deploy a Compose service or NAS app per application.
 
-Published image: `ghcr.io/qballjos/aio-media-server-manager:latest` (`linux/amd64` and `linux/arm64`).
+**Published image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
+**Architectures:** `linux/amd64`, `linux/arm64`
+
+## Platform guides
 
 | Platform | Guide |
 |----------|--------|
-| Docker / Compose | [deploy/DOCKER.md](../deploy/DOCKER.md) |
+| Docker / Compose (recommended) | [deploy/DOCKER.md](../deploy/DOCKER.md) |
 | Native Linux / LXC / systemd | [deploy/LINUX.md](../deploy/LINUX.md) |
 | Unraid | [deploy/UNRAID.md](../deploy/UNRAID.md) |
-| Synology DSM (Container Manager project) | [deploy/SYNOLOGY.md](../deploy/SYNOLOGY.md) |
+| Synology DSM (Container Manager) | [deploy/SYNOLOGY.md](../deploy/SYNOLOGY.md) |
 | TrueNAS SCALE | [deploy/TRUENAS.md](../deploy/TRUENAS.md) |
 | Cloudflare Tunnel (optional) | [deploy/CLOUDFLARE.md](../deploy/CLOUDFLARE.md) |
 
-After the process is running, open `http://<host>:8080` and complete the first-run wizard.
+When the process is up, open `http://<host>:8080` and follow [Usage](USAGE.md).
 
-## Create folders over SSH
+## Host directories
 
-SSH into the host first, then create the three bind-mount directories (adjust the paths for your NAS). Same filesystem for downloads and media is recommended so hardlinks work.
+SSH into the host and create the three bind mounts. Keep **downloads** and **media** on the same filesystem so *Arr can hardlink instead of copy.
 
 ```bash
 ssh user@host
 
 sudo mkdir -p /path/to/config /path/to/downloads /path/to/media /path/to/config/vpn
 sudo chown -R "$PUID:$PGID" /path/to/config /path/to/downloads /path/to/media
-# If you do not know PUID/PGID yet:
-id
+id   # use this if you do not yet know PUID/PGID
 ```
 
-Platform path examples and full commands: [Docker](../deploy/DOCKER.md), [Linux](../deploy/LINUX.md), [Unraid](../deploy/UNRAID.md), [Synology](../deploy/SYNOLOGY.md), [TrueNAS](../deploy/TRUENAS.md).
+The appliance then creates library layout inside those mounts, for example:
 
-The appliance then creates library subfolders inside those mounts (`media/{tv,movies,anime,music,books}`, `downloads/{complete,incomplete,torrents}/…`, `cache/transcode/{jellyfin,plex}`) and wires them into Sonarr, Radarr, Lidarr, download clients, Jellyfin, and Plex.
+- `media/{tv,movies,anime,music,books}`
+- `downloads/{complete,incomplete,torrents}/…`
+- `cache/transcode/{jellyfin,plex}`
 
-## What you need
+Those paths are wired into Sonarr, Radarr, Lidarr, download clients, Jellyfin, and Plex.
 
-- Storage for **config**, **downloads**, and **media** (same filesystem recommended so hardlinks work).
-- A media user UID/GID (`id`) for `PUID` / `PGID`.
-- Optional: `/dev/dri` (or NVIDIA devices) for hardware transcoding.
-- Optional: `NET_ADMIN` / privileged container and a WireGuard or OpenVPN profile for qBittorrent-only VPN.
+## Requirements
+
+- Disk for **config**, **downloads**, and **media**
+- Media-user UID/GID (`id`) mapped as `PUID` / `PGID`
+- Optional: `/dev/dri` or NVIDIA devices for hardware transcoding
+- Optional: `NET_ADMIN` (or a privileged container) plus a WireGuard or OpenVPN profile if torrent traffic should use a VPN
 
 ## Ports
 
-The manager UI is **8080**. Child apps bind inside the same appliance (Sonarr 8989, Radarr 7878, Prowlarr 9696, qBittorrent 8081, SABnzbd 8085, Jellyfin 8096, Seerr 5055, Plex 32400, and others). Publish those ports, or run the container with host networking.
+The manager UI listens on **8080**. Child applications bind inside the same appliance. Publish the ports you need, or run with host networking.
+
+| Application | Default port |
+|-------------|--------------|
+| Manager UI | 8080 |
+| qBittorrent | 8081 |
+| Shelfmark | 8084 |
+| SABnzbd | 8085 |
+| Jellyfin | 8096 |
+| Tautulli | 8181 |
+| Flaresolverr | 8191 |
+| Maintainerr | 6246 |
+| Bazarr | 6767 |
+| NZBGet | 6789 |
+| Profilarr | 6868 |
+| Autobrr | 7474 |
+| Lidarr | 8686 |
+| Sonarr | 8989 |
+| Radarr | 7878 |
+| Prowlarr | 9696 |
+| Seerr | 5055 |
+| Grimmory | 6060 |
+| NeutArr | 9705 |
+| Cleanuparr | 11083 |
+| Plex | 32400 |
+
+Unpackerr, Recyclarr, Kometa, and Mylar3 use the ports shown on their catalog cards.
 
 ## Development clone
 
-Use this only if you are changing the code. Production installs should use the GHCR image or a tagged release.
+Use a git checkout only when changing the code. Production should use the GHCR image or a tagged release.
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git

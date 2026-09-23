@@ -89,6 +89,14 @@ secrets.enc
 .tmp*/
 
 # ===========================
+# Internal (keep local; not published)
+# ===========================
+ARCHITECTURE.md
+ROADMAP.md
+SECURITY.md
+PROMPT.md
+
+# ===========================
 # Local Reference Material
 # ===========================
 DUMB/
