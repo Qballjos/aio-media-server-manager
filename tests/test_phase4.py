@@ -144,3 +144,14 @@ def test_version_compare():
     assert _is_newer("1.2.0", "1.1.0")
     assert not _is_newer("1.1.0", "1.2.0")
     assert _is_newer("v2.0.0", "1.9.9")
+
+
+def test_grimmory_runner_starts_mariadb_as_root(catalog: ApplicationCatalog):
+    app = catalog.get("grimmory")
+    app.install_dir.mkdir(parents=True, exist_ok=True)
+    app.data_dir.mkdir(parents=True, exist_ok=True)
+    (app.install_dir / "grimmory.jar").write_bytes(b"jar")
+    app.post_install()
+    script = (app.install_dir / "run-grimmory").read_text(encoding="utf-8")
+    assert "--user=root" in script
+    assert "command -v java" in script

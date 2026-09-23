@@ -9,6 +9,10 @@ COPY frontend/ ./
 COPY logo-aio-media-manager.png ./public/logo-aio-media-manager.png
 RUN npm run build
 
+FROM node:22-bookworm-slim AS nodebin
+
+FROM eclipse-temurin:25-jre-noble AS jre
+
 FROM python:3.14-slim-bookworm
 ARG TARGETARCH
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -18,7 +22,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     AMM_DOWNLOAD_DIR=/downloads \
     AMM_MEDIA_DIR=/media \
     AMM_API_HOST=0.0.0.0 \
-    AMM_API_PORT=8080
+    AMM_API_PORT=8080 \
+    JAVA_HOME=/opt/java \
+    PATH="/opt/java/bin:${PATH}"
+
+COPY --from=jre /opt/java/openjdk /opt/java
+COPY --from=nodebin /usr/local/bin/node /usr/local/bin/node
+COPY --from=nodebin /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 # Servarr/.NET self-contained builds need ICU, OpenSSL, and SQLite from the OS.
 RUN apt-get update \
@@ -40,12 +50,19 @@ RUN apt-get update \
         libfontconfig1 \
         fonts-liberation \
         chromium \
-        openjdk-17-jre-headless \
+        xvfb \
         mariadb-server \
-        nodejs \
-        npm \
+        unrar-free \
+        par2 \
+        p7zip-full \
+        build-essential \
+        python3-dev \
         ${ICU_PKG} \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && ln -sf /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
+    && corepack enable
 
 RUN set -eux; \
     case "${TARGETARCH:-amd64}" in \
@@ -70,6 +87,6 @@ COPY applications ./applications
 COPY main.py ./
 COPY --from=frontend /ui/dist ./frontend/dist
 
-VOLUME ["/config", "/downloads", "/media"]
+VOLUME ["/config", "/data", "/downloads", "/media"]
 EXPOSE 8080
 CMD ["python", "main.py"]

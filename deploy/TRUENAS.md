@@ -16,13 +16,12 @@ Replace `tank` with your pool name. Create datasets, then the directories the co
 
 ```bash
 sudo zfs create -p tank/apps/aio-media-manager
-sudo zfs create -p tank/downloads
-sudo zfs create -p tank/media
+sudo zfs create -p tank/data
 
 sudo mkdir -p \
   /mnt/tank/apps/aio-media-manager/vpn \
-  /mnt/tank/downloads \
-  /mnt/tank/media
+  /mnt/tank/data/downloads \
+  /mnt/tank/data/media
 ```
 
 TV, movies, anime, music, books, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
@@ -33,11 +32,10 @@ Set the owner to your media user (TrueNAS `apps` is often UID/GID `568`; confirm
 id apps
 sudo chown -R 568:568 \
   /mnt/tank/apps/aio-media-manager \
-  /mnt/tank/downloads \
-  /mnt/tank/media
+  /mnt/tank/data
 ```
 
-Keep downloads and media on the same pool so hardlinks work.
+Keep downloads and media as **directories on one dataset**. Two ZFS datasets cannot hardlink to each other.
 
 ## Custom App
 
@@ -46,9 +44,8 @@ Keep downloads and media on the same pool so hardlinks work.
 3. Port forwarding: `8080` → `8080` (and child WebUI ports, or host network).
 4. Storage (paths from the SSH commands above):
    - `/mnt/tank/apps/aio-media-manager` → `/config`
-   - `/mnt/tank/downloads` → `/downloads`
-   - `/mnt/tank/media` → `/media`
-5. Environment: `PUID` / `PGID` = the UID/GID you used with `chown`.
+   - `/mnt/tank/data` → `/data`
+5. Environment: `PUID` / `PGID` = the UID/GID you used with `chown`, plus `AMM_DOWNLOAD_DIR=/data/downloads` and `AMM_MEDIA_DIR=/data/media`.
 6. Privileged / `NET_ADMIN` if you enable qBittorrent VPN.
 7. GPU: pass `/dev/dri` (Intel/AMD) or NVIDIA runtime when transcoding.
 

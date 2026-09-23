@@ -281,10 +281,8 @@ class AppInstaller:
             text=True,
         )
 
-        executable = venv_dir / "bin" / package
-        if not executable.is_file():
-            executable = venv_dir / "Scripts" / f"{package}.exe"
-        if not executable.is_file():
+        executable = _find_venv_executable(venv_dir, package)
+        if not executable:
             raise FileNotFoundError(
                 f"PyPI package '{package}' installed but executable was not found in {venv_dir}."
             )
@@ -552,6 +550,28 @@ class AppInstaller:
                 return candidate
 
         return None
+
+
+def _find_venv_executable(venv_dir: Path, package: str) -> Path | None:
+    names = [package, package.replace("-", "_")]
+    if package.lower() == "sabnzbd":
+        names = ["sabnzbdplus", "SABnzbd", "SABnzbd.py", package]
+    if package.lower() == "bazarr":
+        names = ["bazarr.py", package]
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        for candidate in (venv_dir / "bin" / name, venv_dir / "Scripts" / name, venv_dir / "Scripts" / f"{name}.exe"):
+            if candidate.is_file():
+                return candidate
+    bin_dir = venv_dir / "bin"
+    if bin_dir.is_dir():
+        for child in bin_dir.iterdir():
+            if child.is_file() and package.lower() in child.name.lower():
+                return child
+    return None
 
 
 def _looks_like_archive(path: Path) -> bool:

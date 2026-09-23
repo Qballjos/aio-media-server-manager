@@ -20,11 +20,11 @@ id
 export PUID="$(id -u)"
 export PGID="$(id -g)"
 
-sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,downloads,media}
+sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,data/downloads,data/media}
 sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager
 ```
 
-Use other paths if you already have libraries (for example `/srv/media` and `/srv/downloads`). Keep downloads and media on the same filesystem for hardlinks.
+Use other paths if you already have libraries (for example `/srv/data/media` and `/srv/data/downloads`). Keep downloads and media as subfolders of **one** host directory so hardlinks work. Two separate bind mounts, even on btrfs, often fail if they are different subvolumes.
 
 ## Compose (recommended)
 
@@ -60,8 +60,9 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   -p 8080:8080 \
   -e PUID="${PUID}" -e PGID="${PGID}" \
   -v /opt/aio-media-manager/config:/config \
-  -v /opt/aio-media-manager/downloads:/downloads \
-  -v /opt/aio-media-manager/media:/media \
+  -v /opt/aio-media-manager/data:/data \
+  -e AMM_DOWNLOAD_DIR=/data/downloads \
+  -e AMM_MEDIA_DIR=/data/media \
   ghcr.io/qballjos/aio-media-server-manager:latest
 ```
 

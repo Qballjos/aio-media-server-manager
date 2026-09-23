@@ -24,7 +24,8 @@ const authLoading = ref(false)
 
 // Dashboard data
 const catalogApps = ref([])
-const catalogCategory = ref('all')
+const catalogCategoriesSelected = ref([])
+const catalogStatusFilters = ref([])
 const catalogSort = ref('popularity')
 const catalogSearch = ref('')
 const applications = ref([])
@@ -377,10 +378,64 @@ const catalogCategories = computed(() => {
   return names.sort((a, b) => (CATEGORY_LABELS[a] || a).localeCompare(CATEGORY_LABELS[b] || b))
 })
 
+function isRunningService(s) {
+  return s.state === 'running' || s.state === 'healthy'
+}
+
+function toggleCategoryFilter(category) {
+  if (category === 'all') {
+    catalogCategoriesSelected.value = []
+    return
+  }
+  const current = [...catalogCategoriesSelected.value]
+  const idx = current.indexOf(category)
+  if (idx >= 0) current.splice(idx, 1)
+  else current.push(category)
+  catalogCategoriesSelected.value = current
+}
+
+function removeCategoryFilter(category) {
+  catalogCategoriesSelected.value = catalogCategoriesSelected.value.filter(c => c !== category)
+}
+
+function toggleStatusFilter(key) {
+  const current = [...catalogStatusFilters.value]
+  const idx = current.indexOf(key)
+  if (idx >= 0) current.splice(idx, 1)
+  else current.push(key)
+  catalogStatusFilters.value = current
+}
+
+function removeStatusFilter(key) {
+  catalogStatusFilters.value = catalogStatusFilters.value.filter(k => k !== key)
+}
+
+function scrollToCatalog() {
+  document.getElementById('catalog-toolbar')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function filterByActiveServices() {
+  toggleStatusFilter('active')
+  scrollToCatalog()
+}
+
+function filterByInstalledPlugins() {
+  toggleStatusFilter('installed')
+  scrollToCatalog()
+}
+
 const visibleServices = computed(() => {
   let list = combinedServices.value
-  if (catalogCategory.value !== 'all') {
-    list = list.filter(s => s.category === catalogCategory.value)
+  if (catalogCategoriesSelected.value.length) {
+    const allowed = new Set(catalogCategoriesSelected.value)
+    list = list.filter(s => allowed.has(s.category))
+  }
+  if (catalogStatusFilters.value.length) {
+    list = list.filter(s => {
+      const matchActive = catalogStatusFilters.value.includes('active') && isRunningService(s)
+      const matchInstalled = catalogStatusFilters.value.includes('installed') && s.installed
+      return matchActive || matchInstalled
+    })
   }
   const query = catalogSearch.value.trim().toLowerCase()
   if (query) {
@@ -423,6 +478,7 @@ const cloudflareTunnelIssue = computed(() => {
   return Boolean(tunnel?.enabled && !tunnel?.connected)
 })
 const transcodingAvailable = computed(() => systemInfo.value?.transcoding?.available)
+const hardlinksSupported = computed(() => systemInfo.value?.storage?.download_dir?.hardlinks_supported !== false)
 
 // --- App Control Actions ---
 async function startApp(name) {
@@ -896,7 +952,17 @@ onUnmounted(() => {
       <div v-else class="dashboard-layout animate-fade">
         <!-- Metric Cards -->
         <section class="metrics-grid">
-          <div class="stat-card glass-card">
+          <div
+            class="stat-card glass-card stat-card-filter"
+            :class="{ 'is-filter-on': catalogStatusFilters.includes('active') }"
+            role="button"
+            tabindex="0"
+            :aria-pressed="catalogStatusFilters.includes('active')"
+            title="Show only running services"
+            @click="filterByActiveServices"
+            @keydown.enter.prevent="filterByActiveServices"
+            @keydown.space.prevent="filterByActiveServices"
+          >
             <div class="stat-icon-wrapper active-color">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -911,7 +977,17 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="stat-card glass-card">
+          <div
+            class="stat-card glass-card stat-card-filter"
+            :class="{ 'is-filter-on': catalogStatusFilters.includes('installed') }"
+            role="button"
+            tabindex="0"
+            :aria-pressed="catalogStatusFilters.includes('installed')"
+            title="Show only installed applications"
+            @click="filterByInstalledPlugins"
+            @keydown.enter.prevent="filterByInstalledPlugins"
+            @keydown.space.prevent="filterByInstalledPlugins"
+          >
             <div class="stat-icon-wrapper installed-color">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -978,6 +1054,14 @@ onUnmounted(() => {
           Cloudflare Tunnel is enabled but cloudflared is not connected. The manager is still available at http://server-ip:8080.
         </div>
 
+        <div
+          v-if="!hardlinksSupported"
+          class="alert-banner alert-error"
+          style="margin-bottom: 1.25rem;"
+        >
+          Hardlinks are not available between downloads and media, so *Arr will copy files (extra disk I/O). Put both folders on the same host filesystem and the same btrfs subvolume, then bind-mount one parent as <code>/data</code> with <code>AMM_DOWNLOAD_DIR=/data/downloads</code> and <code>AMM_MEDIA_DIR=/data/media</code>.
+        </div>
+
 
         <!-- Services Section Header -->
         <div class="section-title-row">
@@ -995,7 +1079,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div class="catalog-toolbar glass-card">
+        <div id="catalog-toolbar" class="catalog-toolbar glass-card">
           <div class="catalog-filter-group catalog-search-group">
             <label class="catalog-filter-label" for="catalog-search">Search</label>
             <input
@@ -1009,13 +1093,48 @@ onUnmounted(() => {
             />
           </div>
           <div class="catalog-filter-group">
+            <span class="catalog-filter-label">Status</span>
+            <div class="catalog-chips" role="group" aria-label="Filter by status">
+              <button
+                type="button"
+                class="catalog-chip"
+                :class="{ active: catalogStatusFilters.includes('active') }"
+                @click="toggleStatusFilter('active')"
+              >
+                Active
+                <span
+                  v-if="catalogStatusFilters.includes('active')"
+                  class="chip-clear"
+                  role="button"
+                  aria-label="Remove active filter"
+                  @click.stop="removeStatusFilter('active')"
+                >×</span>
+              </button>
+              <button
+                type="button"
+                class="catalog-chip"
+                :class="{ active: catalogStatusFilters.includes('installed') }"
+                @click="toggleStatusFilter('installed')"
+              >
+                Installed
+                <span
+                  v-if="catalogStatusFilters.includes('installed')"
+                  class="chip-clear"
+                  role="button"
+                  aria-label="Remove installed filter"
+                  @click.stop="removeStatusFilter('installed')"
+                >×</span>
+              </button>
+            </div>
+          </div>
+          <div class="catalog-filter-group">
             <span class="catalog-filter-label">Category</span>
             <div class="catalog-chips" role="group" aria-label="Filter by category">
               <button
                 type="button"
                 class="catalog-chip"
-                :class="{ active: catalogCategory === 'all' }"
-                @click="catalogCategory = 'all'"
+                :class="{ active: catalogCategoriesSelected.length === 0 }"
+                @click="toggleCategoryFilter('all')"
               >
                 All
               </button>
@@ -1024,10 +1143,17 @@ onUnmounted(() => {
                 :key="category"
                 type="button"
                 class="catalog-chip"
-                :class="{ active: catalogCategory === category }"
-                @click="catalogCategory = category"
+                :class="{ active: catalogCategoriesSelected.includes(category) }"
+                @click="toggleCategoryFilter(category)"
               >
                 {{ CATEGORY_LABELS[category] || category }}
+                <span
+                  v-if="catalogCategoriesSelected.includes(category)"
+                  class="chip-clear"
+                  role="button"
+                  :aria-label="'Remove ' + (CATEGORY_LABELS[category] || category) + ' filter'"
+                  @click.stop="removeCategoryFilter(category)"
+                >×</span>
               </button>
             </div>
           </div>
@@ -1225,7 +1351,7 @@ onUnmounted(() => {
               </template>
             </div>
           </div>
-          <p v-if="visibleServices.length === 0" class="catalog-empty">No applications match this search.</p>
+          <p v-if="visibleServices.length === 0" class="catalog-empty">No applications match these filters.</p>
         </div>
       </div>
     </main>
@@ -1647,6 +1773,20 @@ onUnmounted(() => {
   gap: 1rem;
 }
 
+.stat-card-filter {
+  cursor: pointer;
+  user-select: none;
+}
+
+.stat-card-filter:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.stat-card-filter.is-filter-on {
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+}
+
 .stat-icon-wrapper {
   width: 44px;
   height: 44px;
@@ -1834,6 +1974,9 @@ onUnmounted(() => {
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .catalog-chip:hover {
@@ -1845,6 +1988,24 @@ onUnmounted(() => {
   color: #e0f2fe;
   background: rgba(14, 165, 233, 0.18);
   border-color: rgba(56, 189, 248, 0.45);
+}
+
+.chip-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: #e0f2fe;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.chip-clear:hover {
+  background: rgba(239, 68, 68, 0.35);
+  color: #fecaca;
 }
 
 .catalog-sort-select {

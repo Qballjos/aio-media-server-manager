@@ -19,11 +19,13 @@ services:
       # - "32400:32400" # Plex
     volumes:
       - /volume1/docker/aio-media-manager/config:/config
-      - /volume1/downloads:/downloads
-      - /volume1/media:/media
+      # Same shared folder (not two separate DSM shares) so *Arr can hardlink.
+      - /volume1/data:/data
     environment:
       PUID: "1026"
       PGID: "100"
+      AMM_DOWNLOAD_DIR: /data/downloads
+      AMM_MEDIA_DIR: /data/media
       AMM_VPN_ENABLED: "false"
       AMM_VPN_ENFORCE: "false"
       AMM_CLOUDFLARE_TUNNEL_ENABLED: "false"

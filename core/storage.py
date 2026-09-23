@@ -32,6 +32,8 @@ from core.library_layout import LibraryLayout
 
 logger = logging.getLogger(__name__)
 
+_hardlink_warning_logged = False
+
 # ---------------------------------------------------------------------------
 # Filesystem type helpers
 # ---------------------------------------------------------------------------
@@ -116,14 +118,17 @@ class StorageManager:
             )
             dl_info.hardlinks_supported = supported
             if not supported:
-                logger.warning(
-                    "Hardlinks are NOT supported between '%s' and '%s'. "
-                    "The *Arr apps will fall back to file copies instead of "
-                    "instant atomic moves, which doubles disk usage temporarily. "
-                    "Make sure both directories are on the same filesystem.",
-                    self._settings.download_dir,
-                    self._settings.media_dir,
-                )
+                global _hardlink_warning_logged
+                if not _hardlink_warning_logged:
+                    logger.warning(
+                        "Hardlinks are NOT supported between '%s' and '%s'. "
+                        "*Arr will copy files instead of linking. Bind one host folder "
+                        "as /data (same filesystem and btrfs subvolume) and set "
+                        "AMM_DOWNLOAD_DIR=/data/downloads AMM_MEDIA_DIR=/data/media.",
+                        self._settings.download_dir,
+                        self._settings.media_dir,
+                    )
+                    _hardlink_warning_logged = True
             else:
                 logger.info(
                     "Hardlinks are supported between download_dir and media_dir. ✓"

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import glob
+import os
 import shutil
+import subprocess
 from pathlib import Path
 
 from applications.arr import ArrApplication
 from applications.base import SimpleApplication
+from applications.install_helpers import create_venv, python_bin, venv_bin, write_runner
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
+from core.installer import AppInstaller, InstallResult
+from core.installer.arch import PlatformArch, detect_system_arch
 
 
 class LidarrApp(ArrApplication):
@@ -168,10 +174,41 @@ class BazarrApp(SimpleApplication):
         default_port=6767,
         executable_name="bazarr",
         supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.PYPI,
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=(r"bazarr\.zip$",),
         optional_dependencies=("sonarr", "radarr"),
         health_path="/api/system/health",
     )
+
+    def executable_path(self) -> Path | None:
+        runner = self.install_dir / "bazarr"
+        if runner.is_file():
+            return runner
+        script = self.install_dir / "bazarr.py"
+        if script.is_file():
+            return script
+        return super().executable_path()
+
+    def install(self) -> InstallResult:
+        installer = AppInstaller()
+        result = installer.install_from_github(
+            repo=self.github_repo,
+            app_name=self.name,
+            executable_name="bazarr.py",
+            preferred_patterns=self.preferred_patterns(),
+        )
+        python = python_bin()
+        script = self.install_dir / "bazarr.py"
+        runner = self.install_dir / "bazarr"
+        write_runner(
+            runner,
+            [
+                "#!/bin/sh",
+                f'exec "{python}" "{script}" "$@"',
+            ],
+        )
+        self.post_install()
+        return result
 
     def start_args(self) -> list[str]:
         return ["--no-update", "--config", str(self.config_dir), "--port", str(self.port)]
@@ -237,18 +274,93 @@ class ProfilarrApp(SimpleApplication):
         executable_name="profilarr",
         supported_architectures=("x86_64", "arm64"),
         install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=("linux",),
         optional_dependencies=("sonarr", "radarr"),
         health_path="/",
     )
 
     def extra_env(self) -> dict[str, str]:
-        return {
+        sqlite = _sqlite_library()
+        env = {
             "PORT": str(self.port),
             "HOST": "0.0.0.0",
             "TZ": "Etc/UTC",
             "AUTH": "on",
+            "APP_BASE_PATH": str(self.config_dir),
+            "DENO_DIR": str(self.install_dir / "deno-cache"),
         }
+        if sqlite:
+            env["DENO_SQLITE_PATH"] = sqlite
+        return env
+
+    def install(self) -> InstallResult:
+        installer = AppInstaller()
+        result = installer.install_from_github_source(
+            self.github_repo,
+            self.name,
+            "deno.jsonc",
+        )
+        deno = _ensure_deno(self.install_dir / "bin")
+        env = {**os.environ, **self.extra_env()}
+        subprocess.run(
+            [str(deno), "ci"],
+            cwd=self.install_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        subprocess.run(
+            [str(deno), "run", "-A", "vite", "build"],
+            cwd=self.install_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        compiled = self.install_dir / "profilarr"
+        target = (
+            "aarch64-unknown-linux-gnu"
+            if detect_system_arch() == PlatformArch.ARM64
+            else "x86_64-unknown-linux-gnu"
+        )
+        mod = self.install_dir / "dist" / "build" / "mod.ts"
+        if mod.is_file():
+            compile = subprocess.run(
+                [
+                    str(deno),
+                    "compile",
+                    "--no-check",
+                    "--allow-all",
+                    "--target",
+                    target,
+                    "--output",
+                    str(compiled),
+                    str(mod),
+                ],
+                cwd=self.install_dir,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            if compile.returncode != 0 or not compiled.is_file():
+                write_runner(
+                    compiled,
+                    [
+                        "#!/bin/sh",
+                        f'exec "{deno}" run --allow-all "{mod}" "$@"',
+                    ],
+                )
+        else:
+            write_runner(
+                compiled,
+                [
+                    "#!/bin/sh",
+                    f'cd "{self.install_dir}"',
+                    f'exec "{deno}" task preview "$@"',
+                ],
+            )
+        self.post_install()
+        return result
 
 
 class NeutarrApp(SimpleApplication):
@@ -264,7 +376,6 @@ class NeutarrApp(SimpleApplication):
         executable_name="neutarr",
         supported_architectures=("x86_64", "arm64"),
         install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=("linux",),
         optional_dependencies=("sonarr", "radarr"),
         health_path="/",
     )
@@ -272,9 +383,93 @@ class NeutarrApp(SimpleApplication):
     def extra_env(self) -> dict[str, str]:
         return {
             "NEUTARR_CONFIG_DIR": str(self.config_dir),
+            "CONFIG_DIR": str(self.config_dir),
             "NEUTARR_PORT": str(self.port),
+            "PORT": str(self.port),
+            "FLASK_HOST": "0.0.0.0",
             "TZ": "Etc/UTC",
+            "PYTHONPATH": str(self.install_dir),
         }
+
+    def install(self) -> InstallResult:
+        installer = AppInstaller()
+        result = installer.install_from_github_source(
+            self.github_repo,
+            self.name,
+            "main.py",
+        )
+        venv_dir = create_venv(self.install_dir)
+        pip = venv_bin(venv_dir, "pip")
+        subprocess.run(
+            [
+                str(pip),
+                "install",
+                "flask>=3.1.3,<4.0.0",
+                "requests>=2.31.0,<3.0.0",
+                "waitress>=3.0.1,<4.0.0",
+                "bcrypt>=4.1.2,<6.0.0",
+                "pyjwt>=2.9.0,<3.0.0",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        frontend = self.install_dir / "frontend"
+        npm = shutil.which("npm")
+        if npm and (frontend / "package.json").is_file():
+            subprocess.run([npm, "ci"], cwd=frontend, check=True, capture_output=True, text=True)
+            subprocess.run([npm, "run", "build"], cwd=frontend, check=True, capture_output=True, text=True)
+        python = venv_bin(venv_dir, "python")
+        runner = self.install_dir / "neutarr"
+        write_runner(
+            runner,
+            [
+                "#!/bin/sh",
+                f'cd "{self.install_dir}"',
+                f'export PYTHONPATH="{self.install_dir}"',
+                f'exec "{python}" "{self.install_dir / "main.py"}" "$@"',
+            ],
+        )
+        self.post_install()
+        return result
+
+
+def _sqlite_library() -> str | None:
+    matches = glob.glob("/usr/lib/*/libsqlite3.so.0") + glob.glob("/usr/lib/libsqlite3.so.0")
+    return matches[0] if matches else None
+
+
+def _ensure_deno(bin_dir: Path) -> Path:
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    deno = bin_dir / "deno"
+    if deno.is_file():
+        return deno
+    slug = (
+        "aarch64-unknown-linux-gnu"
+        if detect_system_arch() == PlatformArch.ARM64
+        else "x86_64-unknown-linux-gnu"
+    )
+    installer = AppInstaller()
+    cache = installer.settings.cache_dir / "downloads"
+    cache.mkdir(parents=True, exist_ok=True)
+    archive = cache / f"deno-{slug}.zip"
+    installer.download_file(
+        f"https://github.com/denoland/deno/releases/latest/download/deno-{slug}.zip",
+        archive,
+    )
+    from core.installer.extractor import ArchiveExtractor
+
+    staging = bin_dir / ".deno-extract"
+    if staging.exists():
+        shutil.rmtree(staging)
+    ArchiveExtractor.extract(archive, staging, strip_single_wrapper=True)
+    found = next(staging.rglob("deno"), None)
+    if found is None:
+        raise FileNotFoundError("Deno binary missing from official release zip.")
+    shutil.copy2(found, deno)
+    deno.chmod(deno.stat().st_mode | 0o755)
+    shutil.rmtree(staging, ignore_errors=True)
+    return deno
 
 
 class Mylar3App(SimpleApplication):

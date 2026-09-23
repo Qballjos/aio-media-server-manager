@@ -10,22 +10,19 @@ Password rules: at least 8 characters, at most 72 bytes (bcrypt limit).
 
 ## 2. First-run wizard
 
-After sign-in, a 12-step wizard runs until you finish it or choose **Skip for now**.
+After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now**.
 
 | Step | You choose |
 |------|------------|
-| 1 | Welcome |
-| 2 | Detected platform (read-only) |
-| 3 | Media and config directories |
-| 4 | `PUID` / `PGID` |
-| 5 | Download clients (SABnzbd, NZBGet, qBittorrent) and a preferred client |
-| 6 | VPN: none, PrivadoVPN-style isolation, or a custom WireGuard / OpenVPN path |
-| 7 | *Arr apps: Prowlarr, Sonarr, Radarr, Lidarr |
-| 8 | Media servers: Jellyfin and/or Plex (optional Plex claim token) |
-| 9 | Requests (Seerr) |
-| 10 | Recommended tools (Bazarr, Flaresolverr, Grimmory, Shelfmark, Unpackerr, Recyclarr, and others) |
-| 11 | Review |
-| 12 | Save settings and start catalog installs |
+| 1 | Media, download, and config directories (same `/data` parent for hardlinks) |
+| 2 | `PUID` / `PGID` (pre-filled from the host / compose user) |
+| 3 | Download clients (SABnzbd, NZBGet, qBittorrent) |
+| 4 | VPN: none, PrivadoVPN-style isolation, or a custom WireGuard / OpenVPN path |
+| 5 | *Arr apps: Prowlarr, Sonarr, Radarr, Lidarr |
+| 6 | Media servers: Jellyfin and/or Plex (optional Plex claim token) |
+| 7 | Requests (Seerr) |
+| 8 | Recommended tools (Bazarr and Flaresolverr selected by default) |
+| 9 | Review, then save and install |
 
 qBittorrent username and password in the wizard may be left blank. Blank fields reuse the manager admin login.
 

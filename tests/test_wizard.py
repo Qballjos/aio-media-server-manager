@@ -1,5 +1,5 @@
 """
-tests/test_wizard.py — Tests for Guided 12-Step Setup Wizard.
+tests/test_wizard.py — Tests for the first-run setup wizard.
 """
 
 from pathlib import Path
@@ -29,9 +29,10 @@ def test_wizard_engine_lifecycle(tmp_path: Path):
     assert "system" in step2["platform"]
 
     # Step 3: Storage update
-    engine.update_step_selections(3, {"media_dir": "/custom/media", "config_dir": "/custom/config"})
+    engine.update_step_selections(3, {"media_dir": "/custom/media", "config_dir": "/custom/config", "download_dir": "/custom/downloads"})
     status = engine.get_status()
     assert status["selections"]["media_dir"] == "/custom/media"
+    assert status["selections"]["download_dir"] == "/custom/downloads"
     assert status["current_step"] >= 4
 
     # Step 5: Download clients
@@ -41,6 +42,9 @@ def test_wizard_engine_lifecycle(tmp_path: Path):
     step5 = engine.get_step_data(5)
     assert {opt["id"] for opt in step5["options"]} >= {"sabnzbd", "nzbget", "qbittorrent"}
     assert all(opt.get("help_url") for opt in step5["options"])
+
+    step10 = engine.get_step_data(10)
+    assert set(step10["selected"]) >= {"bazarr", "flaresolverr"}
 
     step7 = engine.get_step_data(7)
     assert {opt["id"] for opt in step7["options"]} >= {"prowlarr", "sonarr", "radarr", "lidarr"}

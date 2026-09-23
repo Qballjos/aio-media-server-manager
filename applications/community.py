@@ -3,42 +3,15 @@
 from __future__ import annotations
 
 import shutil
-import stat
 import subprocess
-import sys
 from pathlib import Path
 
 from applications.base import SimpleApplication
+from applications.install_helpers import create_venv, venv_bin, write_runner
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
 from core.installer import AppInstaller, InstallResult
-from core.installer.arch import PlatformArch, detect_system_arch
 from core.library_layout import LibraryLayout
 from core.settings import settings as default_settings
-
-
-def _write_runner(path: Path, lines: list[str]) -> None:
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-
-
-def _create_venv(install_root: Path) -> Path:
-    venv_dir = install_root / "venv"
-    subprocess.run(
-        [sys.executable, "-m", "venv", str(venv_dir)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    pip = venv_dir / "bin" / "pip"
-    if not pip.is_file():
-        pip = venv_dir / "Scripts" / "pip.exe"
-    subprocess.run(
-        [str(pip), "install", "--upgrade", "pip"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return venv_dir
 
 
 class FlaresolverrApp(SimpleApplication):
@@ -90,10 +63,8 @@ class FlaresolverrApp(SimpleApplication):
             self.name,
             "src/flaresolverr.py",
         )
-        venv_dir = _create_venv(self.install_dir)
-        pip = venv_dir / "bin" / "pip"
-        if not pip.is_file():
-            pip = venv_dir / "Scripts" / "pip.exe"
+        venv_dir = create_venv(self.install_dir)
+        pip = venv_bin(venv_dir, "pip")
         requirements = self.install_dir / "requirements.txt"
         if requirements.is_file():
             subprocess.run(
@@ -102,12 +73,10 @@ class FlaresolverrApp(SimpleApplication):
                 capture_output=True,
                 text=True,
             )
-        python = venv_dir / "bin" / "python"
-        if not python.is_file():
-            python = venv_dir / "Scripts" / "python.exe"
+        python = venv_bin(venv_dir, "python")
         script = self.install_dir / "src" / "flaresolverr.py"
         runner = self.install_dir / "flaresolverr"
-        _write_runner(
+        write_runner(
             runner,
             [
                 "#!/bin/sh",
@@ -169,12 +138,11 @@ class GrimmoryApp(SimpleApplication):
         }
 
     def post_install(self) -> None:
-        java = shutil.which("java") or "java"
         jar = self.install_dir / "grimmory.jar"
         datadir = self.data_dir / "mysql"
         socket = self.data_dir / "mysql.sock"
         runner = self.install_dir / "run-grimmory"
-        _write_runner(
+        write_runner(
             runner,
             [
                 "#!/bin/sh",
@@ -183,9 +151,9 @@ class GrimmoryApp(SimpleApplication):
                 f'MARIADB_SOCK="{socket}"',
                 "MARIADB_PORT=3307",
                 f'JAR="{jar}"',
-                f'JAVA_BIN="{java}"',
-                'if ! command -v "$JAVA_BIN" >/dev/null 2>&1; then',
-                '  echo "Java is required to run Grimmory" >&2',
+                "JAVA_BIN=$(command -v java || true)",
+                'if [ -z "$JAVA_BIN" ]; then',
+                '  echo "Java 25+ is required to run Grimmory" >&2',
                 "  exit 1",
                 "fi",
                 "MYSQLD=$(command -v mariadbd || command -v mysqld || true)",
@@ -202,7 +170,7 @@ class GrimmoryApp(SimpleApplication):
                 '    "$MYSQLD" --initialize-insecure --datadir="$MARIADB_DATA"',
                 "  fi",
                 "fi",
-                '"$MYSQLD" --datadir="$MARIADB_DATA" --socket="$MARIADB_SOCK" --port="$MARIADB_PORT" --bind-address=127.0.0.1 &',
+                '"$MYSQLD" --user=root --datadir="$MARIADB_DATA" --socket="$MARIADB_SOCK" --port="$MARIADB_PORT" --bind-address=127.0.0.1 &',
                 "MYSQLD_PID=$!",
                 "trap 'kill $MYSQLD_PID 2>/dev/null || true' EXIT",
                 "i=0",
@@ -271,10 +239,8 @@ class ShelfmarkApp(SimpleApplication):
             self.name,
             "pyproject.toml",
         )
-        venv_dir = _create_venv(self.install_dir)
-        pip = venv_dir / "bin" / "pip"
-        if not pip.is_file():
-            pip = venv_dir / "Scripts" / "pip.exe"
+        venv_dir = create_venv(self.install_dir)
+        pip = venv_bin(venv_dir, "pip")
         subprocess.run(
             [str(pip), "install", str(self.install_dir)],
             check=True,
@@ -292,11 +258,9 @@ class ShelfmarkApp(SimpleApplication):
                 if target.exists():
                     shutil.rmtree(target)
                 shutil.copytree(dist, target)
-        gunicorn = venv_dir / "bin" / "gunicorn"
-        if not gunicorn.is_file():
-            gunicorn = venv_dir / "Scripts" / "gunicorn.exe"
+        gunicorn = venv_bin(venv_dir, "gunicorn")
         runner = self.install_dir / "run-shelfmark"
-        _write_runner(
+        write_runner(
             runner,
             [
                 "#!/bin/sh",

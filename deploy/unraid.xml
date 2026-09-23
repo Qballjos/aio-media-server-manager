@@ -14,8 +14,9 @@
   <ExtraParams>--device /dev/dri:/dev/dri --cap-add=NET_ADMIN</ExtraParams>
   <Config Name="Host Port" Target="8080" Default="8080" Mode="tcp" Type="Port" Display="always"/>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/aio-media-manager" Mode="rw" Type="Path" Display="always"/>
-  <Config Name="Downloads" Target="/downloads" Default="/mnt/user/downloads" Mode="rw" Type="Path" Display="always"/>
-  <Config Name="Media" Target="/media" Default="/mnt/user/media" Mode="rw" Type="Path" Display="always"/>
+  <Config Name="Data" Target="/data" Default="/mnt/cache/data" Mode="rw" Type="Path" Display="always"/>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Type="Variable" Display="always"/>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Type="Variable" Display="always"/>
+  <Config Name="Download dir" Target="AMM_DOWNLOAD_DIR" Default="/data/downloads" Mode="" Type="Variable" Display="always"/>
+  <Config Name="Media dir" Target="AMM_MEDIA_DIR" Default="/data/media" Mode="" Type="Variable" Display="always"/>
 </Container>

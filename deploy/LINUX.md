@@ -20,17 +20,17 @@ sudo mkdir -p \
   /opt/aio-media-manager \
   /var/lib/aio-media-manager/config \
   /var/lib/aio-media-manager/config/vpn \
-  /var/lib/aio-media-manager/downloads \
-  /var/lib/aio-media-manager/media
+  /var/lib/aio-media-manager/data/downloads \
+  /var/lib/aio-media-manager/data/media
 sudo chown -R amm:amm /opt/aio-media-manager /var/lib/aio-media-manager
 id amm
 ```
 
-To use existing library paths instead of `/var/lib/aio-media-manager/{downloads,media}`:
+To use existing library paths, keep downloads and media as siblings on the same filesystem:
 
 ```bash
-sudo mkdir -p /srv/downloads /srv/media
-sudo chown -R amm:amm /srv/downloads /srv/media
+sudo mkdir -p /srv/data/downloads /srv/data/media
+sudo chown -R amm:amm /srv/data
 ```
 
 ## Install

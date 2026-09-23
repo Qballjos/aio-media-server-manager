@@ -69,9 +69,10 @@ class WizardEngine:
             "completed": False,
             "selections": {
                 "media_dir": str(self._settings.media_dir),
+                "download_dir": str(self._settings.download_dir),
                 "config_dir": str(self._settings.config_dir),
-                "puid": os.getuid() if hasattr(os, "getuid") else 1000,
-                "pgid": os.getgid() if hasattr(os, "getgid") else 1000,
+                "puid": int(self._settings.puid),
+                "pgid": int(self._settings.pgid),
                 "download_clients": ["sabnzbd", "qbittorrent"],
                 "vpn_provider": "none",
                 "arr_apps": ["prowlarr", "sonarr", "radarr"],
@@ -85,6 +86,7 @@ class WizardEngine:
                 "vpn_protocol": "wireguard",
                 "vpn_enforce": False,
                 "plex_claim": "",
+                "recommended_preview": ["bazarr", "flaresolverr"],
             },
         }
 
@@ -160,12 +162,14 @@ class WizardEngine:
             return {
                 "step": 3,
                 "media_dir": selections.get("media_dir"),
+                "download_dir": selections.get("download_dir"),
                 "config_dir": selections.get("config_dir"),
                 "hardlink_supported": hardlinks,
                 "hardlink_message": (
                     "Hardlinks supported between download and media directories."
                     if hardlinks else
-                    "Hardlinks not supported; *Arr apps will copy files across filesystems."
+                    "Hardlinks not supported. Keep downloads and media on the same host "
+                    "filesystem (and the same btrfs subvolume), mounted as one /data parent."
                 ),
                 "layout": LibraryLayout.from_settings(self._settings).as_dict(),
             }
@@ -173,10 +177,10 @@ class WizardEngine:
         if step_id == 4:
             return {
                 "step": 4,
-                "puid": selections.get("puid"),
-                "pgid": selections.get("pgid"),
-                "current_uid": os.getuid() if hasattr(os, "getuid") else 1000,
-                "current_gid": os.getgid() if hasattr(os, "getgid") else 1000,
+                "puid": selections.get("puid", self._settings.puid),
+                "pgid": selections.get("pgid", self._settings.pgid),
+                "current_uid": self._settings.puid,
+                "current_gid": self._settings.pgid,
             }
 
         if step_id == 5:
@@ -263,7 +267,7 @@ class WizardEngine:
                         {"id": "shelfmark", "name": "Shelfmark (book search and requests)"},
                     ]
                 ),
-                "selected": selections.get("recommended_preview", []),
+                "selected": selections.get("recommended_preview", ["bazarr", "flaresolverr"]),
             }
 
         if step_id == 11:
@@ -285,6 +289,8 @@ class WizardEngine:
         if step_id == 3:
             if "media_dir" in data:
                 selections["media_dir"] = data["media_dir"]
+            if "download_dir" in data:
+                selections["download_dir"] = data["download_dir"]
             if "config_dir" in data:
                 selections["config_dir"] = data["config_dir"]
         elif step_id == 4:
@@ -294,8 +300,8 @@ class WizardEngine:
                 selections["pgid"] = int(data["pgid"])
         elif step_id == 5:
             selections["download_clients"] = data.get("download_clients", selections.get("download_clients", []))
-            if "preferred_download_client" in data:
-                selections["preferred_download_client"] = data["preferred_download_client"]
+            clients = selections.get("download_clients") or []
+            selections["preferred_download_client"] = clients[0] if clients else "qbittorrent"
             if "qbittorrent_username" in data:
                 selections["qbittorrent_username"] = data["qbittorrent_username"]
             if data.get("qbittorrent_password"):
@@ -324,7 +330,10 @@ class WizardEngine:
         elif step_id == 9:
             selections["request_system"] = data.get("request_system", "seerr")
         elif step_id == 10:
-            selections["recommended_preview"] = data.get("recommended_preview", selections.get("recommended_preview", []))
+            selections["recommended_preview"] = data.get(
+                "recommended_preview",
+                selections.get("recommended_preview", ["bazarr", "flaresolverr"]),
+            )
 
         # Advance step
         if step_id < 12:
@@ -358,6 +367,10 @@ class WizardEngine:
         cfg = self._settings
         if selections.get("media_dir"):
             cfg.media_dir = Path(selections["media_dir"]).expanduser().resolve()
+        if selections.get("download_dir"):
+            cfg.download_dir = Path(selections["download_dir"]).expanduser().resolve()
+        if selections.get("config_dir"):
+            cfg.config_dir = Path(selections["config_dir"]).expanduser().resolve()
         if selections.get("puid"):
             cfg.puid = int(selections["puid"])
         if selections.get("pgid"):
@@ -390,7 +403,9 @@ class WizardEngine:
             if password:
                 secret_store.save_secret("qbittorrent_password", str(password))
                 selections["qbittorrent_password"] = ""
-            preferred = selections.get("preferred_download_client") or "qbittorrent"
+            preferred = selections.get("preferred_download_client") or (
+                (selections.get("download_clients") or ["qbittorrent"])[0]
+            )
             secret_store.save_secret("preferred_download_client", str(preferred))
             claim = selections.get("plex_claim")
             if claim:

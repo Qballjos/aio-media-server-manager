@@ -13,25 +13,24 @@ ssh root@<unraid-ip>
 ```bash
 mkdir -p \
   /mnt/user/appdata/aio-media-manager/vpn \
-  /mnt/user/downloads \
-  /mnt/user/media
+  /mnt/cache/data/downloads \
+  /mnt/cache/data/media
 
 chown -R 99:100 \
   /mnt/user/appdata/aio-media-manager \
-  /mnt/user/downloads \
-  /mnt/user/media
+  /mnt/cache/data
 ```
 
 TV, movies, anime, music, books, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
 
 `99:100` is Unraid `nobody`/`users` (PUID 99, PGID 100). If you use a custom share user, run `id thatuser` and `chown` to that UID:GID instead.
 
-For hardlinks, keep downloads and media on the same disk or cache pool, for example:
+For hardlinks, keep downloads and media as subfolders of **one** cache or disk path (not two `/mnt/user` FUSE shares), for example:
 
 ```bash
 mkdir -p /mnt/cache/appdata/aio-media-manager/vpn
-mkdir -p /mnt/cache/downloads /mnt/cache/media
-chown -R 99:100 /mnt/cache/appdata/aio-media-manager /mnt/cache/downloads /mnt/cache/media
+mkdir -p /mnt/cache/data/downloads /mnt/cache/data/media
+chown -R 99:100 /mnt/cache/appdata/aio-media-manager /mnt/cache/data
 ```
 
 ## Docker template
@@ -45,9 +44,8 @@ chown -R 99:100 /mnt/cache/appdata/aio-media-manager /mnt/cache/downloads /mnt/c
 7. Port: `8080` → `8080` (plus any child ports you want published).
 8. Paths (must match the SSH folders):
    - `/config` → `/mnt/user/appdata/aio-media-manager`
-   - `/downloads` → `/mnt/user/downloads`
-   - `/media` → `/mnt/user/media`
-9. Variables: `PUID=99`, `PGID=100`.
+   - `/data` → `/mnt/cache/data`
+9. Variables: `PUID=99`, `PGID=100`, `AMM_DOWNLOAD_DIR=/data/downloads`, `AMM_MEDIA_DIR=/data/media`.
 
 A starting XML template is in [`unraid.xml`](unraid.xml) (copy into `/boot/config/plugins/dockerMan/templates-user/` if you maintain local templates).
 

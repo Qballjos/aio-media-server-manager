@@ -83,6 +83,16 @@ def test_catalog_entries_include_popularity():
     assert sonarr["help_url"] == "https://wiki.servarr.com/sonarr"
 
 
+def test_source_based_install_methods():
+    catalog = ApplicationCatalog()
+    from applications.manifest import InstallMethod
+
+    assert catalog.get("bazarr").manifest.install_method == InstallMethod.GITHUB_RELEASE
+    assert catalog.get("sabnzbd").manifest.preferred_patterns == (r"-src\.tar\.gz$",)
+    assert catalog.get("seerr").manifest.install_method == InstallMethod.NODE_BUNDLE
+    assert catalog.get("seerr").install.__func__ is not catalog.get("sonarr").install.__func__
+
+
 def test_catalog_help_urls_and_icons():
     catalog = ApplicationCatalog()
     from pathlib import Path

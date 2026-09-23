@@ -21,7 +21,7 @@ from core.installer.arch import (
     score_asset_match,
 )
 from core.installer.extractor import ArchiveExtractor, ExtractionSecurityError
-from core.installer.installer import AppInstaller
+from core.installer.installer import AppInstaller, _find_venv_executable
 from core.settings import Settings
 
 
@@ -289,3 +289,12 @@ def test_download_checksum_verification(tmp_path, monkeypatch):
     # Corrupted / mismatched SHA raises ValueError and removes temp file
     with pytest.raises(ValueError, match="Checksum verification failed"):
         installer.download_file("http://fake.url/pkg.tar.gz", dest, expected_sha256="wronghash00000000000000000000000000000000000000000000000000000000")
+
+
+def test_find_venv_executable_names(tmp_path):
+    venv = tmp_path / "venv" / "bin"
+    venv.mkdir(parents=True)
+    (venv / "sabnzbdplus").write_text("#!/bin/sh\n", encoding="utf-8")
+    found = _find_venv_executable(tmp_path / "venv", "sabnzbd")
+    assert found is not None
+    assert found.name == "sabnzbdplus"

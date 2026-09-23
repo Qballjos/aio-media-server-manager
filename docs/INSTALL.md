@@ -20,13 +20,13 @@ When the process is up, open `http://<host>:8080` and follow [Usage](USAGE.md).
 
 ## Host directories
 
-SSH into the host and create the three bind mounts. Keep **downloads** and **media** on the same filesystem so *Arr can hardlink instead of copy.
+SSH into the host and create the bind mounts. Keep **downloads and media in one host folder** (same filesystem, and on btrfs the same subvolume) so *Arr can hardlink instead of copy.
 
 ```bash
 ssh user@host
 
-sudo mkdir -p /path/to/config /path/to/downloads /path/to/media /path/to/config/vpn
-sudo chown -R "$PUID:$PGID" /path/to/config /path/to/downloads /path/to/media
+sudo mkdir -p /path/to/config /path/to/data/downloads /path/to/data/media /path/to/config/vpn
+sudo chown -R "$PUID:$PGID" /path/to/config /path/to/data
 id   # use this if you do not yet know PUID/PGID
 ```
 

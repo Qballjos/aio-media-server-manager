@@ -18,12 +18,14 @@ services:
       # - "5055:5055"   # Seerr
       # - "32400:32400" # Plex
     volumes:
+      # One host tree for downloads + media so *Arr can hardlink (same FS / btrfs subvolume).
       - ./config:/config
-      - ./downloads:/downloads
-      - ./media:/media
+      - ./data:/data
     environment:
       PUID: "1000"
       PGID: "1000"
+      AMM_DOWNLOAD_DIR: /data/downloads
+      AMM_MEDIA_DIR: /data/media
       AMM_VPN_ENABLED: "false"
       AMM_VPN_ENFORCE: "false"
       AMM_CLOUDFLARE_TUNNEL_ENABLED: "false"
