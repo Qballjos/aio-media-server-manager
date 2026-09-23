@@ -2,19 +2,33 @@
 
 Use a **single** custom app / Docker deployment. Do not deploy the *Arr stack as separate SCALE apps if you want this appliance model.
 
-## Suggested setup
+Image: `ghcr.io/qballjos/aio-media-server-manager:latest`
 
-1. Create datasets, for example:
-   - `tank/apps/aio-media-manager`
-   - `tank/media`
-   - `tank/downloads`
-2. Launch one container from the `aio-media-manager` image.
-3. Mount:
+## Datasets
+
+Create datasets (examples):
+
+- `tank/apps/aio-media-manager` (config)
+- `tank/downloads`
+- `tank/media`
+
+Keep downloads and media on the same pool/dataset layout so hardlinks work. Set the dataset owner to your media user (for example UID 568 `apps`, or a dedicated user).
+
+## Custom App
+
+1. **Apps → Discover → Custom App** (or Launch Docker Image).
+2. Image: `ghcr.io/qballjos/aio-media-server-manager:latest`
+3. Port forwarding: `8080` → `8080` (and child WebUI ports, or host network).
+4. Storage:
    - config dataset → `/config`
-   - media dataset → `/media`
    - downloads dataset → `/downloads`
-4. Publish port `8080`.
-5. Set `PUID`/`PGID` to the dataset owner.
-6. If the host has an iGPU/NVIDIA GPU, pass `/dev/dri` (and NVIDIA devices when applicable).
+   - media dataset → `/media`
+5. Environment: `PUID` / `PGID` = dataset owner.
+6. Privileged / `NET_ADMIN` if you enable qBittorrent VPN.
+7. GPU: pass `/dev/dri` (Intel/AMD) or NVIDIA runtime when transcoding.
 
 The manager UI is `http://<truenas-ip>:8080`.
+
+## Updates
+
+TrueNAS will pull a newer `:latest` when you update the app. Pin a semver tag (`:0.1.0`) if you want slower upgrades once git tags exist.

@@ -1,12 +1,22 @@
 # One AIO container only — not a per-application compose stack.
+# Pull the published image, or pass --build to build locally from this repo.
 services:
   aio-media-manager:
+    image: ghcr.io/qballjos/aio-media-server-manager:latest
     build: .
-    image: aio-media-manager:latest
     container_name: aio-media-manager
     restart: unless-stopped
     ports:
       - "8080:8080"
+      # Uncomment to publish managed app WebUIs on the host, or use network_mode: host.
+      # - "8081:8081"   # qBittorrent
+      # - "8085:8085"   # SABnzbd
+      # - "8096:8096"   # Jellyfin
+      # - "8989:8989"   # Sonarr
+      # - "7878:7878"   # Radarr
+      # - "9696:9696"   # Prowlarr
+      # - "5055:5055"   # Seerr
+      # - "32400:32400" # Plex
     volumes:
       - ./config:/config
       - ./downloads:/downloads

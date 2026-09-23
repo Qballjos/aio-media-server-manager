@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <Container>
   <Name>aio-media-manager</Name>
-  <Repository>aio-media-manager:latest</Repository>
-  <Registry/>
+  <Repository>ghcr.io/qballjos/aio-media-server-manager:latest</Repository>
+  <Registry>https://ghcr.io/</Registry>
   <Network>bridge</Network>
   <Privileged>true</Privileged>
   <Support>https://github.com/Qballjos/aio-media-server-manager</Support>

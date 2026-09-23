@@ -2,14 +2,14 @@
 
 The AIO manager is **one process tree / one container**. Never add a Compose service per application.
 
-| Mode | Files |
+Published image: [`ghcr.io/qballjos/aio-media-server-manager`](https://github.com/Qballjos/aio-media-server-manager/pkgs/container/aio-media-server-manager)
+
+| Mode | Manual |
 |------|--------|
-| A — Docker | [`Dockerfile`](../Dockerfile), [`docker-compose.yml`](../docker-compose.yml) |
-| B — Native Linux / LXC | [`aio-media-manager.service`](aio-media-manager.service) |
-| C — NAS templates | [`unraid.xml`](unraid.xml), [`SYNOLOGY.md`](SYNOLOGY.md), [`TRUENAS.md`](TRUENAS.md) |
+| A — Docker | [DOCKER.md](DOCKER.md) |
+| B — Native Linux / LXC | [LINUX.md](LINUX.md) |
+| C — Unraid | [UNRAID.md](UNRAID.md) |
+| C — Synology | [SYNOLOGY.md](SYNOLOGY.md) |
+| C — TrueNAS SCALE | [TRUENAS.md](TRUENAS.md) |
 
-```bash
-docker compose up -d --build
-```
-
-Then open `http://localhost:8080`.
+Full overview: [docs/INSTALL.md](../docs/INSTALL.md)

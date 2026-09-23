@@ -1,0 +1,39 @@
+# Installation
+
+AIO Media Server Manager is **one appliance**: the manager plus every *Arr app, downloader, and media server run as supervised processes. Do not deploy a Compose stack or NAS app per application.
+
+Published image: `ghcr.io/qballjos/aio-media-server-manager:latest` (`linux/amd64` and `linux/arm64`).
+
+| Platform | Guide |
+|----------|--------|
+| Docker / Compose | [deploy/DOCKER.md](../deploy/DOCKER.md) |
+| Native Linux / LXC / systemd | [deploy/LINUX.md](../deploy/LINUX.md) |
+| Unraid | [deploy/UNRAID.md](../deploy/UNRAID.md) |
+| Synology DSM | [deploy/SYNOLOGY.md](../deploy/SYNOLOGY.md) |
+| TrueNAS SCALE | [deploy/TRUENAS.md](../deploy/TRUENAS.md) |
+
+After the process is running, open `http://<host>:8080` and complete the first-run wizard.
+
+## What you need
+
+- Storage for **config**, **downloads**, and **media** (same filesystem recommended so hardlinks work).
+- A media user UID/GID (`id`) for `PUID` / `PGID`.
+- Optional: `/dev/dri` (or NVIDIA devices) for hardware transcoding.
+- Optional: `NET_ADMIN` / privileged container and a WireGuard or OpenVPN profile for qBittorrent-only VPN.
+
+## Ports
+
+The manager UI is **8080**. Child apps bind inside the same appliance (Sonarr 8989, Radarr 7878, Prowlarr 9696, qBittorrent 8081, SABnzbd 8085, Jellyfin 8096, Seerr 5055, Plex 32400, and others). Publish those ports, or run the container with host networking.
+
+## Development clone
+
+Use this only if you are changing the code. Production installs should use the GHCR image or a tagged release.
+
+```bash
+git clone https://github.com/Qballjos/aio-media-server-manager.git
+cd aio-media-server-manager
+cp .env.example .env
+poetry install
+cd frontend && npm ci && npm run build && cd ..
+poetry run python main.py
+```

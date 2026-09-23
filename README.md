@@ -1,6 +1,7 @@
 # AIO Media Server Manager
 
 [![CI](https://github.com/Qballjos/aio-media-server-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Qballjos/aio-media-server-manager/actions/workflows/ci.yml)
+[![GHCR](https://img.shields.io/badge/GHCR-aio--media--server--manager-blue)](https://github.com/Qballjos/aio-media-server-manager/pkgs/container/aio-media-server-manager)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A self-hosted, all-in-one appliance that manages a complete media stack (Usenet/Torrents, *Arr ecosystem, media servers) without a separate Docker container for each application.
@@ -34,10 +35,24 @@ Inspired by the process supervision and declarative concepts of DUMB, with **zer
 
 ## Documentation
 
+- [Installation](docs/INSTALL.md)
+- [Docker](deploy/DOCKER.md) · [Linux / LXC](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md)
 - [Architecture](ARCHITECTURE.md)
 - [Roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
-- [Deployment](deploy/README.md)
+
+---
+
+## Install (Docker)
+
+```bash
+docker pull ghcr.io/qballjos/aio-media-server-manager:latest
+docker compose up -d
+```
+
+Or from this repo: `docker compose pull && docker compose up -d`. Then open `http://localhost:8080`.
+
+Image tags: `latest` (main), `sha-<git>`, and semver when you push `v*` tags. See [docs/INSTALL.md](docs/INSTALL.md) for Unraid, Synology, TrueNAS, and native Linux.
 
 ---
 
