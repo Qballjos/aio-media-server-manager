@@ -36,6 +36,11 @@ async def submit_wizard_step(step_id: int, request: Request) -> dict[str, Any]:
     return wizard_engine.update_step_selections(step_id, data)
 
 
+@router.post("/skip", summary="Skip remaining wizard steps and open the dashboard")
+async def skip_wizard() -> dict[str, Any]:
+    return wizard_engine.skip()
+
+
 @router.post("/execute", summary="Execute wizard installation and automatic wiring")
 async def execute_wizard() -> dict[str, Any]:
     result = await wizard_engine.execute_installation()

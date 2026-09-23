@@ -83,6 +83,12 @@ secret.key
 secrets.enc
 
 # ===========================
+# Local scratch / UI verify
+# ===========================
+.tmp-ui-verify/
+.tmp*/
+
+# ===========================
 # Local Reference Material
 # ===========================
 DUMB/

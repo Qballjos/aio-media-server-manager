@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { appIconSrc } from './appIcons.js'
+import WizardPanel from './WizardPanel.vue'
 
 // --- State Variables ---
 const authStatus = ref({
@@ -32,6 +33,8 @@ const hostArch = ref('')
 const isLoadingData = ref(false)
 const actionLoading = ref({}) // map appName -> action ("start", "stop", etc.)
 const iconFailed = ref({})
+const wizardCompleted = ref(true)
+const wizardStatusLoaded = ref(false)
 
 // Toast messages
 const toasts = ref([])
@@ -145,7 +148,7 @@ async function checkAuthStatus() {
         if (fromCookie) storeCsrf(fromCookie)
       }
       if (data.authenticated) {
-        await refreshDashboard()
+        await Promise.all([refreshDashboard(), fetchWizardStatus()])
       }
     }
   } catch (err) {
@@ -198,7 +201,7 @@ async function handleSetup() {
     showToast('Admin setup completed successfully! Welcome to AIO Media Manager.', 'success')
     authForm.value.password = ''
     authForm.value.confirmPassword = ''
-    await refreshDashboard()
+    await Promise.all([refreshDashboard(), fetchWizardStatus()])
   } catch (err) {
     authError.value = 'Network error during setup: ' + err.message
   } finally {
@@ -241,7 +244,7 @@ async function handleLogin() {
     }
     showToast(`Welcome back, ${data.username}!`, 'success')
     authForm.value.password = ''
-    await refreshDashboard()
+    await Promise.all([refreshDashboard(), fetchWizardStatus()])
   } catch (err) {
     authError.value = 'Login error: ' + err.message
   } finally {
@@ -298,6 +301,29 @@ async function fetchSystemInfo() {
   }
 }
 
+async function fetchWizardStatus() {
+  try {
+    const res = await apiRequest('/api/wizard/status')
+    if (res.ok) {
+      const data = await res.json()
+      wizardCompleted.value = !!data.completed
+    } else {
+      wizardCompleted.value = true
+    }
+  } catch (err) {
+    console.error('Wizard status error:', err)
+    wizardCompleted.value = true
+  } finally {
+    wizardStatusLoaded.value = true
+  }
+}
+
+async function onWizardDone() {
+  wizardCompleted.value = true
+  showToast('Setup wizard finished. Catalog installs may continue in the background.', 'success')
+  await refreshDashboard()
+}
+
 async function refreshDashboard() {
   isLoadingData.value = true
   await Promise.all([fetchCatalog(), fetchApplications(), fetchSystemInfo()])
@@ -329,7 +355,8 @@ const combinedServices = computed(() => {
       pid: live ? live.pid : null,
       uptime: live ? live.uptime_seconds : null,
       arm64: cat.arm64_supported,
-      popularity: cat.popularity ?? 0
+      popularity: cat.popularity ?? 0,
+      helpUrl: cat.help_url || ''
     }
   })
 })
@@ -855,7 +882,17 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <!-- 3. Dashboard View -->
+      <!-- 3. First-run stack wizard -->
+      <section v-else-if="!wizardStatusLoaded" class="auth-card-wrapper animate-fade">
+        <p class="wizard-muted" style="text-align:center;color:#94a3b8;">Loading setup…</p>
+      </section>
+      <WizardPanel
+        v-else-if="!wizardCompleted"
+        :api-request="apiRequest"
+        @done="onWizardDone"
+      />
+
+      <!-- 4. Dashboard View -->
       <div v-else class="dashboard-layout animate-fade">
         <!-- Metric Cards -->
         <section class="metrics-grid">
@@ -1028,6 +1065,14 @@ onUnmounted(() => {
                 <div>
                   <div class="service-name-row">
                     <h3 class="service-name">{{ service.displayName }}</h3>
+                    <a
+                      v-if="service.helpUrl"
+                      :href="service.helpUrl"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="help-btn"
+                      :title="'Help / wiki for ' + service.displayName"
+                    >?</a>
                     <span class="category-pill">{{ service.category }}</span>
                   </div>
                   <div class="service-port font-mono">
@@ -1919,6 +1964,26 @@ onUnmounted(() => {
   font-weight: 600;
   margin: 0;
   color: #f8fafc;
+}
+
+.help-btn {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #93c5fd;
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  text-decoration: none;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.help-btn:hover {
+  color: #fff;
+  border-color: #93c5fd;
 }
 
 .category-pill {

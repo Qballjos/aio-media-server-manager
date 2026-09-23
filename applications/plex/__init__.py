@@ -6,6 +6,7 @@ import requests
 
 from applications.base import BaseApplication
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
+from core.crypto import secret_store
 from core.installer.arch import detect_system_arch
 from core.installer.installer import AppInstaller, InstallResult
 from core.settings import settings
@@ -32,10 +33,14 @@ class PlexApp(BaseApplication):
     manifest = MANIFEST
 
     def extra_env(self) -> dict[str, str]:
-        return {
+        env = {
             "PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR": str(self.config_dir),
             "PLEX_MEDIA_SERVER_HOME": str(self.install_dir),
         }
+        claim = secret_store.get_secret("plex_claim")
+        if claim:
+            env["PLEX_CLAIM"] = claim
+        return env
 
     def build_start_command(self, executable: Path) -> list[str]:
         return [str(executable)]

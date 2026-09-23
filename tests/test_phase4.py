@@ -42,6 +42,9 @@ def test_phase4_catalog_plugins(catalog: ApplicationCatalog):
         "tautulli",
         "autobrr",
         "kometa",
+        "flaresolverr",
+        "grimmory",
+        "shelfmark",
     }
     assert expected.issubset(names)
     assert catalog.get("recyclarr").manifest.daemon is False

@@ -72,8 +72,8 @@ class LibraryLayout:
         return self.media_dir / "music"
 
     @property
-    def books(self) -> Path:
-        return self.media_dir / "books"
+    def bookdrop(self) -> Path:
+        return self.media_dir / "books" / "bookdrop"
 
     @property
     def comics(self) -> Path:
@@ -113,6 +113,7 @@ class LibraryLayout:
             dirs.append(self.media_path(name))
             dirs.append(self.complete_path(name))
             dirs.append(self.torrent_path(name))
+        dirs.append(self.bookdrop)
         return dirs
 
     def as_dict(self) -> dict[str, str | dict[str, str]]:

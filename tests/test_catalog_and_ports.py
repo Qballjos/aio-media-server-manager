@@ -80,6 +80,47 @@ def test_catalog_entries_include_popularity():
     mylar = catalog.get("mylar3").catalog_entry()
     assert sonarr["popularity"] > mylar["popularity"]
     assert sonarr["category"] == AppCategory.AUTOMATION.value
+    assert sonarr["help_url"] == "https://wiki.servarr.com/sonarr"
+
+
+def test_catalog_help_urls_and_icons():
+    catalog = ApplicationCatalog()
+    from pathlib import Path
+    from applications.manifest import HELP_URLS
+
+    icons = Path(__file__).resolve().parents[1] / "frontend" / "public" / "app-icons"
+    mapping = {
+        "flaresolverr": "flaresolverr.png",
+        "grimmory": "grimmory.svg",
+        "shelfmark": "shelfmark.png",
+        "autobrr": "autobrr.svg",
+        "bazarr": "bazarr.svg",
+        "cleanuparr": "cleanuparr.png",
+        "jellyfin": "jellyfin.svg",
+        "kometa": "kometa.svg",
+        "lidarr": "lidarr.svg",
+        "maintainerr": "maintainerr.svg",
+        "mylar3": "mylar.png",
+        "neutarr": "neutarr.svg",
+        "nzbget": "nzbget.svg",
+        "plex": "plex.svg",
+        "profilarr": "profilarr.svg",
+        "prowlarr": "prowlarr.svg",
+        "qbittorrent": "qbittorrent.svg",
+        "radarr": "radarr.svg",
+        "recyclarr": "recyclarr.svg",
+        "sabnzbd": "sabnzbd.svg",
+        "seerr": "seerr.svg",
+        "sonarr": "sonarr.svg",
+        "tautulli": "tautulli.svg",
+        "unpackerr": "unpackerr.png",
+    }
+    for plugin in catalog.all_plugins():
+        name = plugin.name
+        entry = plugin.catalog_entry()
+        assert name in HELP_URLS
+        assert entry["help_url"] == HELP_URLS[name]
+        assert (icons / mapping[name]).is_file(), f"missing icon for {name}"
 
 
 def test_port_manager_registry_and_availability():

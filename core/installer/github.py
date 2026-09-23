@@ -166,15 +166,17 @@ class GitHubReleaseClient:
 
         for asset in assets:
             name = asset.get("name", "")
+            preferred_hit = bool(
+                preferred_patterns
+                and any(re.search(pat, name, re.IGNORECASE) for pat in preferred_patterns)
+            )
             score = score_asset_match(name, arch, target_os)
-            if score < 0:
+            # Platform-independent artifacts (JARs, generic zips) are selected by
+            # preferred_patterns even when the filename has no arch/OS token.
+            if score < 0 and not preferred_hit:
                 continue
-
-            # Additional boost if user/plugin supplied specific regex patterns
-            if preferred_patterns:
-                for pat in preferred_patterns:
-                    if re.search(pat, name, re.IGNORECASE):
-                        score += 100
+            if preferred_hit:
+                score = max(score, 0) + 200
 
             if score > best_score:
                 best_score = score

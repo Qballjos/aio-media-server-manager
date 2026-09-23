@@ -133,6 +133,7 @@ def test_prowlarr_client(mock_post, mock_get):
     assert client.sync_sonarr(sonarr_api_key="sonarr_key") is True
     assert client.sync_radarr(radarr_api_key="radarr_key") is True
     assert client.sync_lidarr(lidarr_api_key="lidarr_key") is True
+    assert client.add_flaresolverr() is True
 
 
 @patch("requests.get")
@@ -182,7 +183,7 @@ def test_integration_endpoints():
 
 
 def test_arr_install_triggers_wiring_set():
-    assert WIRE_AFTER_INSTALL == frozenset({"sonarr", "radarr", "lidarr", "prowlarr"})
+    assert WIRE_AFTER_INSTALL == frozenset({"sonarr", "radarr", "lidarr", "prowlarr", "flaresolverr"})
     assert "whisparr" not in WIRE_AFTER_INSTALL
     assert "readarr" not in WIRE_AFTER_INSTALL
 

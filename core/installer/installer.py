@@ -333,6 +333,68 @@ class AppInstaller:
             installed_at=metadata["installed_at"],
         )
 
+    def install_from_github_source(
+        self,
+        repo: str,
+        app_name: str,
+        executable_name: str,
+        *,
+        tag: str | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> InstallResult:
+        """Download a GitHub release zipball into the app install dir."""
+        if tag:
+            release = self.github_client.get_release_by_tag(repo, tag)
+        else:
+            release = self.github_client.get_latest_release(repo)
+        version = release.get("tag_name", "unknown")
+        zipball = release.get("zipball_url")
+        if not zipball:
+            raise ValueError(f"Release '{version}' for {repo} has no zipball_url")
+
+        cache_dir = self.settings.cache_dir / "downloads"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = cache_dir / f"{app_name}-{version}.zip"
+        computed_sha = self.download_file(
+            url=zipball,
+            destination=archive_path,
+            progress_callback=progress_callback,
+        )
+        install_root = self.settings.install_dir / app_name
+        executable_path = self.activate_archive(
+            archive_path=archive_path,
+            target_install_dir=install_root,
+            executable_name=executable_name,
+            app_name=app_name,
+        )
+        metadata = {
+            "app_name": app_name,
+            "version": version,
+            "asset_name": archive_path.name,
+            "sha256": computed_sha,
+            "repo": repo,
+            "source": "github_zipball",
+            "installed_at": time.time(),
+            "arch": detect_system_arch().value,
+        }
+        with open(install_root / ".amm_installed.json", "w", encoding="utf-8") as fh:
+            json.dump(metadata, fh, indent=2)
+        self.storage_manager.apply_permissions(
+            install_root,
+            puid=self.settings.puid,
+            pgid=self.settings.pgid,
+            recursive=True,
+        )
+        return InstallResult(
+            app_name=app_name,
+            version=version,
+            install_dir=install_root,
+            executable_path=executable_path,
+            asset_name=archive_path.name,
+            sha256=computed_sha,
+            installed_at=metadata["installed_at"],
+        )
+
     # ------------------------------------------------------------------
     # Streaming Downloader
     # ------------------------------------------------------------------

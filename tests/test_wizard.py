@@ -38,9 +38,39 @@ def test_wizard_engine_lifecycle(tmp_path: Path):
     engine.update_step_selections(5, {"download_clients": ["sabnzbd"]})
     assert engine.get_status()["selections"]["download_clients"] == ["sabnzbd"]
 
-    # Step 6: VPN
+    step5 = engine.get_step_data(5)
+    assert {opt["id"] for opt in step5["options"]} >= {"sabnzbd", "nzbget", "qbittorrent"}
+    assert all(opt.get("help_url") for opt in step5["options"])
+
+    step7 = engine.get_step_data(7)
+    assert {opt["id"] for opt in step7["options"]} >= {"prowlarr", "sonarr", "radarr", "lidarr"}
+
+    step8 = engine.get_step_data(8)
+    plex = next(opt for opt in step8["options"] if opt["id"] == "plex")
+    assert plex.get("disabled") is not True
+
+    engine.update_step_selections(8, {"media_servers": ["jellyfin", "plex"]})
+    assert engine.get_status()["selections"]["media_servers"] == ["jellyfin", "plex"]
+
     engine.update_step_selections(6, {"vpn_provider": "privadovpn"})
     assert engine.get_status()["selections"]["vpn_provider"] == "privadovpn"
+
+    engine.update_step_selections(
+        5,
+        {
+            "download_clients": ["qbittorrent"],
+            "preferred_download_client": "qbittorrent",
+            "qbittorrent_username": "amm",
+            "qbittorrent_password": "secret-pass",
+        },
+    )
+    step5 = engine.get_step_data(5)
+    assert step5["preferred_download_client"] == "qbittorrent"
+    assert step5["has_qbittorrent_password"] is True
+    assert "qbittorrent_password" not in engine.get_status()["selections"]
+
+    engine.skip()
+    assert engine.is_completed() is True
 
     # Reload from disk to test persistence
     reloaded_engine = WizardEngine(state_file=state_file)
@@ -73,3 +103,8 @@ async def test_wizard_api_endpoints(tmp_path: Path):
     exec_data = res_exec.json()
     assert exec_data["completed"] is True
     assert "wiring" in exec_data
+    assert "target_apps" in exec_data
+
+    res_skip = client.post("/api/wizard/skip")
+    assert res_skip.status_code == 200
+    assert res_skip.json()["completed"] is True

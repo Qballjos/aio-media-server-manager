@@ -20,6 +20,7 @@ def test_storage_creates_media_download_and_transcode_folders(tmp_path: Path):
     assert layout.complete.is_dir()
     assert layout.transcode_jellyfin.is_dir()
     assert layout.transcode_plex.is_dir()
+    assert layout.bookdrop.is_dir()
     for name in LIBRARY_FOLDERS:
         assert layout.media_path(name).is_dir()
         assert layout.complete_path(name).is_dir()
@@ -37,5 +38,5 @@ def test_library_layout_paths_are_under_configured_roots(tmp_path: Path):
     payload = layout.as_dict()
     assert payload["libraries"]["anime"] == str(tmp_path / "lib" / "anime")
     assert payload["complete_categories"]["music"] == str(tmp_path / "dl" / "complete" / "music")
-    assert payload["torrent_categories"]["books"] == str(tmp_path / "dl" / "torrents" / "books")
+    assert layout.bookdrop == tmp_path / "lib" / "books" / "bookdrop"
     assert payload["transcode_jellyfin"].endswith("transcode/jellyfin")

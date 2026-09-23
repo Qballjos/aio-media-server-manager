@@ -8,17 +8,26 @@ to separate and route BitTorrent downloads.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 import requests
+
+from core.crypto import secret_store
 
 logger = logging.getLogger(__name__)
 
 
+def qbittorrent_credentials() -> tuple[str, str]:
+    username = secret_store.get_secret("qbittorrent_username") or "admin"
+    password = secret_store.get_secret("qbittorrent_password") or "adminadmin"
+    return username, password
+
+
 class QBittorrentClient:
-    def __init__(self, host: str = "127.0.0.1", port: int = 8085, username: str = "admin", password: str = "adminadmin"):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8085, username: str | None = None, password: str | None = None):
+        stored_user, stored_pass = qbittorrent_credentials()
         self.base_url = f"http://{host}:{port}/api/v2"
-        self.username = username
-        self.password = password
+        self.username = username if username is not None else stored_user
+        self.password = password if password is not None else stored_pass
         self.session = requests.Session()
         self._authenticated = False
 

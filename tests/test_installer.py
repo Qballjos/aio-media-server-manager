@@ -94,6 +94,26 @@ def test_score_prefers_glibc_linux_core_over_musl():
     assert musl > 0
 
 
+def test_select_asset_allows_preferred_jar():
+    from core.installer.github import GitHubReleaseClient
+
+    client = GitHubReleaseClient()
+    release = {
+        "tag_name": "v1.0.0",
+        "assets": [
+            {"name": "openapi.json", "browser_download_url": "http://example/openapi.json"},
+            {"name": "grimmory.jar", "browser_download_url": "http://example/grimmory.jar"},
+        ],
+    }
+    asset = client.select_asset(
+        release,
+        PlatformArch.ARM64,
+        PlatformOS.LINUX,
+        preferred_patterns=(r"grimmory\.jar$",),
+    )
+    assert asset["name"] == "grimmory.jar"
+
+
 def test_score_rejects_nzbget_run_installer():
     run = score_asset_match(
         "nzbget-26.3-bin-linux.run",

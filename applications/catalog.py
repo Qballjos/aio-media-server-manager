@@ -24,6 +24,7 @@ from applications.extended import (
     TautulliApp,
     UnpackerrApp,
 )
+from applications.community import FlaresolverrApp, GrimmoryApp, ShelfmarkApp
 from applications.jellyfin import JellyfinApp
 from applications.plex import PlexApp
 from applications.prowlarr import ProwlarrApp
@@ -61,6 +62,9 @@ PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
     TautulliApp,
     AutobrrApp,
     KometaApp,
+    FlaresolverrApp,
+    GrimmoryApp,
+    ShelfmarkApp,
 )
 
 

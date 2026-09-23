@@ -8,10 +8,10 @@ Implements the 12-step guided setup flow defined in PROMPT.md §26:
 4. User/permissions (PUID/PGID)
 5. Download clients (SABnzbd, qBittorrent)
 6. VPN (None / PrivadoVPN preview)
-7. *Arr (Prowlarr, Sonarr, Radarr)
-8. Media server (Jellyfin)
+7. *Arr (Prowlarr, Sonarr, Radarr, Lidarr)
+8. Media server (Jellyfin and/or Plex)
 9. Request system (Seerr)
-10. Recommended tools preview
+10. Recommended tools (Bazarr, Flaresolverr, Grimmory, Shelfmark, ...)
 11. Review
 12. Install & automatic wiring
 """
@@ -26,11 +26,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from applications.catalog import ApplicationCatalog
+from applications.manifest import help_url_for
+from core.crypto import secret_store
 from core.integrations.engine import integration_engine
 from core.library_layout import LibraryLayout
 from core.settings import settings
 from core.storage import StorageManager
-from core.supervisor import ProcessSupervisor
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +76,15 @@ class WizardEngine:
                 "vpn_provider": "none",
                 "arr_apps": ["prowlarr", "sonarr", "radarr"],
                 "media_server": "jellyfin",
+                "media_servers": ["jellyfin"],
                 "request_system": "seerr",
-                "recommended_preview": ["bazarr", "unpackerr", "recyclarr"],
+                "preferred_download_client": "qbittorrent",
+                "qbittorrent_username": "admin",
+                "qbittorrent_password": "",
+                "vpn_config_path": "",
+                "vpn_protocol": "wireguard",
+                "vpn_enforce": False,
+                "plex_claim": "",
             },
         }
 
@@ -90,12 +98,35 @@ class WizardEngine:
     def is_completed(self) -> bool:
         return bool(self._state.get("completed", False))
 
+    def skip(self) -> dict[str, Any]:
+        self._state["completed"] = True
+        self._state["current_step"] = 12
+        self._save_state()
+        return self.get_status()
+
+    def _annotate_options(self, options: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        catalog = ApplicationCatalog(app_settings=self._settings)
+        annotated = []
+        for option in options:
+            item = dict(option)
+            name = item.get("id") or ""
+            if catalog.has(name):
+                plugin = catalog.get(name)
+                item["help_url"] = help_url_for(
+                    plugin.name, plugin.manifest.github_repo, plugin.manifest.upstream_url
+                )
+                item["display_name"] = plugin.manifest.display_name
+            annotated.append(item)
+        return annotated
+
     def get_status(self) -> dict[str, Any]:
+        selections = dict(self._state.get("selections", {}))
+        selections.pop("qbittorrent_password", None)
         return {
             "current_step": self._state.get("current_step", 1),
             "completed": self.is_completed(),
             "steps": WIZARD_STEPS,
-            "selections": self._state.get("selections", {}),
+            "selections": selections,
         }
 
     def get_step_data(self, step_id: int) -> dict[str, Any]:
@@ -151,11 +182,17 @@ class WizardEngine:
         if step_id == 5:
             return {
                 "step": 5,
-                "options": [
-                    {"id": "sabnzbd", "name": "SABnzbd (Usenet)", "recommended": True},
-                    {"id": "qbittorrent", "name": "qBittorrent (BitTorrent)", "recommended": True},
-                ],
+                "options": self._annotate_options(
+                    [
+                        {"id": "sabnzbd", "name": "SABnzbd (Usenet)", "recommended": True},
+                        {"id": "nzbget", "name": "NZBGet (Usenet)", "recommended": False},
+                        {"id": "qbittorrent", "name": "qBittorrent (BitTorrent)", "recommended": True},
+                    ]
+                ),
                 "selected": selections.get("download_clients", []),
+                "preferred_download_client": selections.get("preferred_download_client", "qbittorrent"),
+                "qbittorrent_username": selections.get("qbittorrent_username", "admin"),
+                "has_qbittorrent_password": bool(selections.get("qbittorrent_password")),
             }
 
         if step_id == 6:
@@ -163,51 +200,69 @@ class WizardEngine:
                 "step": 6,
                 "options": [
                     {"id": "none", "name": "None / Direct Connection", "recommended": True},
-                    {"id": "privadovpn", "name": "PrivadoVPN (Network Namespace Isolation)", "preview": True},
+                    {"id": "privadovpn", "name": "PrivadoVPN (Network Namespace Isolation)"},
+                    {"id": "custom", "name": "Custom WireGuard / OpenVPN config"},
                 ],
                 "selected": selections.get("vpn_provider", "none"),
+                "vpn_config_path": selections.get("vpn_config_path", ""),
+                "vpn_protocol": selections.get("vpn_protocol", "wireguard"),
+                "vpn_enforce": bool(selections.get("vpn_enforce", False)),
             }
 
         if step_id == 7:
             return {
                 "step": 7,
-                "options": [
-                    {"id": "prowlarr", "name": "Prowlarr (Indexer Manager)", "recommended": True},
-                    {"id": "sonarr", "name": "Sonarr (TV Automation)", "recommended": True},
-                    {"id": "radarr", "name": "Radarr (Movie Automation)", "recommended": True},
-                ],
+                "options": self._annotate_options(
+                    [
+                        {"id": "prowlarr", "name": "Prowlarr (Indexer Manager)", "recommended": True},
+                        {"id": "sonarr", "name": "Sonarr (TV Automation)", "recommended": True},
+                        {"id": "radarr", "name": "Radarr (Movie Automation)", "recommended": True},
+                        {"id": "lidarr", "name": "Lidarr (Music Automation)", "recommended": False},
+                    ]
+                ),
                 "selected": selections.get("arr_apps", []),
             }
 
         if step_id == 8:
             return {
                 "step": 8,
-                "options": [
-                    {"id": "jellyfin", "name": "Jellyfin (Open Source Media Server)", "recommended": True},
-                    {"id": "plex", "name": "Plex (Phase 4 deferred)", "disabled": True},
-                ],
-                "selected": selections.get("media_server", "jellyfin"),
+                "options": self._annotate_options(
+                    [
+                        {"id": "jellyfin", "name": "Jellyfin (Open Source Media Server)", "recommended": True},
+                        {"id": "plex", "name": "Plex Media Server (can share the same library as Jellyfin)"},
+                    ]
+                ),
+                "selected": selections.get("media_servers")
+                or ([selections["media_server"]] if selections.get("media_server") else ["jellyfin"]),
+                "plex_claim": selections.get("plex_claim", ""),
             }
 
         if step_id == 9:
             return {
                 "step": 9,
-                "options": [
-                    {"id": "seerr", "name": "Seerr (Media Request Management)", "recommended": True},
-                ],
+                "options": self._annotate_options(
+                    [
+                        {"id": "seerr", "name": "Seerr (Media Request Management)", "recommended": True},
+                    ]
+                ),
                 "selected": selections.get("request_system", "seerr"),
             }
 
         if step_id == 10:
             return {
                 "step": 10,
-                "options": [
-                    {"id": "bazarr", "name": "Bazarr (Subtitles)", "phase": 4},
-                    {"id": "unpackerr", "name": "Unpackerr (Archive Extraction)", "phase": 4},
-                    {"id": "recyclarr", "name": "Recyclarr (TRaSH Guides Sync)", "phase": 4},
-                    {"id": "profilarr", "name": "Profilarr (Profile Management)", "phase": 4},
-                    {"id": "neutarr", "name": "NeutArr (Automation Optimizer)", "phase": 4},
-                ],
+                "options": self._annotate_options(
+                    [
+                        {"id": "bazarr", "name": "Bazarr (Subtitles)"},
+                        {"id": "unpackerr", "name": "Unpackerr (Archive Extraction)"},
+                        {"id": "recyclarr", "name": "Recyclarr (TRaSH Guides Sync)"},
+                        {"id": "profilarr", "name": "Profilarr (Profile Management)"},
+                        {"id": "neutarr", "name": "NeutArr (Automation Optimizer)"},
+                        {"id": "flaresolverr", "name": "Flaresolverr (Cloudflare bypass for indexers)"},
+                        {"id": "grimmory", "name": "Grimmory (ebooks, comics, audiobooks)"},
+                        {"id": "shelfmark", "name": "Shelfmark (book search and requests)"},
+                    ]
+                ),
                 "selected": selections.get("recommended_preview", []),
             }
 
@@ -239,12 +294,33 @@ class WizardEngine:
                 selections["pgid"] = int(data["pgid"])
         elif step_id == 5:
             selections["download_clients"] = data.get("download_clients", selections.get("download_clients", []))
+            if "preferred_download_client" in data:
+                selections["preferred_download_client"] = data["preferred_download_client"]
+            if "qbittorrent_username" in data:
+                selections["qbittorrent_username"] = data["qbittorrent_username"]
+            if data.get("qbittorrent_password"):
+                selections["qbittorrent_password"] = data["qbittorrent_password"]
         elif step_id == 6:
             selections["vpn_provider"] = data.get("vpn_provider", "none")
+            if "vpn_config_path" in data:
+                selections["vpn_config_path"] = data["vpn_config_path"]
+            if "vpn_protocol" in data:
+                selections["vpn_protocol"] = data["vpn_protocol"]
+            if "vpn_enforce" in data:
+                selections["vpn_enforce"] = bool(data["vpn_enforce"])
         elif step_id == 7:
             selections["arr_apps"] = data.get("arr_apps", selections.get("arr_apps", []))
         elif step_id == 8:
-            selections["media_server"] = data.get("media_server", "jellyfin")
+            if "media_servers" in data:
+                servers = [name for name in data.get("media_servers", []) if name and name != "none"]
+                selections["media_servers"] = servers
+                selections["media_server"] = servers[0] if servers else "none"
+            else:
+                selections["media_server"] = data.get("media_server", "jellyfin")
+                val = selections["media_server"]
+                selections["media_servers"] = [val] if val and val != "none" else []
+            if "plex_claim" in data:
+                selections["plex_claim"] = data["plex_claim"]
         elif step_id == 9:
             selections["request_system"] = data.get("request_system", "seerr")
         elif step_id == 10:
@@ -257,47 +333,95 @@ class WizardEngine:
 
         return self.get_status()
 
-    async def execute_installation(self) -> dict[str, Any]:
-        """
-        Runs batch installation, service startup, and automatic integration engine.
-        """
+    def _target_apps(self) -> list[str]:
         selections = self._state.get("selections", {})
         catalog = ApplicationCatalog(app_settings=self._settings)
-        supervisor = ProcessSupervisor.get()
+        target: set[str] = set(selections.get("download_clients", []))
+        target.update(selections.get("arr_apps", []))
+        target.update(selections.get("recommended_preview", []))
+        media_servers = selections.get("media_servers")
+        if media_servers:
+            target.update(media_servers)
+        elif selections.get("media_server") and selections["media_server"] != "none":
+            target.add(selections["media_server"])
+        if selections.get("request_system") and selections["request_system"] != "none":
+            target.add(selections["request_system"])
+        try:
+            ordered = catalog.resolve_install_order(list(target))
+        except Exception:
+            ordered = sorted(target)
+        return [name for name in ordered if catalog.has(name)]
 
-        installed_apps: list[str] = []
+    def apply_initial_settings(self) -> None:
+        """Persist path/VPN/credential choices from the wizard into runtime settings."""
+        selections = self._state.get("selections", {})
+        cfg = self._settings
+        if selections.get("media_dir"):
+            cfg.media_dir = Path(selections["media_dir"]).expanduser().resolve()
+        if selections.get("puid"):
+            cfg.puid = int(selections["puid"])
+        if selections.get("pgid"):
+            cfg.pgid = int(selections["pgid"])
+
+        vpn_provider = selections.get("vpn_provider") or "none"
+        if vpn_provider != "none":
+            cfg.vpn_enabled = True
+            cfg.vpn_provider = "privadovpn" if vpn_provider == "privadovpn" else vpn_provider
+            cfg.vpn_protocol = selections.get("vpn_protocol") or "wireguard"
+            cfg.vpn_enforce = bool(selections.get("vpn_enforce"))
+            if selections.get("vpn_config_path"):
+                cfg.vpn_config_path = Path(selections["vpn_config_path"]).expanduser().resolve()
+        else:
+            cfg.vpn_enabled = False
+            cfg.vpn_enforce = False
+
+        try:
+            cfg.save()
+        except Exception as exc:
+            logger.warning("Could not persist wizard settings: %s", exc)
+
+        username = selections.get("qbittorrent_username") or "admin"
+        try:
+            secret_store.save_secret("qbittorrent_username", str(username))
+            password = selections.get("qbittorrent_password")
+            if password:
+                secret_store.save_secret("qbittorrent_password", str(password))
+                selections["qbittorrent_password"] = ""
+            preferred = selections.get("preferred_download_client") or "qbittorrent"
+            secret_store.save_secret("preferred_download_client", str(preferred))
+            claim = selections.get("plex_claim")
+            if claim:
+                secret_store.save_secret("plex_claim", str(claim))
+                selections["plex_claim"] = ""
+        except Exception as exc:
+            logger.warning("Could not persist wizard secrets: %s", exc)
+
+    async def execute_installation(self) -> dict[str, Any]:
+        """
+        Persist first-run settings, then report which catalog apps should be installed.
+        Catalog POST /install is kicked off by the UI so this request stays short.
+        """
+        self.apply_initial_settings()
+        catalog = ApplicationCatalog(app_settings=self._settings)
+        target_apps = self._target_apps()
         install_results: list[dict[str, Any]] = []
 
-        # Gather target applications to install
-        target_apps = set(selections.get("download_clients", []))
-        target_apps.update(selections.get("arr_apps", []))
-        if selections.get("media_server") and selections["media_server"] != "none":
-            target_apps.add(selections["media_server"])
-        if selections.get("request_system") and selections["request_system"] != "none":
-            target_apps.add(selections["request_system"])
-
         for app_name in target_apps:
-            if not catalog.has(app_name):
-                continue
             plugin = catalog.get(app_name)
-            is_inst = plugin.is_installed()
-            if not is_inst:
-                # Mark installation attempt
-                install_results.append({"app": app_name, "installed": False, "status": "simulated_or_pending"})
-            else:
-                installed_apps.append(app_name)
+            if plugin.is_installed():
                 install_results.append({"app": app_name, "installed": True, "status": "already_installed"})
+            else:
+                install_results.append({"app": app_name, "installed": False, "status": "pending_catalog_install"})
 
-        # Run automated integration wiring
         wiring_report = integration_engine.run_full_wiring()
 
-        # Mark wizard completed
         self._state["completed"] = True
         self._state["current_step"] = 12
         self._save_state()
 
         return {
             "completed": True,
+            "target_apps": target_apps,
             "installations": install_results,
             "wiring": wiring_report,
         }

@@ -137,3 +137,40 @@ class ProwlarrClient:
         except Exception as exc:
             logger.debug("Prowlarr sync %s error: %s", implementation, exc)
             return False
+
+    def add_flaresolverr(self, flaresolverr_url: str = "http://127.0.0.1:8191") -> bool:
+        """Register Flaresolverr as a Prowlarr indexer proxy."""
+        try:
+            resp = requests.get(
+                f"{self.base_url}/indexerProxy",
+                headers=self._headers(),
+                timeout=5.0,
+            )
+            proxies = resp.json() if resp.status_code == 200 else []
+        except Exception as exc:
+            logger.debug("Prowlarr list indexerProxy error: %s", exc)
+            proxies = []
+        if any(item.get("implementation") == "FlareSolverr" for item in proxies):
+            logger.info("Prowlarr Flaresolverr proxy already registered.")
+            return True
+        payload = {
+            "enable": True,
+            "name": "Flaresolverr (AMM)",
+            "implementation": "FlareSolverr",
+            "configContract": "FlareSolverrSettings",
+            "fields": [
+                {"name": "host", "value": flaresolverr_url.rstrip("/")},
+                {"name": "requestTimeout", "value": 60},
+            ],
+        }
+        try:
+            resp = requests.post(
+                f"{self.base_url}/indexerProxy",
+                headers=self._headers(),
+                json=payload,
+                timeout=5.0,
+            )
+            return resp.status_code in (200, 201)
+        except Exception as exc:
+            logger.debug("Prowlarr add_flaresolverr error: %s", exc)
+            return False

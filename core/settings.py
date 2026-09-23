@@ -255,6 +255,7 @@ class Settings(BaseSettings):
             "vpn_enforce": self.vpn_enforce,
             "vpn_provider": self.vpn_provider,
             "vpn_protocol": self.vpn_protocol,
+            "vpn_config_path": str(self.vpn_config_path) if self.vpn_config_path else "",
             "cloudflare_tunnel_enabled": self.cloudflare_tunnel_enabled,
         }
 

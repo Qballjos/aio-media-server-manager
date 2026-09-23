@@ -25,7 +25,7 @@ from core.integrations.jellyfin import JellyfinClient
 from core.integrations.nzbget import NZBGetClient
 from core.integrations.plex import PlexClient
 from core.integrations.prowlarr import ProwlarrClient
-from core.integrations.qbittorrent import QBittorrentClient
+from core.integrations.qbittorrent import QBittorrentClient, qbittorrent_credentials
 from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient
 from core.integrations.seerr import SeerrClient
@@ -42,7 +42,7 @@ from core.supervisor import ProcessSupervisor
 
 logger = logging.getLogger(__name__)
 
-WIRE_AFTER_INSTALL = frozenset({"sonarr", "radarr", "lidarr", "prowlarr"})
+WIRE_AFTER_INSTALL = frozenset({"sonarr", "radarr", "lidarr", "prowlarr", "flaresolverr"})
 
 _STATUS_APPS = (
     "sabnzbd",
@@ -122,6 +122,7 @@ class IntegrationEngine:
             )
         )
 
+        qb_user, qb_pass = qbittorrent_credentials()
         sab_port = self._port("sabnzbd", 8085)
         nzb_port = self._port("nzbget", 6789)
         qb_port = self._port("qbittorrent", 8081)
@@ -180,7 +181,9 @@ class IntegrationEngine:
                 [
                     sonarr_client.add_sabnzbd_client(port=sab_port, api_key=sab_key or "", category="sonarr"),
                     sonarr_client.add_nzbget_client(port=nzb_port, category="sonarr"),
-                    sonarr_client.add_qbittorrent_client(port=qb_port, category="sonarr"),
+                    sonarr_client.add_qbittorrent_client(
+                        port=qb_port, username=qb_user, password=qb_pass, category="sonarr"
+                    ),
                 ]
             )
             sonarr_naming = sonarr_client.configure_naming_defaults()
@@ -200,7 +203,9 @@ class IntegrationEngine:
                 [
                     radarr_client.add_sabnzbd_client(port=sab_port, api_key=sab_key or "", category="radarr"),
                     radarr_client.add_nzbget_client(port=nzb_port, category="radarr"),
-                    radarr_client.add_qbittorrent_client(port=qb_port, category="radarr"),
+                    radarr_client.add_qbittorrent_client(
+                        port=qb_port, username=qb_user, password=qb_pass, category="radarr"
+                    ),
                 ]
             )
             radarr_naming = radarr_client.configure_naming_defaults()
@@ -228,6 +233,8 @@ class IntegrationEngine:
                 sab_key=sab_key or "",
                 nzb_port=nzb_port,
                 qb_port=qb_port,
+                qb_username=qb_user,
+                qb_password=qb_pass,
                 category="lidarr",
             )
             steps.append(_step("lidarr", "wire_clients_and_storage", lidarr_ok, str(layout.music)))
@@ -241,8 +248,11 @@ class IntegrationEngine:
                 syncs.append(prowlarr_client.sync_radarr(radarr_url=radarr_url, radarr_api_key=radarr_key or ""))
             if self._installed("lidarr"):
                 syncs.append(prowlarr_client.sync_lidarr(lidarr_url=lidarr_url, lidarr_api_key=lidarr_key or ""))
+            if self._installed("flaresolverr"):
+                flare_port = self._port("flaresolverr", 8191)
+                syncs.append(prowlarr_client.add_flaresolverr(f"http://127.0.0.1:{flare_port}"))
             prowl_ok = all(syncs) if syncs else True
-            steps.append(_step("prowlarr", "sync_applications", prowl_ok, "Prowlarr → Sonarr/Radarr/Lidarr"))
+            steps.append(_step("prowlarr", "sync_applications", prowl_ok, "Prowlarr → Sonarr/Radarr/Lidarr/Flaresolverr"))
 
         if not self._skip_uninstalled(steps, "jellyfin", "configure_libraries_and_transcode"):
             jelly_client = JellyfinClient(port=jelly_port, api_key=jellyfin_key)
@@ -354,13 +364,17 @@ def _wire_arr_app(
     nzb_port: int,
     qb_port: int,
     category: str,
+    qb_username: str = "admin",
+    qb_password: str = "adminadmin",
 ) -> bool:
     root_ok = all(client.add_root_folder(str(path)) for path in roots)
     dl_ok = any(
         [
             client.add_sabnzbd_client(port=sab_port, api_key=sab_key, category=category),
             client.add_nzbget_client(port=nzb_port, category=category),
-            client.add_qbittorrent_client(port=qb_port, category=category),
+            client.add_qbittorrent_client(
+                port=qb_port, username=qb_username, password=qb_password, category=category
+            ),
         ]
     )
     return root_ok and dl_ok

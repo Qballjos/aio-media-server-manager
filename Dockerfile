@@ -38,6 +38,12 @@ RUN apt-get update \
         libxml2 \
         libncurses6 \
         libfontconfig1 \
+        fonts-liberation \
+        chromium \
+        openjdk-17-jre-headless \
+        mariadb-server \
+        nodejs \
+        npm \
         ${ICU_PKG} \
     && rm -rf /var/lib/apt/lists/*
 

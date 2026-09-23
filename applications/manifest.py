@@ -56,6 +56,9 @@ _POPULARITY_RANK: dict[str, int] = {
     "maintainerr": 54,
     "kometa": 52,
     "autobrr": 48,
+    "flaresolverr": 88,
+    "grimmory": 62,
+    "shelfmark": 60,
     "mylar3": 40,
 }
 
@@ -68,7 +71,43 @@ _TIER_POPULARITY = {
 
 
 def popularity_rank(name: str, tier: AppTier) -> int:
-    return _POPULARITY_RANK.get(name, _TIER_POPULARITY.get(tier, 0))
+    return _POPULARITY_RANK.get(name, _TIER_POPULARITY.get(tier, 10))
+
+
+def help_url_for(name: str, github_repo: str = "", upstream_url: str = "") -> str:
+    if name in HELP_URLS:
+        return HELP_URLS[name]
+    if github_repo:
+        return f"https://github.com/{github_repo}#readme"
+    return upstream_url
+
+
+HELP_URLS: dict[str, str] = {
+    "sonarr": "https://wiki.servarr.com/sonarr",
+    "radarr": "https://wiki.servarr.com/radarr",
+    "lidarr": "https://wiki.servarr.com/lidarr",
+    "prowlarr": "https://wiki.servarr.com/prowlarr",
+    "bazarr": "https://wiki.bazarr.media",
+    "sabnzbd": "https://sabnzbd.org/wiki/",
+    "nzbget": "https://nzbget.com/documentation/",
+    "qbittorrent": "https://github.com/qbittorrent/qBittorrent/wiki",
+    "jellyfin": "https://jellyfin.org/docs/",
+    "plex": "https://support.plex.tv/articles/",
+    "seerr": "https://docs.seerr.dev/",
+    "unpackerr": "https://unpackerr.zip/docs/",
+    "recyclarr": "https://recyclarr.dev/wiki/",
+    "profilarr": "https://github.com/Dictionarry-Hub/profilarr#readme",
+    "neutarr": "https://github.com/I-am-PUID-0/NeutArr#readme",
+    "mylar3": "https://mylarcomics.github.io/",
+    "cleanuparr": "https://github.com/Cleanuparr/Cleanuparr/wiki",
+    "maintainerr": "https://maintainerr.info/",
+    "tautulli": "https://github.com/Tautulli/Tautulli/wiki",
+    "autobrr": "https://autobrr.com/",
+    "kometa": "https://kometa.wiki/",
+    "flaresolverr": "https://github.com/FlareSolverr/FlareSolverr#readme",
+    "grimmory": "https://grimmory.org/docs/",
+    "shelfmark": "https://github.com/calibrain/shelfmark#readme",
+}
 
 
 @dataclass(frozen=True)
@@ -116,4 +155,5 @@ class AppManifest:
             "data_directory": self.data_subdir or self.name,
             "daemon": self.daemon,
             "popularity": popularity_rank(self.name, self.tier),
+            "help_url": help_url_for(self.name, self.github_repo, self.upstream_url),
         }
