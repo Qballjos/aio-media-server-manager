@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Architecture & roadmap
+    url: https://github.com/Qballjos/aio-media-server-manager/blob/main/ARCHITECTURE.md
+    about: Read the design docs before requesting large changes.
+  - name: Security report
+    url: https://github.com/Qballjos/aio-media-server-manager/security/advisories/new
+    about: Report a vulnerability privately. Do not file a public issue.

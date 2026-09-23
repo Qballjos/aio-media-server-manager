@@ -1,0 +1,48 @@
+name: Bug report
+description: Something is broken or unexpected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the report. Do not include passwords, API keys, or VPN configs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment mode
+      options:
+        - Native Linux / LXC
+        - Single Docker container
+        - Unraid
+        - Synology
+        - TrueNAS
+        - Development (poetry)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Git commit or version
+      placeholder: e.g. main @ abc123
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Redact secrets first.
+      render: text

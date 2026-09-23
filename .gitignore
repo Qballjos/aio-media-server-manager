@@ -32,6 +32,8 @@ pip-wheel-metadata/
 
 # Unit test / coverage
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .coverage
 .coverage.*
 htmlcov/
@@ -42,12 +44,8 @@ coverage.xml
 *.cover
 *.py,cover
 
-# ===========================
-# Poetry
-# ===========================
-poetry.lock      # committed to lock deps; remove this line if you want to pin
-# Uncomment below to ignore lock file in libraries:
-# poetry.lock
+# Poetry lockfile is committed for this application.
+# (Do not ignore poetry.lock.)
 
 # ===========================
 # Node / Frontend
@@ -81,6 +79,8 @@ Thumbs.db
 /config/
 /logs/
 *.log
+secret.key
+secrets.enc
 
 # ===========================
 # Local Reference Material
