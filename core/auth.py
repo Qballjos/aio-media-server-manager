@@ -25,6 +25,7 @@ CSRF_HEADER = "X-CSRF-Token"
 JWT_ALGORITHM = "HS256"
 JWT_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days
 MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_BYTES = 72
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 10
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
@@ -232,6 +233,11 @@ class AuthManager:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
+            )
+        if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Password must be at most {MAX_PASSWORD_BYTES} bytes (bcrypt limit).",
             )
 
 

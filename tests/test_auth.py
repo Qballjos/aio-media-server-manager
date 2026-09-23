@@ -56,6 +56,13 @@ def test_password_min_length_validation(auth_mgr: AuthManager):
     assert exc_info.value.status_code == 422
 
 
+def test_password_max_bcrypt_bytes(auth_mgr: AuthManager):
+    """bcrypt 5 rejects secrets longer than 72 bytes."""
+    with pytest.raises(HTTPException) as exc_info:
+        auth_mgr.create_admin("admin", "x" * 73)
+    assert exc_info.value.status_code == 422
+
+
 def test_jwt_token_issue_and_decode(auth_mgr: AuthManager):
     """JWT tokens can be issued and decoded accurately."""
     token = auth_mgr.issue_token("admin")
