@@ -121,6 +121,12 @@ def test_catalog_help_urls_and_icons():
         assert name in HELP_URLS
         assert entry["help_url"] == HELP_URLS[name]
         assert (icons / mapping[name]).is_file(), f"missing icon for {name}"
+    extra = sorted(
+        path.name
+        for path in icons.iterdir()
+        if path.suffix.lower() in {".svg", ".png"} and path.name not in mapping.values()
+    )
+    assert extra == [], f"Unused app icons: {extra}"
 
 
 def test_port_manager_registry_and_availability():
