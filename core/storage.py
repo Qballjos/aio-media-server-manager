@@ -28,6 +28,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from core.library_layout import LibraryLayout
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -129,32 +131,28 @@ class StorageManager:
 
         return self._path_info
 
-    def create_standard_layout(self) -> None:
+    def create_standard_layout(self) -> LibraryLayout:
         """
         Create the canonical directory tree under config_dir, download_dir,
-        and media_dir.  Directories are created with correct ownership.
+        media_dir, and cache_dir. Directories are created with correct ownership.
         """
         puid = self._settings.puid
         pgid = self._settings.pgid
+        layout = LibraryLayout.from_settings(self._settings)
 
         dirs_to_create = [
-            # Config, logs, cache, apps
             self._settings.config_dir / "logs",
             self._settings.install_dir,
             self._settings.cache_dir,
             self._settings.cache_dir / "downloads",
-            # Downloads
-            self._settings.download_dir / "complete",
-            self._settings.download_dir / "incomplete",
-            # Media library
-            self._settings.media_dir / "movies",
-            self._settings.media_dir / "tv",
+            *layout.directories(),
         ]
 
         for directory in dirs_to_create:
             self.ensure_dir(directory, puid, pgid)
 
         logger.info("Standard directory layout created/verified.")
+        return layout
 
     def validate_path(self, path: Path, label: str) -> PathInfo:
         """Inspect and return a PathInfo for the given path."""
@@ -188,9 +186,12 @@ class StorageManager:
         Safe to call if the directory already exists.
         """
         path = Path(path)
-        path.mkdir(parents=True, exist_ok=True)
-        _safe_chown(path, puid, pgid)
-        logger.debug("Directory ready: %s", path)
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            _safe_chown(path, puid, pgid)
+            logger.debug("Directory ready: %s", path)
+        except OSError as exc:
+            logger.warning("Could not create directory %s: %s", path, exc)
 
     def get_path_info(self) -> dict[str, PathInfo]:
         """Return cached path info (populated after validate_all())."""

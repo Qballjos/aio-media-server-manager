@@ -14,13 +14,15 @@ ssh root@<unraid-ip>
 mkdir -p \
   /mnt/user/appdata/aio-media-manager/vpn \
   /mnt/user/downloads \
-  /mnt/user/media/{movies,tv}
+  /mnt/user/media
 
 chown -R 99:100 \
   /mnt/user/appdata/aio-media-manager \
   /mnt/user/downloads \
   /mnt/user/media
 ```
+
+TV, movies, anime, music, books, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
 
 `99:100` is Unraid `nobody`/`users` (PUID 99, PGID 100). If you use a custom share user, run `id thatuser` and `chown` to that UID:GID instead.
 

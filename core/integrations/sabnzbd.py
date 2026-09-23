@@ -51,3 +51,15 @@ class SABnzbdClient:
         if success:
             logger.info("Added SABnzbd category '%s' -> '%s'", name, dir_path)
         return success
+
+    def set_folders(self, complete_dir: str, incomplete_dir: str) -> bool:
+        """Point SABnzbd at the appliance complete and incomplete directories."""
+        complete_ok = self._request(
+            "set_config",
+            {"section": "misc", "keyword": "complete_dir", "value": complete_dir},
+        )
+        incomplete_ok = self._request(
+            "set_config",
+            {"section": "misc", "keyword": "download_dir", "value": incomplete_dir},
+        )
+        return bool(complete_ok.get("status", False)) and bool(incomplete_ok.get("status", False))

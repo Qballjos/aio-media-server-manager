@@ -89,3 +89,51 @@ class ProwlarrClient:
         except Exception as exc:
             logger.debug("Prowlarr sync_radarr error: %s", exc)
             return False
+
+    def sync_lidarr(self, lidarr_url: str = "http://127.0.0.1:8686", lidarr_api_key: str = "") -> bool:
+        return self._sync_app(
+            "Lidarr",
+            "LidarrSettings",
+            "Lidarr (AMM)",
+            lidarr_url,
+            lidarr_api_key,
+            [3000, 3010, 3020, 3030, 3040],
+        )
+
+    def _sync_app(
+        self,
+        implementation: str,
+        config_contract: str,
+        name: str,
+        base_url: str,
+        api_key: str,
+        categories: list[int],
+    ) -> bool:
+        apps = self.get_applications()
+        if any(item.get("implementation") == implementation for item in apps):
+            logger.info("Prowlarr %s sync application already registered.", implementation)
+            return True
+        payload = {
+            "enable": True,
+            "name": name,
+            "syncLevel": "fullSync",
+            "implementation": implementation,
+            "configContract": config_contract,
+            "fields": [
+                {"name": "prowlarrUrl", "value": f"http://{self.host}:{self.port}"},
+                {"name": "baseUrl", "value": base_url},
+                {"name": "apiKey", "value": api_key},
+                {"name": "syncCategories", "value": categories},
+            ],
+        }
+        try:
+            resp = requests.post(
+                f"{self.base_url}/applications",
+                headers=self._headers(),
+                json=payload,
+                timeout=5.0,
+            )
+            return resp.status_code in (200, 201)
+        except Exception as exc:
+            logger.debug("Prowlarr sync %s error: %s", implementation, exc)
+            return False

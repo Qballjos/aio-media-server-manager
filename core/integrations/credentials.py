@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -61,6 +62,17 @@ def get_application_api_key(app_name: str, app_config_dir: Optional[Path] = None
         return api_key
 
     return None
+
+
+def wait_for_application_api_key(app_name: str, timeout: float = 90.0) -> Optional[str]:
+    """Poll config.xml / secret store until the app has generated an API key."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        key = get_application_api_key(app_name)
+        if key:
+            return key
+        time.sleep(1.5)
+    return get_application_api_key(app_name)
 
 
 def set_application_api_key(app_name: str, api_key: str) -> None:

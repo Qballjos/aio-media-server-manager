@@ -14,6 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from applications.catalog import ApplicationCatalog
 from core.auth import auth_manager
 from core.installer.arch import detect_system_arch
+from core.integrations.lifecycle import finalize_application_install
 from core.port_manager import PortManager
 from core.settings import settings
 
@@ -109,11 +110,12 @@ async def install_application(
             "version": plugin.installed_metadata().get("version"),
         }
 
-    def _do_install():
+    async def _do_install():
         try:
             logger.info("Starting background install for '%s'...", name)
             plugin.install()
             logger.info("Background install for '%s' completed successfully.", name)
+            await finalize_application_install(plugin)
         except Exception as err:
             logger.error("Failed to install '%s': %s", name, err, exc_info=True)
 

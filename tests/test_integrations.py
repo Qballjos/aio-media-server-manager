@@ -10,7 +10,12 @@ from api.app import create_app
 from core.crypto import secret_store
 from core.integrations.credentials import get_application_api_key, set_application_api_key
 from core.integrations.bazarr import BazarrClient
-from core.integrations.hooks import write_neutarr_config, write_profilarr_config, write_recyclarr_config
+from core.integrations.hooks import (
+    write_neutarr_config,
+    write_profilarr_config,
+    write_recyclarr_config,
+    write_unpackerr_config,
+)
 from core.integrations.nzbget import NZBGetClient
 from core.integrations.prowlarr import ProwlarrClient
 from core.integrations.qbittorrent import QBittorrentClient
@@ -18,6 +23,7 @@ from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient
 from core.integrations.seerr import SeerrClient
 from core.integrations.sonarr import SonarrClient
+from core.integrations.engine import WIRE_AFTER_INSTALL
 
 
 def test_credentials_discovery(tmp_path: Path):
@@ -70,7 +76,7 @@ def test_qbittorrent_client(mock_get, mock_post):
 
     client = QBittorrentClient()
     assert client.login() is True
-    assert client.create_category("sonarr", "/data/downloads/torrents/tv") is True
+    assert client.create_category("sonarr", "/downloads/torrents/tv") is True
 
 
 @patch("requests.get")
@@ -126,6 +132,7 @@ def test_prowlarr_client(mock_post, mock_get):
     client = ProwlarrClient(api_key="prowlarr_key_123")
     assert client.sync_sonarr(sonarr_api_key="sonarr_key") is True
     assert client.sync_radarr(radarr_api_key="radarr_key") is True
+    assert client.sync_lidarr(lidarr_api_key="lidarr_key") is True
 
 
 @patch("requests.get")
@@ -163,7 +170,21 @@ def test_integration_endpoints():
     assert data["status"] == "completed"
     assert len(data["steps"]) >= 4
     targets = {step["target"] for step in data["steps"]}
-    assert {"seerr", "bazarr", "recyclarr", "nzbget"}.issubset(targets)
+    assert {"storage", "seerr", "bazarr", "recyclarr", "nzbget", "jellyfin", "lidarr"}.issubset(targets)
+    skipped = {step["target"] for step in data["steps"] if step["status"] == "skipped"}
+    assert "lidarr" in skipped
+    assert "whisparr" not in targets
+    assert "readarr" not in targets
+    assert "libraries" in data["layout"]
+    assert "tv" in data["layout"]["libraries"]
+    assert "books" in data["layout"]["libraries"]
+    assert "incomplete" in data["layout"]
+
+
+def test_arr_install_triggers_wiring_set():
+    assert WIRE_AFTER_INSTALL == frozenset({"sonarr", "radarr", "lidarr", "prowlarr"})
+    assert "whisparr" not in WIRE_AFTER_INSTALL
+    assert "readarr" not in WIRE_AFTER_INSTALL
 
 
 @patch("requests.post")
@@ -195,20 +216,48 @@ def test_optimization_hooks(tmp_path: Path):
         radarr_key="r",
     )
     assert rec.is_file()
-    assert "base_url: http://127.0.0.1:8989" in rec.read_text(encoding="utf-8")
+    rec_text = rec.read_text(encoding="utf-8")
+    assert "base_url: http://127.0.0.1:8989" in rec_text
+    assert "trash_id: 72dae194fc92bf828f32cde7744e51a1" in rec_text
+    assert "trash_id: d1d67249d3890e49bc12e275d989a7e9" in rec_text
+    assert "plex-tv" in rec_text
     pro = write_profilarr_config(
         tmp_path / "profilarr",
         sonarr_url="http://127.0.0.1:8989",
         sonarr_key="s",
         radarr_url="http://127.0.0.1:7878",
         radarr_key="r",
+        lidarr_url="http://127.0.0.1:8686",
+        lidarr_key="l",
     )
     assert pro.is_file()
+    pro_text = pro.read_text(encoding="utf-8")
+    assert "base_url: \"http://127.0.0.1:8989\"" in pro_text
+    assert "Lidarr (AMM)" in pro_text
+    assert "backup_before_sync: true" in pro_text
     neu = write_neutarr_config(
         tmp_path / "neutarr",
         sonarr_url="http://127.0.0.1:8989",
         sonarr_key="s",
         radarr_url="http://127.0.0.1:7878",
         radarr_key="r",
+        lidarr_url="http://127.0.0.1:8686",
+        lidarr_key="l",
     )
     assert neu.is_file()
+    sonarr_hunt = (tmp_path / "neutarr" / "sonarr.json").read_text(encoding="utf-8")
+    assert "hourly_cap" in sonarr_hunt
+    assert "http://127.0.0.1:8989" in sonarr_hunt
+    assert (tmp_path / "neutarr" / "lidarr.json").is_file()
+    unpack = write_unpackerr_config(
+        tmp_path / "unpackerr",
+        complete_paths=["/downloads/complete/tv", "/downloads/complete/movies"],
+        sonarr_url="http://127.0.0.1:8989",
+        sonarr_key="s",
+        radarr_url="http://127.0.0.1:7878",
+        radarr_key="r",
+    )
+    assert unpack.is_file()
+    text = unpack.read_text(encoding="utf-8")
+    assert "/downloads/complete/tv" in text
+    assert "[[sonarr]]" in text

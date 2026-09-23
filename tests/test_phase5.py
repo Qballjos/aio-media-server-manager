@@ -11,7 +11,7 @@ from applications.qbittorrent import QBittorrentApp
 from core.metrics import collect_metrics
 from core.settings import Settings
 from core.transcoding import probe_transcoding
-from core.vpn import VpnManager
+from core.vpn import TORRENT_NETNS, VPN_TUNNELED_APPS, VpnIsolationError, VpnManager
 
 
 def test_metrics_shape():
@@ -44,10 +44,49 @@ def test_vpn_status_without_tunnel(tmp_path: Path):
     status = mgr.status()
     assert status["enabled"] is True
     assert status["usenet_bypasses_vpn"] is True
+    assert status["tunneled_apps"] == ["prowlarr", "qbittorrent"]
     assert status["tunnel_up"] is False
     assert "privadovpn" in status["supported_providers"]
     cmd = mgr.wrap_torrent_command(["qbittorrent-nox"])
     assert cmd[0] == "qbittorrent-nox"
+
+
+def test_vpn_wraps_when_linux_netns_exists(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+        vpn_enforce=True,
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_is_linux", lambda: True)
+    monkeypatch.setattr(mgr, "_netns_exists", lambda: True)
+    monkeypatch.setattr("core.vpn.shutil.which", lambda name: "/sbin/ip" if name == "ip" else None)
+    wrapped = mgr.wrap_isolated_command(["Prowlarr", "-nobrowser"])
+    assert wrapped[:4] == ["ip", "netns", "exec", TORRENT_NETNS]
+    assert wrapped[-1] == "-nobrowser"
+
+
+def test_vpn_kill_switch_blocks_tunneled_apps(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+        vpn_enforce=True,
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_is_linux", lambda: True)
+    monkeypatch.setattr(mgr, "_netns_exists", lambda: False)
+    monkeypatch.setattr(mgr, "_tunnel_up", lambda: False)
+    for name in VPN_TUNNELED_APPS:
+        try:
+            mgr.assert_can_start_tunneled_app(name)
+            raise AssertionError(f"expected kill switch for {name}")
+        except VpnIsolationError:
+            pass
+    mgr.assert_can_start_tunneled_app("sabnzbd")
 
 
 def test_qbittorrent_start_command_not_netns_on_non_linux(tmp_path: Path):
@@ -66,6 +105,8 @@ def test_system_info_includes_phase5_fields():
     data = resp.json()
     assert "metrics" in data
     assert "transcoding" in data
+    assert "library" in data
+    assert "tv" in data["library"]["libraries"]
     assert "vpn" in data
     assert "cloudflare_tunnel" in data
 

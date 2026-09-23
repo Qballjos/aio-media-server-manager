@@ -27,44 +27,6 @@ class LidarrApp(ArrApplication):
     )
 
 
-class ReadarrApp(ArrApplication):
-    manifest = AppManifest(
-        name="readarr",
-        display_name="Readarr",
-        description="Ebook and audiobook automation for the *Arr stack.",
-        github_repo="Readarr/Readarr",
-        upstream_url="https://github.com/Readarr/Readarr",
-        tier=AppTier.OPTIONAL,
-        category=AppCategory.AUTOMATION,
-        default_port=8787,
-        executable_name="Readarr",
-        supported_architectures=("x86_64", "arm64", "armv7"),
-        install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=("linux",),
-        optional_dependencies=("prowlarr", "sabnzbd", "qbittorrent"),
-        health_path="/ping",
-    )
-
-
-class WhisparrApp(ArrApplication):
-    manifest = AppManifest(
-        name="whisparr",
-        display_name="Whisparr",
-        description="Adult video automation compatible with the *Arr ecosystem.",
-        github_repo="Whisparr/Whisparr",
-        upstream_url="https://github.com/Whisparr/Whisparr",
-        tier=AppTier.OPTIONAL,
-        category=AppCategory.AUTOMATION,
-        default_port=6969,
-        executable_name="Whisparr",
-        supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=("linux",),
-        optional_dependencies=("prowlarr", "sabnzbd", "qbittorrent"),
-        health_path="/ping",
-    )
-
-
 class NzbgetApp(SimpleApplication):
     manifest = AppManifest(
         name="nzbget",
@@ -234,6 +196,12 @@ class RecyclarrApp(SimpleApplication):
         daemon=False,
     )
 
+    def start_args(self) -> list[str]:
+        return ["sync", "--app-data", str(self.config_dir)]
+
+    def extra_env(self) -> dict[str, str]:
+        return {"RECYCLARR_APP_DATA": str(self.config_dir)}
+
 
 class ProfilarrApp(SimpleApplication):
     manifest = AppManifest(
@@ -252,6 +220,14 @@ class ProfilarrApp(SimpleApplication):
         optional_dependencies=("sonarr", "radarr"),
         health_path="/",
     )
+
+    def extra_env(self) -> dict[str, str]:
+        return {
+            "PORT": str(self.port),
+            "HOST": "0.0.0.0",
+            "TZ": "Etc/UTC",
+            "AUTH": "on",
+        }
 
 
 class NeutarrApp(SimpleApplication):
@@ -272,14 +248,21 @@ class NeutarrApp(SimpleApplication):
         health_path="/",
     )
 
+    def extra_env(self) -> dict[str, str]:
+        return {
+            "NEUTARR_CONFIG_DIR": str(self.config_dir),
+            "NEUTARR_PORT": str(self.port),
+            "TZ": "Etc/UTC",
+        }
+
 
 class Mylar3App(SimpleApplication):
     manifest = AppManifest(
         name="mylar3",
         display_name="Mylar3",
         description="Comic book automation compatible with the *Arr workflow.",
-        github_repo="mylar3/mylar3",
-        upstream_url="https://github.com/mylar3/mylar3",
+        github_repo="MylarComics/mylar3",
+        upstream_url="https://github.com/MylarComics/mylar3",
         tier=AppTier.OPTIONAL,
         category=AppCategory.AUTOMATION,
         default_port=8090,
@@ -387,25 +370,3 @@ class KometaApp(SimpleApplication):
         health_path="/",
         daemon=False,
     )
-
-
-class HuntarrApp(SimpleApplication):
-    manifest = AppManifest(
-        name="huntarr",
-        display_name="Huntarr",
-        description="Experimental missing-media hunter. Prefer NeutArr when both are available.",
-        github_repo="plexguide/Huntarr.io",
-        upstream_url="https://github.com/plexguide/Huntarr.io",
-        tier=AppTier.EXPERIMENTAL,
-        category=AppCategory.OPTIMIZATION,
-        default_port=9706,
-        executable_name="huntarr",
-        supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=("linux",),
-        optional_dependencies=("sonarr", "radarr"),
-        health_path="/",
-    )
-
-    def extra_env(self) -> dict[str, str]:
-        return {"PORT": str(self.port), "CONFIG_DIR": str(self.config_dir)}

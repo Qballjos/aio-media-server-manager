@@ -13,7 +13,6 @@ from applications.extended import (
     AutobrrApp,
     BazarrApp,
     CleanuparrApp,
-    HuntarrApp,
     KometaApp,
     LidarrApp,
     MaintainerrApp,
@@ -21,11 +20,9 @@ from applications.extended import (
     NeutarrApp,
     NzbgetApp,
     ProfilarrApp,
-    ReadarrApp,
     RecyclarrApp,
     TautulliApp,
     UnpackerrApp,
-    WhisparrApp,
 )
 from applications.jellyfin import JellyfinApp
 from applications.plex import PlexApp
@@ -58,15 +55,12 @@ PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
     ProfilarrApp,
     NeutarrApp,
     LidarrApp,
-    ReadarrApp,
-    WhisparrApp,
     Mylar3App,
     CleanuparrApp,
     MaintainerrApp,
     TautulliApp,
     AutobrrApp,
     KometaApp,
-    HuntarrApp,
 )
 
 

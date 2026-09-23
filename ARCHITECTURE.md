@@ -207,7 +207,15 @@ No hardcoded paths. All paths are resolved from environment variables or `amm_co
 * `media_dir` (default `/media`)
 * `cache_dir` (default `/cache`, optional)
 
-The first-run wizard prompts the user to define these paths. Examples across platforms:
+The first-run wizard prompts the user to define these paths. On startup the manager also creates the canonical library tree under those roots:
+
+* `media/{tv,movies,anime,music,books,comics}`
+* `downloads/complete/{tv,movies,anime,music,books,comics}`
+* `downloads/incomplete`
+* `downloads/torrents/{tv,movies,anime,music,books,comics}`
+* `cache/transcode/{jellyfin,plex}`
+
+Those folders are registered on matching apps (Sonarr TV+anime, Radarr movies, Lidarr music, download-client categories, Jellyfin/Plex libraries and transcode temp paths). Examples across platforms:
 
 | Platform | Media | Downloads |
 |----------|-------|-----------|
@@ -240,8 +248,7 @@ Applications are organized into clear tiers and categories:
   * **Core (MVP):** Prowlarr, Sonarr, Radarr, SABnzbd, qBittorrent, Jellyfin, Seerr.
   * **Core (Phase 4):** Plex, NZBGet — same tier, added after MVP validation.
   * **Recommended:** Bazarr, Unpackerr, Recyclarr, Profilarr, NeutArr.
-  * **Optional:** Lidarr, Readarr, Whisparr, Mylar3, Autobrr, Cleanuparr, Maintainerr, Tautulli, Kometa.
-  * **Experimental:** Huntarr and other tools with less stable APIs or maintenance.
+  * **Optional:** Lidarr, Mylar3, Autobrr, Cleanuparr, Maintainerr, Tautulli, Kometa.
 * **Client Flexibility:** The user selects SABnzbd and/or NZBGet for Usenet, and Jellyfin and/or Plex (both can share the same media library concurrently).
 
 Each catalog entry carries: name, description, upstream project, GitHub repository, current/installed version, supported architectures, installation method, required dependencies, default port, configuration directory, data directory, health endpoint, update mechanism, and API integration capabilities.

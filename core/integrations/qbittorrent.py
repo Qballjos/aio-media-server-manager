@@ -69,3 +69,25 @@ class QBittorrentClient:
         except Exception as exc:
             logger.debug("qBittorrent createCategory error: %s", exc)
             return False
+
+    def set_download_paths(self, save_path: str, incomplete_path: str) -> bool:
+        """Set default completed and incomplete torrent directories."""
+        try:
+            import json
+
+            payload = json.dumps(
+                {
+                    "save_path": save_path,
+                    "temp_path": incomplete_path,
+                    "temp_path_enabled": True,
+                }
+            )
+            resp = self.session.post(
+                f"{self.base_url}/app/setPreferences",
+                data={"json": payload},
+                timeout=5.0,
+            )
+            return resp.status_code in (200, 201)
+        except Exception as exc:
+            logger.debug("qBittorrent setPreferences error: %s", exc)
+            return False

@@ -54,3 +54,8 @@ class NZBGetClient:
         if dest_dir:
             self._call("configset", [f"Category{slot}.DestDir", dest_dir])
         return ok_name is not False and ok_name is not None
+
+    def set_download_dirs(self, complete_dir: str, incomplete_dir: str) -> bool:
+        dest = self._call("configset", ["DestDir", complete_dir])
+        inter = self._call("configset", ["InterDir", incomplete_dir])
+        return dest is not None and dest is not False and inter is not None and inter is not False

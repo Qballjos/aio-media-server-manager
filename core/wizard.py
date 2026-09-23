@@ -27,6 +27,7 @@ from typing import Any, Optional
 
 from applications.catalog import ApplicationCatalog
 from core.integrations.engine import integration_engine
+from core.library_layout import LibraryLayout
 from core.settings import settings
 from core.storage import StorageManager
 from core.supervisor import ProcessSupervisor
@@ -135,6 +136,7 @@ class WizardEngine:
                     if hardlinks else
                     "Hardlinks not supported; *Arr apps will copy files across filesystems."
                 ),
+                "layout": LibraryLayout.from_settings(self._settings).as_dict(),
             }
 
         if step_id == 4:

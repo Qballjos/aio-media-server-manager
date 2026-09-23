@@ -56,11 +56,11 @@ Per PROMPT.md §37 Phase 3 — MVP stack only: manager, dashboard, catalog, proc
 * [x] Encrypted Secret Storage for application credentials (Fernet, filesystem permissions, masked UI fields)
 * [x] Develop Automatic Integration Engine via APIs:
   * **Core wiring (automatic at install):**
-    * [x] Configure categories (`sonarr`, `radarr`) in SABnzbd and qBittorrent
-    * [x] Register download clients inside Sonarr and Radarr
-    * [x] Register Sonarr/Radarr in Prowlarr with automatic indexer synchronization
+    * [x] Configure categories (`sonarr`, `radarr`, `anime`, `lidarr`) and complete/incomplete/transcode folders
+    * [x] Register download clients inside Sonarr, Radarr, and Lidarr
+    * [x] Register Sonarr/Radarr/Lidarr in Prowlarr with automatic indexer synchronization
     * [x] Link Seerr to Sonarr, Radarr, and Jellyfin
-    * [x] Configure root folders and basic download handling defaults
+    * [x] Configure root folders (TV, anime, movies, music, books) and media-server libraries
   * **Sensible defaults only (not full TRaSH tuning):**
     * [x] Basic naming templates and quality profile placeholders
   * **Deferred to Phase 4 optimization tools (not duplicated by the integration engine):**
@@ -102,9 +102,9 @@ Per PROMPT.md §37 Phase 4.
   * **Recyclarr** (TRaSH Guides synchronization)
   * **Profilarr** (Profile management)
   * **NeutArr** (Automation optimizer)
-  * **Extended *Arr:** Lidarr, Readarr, Whisparr, Mylar3
+  * **Extended *Arr:** Lidarr, Mylar3
   * **Maintenance:** Cleanuparr, Maintainerr, Tautulli
-  * **Optional catalog entries** (implement when upstream APIs are stable): Autobrr, Kometa, Huntarr
+  * **Optional catalog entries** (implement when upstream APIs are stable): Autobrr, Kometa
 * [x] Extend integration engine for Phase 4 apps:
   * Bazarr ↔ Sonarr/Radarr library pairing
   * Post-install hooks for Recyclarr, Profilarr, and NeutArr

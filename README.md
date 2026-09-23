@@ -41,7 +41,7 @@ Inspired by DUMB’s process-supervision model, with **zero Debrid functionality
 - **Catalog installers:** GitHub releases, official binaries (Jellyfin, Plex), and PyPI apps.
 - **Automatic wiring:** indexers, download clients, and Seerr hooked up after install.
 - **Storage model:** `config`, `downloads`, and `media` with `PUID`/`PGID` and hardlink checks.
-- **VPN for torrents only:** qBittorrent in a netns; Usenet stays off the VPN.
+- **VPN for torrents and Prowlarr only:** qBittorrent and Prowlarr run in a Linux netns bound to the tunnel; Usenet stays off the VPN.
 - **Hardware transcoding:** VAAPI / QSV / NVIDIA when the host exposes devices.
 - **Cloudflare Tunnel:** optional remotely-managed `cloudflared` to the manager UI.
 - **Management UI:** Vue 3 dashboard (app logos, health, updates, backups, uninstall).
@@ -53,13 +53,13 @@ Inspired by DUMB’s process-supervision model, with **zero Debrid functionality
 | Role | Apps |
 |------|------|
 | Indexers | Prowlarr |
-| Automation | Sonarr, Radarr, Lidarr, Readarr, Whisparr, Mylar3 |
+| Automation | Sonarr, Radarr, Lidarr, Mylar3 |
 | Downloaders | SABnzbd, NZBGet, qBittorrent |
 | Media | Jellyfin, Plex (can share the same libraries) |
 | Requests | Seerr |
 | Subtitles / extract | Bazarr, Unpackerr |
 | Profiles / cleanup | Recyclarr, Profilarr, NeutArr, Cleanuparr |
-| Library / stats | Maintainerr, Kometa, Tautulli, Autobrr, Huntarr |
+| Library / stats | Maintainerr, Kometa, Tautulli, Autobrr |
 
 ---
 

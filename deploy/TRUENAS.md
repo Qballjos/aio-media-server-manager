@@ -22,8 +22,10 @@ sudo zfs create -p tank/media
 sudo mkdir -p \
   /mnt/tank/apps/aio-media-manager/vpn \
   /mnt/tank/downloads \
-  /mnt/tank/media/{movies,tv}
+  /mnt/tank/media
 ```
+
+TV, movies, anime, music, books, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
 
 Set the owner to your media user (TrueNAS `apps` is often UID/GID `568`; confirm with `id apps` or `id`):
 

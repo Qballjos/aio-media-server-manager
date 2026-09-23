@@ -30,6 +30,8 @@ id
 
 Platform path examples and full commands: [Docker](../deploy/DOCKER.md), [Linux](../deploy/LINUX.md), [Unraid](../deploy/UNRAID.md), [Synology](../deploy/SYNOLOGY.md), [TrueNAS](../deploy/TRUENAS.md).
 
+The appliance then creates library subfolders inside those mounts (`media/{tv,movies,anime,music,books}`, `downloads/{complete,incomplete,torrents}/…`, `cache/transcode/{jellyfin,plex}`) and wires them into Sonarr, Radarr, Lidarr, download clients, Jellyfin, and Plex.
+
 ## What you need
 
 - Storage for **config**, **downloads**, and **media** (same filesystem recommended so hardlinks work).

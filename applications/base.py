@@ -130,17 +130,20 @@ class BaseApplication(abc.ABC):
         """Default GitHub-release install. Override for PyPI / custom sources."""
         if self.manifest.install_method == InstallMethod.PYPI:
             installer = AppInstaller()
-            return installer.install_from_pypi(
+            result = installer.install_from_pypi(
                 package=self.executable_name,
                 app_name=self.name,
             )
-        installer = AppInstaller()
-        return installer.install_from_github(
-            repo=self.github_repo,
-            app_name=self.name,
-            executable_name=self.executable_name,
-            preferred_patterns=self.preferred_patterns(),
-        )
+        else:
+            installer = AppInstaller()
+            result = installer.install_from_github(
+                repo=self.github_repo,
+                app_name=self.name,
+                executable_name=self.executable_name,
+                preferred_patterns=self.preferred_patterns(),
+            )
+        self.post_install()
+        return result
 
     def post_install(self) -> None:
         """Hook called after install() succeeds."""

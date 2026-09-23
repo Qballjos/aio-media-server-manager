@@ -36,20 +36,21 @@ def test_phase4_catalog_plugins(catalog: ApplicationCatalog):
         "profilarr",
         "neutarr",
         "lidarr",
-        "readarr",
-        "whisparr",
         "mylar3",
         "cleanuparr",
         "maintainerr",
         "tautulli",
         "autobrr",
         "kometa",
-        "huntarr",
     }
     assert expected.issubset(names)
     assert catalog.get("recyclarr").manifest.daemon is False
     assert catalog.get("plex").manifest.default_port == 32400
-    assert catalog.get("nzbget").manifest.default_port == 6789
+    assert catalog.get("mylar3").manifest.github_repo == "MylarComics/mylar3"
+    names = set(catalog.names())
+    assert "readarr" not in names
+    assert "whisparr" not in names
+    assert "huntarr" not in names
 
 
 def test_nzbget_start_uses_configfile_not_option(tmp_path: Path):

@@ -21,6 +21,7 @@ from core.settings import settings
 from core.supervisor import ProcessSupervisor
 from core.uninstall import UninstallError, uninstall_application
 from core.updater import ApplicationUpdater
+from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,12 @@ async def start_application(name: str, request: Request) -> dict[str, Any]:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"'{name}' is a CLI tool and is not started as a background service.",
         )
+
+    if name in VPN_TUNNELED_APPS:
+        try:
+            vpn_manager.assert_can_start_tunneled_app(name)
+        except VpnIsolationError as err:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
 
     supervisor = ProcessSupervisor.get()
     cmd = plugin.start_command()

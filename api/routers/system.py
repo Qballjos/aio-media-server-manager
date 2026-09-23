@@ -11,6 +11,7 @@ import logging
 
 from fastapi import APIRouter
 
+from core.library_layout import LibraryLayout
 from core.metrics import collect_metrics
 from core.settings import settings
 from core.storage import StorageManager
@@ -56,6 +57,7 @@ async def system_info() -> dict:
         "storage": paths_summary,
         "processes": processes,
         "metrics": collect_metrics(),
+        "library": LibraryLayout.from_settings(settings).as_dict(),
         "transcoding": probe_transcoding(),
         "vpn": vpn_manager.status(),
         "cloudflare_tunnel": cloudflare_tunnel.status(),

@@ -23,6 +23,9 @@ const authLoading = ref(false)
 
 // Dashboard data
 const catalogApps = ref([])
+const catalogCategory = ref('all')
+const catalogSort = ref('popularity')
+const catalogSearch = ref('')
 const applications = ref([])
 const systemInfo = ref(null)
 const hostArch = ref('')
@@ -325,9 +328,56 @@ const combinedServices = computed(() => {
       state: live ? live.state : (cat.installed ? 'stopped' : 'not_installed'),
       pid: live ? live.pid : null,
       uptime: live ? live.uptime_seconds : null,
-      arm64: cat.arm64_supported
+      arm64: cat.arm64_supported,
+      popularity: cat.popularity ?? 0
     }
   })
+})
+
+const CATEGORY_LABELS = {
+  downloading: 'Downloading',
+  automation: 'Automation',
+  indexers: 'Indexers',
+  subtitles: 'Subtitles',
+  media: 'Media',
+  requests: 'Requests',
+  optimization: 'Optimization',
+  maintenance: 'Maintenance'
+}
+
+const catalogCategories = computed(() => {
+  const names = [...new Set(combinedServices.value.map(s => s.category).filter(Boolean))]
+  return names.sort((a, b) => (CATEGORY_LABELS[a] || a).localeCompare(CATEGORY_LABELS[b] || b))
+})
+
+const visibleServices = computed(() => {
+  let list = combinedServices.value
+  if (catalogCategory.value !== 'all') {
+    list = list.filter(s => s.category === catalogCategory.value)
+  }
+  const query = catalogSearch.value.trim().toLowerCase()
+  if (query) {
+    list = list.filter(s => {
+      const haystack = [
+        s.displayName,
+        s.name,
+        s.description,
+        CATEGORY_LABELS[s.category] || s.category
+      ].join(' ').toLowerCase()
+      return haystack.includes(query)
+    })
+  }
+  const copy = [...list]
+  if (catalogSort.value === 'az') {
+    copy.sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }))
+  } else {
+    copy.sort((a, b) => {
+      const pop = (b.popularity || 0) - (a.popularity || 0)
+      if (pop !== 0) return pop
+      return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' })
+    })
+  }
+  return copy
 })
 
 const activeAppCount = computed(() => {
@@ -908,10 +958,56 @@ onUnmounted(() => {
           </button>
         </div>
 
+        <div class="catalog-toolbar glass-card">
+          <div class="catalog-filter-group catalog-search-group">
+            <label class="catalog-filter-label" for="catalog-search">Search</label>
+            <input
+              id="catalog-search"
+              v-model="catalogSearch"
+              type="search"
+              class="catalog-search-input"
+              placeholder="Search apps…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <div class="catalog-filter-group">
+            <span class="catalog-filter-label">Category</span>
+            <div class="catalog-chips" role="group" aria-label="Filter by category">
+              <button
+                type="button"
+                class="catalog-chip"
+                :class="{ active: catalogCategory === 'all' }"
+                @click="catalogCategory = 'all'"
+              >
+                All
+              </button>
+              <button
+                v-for="category in catalogCategories"
+                :key="category"
+                type="button"
+                class="catalog-chip"
+                :class="{ active: catalogCategory === category }"
+                @click="catalogCategory = category"
+              >
+                {{ CATEGORY_LABELS[category] || category }}
+              </button>
+            </div>
+          </div>
+          <div class="catalog-filter-group catalog-sort-group">
+            <label class="catalog-filter-label" for="catalog-sort">Sort</label>
+            <select id="catalog-sort" v-model="catalogSort" class="catalog-sort-select">
+              <option value="popularity">Popularity</option>
+              <option value="az">A to Z</option>
+            </select>
+          </div>
+          <span class="catalog-count font-mono">{{ visibleServices.length }} / {{ combinedServices.length }}</span>
+        </div>
+
         <!-- Services Grid -->
         <div class="services-grid">
           <div
-            v-for="service in combinedServices"
+            v-for="service in visibleServices"
             :key="service.name"
             class="service-card glass-card"
             :class="{ 'is-running': service.state === 'running' || service.state === 'healthy' }"
@@ -1084,6 +1180,7 @@ onUnmounted(() => {
               </template>
             </div>
           </div>
+          <p v-if="visibleServices.length === 0" class="catalog-empty">No applications match this search.</p>
         </div>
       </div>
     </main>
@@ -1624,6 +1721,125 @@ onUnmounted(() => {
   color: #fff;
 }
 
+.catalog-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem 1.25rem;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1.15rem;
+}
+
+.catalog-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.catalog-sort-group {
+  flex: 0 0 auto;
+}
+
+.catalog-search-group {
+  flex: 1 1 14rem;
+  max-width: 22rem;
+}
+
+.catalog-search-input {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  width: 100%;
+}
+
+.catalog-search-input::placeholder {
+  color: #64748b;
+}
+
+.catalog-search-input:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.catalog-filter-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.catalog-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.catalog-chip {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.catalog-chip:hover {
+  color: #e2e8f0;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.catalog-chip.active {
+  color: #e0f2fe;
+  background: rgba(14, 165, 233, 0.18);
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.catalog-sort-select {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  min-width: 10rem;
+}
+
+.catalog-count {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #64748b;
+  align-self: center;
+}
+
+@media (max-width: 720px) {
+  .catalog-count {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .catalog-sort-select,
+  .catalog-search-group {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.catalog-empty {
+  grid-column: 1 / -1;
+  color: #64748b;
+  font-size: 0.9rem;
+  margin: 0.5rem 0 0;
+}
+
 .services-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
@@ -1688,6 +1904,9 @@ onUnmounted(() => {
 .app-badge.downloading { color: #34d399; border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.1); }
 .app-badge.media { color: #f472b6; border-color: rgba(244, 114, 182, 0.3); background: rgba(244, 114, 182, 0.1); }
 .app-badge.requests { color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.1); }
+.app-badge.subtitles { color: #c084fc; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.1); }
+.app-badge.optimization { color: #22d3ee; border-color: rgba(34, 211, 238, 0.3); background: rgba(34, 211, 238, 0.1); }
+.app-badge.maintenance { color: #fb923c; border-color: rgba(251, 146, 60, 0.3); background: rgba(251, 146, 60, 0.1); }
 
 .service-name-row {
   display: flex;

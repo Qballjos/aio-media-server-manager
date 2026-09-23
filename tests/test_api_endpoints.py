@@ -111,6 +111,10 @@ def test_catalog_endpoints(client: TestClient):
     names = [a["name"] for a in apps]
     assert "prowlarr" in names
     assert "sonarr" in names
+    sonarr = next(a for a in apps if a["name"] == "sonarr")
+    mylar = next(a for a in apps if a["name"] == "mylar3")
+    assert sonarr["popularity"] > mylar["popularity"]
+    assert "category" in sonarr
 
     # 2. Get single app details
     resp = client.get("/api/catalog/prowlarr")

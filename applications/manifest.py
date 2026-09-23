@@ -34,6 +34,43 @@ class InstallMethod(str, enum.Enum):
     NODE_BUNDLE = "node_bundle"
 
 
+# Typical Servarr-stack adoption (higher = more popular). Unlisted apps use tier.
+_POPULARITY_RANK: dict[str, int] = {
+    "sonarr": 100,
+    "radarr": 99,
+    "prowlarr": 98,
+    "jellyfin": 96,
+    "plex": 95,
+    "qbittorrent": 94,
+    "sabnzbd": 93,
+    "seerr": 90,
+    "nzbget": 86,
+    "bazarr": 85,
+    "lidarr": 80,
+    "unpackerr": 76,
+    "recyclarr": 74,
+    "tautulli": 70,
+    "profilarr": 66,
+    "neutarr": 64,
+    "cleanuparr": 58,
+    "maintainerr": 54,
+    "kometa": 52,
+    "autobrr": 48,
+    "mylar3": 40,
+}
+
+_TIER_POPULARITY = {
+    AppTier.CORE: 70,
+    AppTier.RECOMMENDED: 50,
+    AppTier.OPTIONAL: 30,
+    AppTier.EXPERIMENTAL: 10,
+}
+
+
+def popularity_rank(name: str, tier: AppTier) -> int:
+    return _POPULARITY_RANK.get(name, _TIER_POPULARITY.get(tier, 0))
+
+
 @dataclass(frozen=True)
 class AppManifest:
     """Declarative metadata for one catalog entry."""
@@ -78,4 +115,5 @@ class AppManifest:
             "config_directory": self.config_subdir or self.name,
             "data_directory": self.data_subdir or self.name,
             "daemon": self.daemon,
+            "popularity": popularity_rank(self.name, self.tier),
         }

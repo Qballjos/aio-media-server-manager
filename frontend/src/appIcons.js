@@ -3,7 +3,6 @@ const ICON_FILES = {
   autobrr: 'autobrr.svg',
   bazarr: 'bazarr.svg',
   cleanuparr: 'cleanuparr.png',
-  huntarr: 'huntarr.png',
   jellyfin: 'jellyfin.svg',
   kometa: 'kometa.svg',
   lidarr: 'lidarr.svg',
@@ -16,14 +15,12 @@ const ICON_FILES = {
   prowlarr: 'prowlarr.svg',
   qbittorrent: 'qbittorrent.svg',
   radarr: 'radarr.svg',
-  readarr: 'readarr.svg',
   recyclarr: 'recyclarr.svg',
   sabnzbd: 'sabnzbd.svg',
   seerr: 'seerr.svg',
   sonarr: 'sonarr.svg',
   tautulli: 'tautulli.svg',
   unpackerr: 'unpackerr.png',
-  whisparr: 'whisparr.svg',
 }
 
 export function appIconSrc(name) {

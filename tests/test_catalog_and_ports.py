@@ -74,6 +74,14 @@ def test_topological_sort_order():
     assert ordered_names.index("prowlarr") < ordered_names.index("radarr")
 
 
+def test_catalog_entries_include_popularity():
+    catalog = ApplicationCatalog()
+    sonarr = catalog.get("sonarr").catalog_entry()
+    mylar = catalog.get("mylar3").catalog_entry()
+    assert sonarr["popularity"] > mylar["popularity"]
+    assert sonarr["category"] == AppCategory.AUTOMATION.value
+
+
 def test_port_manager_registry_and_availability():
     """PortManager reports allocated ports and finds free alternatives."""
     pm = PortManager()
