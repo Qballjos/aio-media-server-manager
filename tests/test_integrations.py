@@ -4,13 +4,14 @@ tests/test_integrations.py — Tests for the automatic integration engine and cl
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import pytest
 from fastapi.testclient import TestClient
 
 from api.app import create_app
 from core.crypto import secret_store
 from core.integrations.credentials import get_application_api_key, set_application_api_key
-from core.integrations.engine import IntegrationEngine
+from core.integrations.bazarr import BazarrClient
+from core.integrations.hooks import write_neutarr_config, write_profilarr_config, write_recyclarr_config
+from core.integrations.nzbget import NZBGetClient
 from core.integrations.prowlarr import ProwlarrClient
 from core.integrations.qbittorrent import QBittorrentClient
 from core.integrations.radarr import RadarrClient
@@ -88,6 +89,7 @@ def test_sonarr_client(mock_post, mock_get):
     assert client.add_root_folder("/data/media/tv") is True
     assert client.add_sabnzbd_client(api_key="sab_key") is True
     assert client.add_qbittorrent_client() is True
+    assert client.add_nzbget_client() is True
 
 
 @patch("requests.get")
@@ -106,6 +108,7 @@ def test_radarr_client(mock_post, mock_get):
     assert client.add_root_folder("/data/media/movies") is True
     assert client.add_sabnzbd_client(api_key="sab_key") is True
     assert client.add_qbittorrent_client() is True
+    assert client.add_nzbget_client() is True
 
 
 @patch("requests.get")
@@ -141,6 +144,7 @@ def test_seerr_client(mock_post, mock_get):
     assert client.connect_sonarr(api_key="sonarr_key") is True
     assert client.connect_radarr(api_key="radarr_key") is True
     assert client.connect_jellyfin(api_key="jelly_key") is True
+    assert client.connect_plex(port=32400) is True
 
 
 def test_integration_endpoints():
@@ -158,3 +162,53 @@ def test_integration_endpoints():
     data = res_run.json()
     assert data["status"] == "completed"
     assert len(data["steps"]) >= 4
+    targets = {step["target"] for step in data["steps"]}
+    assert {"seerr", "bazarr", "recyclarr", "nzbget"}.issubset(targets)
+
+
+@patch("requests.post")
+def test_nzbget_client(mock_post):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"result": []}
+    mock_post.return_value = mock_resp
+    client = NZBGetClient()
+    assert client.add_category("sonarr", "tv") is True
+
+
+@patch("requests.post")
+def test_bazarr_client(mock_post):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 201
+    mock_post.return_value = mock_resp
+    client = BazarrClient(api_key="baz")
+    assert client.pair_sonarr("http://127.0.0.1:8989", "sonarr") is True
+    assert client.pair_radarr("http://127.0.0.1:7878", "radarr") is True
+
+
+def test_optimization_hooks(tmp_path: Path):
+    rec = write_recyclarr_config(
+        tmp_path / "recyclarr",
+        sonarr_url="http://127.0.0.1:8989",
+        sonarr_key="s",
+        radarr_url="http://127.0.0.1:7878",
+        radarr_key="r",
+    )
+    assert rec.is_file()
+    assert "base_url: http://127.0.0.1:8989" in rec.read_text(encoding="utf-8")
+    pro = write_profilarr_config(
+        tmp_path / "profilarr",
+        sonarr_url="http://127.0.0.1:8989",
+        sonarr_key="s",
+        radarr_url="http://127.0.0.1:7878",
+        radarr_key="r",
+    )
+    assert pro.is_file()
+    neu = write_neutarr_config(
+        tmp_path / "neutarr",
+        sonarr_url="http://127.0.0.1:8989",
+        sonarr_key="s",
+        radarr_url="http://127.0.0.1:7878",
+        radarr_key="r",
+    )
+    assert neu.is_file()

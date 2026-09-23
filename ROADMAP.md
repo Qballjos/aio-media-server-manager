@@ -105,7 +105,7 @@ Per PROMPT.md §37 Phase 4.
   * **Extended *Arr:** Lidarr, Readarr, Whisparr, Mylar3
   * **Maintenance:** Cleanuparr, Maintainerr, Tautulli
   * **Optional catalog entries** (implement when upstream APIs are stable): Autobrr, Kometa, Huntarr
-* [ ] Extend integration engine for Phase 4 apps:
+* [x] Extend integration engine for Phase 4 apps:
   * Bazarr ↔ Sonarr/Radarr library pairing
   * Post-install hooks for Recyclarr, Profilarr, and NeutArr
   * Plex and NZBGet wiring into existing download/indexer/request flows

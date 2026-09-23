@@ -117,6 +117,44 @@ class SonarrClient:
             logger.debug("Sonarr add qBittorrent error: %s", exc)
             return False
 
+    def add_nzbget_client(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 6789,
+        username: str = "nzbget",
+        password: str = "tegbzn6789",
+        category: str = "sonarr",
+    ) -> bool:
+        clients = self.get_download_clients()
+        if any(c.get("implementation") == "Nzbget" for c in clients):
+            logger.info("Sonarr NZBGet download client already exists.")
+            return True
+        payload = {
+            "enable": True,
+            "name": "NZBGet (AMM)",
+            "implementation": "Nzbget",
+            "configContract": "NzbgetSettings",
+            "fields": [
+                {"name": "host", "value": host},
+                {"name": "port", "value": port},
+                {"name": "username", "value": username},
+                {"name": "password", "value": password},
+                {"name": "tvCategory", "value": category},
+                {"name": "useSsl", "value": False},
+            ],
+        }
+        try:
+            resp = requests.post(
+                f"{self.base_url}/downloadclient",
+                headers=self._headers(),
+                json=payload,
+                timeout=5.0,
+            )
+            return resp.status_code in (200, 201)
+        except Exception as exc:
+            logger.debug("Sonarr add NZBGet error: %s", exc)
+            return False
+
     def configure_naming_defaults(self) -> bool:
         """Set standard episode naming format."""
         try:

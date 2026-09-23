@@ -111,3 +111,26 @@ class SeerrClient:
         except Exception as exc:
             logger.debug("Seerr connect_jellyfin error: %s", exc)
             return False
+
+    def connect_plex(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 32400,
+    ) -> bool:
+        """Link Plex Media Server into Seerr."""
+        try:
+            payload = {
+                "ip": host,
+                "port": port,
+                "useSsl": False,
+            }
+            resp = requests.post(
+                f"{self.base_url}/settings/plex",
+                headers=self._headers(),
+                json=payload,
+                timeout=5.0,
+            )
+            return resp.status_code in (200, 201)
+        except Exception as exc:
+            logger.debug("Seerr connect_plex error: %s", exc)
+            return False
