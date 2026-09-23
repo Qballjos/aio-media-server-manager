@@ -1,0 +1,36 @@
+# Synology Container Manager project — one AIO container only.
+# Place this file at /volume1/docker/aio-media-manager/docker-compose.yml
+# Do not add extra services for Sonarr, Radarr, or download clients.
+
+services:
+  aio-media-manager:
+    image: ghcr.io/qballjos/aio-media-server-manager:latest
+    container_name: aio-media-manager
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      # - "8081:8081"   # qBittorrent
+      # - "8085:8085"   # SABnzbd
+      # - "8096:8096"   # Jellyfin
+      # - "8989:8989"   # Sonarr
+      # - "7878:7878"   # Radarr
+      # - "9696:9696"   # Prowlarr
+      # - "5055:5055"   # Seerr
+      # - "32400:32400" # Plex
+    volumes:
+      - /volume1/docker/aio-media-manager/config:/config
+      - /volume1/downloads:/downloads
+      - /volume1/media:/media
+    environment:
+      PUID: "1026"
+      PGID: "100"
+      AMM_VPN_ENABLED: "false"
+      AMM_VPN_ENFORCE: "false"
+      AMM_TRUSTED_PROXIES: ""
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    privileged: true
+    # Uncomment if the NAS has an iGPU and /dev/dri exists:
+    # devices:
+    #   - /dev/dri:/dev/dri

@@ -1,11 +1,11 @@
-# Synology Container Manager
+# Synology Container Manager (Project)
 
-Deploy **one** AIO container. Do not add separate containers for Sonarr, Radarr, or download clients.
+Deploy **one** AIO Container Manager **project**. Do not add extra project services or separate containers for Sonarr, Radarr, or download clients.
 
 Image: `ghcr.io/qballjos/aio-media-server-manager:latest`  
-Use a DSM build that can run `linux/amd64` or `linux/arm64` images (most Plus and 2025 ARM NAS units).
+Use a DSM build that can run `linux/amd64` or `linux/arm64` images.
 
-## Create folders over SSH
+## Create the project over SSH
 
 Enable SSH (Control Panel → Terminal & SNMP → Enable SSH service), then:
 
@@ -13,64 +13,75 @@ Enable SSH (Control Panel → Terminal & SNMP → Enable SSH service), then:
 ssh admin@<nas-ip>
 ```
 
-Adjust `/volume1` if your storage pool uses another volume. Create the bind-mount directories as the media user (DSM often uses UID `1026` / GID `100` — confirm with `id`):
+The install script creates `/volume1/docker/aio-media-manager`, the config/downloads/media folders, and writes `docker-compose.yml` with your `PUID`/`PGID`:
 
 ```bash
 id
-export PUID="$(id -u)"
-export PGID="$(id -g)"
-
-sudo mkdir -p \
-  /volume1/docker/aio-media-manager/config/vpn \
-  /volume1/downloads \
-  /volume1/media/{movies,tv}
-
-sudo chown -R "${PUID}:${PGID}" \
-  /volume1/docker/aio-media-manager \
-  /volume1/downloads \
-  /volume1/media
+curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sudo sh
 ```
 
-If you run SSH as `admin` but the share is owned by another user:
+If SSH is `admin` but the media share belongs to another user:
 
 ```bash
 id media
-sudo chown -R 1026:100 \
-  /volume1/docker/aio-media-manager \
-  /volume1/downloads \
-  /volume1/media
+sudo PUID=1026 PGID=100 sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
 ```
 
-## Pull the image
+Other volume or paths:
 
 ```bash
-sudo docker pull ghcr.io/qballjos/aio-media-server-manager:latest
+sudo VOLUME=/volume2 \
+     DOWNLOADS=/volume2/downloads \
+     MEDIA=/volume2/media \
+     PUID=1026 PGID=100 \
+     sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
 ```
 
-If GHCR is private, run `sudo docker login ghcr.io` first.
+The generated file is `/volume1/docker/aio-media-manager/docker-compose.yml` (no `build:` key — Container Manager pulls GHCR). A static copy lives in [`synology/docker-compose.yml`](synology/docker-compose.yml).
 
-## Create the container
+If GHCR is private: `sudo docker login ghcr.io` before starting the project.
 
-**Container Manager → Container → Create** from that image:
+## Import in Container Manager
 
-- Port: `8080/tcp` (add child app ports or use host network).
-- Volumes:
-  - `/volume1/docker/aio-media-manager/config` → `/config`
-  - `/volume1/media` → `/media`
-  - `/volume1/downloads` → `/downloads`
-- Environment: `PUID` / `PGID` matching the `chown` above.
-- Privileged: on if you will use torrent VPN.
-- Devices: `/dev/dri` when the NAS has an iGPU and you want transcoding.
+1. Open **Container Manager → Project → Create**.
+2. **Project name:** `aio-media-manager`
+3. **Path:** `/volume1/docker/aio-media-manager` (same folder the script used).
+4. **Source:** use the **existing** `docker-compose.yml` (do not paste a second compose file or add more services).
+5. Start the project.
 
-Optional torrent VPN over SSH:
+The UI should show a single service `aio-media-manager`. Open `http://<nas-ip>:8080` and complete the wizard.
+
+To start from SSH instead of the UI:
+
+```bash
+sudo docker compose -f /volume1/docker/aio-media-manager/docker-compose.yml pull
+sudo docker compose -f /volume1/docker/aio-media-manager/docker-compose.yml up -d
+```
+
+After that, Container Manager still lists it if the project path matches.
+
+## Hardware transcoding
+
+If `/dev/dri` exists, add this block under `aio-media-manager` in the project compose file, then rebuild/start the project:
+
+```yaml
+    devices:
+      - /dev/dri:/dev/dri
+```
+
+```bash
+ls -l /dev/dri
+```
+
+## VPN (qBittorrent only)
 
 ```bash
 sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
-# scp wg0.conf into that directory, then set AMM_VPN_ENABLED=true on the container
+# scp wg0.conf into that directory
 ```
 
-Open `http://<nas-ip>:8080` and complete the first-run wizard.
+Set `AMM_VPN_ENABLED=true` in the project compose (and `AMM_VPN_ENFORCE=true` if torrents must not run without a tunnel), then start the project again.
 
 ## Permissions
 
-Map the container to the same user DSM uses for the media shared folder. If apps cannot write, fix ownership with `chown` over SSH rather than running as root.
+`PUID`/`PGID` in the compose file must match the `chown` the script applied. If apps cannot write, fix ownership over SSH rather than running as root.
