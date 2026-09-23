@@ -47,8 +47,12 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
 
     if plugin.name in WIRE_AFTER_INSTALL:
         logger.info("Running integration wiring after '%s' install.", plugin.name)
-        report["wiring"] = integration_engine.run_full_wiring()
-        report["wired"] = True
+        try:
+            report["wiring"] = integration_engine.run_full_wiring()
+            report["wired"] = True
+        except Exception as exc:
+            logger.error("Wiring after '%s' failed: %s", plugin.name, exc, exc_info=True)
+            report["wiring_error"] = str(exc)
     return report
 
 

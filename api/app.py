@@ -14,6 +14,7 @@ from api.routers import applications as applications_router
 from api.routers import auth as auth_router
 from api.routers import backups as backups_router
 from api.routers import catalog as catalog_router
+from api.routers import diagnostics as diagnostics_router
 from api.routers import health as health_router
 from api.routers import integrations as integrations_router
 from api.routers import logs as logs_router
@@ -56,6 +57,9 @@ def create_app() -> FastAPI:
             result = await cloudflare_tunnel.start()
             if result.get("status") == "error":
                 logger.warning("Cloudflare Tunnel did not start: %s", result.get("detail"))
+        from core.diagnostics import diagnostics
+
+        diagnostics.install_logging_hook()
         yield
         logger.info("FastAPI application shutting down.")
 
@@ -104,6 +108,7 @@ def create_app() -> FastAPI:
     app.include_router(backups_router.router)
     app.include_router(vpn_router.router)
     app.include_router(cloudflare_tunnel_router.router)
+    app.include_router(diagnostics_router.router)
 
     # Mount frontend dist if built
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"

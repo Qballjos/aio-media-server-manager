@@ -155,3 +155,5 @@ def test_grimmory_runner_starts_mariadb_as_root(catalog: ApplicationCatalog):
     script = (app.install_dir / "run-grimmory").read_text(encoding="utf-8")
     assert "--user=root" in script
     assert "command -v java" in script
+    assert "--enable-preview" in script
+    assert "if ! _mariadb_up" in script

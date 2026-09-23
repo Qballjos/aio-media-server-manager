@@ -104,6 +104,7 @@ class GrimmoryApp(SimpleApplication):
     )
 
     def start_command(self) -> list[str]:
+        self._write_runner()
         runner = self.install_dir / "run-grimmory"
         if runner.is_file():
             return [str(runner)]
@@ -113,7 +114,7 @@ class GrimmoryApp(SimpleApplication):
         jar = self.install_dir / "grimmory.jar"
         if not jar.is_file():
             jar = self.executable_path()
-        return [java, "-jar", str(jar)]
+        return [java, "--enable-preview", "-jar", str(jar)]
 
     def extra_env(self) -> dict[str, str]:
         layout = LibraryLayout.from_settings(default_settings)
@@ -138,6 +139,9 @@ class GrimmoryApp(SimpleApplication):
         }
 
     def post_install(self) -> None:
+        self._write_runner()
+
+    def _write_runner(self) -> None:
         jar = self.install_dir / "grimmory.jar"
         datadir = self.data_dir / "mysql"
         socket = self.data_dir / "mysql.sock"
@@ -170,18 +174,20 @@ class GrimmoryApp(SimpleApplication):
                 '    "$MYSQLD" --initialize-insecure --datadir="$MARIADB_DATA"',
                 "  fi",
                 "fi",
-                '"$MYSQLD" --user=root --datadir="$MARIADB_DATA" --socket="$MARIADB_SOCK" --port="$MARIADB_PORT" --bind-address=127.0.0.1 &',
-                "MYSQLD_PID=$!",
-                "trap 'kill $MYSQLD_PID 2>/dev/null || true' EXIT",
-                "i=0",
-                "while [ $i -lt 30 ]; do",
-                '  mariadb-admin --socket="$MARIADB_SOCK" ping >/dev/null 2>&1 && break',
-                '  mysqladmin --socket="$MARIADB_SOCK" ping >/dev/null 2>&1 && break',
-                "  i=$((i + 1))",
-                "  sleep 1",
-                "done",
+                '_mariadb_up() { mariadb-admin --socket="$MARIADB_SOCK" ping >/dev/null 2>&1 || mysqladmin --socket="$MARIADB_SOCK" ping >/dev/null 2>&1; }',
+                "if ! _mariadb_up; then",
+                '  "$MYSQLD" --user=root --datadir="$MARIADB_DATA" --socket="$MARIADB_SOCK" --port="$MARIADB_PORT" --bind-address=127.0.0.1 &',
+                "  MYSQLD_PID=$!",
+                "  trap 'kill $MYSQLD_PID 2>/dev/null || true' EXIT",
+                "  i=0",
+                "  while [ $i -lt 30 ]; do",
+                "    _mariadb_up && break",
+                "    i=$((i + 1))",
+                "    sleep 1",
+                "  done",
+                "fi",
                 'mariadb --socket="$MARIADB_SOCK" -e "CREATE DATABASE IF NOT EXISTS grimmory; CREATE USER IF NOT EXISTS \'grimmory\'@\'127.0.0.1\' IDENTIFIED BY \'grimmory\'; GRANT ALL ON grimmory.* TO \'grimmory\'@\'127.0.0.1\'; FLUSH PRIVILEGES;" >/dev/null 2>&1 || true',
-                'exec "$JAVA_BIN" -jar "$JAR"',
+                'exec "$JAVA_BIN" --enable-preview -jar "$JAR"',
             ],
         )
 

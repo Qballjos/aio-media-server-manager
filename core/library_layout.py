@@ -72,8 +72,12 @@ class LibraryLayout:
         return self.media_dir / "music"
 
     @property
+    def books(self) -> Path:
+        return self.media_dir / "books"
+
+    @property
     def bookdrop(self) -> Path:
-        return self.media_dir / "books" / "bookdrop"
+        return self.books / "bookdrop"
 
     @property
     def comics(self) -> Path:

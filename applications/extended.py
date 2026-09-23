@@ -181,13 +181,30 @@ class BazarrApp(SimpleApplication):
     )
 
     def executable_path(self) -> Path | None:
-        runner = self.install_dir / "bazarr"
+        runner = self.install_dir / "run-bazarr"
         if runner.is_file():
             return runner
         script = self.install_dir / "bazarr.py"
         if script.is_file():
             return script
         return super().executable_path()
+
+    def start_command(self) -> list[str]:
+        self._write_runner()
+        return super().start_command()
+
+    def _write_runner(self) -> Path | None:
+        script = self.install_dir / "bazarr.py"
+        if not script.is_file():
+            return None
+        python = python_bin()
+        return write_runner(
+            self.install_dir / "run-bazarr",
+            [
+                "#!/bin/sh",
+                f'exec "{python}" "{script}" "$@"',
+            ],
+        )
 
     def install(self) -> InstallResult:
         installer = AppInstaller()
@@ -197,16 +214,7 @@ class BazarrApp(SimpleApplication):
             executable_name="bazarr.py",
             preferred_patterns=self.preferred_patterns(),
         )
-        python = python_bin()
-        script = self.install_dir / "bazarr.py"
-        runner = self.install_dir / "bazarr"
-        write_runner(
-            runner,
-            [
-                "#!/bin/sh",
-                f'exec "{python}" "{script}" "$@"',
-            ],
-        )
+        self._write_runner()
         self.post_install()
         return result
 

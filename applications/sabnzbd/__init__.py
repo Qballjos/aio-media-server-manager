@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 from applications.base import BaseApplication
-from applications.install_helpers import create_venv, venv_bin, write_runner
+from applications.install_helpers import create_venv, launch_argv, python_bin, venv_bin, write_runner
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
 from core.installer import AppInstaller, InstallResult
 
@@ -30,13 +30,31 @@ class SabnzbdApp(BaseApplication):
     manifest = MANIFEST
 
     def executable_path(self) -> Path | None:
-        runner = self.install_dir / "sabnzbd"
+        runner = self.install_dir / "run-sabnzbd"
         if runner.is_file():
             return runner
         script = self.install_dir / "SABnzbd.py"
         if script.is_file():
             return script
         return super().executable_path()
+
+    def start_command(self) -> list[str]:
+        self._write_runner()
+        return super().start_command()
+
+    def _write_runner(self) -> Path | None:
+        script = self.install_dir / "SABnzbd.py"
+        if not script.is_file():
+            return None
+        venv_python = venv_bin(self.install_dir / "venv", "python")
+        interpreter = str(venv_python) if venv_python.is_file() else python_bin()
+        return write_runner(
+            self.install_dir / "run-sabnzbd",
+            [
+                "#!/bin/sh",
+                f'exec "{interpreter}" "{script}" "$@"',
+            ],
+        )
 
     def install(self) -> InstallResult:
         installer = AppInstaller()
@@ -56,26 +74,19 @@ class SabnzbdApp(BaseApplication):
                 capture_output=True,
                 text=True,
             )
-        python = venv_bin(venv_dir, "python")
-        script = self.install_dir / "SABnzbd.py"
-        runner = self.install_dir / "sabnzbd"
-        write_runner(
-            runner,
-            [
-                "#!/bin/sh",
-                f'exec "{python}" "{script}" "$@"',
-            ],
-        )
+        self._write_runner()
         self.post_install()
         return result
 
     def build_start_command(self, executable: Path) -> list[str]:
-        return [
-            str(executable),
-            "--server",
-            f"0.0.0.0:{self.port}",
-            "--browser",
-            "0",
-            "--config-file",
-            str(self.config_dir / "sabnzbd.ini"),
-        ]
+        return launch_argv(
+            executable,
+            [
+                "--server",
+                f"0.0.0.0:{self.port}",
+                "--browser",
+                "0",
+                "--config-file",
+                str(self.config_dir / "sabnzbd.ini"),
+            ],
+        )

@@ -282,7 +282,12 @@ class ProcessSupervisor:
             logger.error("Cannot start '%s': executable not found — %s", spec.name, exc)
             entry.state = ProcessState.FAILED
             entry.exit_code = -1
-            return
+            raise RuntimeError(f"Cannot start '{spec.name}': executable not found — {exc}") from exc
+        except OSError as exc:
+            logger.error("Cannot start '%s': %s", spec.name, exc)
+            entry.state = ProcessState.FAILED
+            entry.exit_code = -1
+            raise RuntimeError(f"Cannot start '{spec.name}': {exc}") from exc
 
         entry.process = proc
         entry.state = ProcessState.RUNNING

@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { appIconSrc } from './appIcons.js'
 import WizardPanel from './WizardPanel.vue'
+import SettingsPanel from './SettingsPanel.vue'
 
 // --- State Variables ---
 const authStatus = ref({
@@ -36,6 +37,7 @@ const actionLoading = ref({}) // map appName -> action ("start", "stop", etc.)
 const iconFailed = ref({})
 const wizardCompleted = ref(true)
 const wizardStatusLoaded = ref(false)
+const currentView = ref('dashboard')
 
 // Toast messages
 const toasts = ref([])
@@ -262,6 +264,7 @@ async function handleLogout() {
   localStorage.removeItem('amm_token')
   authStatus.value.authenticated = false
   authStatus.value.username = null
+  currentView.value = 'dashboard'
   showToast('Logged out successfully.', 'info')
 }
 
@@ -320,8 +323,9 @@ async function fetchWizardStatus() {
 }
 
 async function onWizardDone() {
-  wizardCompleted.value = true
-  showToast('Setup wizard finished. Catalog installs may continue in the background.', 'success')
+    wizardCompleted.value = true
+    currentView.value = 'dashboard'
+    showToast('Setup wizard finished. Catalog installs may continue in the background.', 'success')
   await refreshDashboard()
 }
 
@@ -424,6 +428,11 @@ function filterByInstalledPlugins() {
   scrollToCatalog()
 }
 
+function filterByAvailablePlugins() {
+  toggleStatusFilter('available')
+  scrollToCatalog()
+}
+
 const visibleServices = computed(() => {
   let list = combinedServices.value
   if (catalogCategoriesSelected.value.length) {
@@ -434,7 +443,8 @@ const visibleServices = computed(() => {
     list = list.filter(s => {
       const matchActive = catalogStatusFilters.value.includes('active') && isRunningService(s)
       const matchInstalled = catalogStatusFilters.value.includes('installed') && s.installed
-      return matchActive || matchInstalled
+      const matchAvailable = catalogStatusFilters.value.includes('available') && !s.installed
+      return matchActive || matchInstalled || matchAvailable
     })
   }
   const query = catalogSearch.value.trim().toLowerCase()
@@ -469,6 +479,12 @@ const activeAppCount = computed(() => {
 const installedAppCount = computed(() => {
   return combinedServices.value.filter(s => s.installed).length
 })
+
+const availableAppCount = computed(() => {
+  return combinedServices.value.filter(s => !s.installed).length
+})
+
+const catalogSize = computed(() => combinedServices.value.length)
 
 const cpuPercent = computed(() => systemInfo.value?.metrics?.cpu_percent)
 const memPercent = computed(() => systemInfo.value?.metrics?.memory?.percent)
@@ -630,7 +646,8 @@ function startLiveWebSocket(name) {
     logWs = null
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${protocol}//${window.location.host}/api/logs/ws/${encodeURIComponent(name)}`
+  const token = authToken.value ? `?token=${encodeURIComponent(authToken.value)}` : ''
+  const wsUrl = `${protocol}//${window.location.host}/api/logs/ws/${encodeURIComponent(name)}${token}`
   try {
     logWs = new WebSocket(wsUrl)
     logWs.onmessage = (event) => {
@@ -800,6 +817,17 @@ onUnmounted(() => {
           <span class="metric-val font-mono">HW</span>
         </div>
         <button
+          v-if="authStatus.authenticated && wizardCompleted"
+          @click="currentView = currentView === 'settings' ? 'dashboard' : 'settings'"
+          class="metric-pill"
+          :style="currentView === 'settings'
+            ? 'cursor: pointer; background: rgba(99, 102, 241, 0.25); border-color: rgba(99, 102, 241, 0.45); color: #c7d2fe;'
+            : 'cursor: pointer;'"
+          title="Settings and debug share link"
+        >
+          {{ currentView === 'settings' ? 'Dashboard' : 'Settings' }}
+        </button>
+        <button
           v-if="authStatus.authenticated"
           @click="runAutomatedWiring"
           class="metric-pill"
@@ -950,6 +978,8 @@ onUnmounted(() => {
 
       <!-- 4. Dashboard View -->
       <div v-else class="dashboard-layout animate-fade">
+        <SettingsPanel v-if="currentView === 'settings'" :api-request="apiRequest" />
+        <template v-else>
         <!-- Metric Cards -->
         <section class="metrics-grid">
           <div
@@ -972,7 +1002,7 @@ onUnmounted(() => {
               <div class="stat-label">ACTIVE SERVICES</div>
               <div class="stat-value font-mono">
                 <span class="text-glow-cyan">{{ activeAppCount }}</span>
-                <span class="stat-sub"> / {{ combinedServices.length }}</span>
+                <span class="stat-sub"> running</span>
               </div>
             </div>
           </div>
@@ -999,24 +1029,35 @@ onUnmounted(() => {
               <div class="stat-label">INSTALLED PLUGINS</div>
               <div class="stat-value font-mono">
                 <span class="text-glow-purple">{{ installedAppCount }}</span>
-                <span class="stat-sub"> / {{ combinedServices.length }}</span>
+                <span class="stat-sub"> of {{ catalogSize }}</span>
               </div>
             </div>
           </div>
 
-          <div class="stat-card glass-card">
+          <div
+            class="stat-card glass-card stat-card-filter"
+            :class="{ 'is-filter-on': catalogStatusFilters.includes('available') }"
+            role="button"
+            tabindex="0"
+            :aria-pressed="catalogStatusFilters.includes('available')"
+            title="Show applications that are not installed yet"
+            @click="filterByAvailablePlugins"
+            @keydown.enter.prevent="filterByAvailablePlugins"
+            @keydown.space.prevent="filterByAvailablePlugins"
+          >
             <div class="stat-icon-wrapper storage-color">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">CPU / RAM</div>
+              <div class="stat-label">AVAILABLE TO INSTALL</div>
               <div class="stat-value font-mono">
-                <span class="text-glow-cyan">{{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</span>
-                <span class="stat-sub"> / {{ memPercent != null ? Math.round(memPercent) + '%' : '—' }}</span>
+                <span class="text-glow-cyan">{{ availableAppCount }}</span>
+                <span class="stat-sub"> of {{ catalogSize }}</span>
               </div>
             </div>
           </div>
@@ -1030,9 +1071,10 @@ onUnmounted(() => {
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">SUPERVISOR HEALTH</div>
-              <div class="stat-value font-mono text-emerald">
-                ONLINE
+              <div class="stat-label">SUPERVISOR / CPU</div>
+              <div class="stat-value font-mono">
+                <span class="text-emerald">ONLINE</span>
+                <span class="stat-sub"> / {{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</span>
               </div>
             </div>
           </div>
@@ -1125,6 +1167,21 @@ onUnmounted(() => {
                   @click.stop="removeStatusFilter('installed')"
                 >×</span>
               </button>
+              <button
+                type="button"
+                class="catalog-chip"
+                :class="{ active: catalogStatusFilters.includes('available') }"
+                @click="toggleStatusFilter('available')"
+              >
+                Available
+                <span
+                  v-if="catalogStatusFilters.includes('available')"
+                  class="chip-clear"
+                  role="button"
+                  aria-label="Remove available filter"
+                  @click.stop="removeStatusFilter('available')"
+                >×</span>
+              </button>
             </div>
           </div>
           <div class="catalog-filter-group">
@@ -1164,7 +1221,7 @@ onUnmounted(() => {
               <option value="az">A to Z</option>
             </select>
           </div>
-          <span class="catalog-count font-mono">{{ visibleServices.length }} / {{ combinedServices.length }}</span>
+          <span class="catalog-count font-mono">{{ visibleServices.length }} shown · {{ installedAppCount }} installed · {{ availableAppCount }} available</span>
         </div>
 
         <!-- Services Grid -->
@@ -1353,6 +1410,7 @@ onUnmounted(() => {
           </div>
           <p v-if="visibleServices.length === 0" class="catalog-empty">No applications match these filters.</p>
         </div>
+        </template>
       </div>
     </main>
 

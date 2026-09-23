@@ -125,6 +125,16 @@ class ApplicationCatalog:
         arch = detect_system_arch().value
         return [plugin.catalog_entry(host_arch=arch) for plugin in self._plugins.values()]
 
+    def counts(self, entries: list[dict] | None = None) -> dict[str, int]:
+        rows = entries if entries is not None else self.entries()
+        installed = sum(1 for row in rows if row.get("installed"))
+        total = len(rows)
+        return {
+            "catalog": total,
+            "installed": installed,
+            "available": total - installed,
+        }
+
     def by_tier(self) -> dict[str, list[str]]:
         grouped: dict[str, list[str]] = defaultdict(list)
         for plugin in self._plugins.values():

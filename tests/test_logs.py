@@ -34,6 +34,24 @@ def test_redact_log_line():
     assert "[REDACTED_SECRET]" in redacted3
 
 
+def test_log_websocket_accepts_access_cookie(monkeypatch):
+    from types import SimpleNamespace
+
+    from api.routers.logs import _authenticate_ws
+    from core.auth import COOKIE_ACCESS, auth_manager
+
+    monkeypatch.setattr(auth_manager, "setup_required", lambda: False)
+    monkeypatch.setattr(auth_manager, "jwt_secret", lambda: "test-jwt-secret-for-logs-ws-32b")
+    token = auth_manager.issue_token("tester")
+    websocket = SimpleNamespace(
+        cookies={COOKIE_ACCESS: token},
+        query_params={},
+    )
+    assert _authenticate_ws(websocket) is True
+    assert _authenticate_ws(SimpleNamespace(cookies={}, query_params={"token": token})) is True
+    assert _authenticate_ws(SimpleNamespace(cookies={}, query_params={})) is False
+
+
 @pytest.mark.asyncio
 async def test_logs_api_and_websocket(tmp_path: Path):
     app = create_app()

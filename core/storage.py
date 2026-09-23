@@ -130,7 +130,7 @@ class StorageManager:
                     )
                     _hardlink_warning_logged = True
             else:
-                logger.info(
+                logger.debug(
                     "Hardlinks are supported between download_dir and media_dir. ✓"
                 )
 
@@ -288,7 +288,7 @@ class StorageManager:
             elif info.is_fuse_fs:
                 extras.append(f"ℹ FUSE filesystem ({info.fs_type})")
             extra_str = "  " + "  ".join(extras) if extras else ""
-            logger.info("[%s] %s  [%s]%s ✓", label, info.path, info.fs_type, extra_str)
+            logger.debug("[%s] %s  [%s]%s ✓", label, info.path, info.fs_type, extra_str)
 
 
 # ---------------------------------------------------------------------------

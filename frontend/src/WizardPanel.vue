@@ -34,6 +34,33 @@ const TITLE = {
 
 const flowIndex = computed(() => FLOW.indexOf(step.value) + 1)
 
+const installTotal = computed(() => installProgress.value.length)
+const installDoneCount = computed(() =>
+  installProgress.value.filter((item) =>
+    ['started', 'failed', 'already_installed'].includes(item.status)
+  ).length
+)
+const installActive = computed(() =>
+  installProgress.value.find((item) => item.status === 'installing')
+)
+const installPercent = computed(() => {
+  if (!installTotal.value) return installing.value ? 8 : 0
+  const partial = installActive.value ? 0.4 : 0
+  return Math.min(100, Math.round(((installDoneCount.value + partial) / installTotal.value) * 100))
+})
+const headerTitle = computed(() => (installing.value ? 'Installing applications' : TITLE[step.value]))
+const headerSubtitle = computed(() => {
+  if (installing.value && !installTotal.value) {
+    return 'Saving your choices and starting catalog installs.'
+  }
+  if (installing.value) {
+    const current = installActive.value
+    if (current) return `Downloading and installing ${displayName(current.name)}.`
+    return `Finished ${installDoneCount.value} of ${installTotal.value} selected apps.`
+  }
+  return `Step ${flowIndex.value} of ${FLOW.length} — pick your stack, then save and install.`
+})
+
 function isSelected(listKey, id) {
   const list = selections[listKey]
   return Array.isArray(list) && list.includes(id)
@@ -49,6 +76,28 @@ function toggle(listKey, id) {
 
 function optionHelp(option) {
   return option.help_url || ''
+}
+
+function displayName(id) {
+  const raw = String(id || '')
+  if (!raw) return '—'
+  return raw.charAt(0).toUpperCase() + raw.slice(1)
+}
+
+function installStatusLabel(status) {
+  if (status === 'queued') return 'QUEUED'
+  if (status === 'installing') return 'INSTALLING'
+  if (status === 'started') return 'DONE'
+  if (status === 'already_installed') return 'INSTALLED'
+  if (status === 'failed') return 'FAILED'
+  return String(status || '').toUpperCase()
+}
+
+function installBadgeClass(status) {
+  if (status === 'started' || status === 'already_installed') return 'badge-running'
+  if (status === 'failed') return 'badge-failed'
+  if (status === 'installing') return 'badge-installing'
+  return 'badge-inactive'
 }
 
 function clampToFlow(id) {
@@ -175,15 +224,27 @@ async function finish() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.detail || 'Wizard could not finish')
     const apps = data.target_apps || []
-    for (const name of apps) {
-      installProgress.value.push({ name, status: 'installing' })
+    const already = new Set(
+      (data.installations || [])
+        .filter((row) => row.status === 'already_installed')
+        .map((row) => row.app)
+    )
+    installProgress.value = apps.map((name) => ({
+      name,
+      status: already.has(name) ? 'already_installed' : 'queued'
+    }))
+    for (const item of installProgress.value) {
+      if (item.status === 'already_installed') continue
+      item.status = 'installing'
       try {
-        const inst = await props.apiRequest(`/api/catalog/${name}/install`, { method: 'POST' })
-        const last = installProgress.value[installProgress.value.length - 1]
-        last.status = inst.ok ? 'started' : 'failed'
+        const inst = await props.apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
+        item.status = inst.ok ? 'started' : 'failed'
       } catch (_) {
-        installProgress.value[installProgress.value.length - 1].status = 'failed'
+        item.status = 'failed'
       }
+    }
+    if (installProgress.value.length) {
+      await new Promise((resolve) => setTimeout(resolve, 700))
     }
     emit('done')
   } catch (err) {
@@ -211,70 +272,127 @@ onMounted(async () => {
 <template>
   <section class="wizard-shell animate-fade">
     <div class="wizard-card">
+      <div class="wizard-glow"></div>
       <div class="wizard-header">
-        <span class="accent-badge">FIRST-RUN SETUP</span>
-        <h2>{{ TITLE[step] }}</h2>
-        <p>Step {{ flowIndex }} of {{ FLOW.length }} — pick your stack, then save and install.</p>
-        <ol class="wizard-progress">
+        <img
+          src="/logo-aio-media-manager.png"
+          alt="AIO Media Server Manager"
+          class="wizard-logo"
+        />
+        <span class="wizard-badge">FIRST-RUN SETUP</span>
+        <h2>{{ headerTitle }}</h2>
+        <p>{{ headerSubtitle }}</p>
+        <ol class="wizard-steps" aria-label="Setup steps">
           <li
             v-for="(id, index) in FLOW"
             :key="id"
-            :class="{ active: id === step, done: FLOW.indexOf(step) > index }"
+            :class="{
+              active: !installing && id === step,
+              done: installing || FLOW.indexOf(step) > index
+            }"
           >
             {{ index + 1 }}
           </li>
         </ol>
       </div>
 
-      <p v-if="error" class="alert-banner alert-error">{{ error }}</p>
+      <p v-if="error" class="wizard-alert">{{ error }}</p>
       <p v-if="loading" class="wizard-muted">Loading…</p>
 
       <div v-else class="wizard-body">
-        <template v-if="step === 3">
-          <label class="form-group">
+        <template v-if="installing">
+          <div class="wizard-install">
+            <div class="wizard-install-meta">
+              <span>{{ installTotal ? 'Catalog installs' : 'Preparing' }}</span>
+              <span class="font-mono">{{ installDoneCount }}/{{ installTotal || 0 }}</span>
+            </div>
+            <div
+              class="wizard-bar"
+              role="progressbar"
+              :aria-valuemin="0"
+              :aria-valuemax="100"
+              :aria-valuenow="installPercent"
+            >
+              <div
+                class="wizard-bar-fill"
+                :class="{ indeterminate: installing && !installTotal }"
+                :style="{ width: (installing && !installTotal ? 40 : installPercent) + '%' }"
+              ></div>
+            </div>
+            <ul v-if="installProgress.length" class="wizard-install-list">
+              <li v-for="item in installProgress" :key="item.name" class="wizard-install-row">
+                <span class="wizard-app-badge">
+                  <img
+                    v-if="appIconSrc(item.name)"
+                    :src="appIconSrc(item.name)"
+                    :alt="displayName(item.name)"
+                    class="wizard-icon"
+                  />
+                  <span v-else>{{ displayName(item.name).slice(0, 2).toUpperCase() }}</span>
+                </span>
+                <span class="wizard-install-name">{{ displayName(item.name) }}</span>
+                <span class="wizard-status" :class="installBadgeClass(item.status)">
+                  <span v-if="item.status === 'installing'" class="spinner spinner-sm"></span>
+                  <span v-else class="wizard-status-dot"></span>
+                  {{ installStatusLabel(item.status) }}
+                </span>
+              </li>
+            </ul>
+          </div>
+        </template>
+
+        <template v-else-if="step === 3">
+          <label class="wizard-field">
             <span>Media directory</span>
-            <input v-model="selections.media_dir" class="input-control font-mono" />
+            <input v-model="selections.media_dir" class="wizard-input font-mono" />
           </label>
-          <label class="form-group">
+          <label class="wizard-field">
             <span>Download directory</span>
-            <input v-model="selections.download_dir" class="input-control font-mono" />
+            <input v-model="selections.download_dir" class="wizard-input font-mono" />
           </label>
-          <label class="form-group">
+          <label class="wizard-field">
             <span>Config directory</span>
-            <input v-model="selections.config_dir" class="input-control font-mono" />
+            <input v-model="selections.config_dir" class="wizard-input font-mono" />
           </label>
           <p class="wizard-muted">{{ payload.hardlink_message }} Put both media and downloads under one host folder (for example <code>/data/media</code> and <code>/data/downloads</code>) so *Arr can hardlink instead of copying.</p>
         </template>
 
         <template v-else-if="step === 4">
           <p class="wizard-muted">Filled from this host’s PUID/PGID (compose <code>PUID</code>/<code>PGID</code>, otherwise 1000). Change only if the media user is different.</p>
-          <label class="form-group">
+          <label class="wizard-field">
             <span>PUID</span>
-            <input v-model="selections.puid" type="number" min="1" class="input-control font-mono" />
+            <input v-model="selections.puid" type="number" min="1" class="wizard-input font-mono" />
           </label>
-          <label class="form-group">
+          <label class="wizard-field">
             <span>PGID</span>
-            <input v-model="selections.pgid" type="number" min="1" class="input-control font-mono" />
+            <input v-model="selections.pgid" type="number" min="1" class="wizard-input font-mono" />
           </label>
         </template>
 
         <template v-else-if="step === 5">
           <div class="wizard-options">
-            <label v-for="option in payload.options || []" :key="option.id" class="wizard-option">
+            <label
+              v-for="option in payload.options || []"
+              :key="option.id"
+              class="wizard-option"
+              :class="{ selected: isSelected('download_clients', option.id) }"
+            >
               <input type="checkbox" :checked="isSelected('download_clients', option.id)" @change="toggle('download_clients', option.id)" />
-              <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              <span class="wizard-app-badge">
+                <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="help-chip" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
             </label>
           </div>
           <template v-if="showQbitCreds">
-            <label class="form-group">
+            <label class="wizard-field">
               <span>qBittorrent WebUI username</span>
-              <input v-model="selections.qbittorrent_username" class="input-control font-mono" />
+              <input v-model="selections.qbittorrent_username" class="wizard-input font-mono" />
             </label>
-            <label class="form-group">
+            <label class="wizard-field">
               <span>qBittorrent WebUI password</span>
-              <input v-model="selections.qbittorrent_password" type="password" class="input-control" placeholder="Leave blank to use the manager password" />
+              <input v-model="selections.qbittorrent_password" type="password" class="wizard-input" placeholder="Leave blank to use the manager password" />
             </label>
             <p class="wizard-muted">Blank qBittorrent fields use the same username and password as AIO Media Server Manager.</p>
           </template>
@@ -282,24 +400,29 @@ onMounted(async () => {
 
         <template v-else-if="step === 6">
           <div class="wizard-options">
-            <label v-for="option in payload.options || []" :key="option.id" class="wizard-option">
+            <label
+              v-for="option in payload.options || []"
+              :key="option.id"
+              class="wizard-option"
+              :class="{ selected: selections.vpn_provider === option.id }"
+            >
               <input type="radio" name="vpn" :value="option.id" v-model="selections.vpn_provider" />
               <span>{{ option.name }}</span>
             </label>
           </div>
           <template v-if="showVpnFields">
-            <label class="form-group">
+            <label class="wizard-field">
               <span>VPN config path</span>
-              <input v-model="selections.vpn_config_path" class="input-control font-mono" placeholder="/config/vpn/wg0.conf" />
+              <input v-model="selections.vpn_config_path" class="wizard-input font-mono" placeholder="/config/vpn/wg0.conf" />
             </label>
-            <label class="form-group">
+            <label class="wizard-field">
               <span>Protocol</span>
-              <select v-model="selections.vpn_protocol" class="input-control">
+              <select v-model="selections.vpn_protocol" class="wizard-input">
                 <option value="wireguard">WireGuard</option>
                 <option value="openvpn">OpenVPN</option>
               </select>
             </label>
-            <label class="wizard-option">
+            <label class="wizard-option" :class="{ selected: selections.vpn_enforce }">
               <input type="checkbox" v-model="selections.vpn_enforce" />
               Enforce kill switch for tunneled apps
             </label>
@@ -308,40 +431,61 @@ onMounted(async () => {
 
         <template v-else-if="step === 7">
           <div class="wizard-options">
-            <label v-for="option in payload.options || []" :key="option.id" class="wizard-option">
+            <label
+              v-for="option in payload.options || []"
+              :key="option.id"
+              class="wizard-option"
+              :class="{ selected: isSelected('arr_apps', option.id) }"
+            >
               <input type="checkbox" :checked="isSelected('arr_apps', option.id)" @change="toggle('arr_apps', option.id)" />
-              <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              <span class="wizard-app-badge">
+                <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="help-chip" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
             </label>
           </div>
         </template>
 
         <template v-else-if="step === 8">
           <div class="wizard-options">
-            <label v-for="option in payload.options || []" :key="option.id" class="wizard-option">
+            <label
+              v-for="option in payload.options || []"
+              :key="option.id"
+              class="wizard-option"
+              :class="{ selected: isSelected('media_servers', option.id) }"
+            >
               <input type="checkbox" :checked="isSelected('media_servers', option.id)" @change="toggle('media_servers', option.id)" />
-              <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              <span class="wizard-app-badge">
+                <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="help-chip" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
             </label>
           </div>
-          <label v-if="showPlexClaim" class="form-group">
+          <label v-if="showPlexClaim" class="wizard-field">
             <span>Plex claim token</span>
-            <input v-model="selections.plex_claim" class="input-control font-mono" placeholder="claim-…" />
+            <input v-model="selections.plex_claim" class="wizard-input font-mono" placeholder="claim-…" />
             <span class="wizard-muted">Optional. Get a token from plex.tv/claim, or sign in from the Plex UI later.</span>
           </label>
         </template>
 
         <template v-else-if="step === 9">
           <div class="wizard-options">
-            <label v-for="option in payload.options || []" :key="option.id" class="wizard-option">
+            <label
+              v-for="option in payload.options || []"
+              :key="option.id"
+              class="wizard-option"
+              :class="{ selected: selections.request_system === option.id }"
+            >
               <input type="radio" name="seerr" :value="option.id" v-model="selections.request_system" />
-              <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              <span class="wizard-app-badge">
+                <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="help-chip" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
             </label>
-            <label class="wizard-option">
+            <label class="wizard-option" :class="{ selected: selections.request_system === 'none' }">
               <input type="radio" name="seerr" value="none" v-model="selections.request_system" />
               <span>Skip for now</span>
             </label>
@@ -350,11 +494,18 @@ onMounted(async () => {
 
         <template v-else-if="step === 10">
           <div class="wizard-options">
-            <label v-for="option in payload.options || []" :key="option.id" class="wizard-option">
+            <label
+              v-for="option in payload.options || []"
+              :key="option.id"
+              class="wizard-option"
+              :class="{ selected: isSelected('recommended_preview', option.id) }"
+            >
               <input type="checkbox" :checked="isSelected('recommended_preview', option.id)" @change="toggle('recommended_preview', option.id)" />
-              <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              <span class="wizard-app-badge">
+                <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
+              </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="help-chip" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
             </label>
           </div>
         </template>
@@ -368,21 +519,19 @@ onMounted(async () => {
             <div><dt>VPN</dt><dd>{{ summary.vpn_provider || 'none' }}</dd></div>
             <div><dt>Recommended</dt><dd>{{ (summary.recommended_preview || []).join(', ') || 'none' }}</dd></div>
           </dl>
-          <ul v-if="installProgress.length" class="wizard-install-list">
-            <li v-for="item in installProgress" :key="item.name">{{ item.name }} — {{ item.status }}</li>
-          </ul>
         </template>
       </div>
 
       <div class="wizard-actions">
-        <button type="button" class="btn-secondary" :disabled="saving || installing" @click="skip">Skip for now</button>
+        <button type="button" class="wizard-btn wizard-btn-ghost" :disabled="saving || installing" @click="skip">Skip for now</button>
         <div class="wizard-nav">
-          <button type="button" class="btn-secondary" :disabled="step === FIRST || saving || installing" @click="back">Back</button>
-          <button v-if="step !== LAST" type="button" class="btn-primary" :disabled="saving || loading" @click="next">
+          <button type="button" class="wizard-btn wizard-btn-ghost" :disabled="step === FIRST || saving || installing" @click="back">Back</button>
+          <button v-if="step !== LAST" type="button" class="wizard-btn wizard-btn-main" :disabled="saving || loading" @click="next">
             {{ saving ? 'Saving…' : 'Next' }}
           </button>
-          <button v-else type="button" class="btn-primary" :disabled="installing" @click="finish">
-            {{ installing ? 'Starting installs…' : 'Save & install' }}
+          <button v-else type="button" class="wizard-btn wizard-btn-main" :disabled="installing" @click="finish">
+            <span v-if="installing" class="spinner spinner-sm"></span>
+            {{ installing ? 'Installing…' : 'Save & install' }}
           </button>
         </div>
       </div>
@@ -394,100 +543,131 @@ onMounted(async () => {
 .wizard-shell {
   display: flex;
   justify-content: center;
-  padding: 1.5rem 0 3rem;
+  align-items: flex-start;
+  min-height: 60vh;
+  padding: 0.5rem 0 2.5rem;
 }
 .wizard-card {
-  width: min(760px, 100%);
-  padding: 2rem 2.1rem 1.75rem;
-  background: rgba(22, 30, 46, 0.75);
-  backdrop-filter: blur(16px);
+  width: min(640px, 100%);
+  padding: 2.25rem;
+  background: rgba(19, 23, 34, 0.65);
+  backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+.wizard-glow {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+.wizard-header {
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+.wizard-logo {
+  width: 72px;
+  height: 72px;
   border-radius: 16px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+  object-fit: cover;
+  display: block;
+  margin-bottom: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-.wizard-header h2 {
-  margin: 0.55rem 0 0.4rem;
-  font-size: 1.55rem;
-  color: #f8fafc;
-}
-.wizard-header p,
-.wizard-muted {
-  color: #94a3b8;
-  font-size: 0.92rem;
-  line-height: 1.45;
-  margin: 0;
-}
-.accent-badge {
+.wizard-badge {
   display: inline-block;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #a5b4fc;
-  background: rgba(99, 102, 241, 0.16);
-  border: 1px solid rgba(129, 140, 248, 0.35);
   padding: 0.2rem 0.5rem;
-  border-radius: 999px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+  margin-bottom: 0.5rem;
 }
-.wizard-progress {
+.wizard-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0.5rem;
+  color: #fff;
+}
+.wizard-header p,
+.wizard-muted {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin: 0;
+}
+.wizard-steps {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.45rem;
   list-style: none;
   padding: 0;
   margin: 1.15rem 0 0;
 }
-.wizard-progress li {
-  width: 2.35rem;
-  height: 2.35rem;
-  border-radius: 999px;
+.wizard-steps li {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 6px;
   display: grid;
   place-items: center;
-  font-size: 0.92rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #94a3b8;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.6);
 }
-.wizard-progress li.active {
+.wizard-steps li.active {
   color: #fff;
   background: linear-gradient(135deg, #4f46e5, #7c3aed);
   border-color: transparent;
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
 }
-.wizard-progress li.done {
-  color: #6ee7b7;
-  border-color: rgba(52, 211, 153, 0.5);
-  background: rgba(16, 185, 129, 0.12);
+.wizard-steps li.done {
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.15);
 }
 .wizard-body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  margin: 1.4rem 0 1.5rem;
+  margin: 0 0 1.5rem;
+  position: relative;
 }
-.form-group {
+.wizard-field {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  font-size: 0.82rem;
+  gap: 0.4rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: #cbd5e1;
 }
-.input-control {
+.wizard-input {
   width: 100%;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 0.85rem 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.7rem 0.9rem;
   border-radius: 8px;
-  color: #f8fafc;
-  font-size: 0.95rem;
+  color: #fff;
+  font-size: 0.9rem;
   line-height: 1.3;
   box-sizing: border-box;
+  font-family: inherit;
+  transition: all 0.2s;
 }
-.input-control:focus {
+.wizard-input:focus {
   outline: none;
   border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 .wizard-options {
   display: flex;
@@ -498,26 +678,48 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.8rem 0.95rem;
+  padding: 0.75rem 0.9rem;
   border-radius: 10px;
   background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: #e2e8f0;
   cursor: pointer;
+  font-size: 0.9rem;
 }
 .wizard-option:hover {
-  border-color: rgba(99, 102, 241, 0.35);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.wizard-option.selected {
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.22);
+  background: rgba(99, 102, 241, 0.08);
+}
+.wizard-app-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #c7d2fe;
 }
 .wizard-icon {
-  width: 26px;
-  height: 26px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+  display: block;
 }
-.help-chip {
+.wizard-help {
   margin-left: auto;
   width: 1.55rem;
   height: 1.55rem;
-  border-radius: 999px;
+  border-radius: 6px;
   display: grid;
   place-items: center;
   font-weight: 700;
@@ -529,25 +731,124 @@ onMounted(async () => {
 }
 .wizard-dl {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.55rem;
 }
 .wizard-dl div {
   display: grid;
-  grid-template-columns: 8.5rem 1fr;
+  grid-template-columns: 7.5rem 1fr;
   gap: 0.6rem;
-  padding: 0.7rem 0.85rem;
+  padding: 0.75rem 0.9rem;
   background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
 }
 .wizard-dl dt {
   color: #64748b;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 .wizard-dl dd {
   margin: 0;
   color: #e2e8f0;
+  font-size: 0.88rem;
+}
+.wizard-install {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.wizard-install-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+.wizard-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.wizard-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.45);
+  transition: width 0.35s ease;
+}
+.wizard-bar-fill.indeterminate {
+  width: 40% !important;
+  animation: wizard-indeterminate 1.2s ease-in-out infinite;
+}
+@keyframes wizard-indeterminate {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(280%); }
+}
+.wizard-install-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.wizard-install-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.wizard-install-name {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+.wizard-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.wizard-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badge-running {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.badge-failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.badge-installing {
+  background: rgba(6, 182, 212, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+.badge-inactive {
+  background: rgba(71, 85, 105, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(71, 85, 105, 0.2);
 }
 .wizard-actions {
   display: flex;
@@ -555,61 +856,73 @@ onMounted(async () => {
   gap: 1rem;
   align-items: center;
   flex-wrap: wrap;
+  position: relative;
 }
 .wizard-nav {
   display: flex;
-  gap: 0.65rem;
+  gap: 0.55rem;
 }
-.btn-primary,
-.btn-secondary {
-  min-height: 2.75rem;
-  padding: 0.8rem 1.35rem;
+.wizard-btn {
+  min-height: 2.6rem;
+  padding: 0.7rem 1.15rem;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.45rem;
+  font-family: inherit;
 }
-.btn-primary {
+.wizard-btn-main {
   background: linear-gradient(135deg, #4f46e5, #7c3aed);
   border: none;
   color: #fff;
   box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
 }
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
+.wizard-btn-main:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
 }
-.btn-secondary {
-  background: rgba(30, 41, 59, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #e2e8f0;
+.wizard-btn-ghost {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
 }
-.btn-secondary:hover:not(:disabled) {
-  background: rgba(51, 65, 85, 0.9);
+.wizard-btn-ghost:hover:not(:disabled) {
+  background: rgba(51, 65, 85, 0.8);
   color: #fff;
 }
-.btn-primary:disabled,
-.btn-secondary:disabled {
+.wizard-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
-.alert-banner {
+.wizard-alert {
   padding: 0.75rem 1rem;
   border-radius: 8px;
-  font-size: 0.85rem;
-}
-.alert-error {
+  font-size: 0.82rem;
+  line-height: 1.4;
   background: rgba(239, 68, 68, 0.15);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #fca5a5;
+  margin-bottom: 1rem;
 }
-.wizard-install-list {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.85rem;
-  color: #cbd5e1;
-  margin: 0;
-  padding-left: 1.1rem;
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: wizard-spin 0.8s linear infinite;
+}
+.spinner-sm {
+  width: 14px;
+  height: 14px;
+}
+@keyframes wizard-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

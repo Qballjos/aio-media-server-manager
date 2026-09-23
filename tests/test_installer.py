@@ -298,3 +298,51 @@ def test_find_venv_executable_names(tmp_path):
     found = _find_venv_executable(tmp_path / "venv", "sabnzbd")
     assert found is not None
     assert found.name == "sabnzbdplus"
+
+
+def test_write_runner_avoids_package_directory(tmp_path):
+    from applications.install_helpers import write_runner
+
+    pkg = tmp_path / "bazarr"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    written = write_runner(pkg, ["#!/bin/sh", "echo ok"])
+    assert written == tmp_path / "run-bazarr"
+    assert written.is_file()
+    assert pkg.is_dir()
+    direct = tmp_path / "sabnzbd-bin"
+    written2 = write_runner(direct, ["#!/bin/sh", "echo ok"])
+    assert written2 == direct
+    assert written2.is_file()
+
+
+def test_launch_argv_prefixes_python_scripts(tmp_path: Path):
+    from applications.install_helpers import launch_argv, python_bin
+
+    script = tmp_path / "bazarr.py"
+    script.write_text("print(1)\n", encoding="utf-8")
+    argv = launch_argv(script, ["--port", "6767"])
+    assert argv[0] == python_bin()
+    assert argv[1] == str(script)
+    assert argv[2:] == ["--port", "6767"]
+
+    binary = tmp_path / "Radarr"
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+    assert launch_argv(binary, ["-nobrowser"]) == [str(binary), "-nobrowser"]
+
+
+def test_bazarr_start_uses_python_not_raw_script(tmp_path: Path):
+    from applications.extended import BazarrApp
+
+    install_root = tmp_path / "apps"
+    (install_root / "bazarr").mkdir(parents=True)
+    script = install_root / "bazarr" / "bazarr.py"
+    script.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+
+    app = BazarrApp(base_config_dir=tmp_path / "config", base_install_dir=install_root)
+    cmd = app.start_command()
+    runner = install_root / "bazarr" / "run-bazarr"
+    assert runner.is_file()
+    assert cmd[0] == str(runner)
+    assert "--no-update" in cmd
+    assert str(app.port) in cmd

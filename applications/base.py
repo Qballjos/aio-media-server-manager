@@ -87,8 +87,8 @@ class BaseApplication(abc.ABC):
         return self.install_dir / ".amm_installed.json"
 
     def is_installed(self) -> bool:
-        if not self.metadata_path().is_file():
-            return False
+        if self.metadata_path().is_file():
+            return True
         exe = self.executable_path()
         return exe is not None and exe.is_file()
 
@@ -102,9 +102,10 @@ class BaseApplication(abc.ABC):
             return None
 
     def executable_path(self) -> Path | None:
-        direct = self.install_dir / self.executable_name
-        if direct.is_file():
-            return direct
+        for name in (self.executable_name, f"run-{self.executable_name}"):
+            direct = self.install_dir / name
+            if direct.is_file():
+                return direct
         if not self.install_dir.exists():
             return None
         for candidate in self.install_dir.rglob(self.executable_name):
@@ -203,7 +204,9 @@ class SimpleApplication(BaseApplication):
     """Default launcher: executable plus optional args from the plugin."""
 
     def build_start_command(self, executable: Path) -> list[str]:
-        return [str(executable), *self.start_args()]
+        from applications.install_helpers import launch_argv
+
+        return launch_argv(executable, self.start_args())
 
     def start_args(self) -> list[str]:
         return []

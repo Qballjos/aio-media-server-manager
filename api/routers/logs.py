@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 
-from core.auth import auth_manager
+from core.auth import COOKIE_ACCESS, auth_manager
 from core.log_redactor import redact_log_line
 from core.supervisor import ProcessSupervisor
 
@@ -30,12 +30,18 @@ def _ensure_authenticated(request: Request) -> None:
 def _authenticate_ws(websocket: WebSocket, token: Optional[str] = None) -> bool:
     if auth_manager.setup_required():
         return True
-    # Try token from query param or cookie
-    auth_token = token or websocket.cookies.get("amm_session")
+    auth_token = (
+        token
+        or websocket.query_params.get("token")
+        or websocket.cookies.get(COOKIE_ACCESS)
+    )
     if not auth_token:
         return False
-    user = auth_manager.validate_jwt(auth_token)
-    return user is not None
+    try:
+        payload = auth_manager.decode_token(auth_token)
+    except HTTPException:
+        return False
+    return bool(payload.get("sub"))
 
 
 @router.get("", summary="Query centralized logs")

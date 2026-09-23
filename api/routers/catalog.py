@@ -45,6 +45,7 @@ async def list_catalog(request: Request) -> dict[str, Any]:
         "host_architecture": arch,
         "applications": entries,
         "by_tier": catalog.by_tier(),
+        "counts": catalog.counts(entries),
     }
 
 
@@ -115,9 +116,15 @@ async def install_application(
             logger.info("Starting background install for '%s'...", name)
             plugin.install()
             logger.info("Background install for '%s' completed successfully.", name)
-            await finalize_application_install(plugin)
+            try:
+                await finalize_application_install(plugin)
+            except Exception as err:
+                logger.error("Post-install wiring failed for '%s': %s", name, err, exc_info=True)
         except Exception as err:
             logger.error("Failed to install '%s': %s", name, err, exc_info=True)
+            from core.diagnostics import diagnostics
+
+            diagnostics.record_exception(err, source=f"install:{name}")
 
     background_tasks.add_task(_do_install)
 
