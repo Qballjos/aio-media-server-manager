@@ -78,10 +78,12 @@ def test_auth_status_setup_and_login_flow(client: TestClient):
 
     token = data["access_token"]
 
-    # 3. Status now indicates setup not required
+    # 3. Status now indicates setup not required and returns the CSRF cookie
     resp = client.get("/api/auth/status")
     assert resp.status_code == 200
     assert resp.json()["setup_required"] is False
+    assert resp.json()["authenticated"] is True
+    assert resp.json().get("csrf_token")
 
     # 4. /api/auth/me with Bearer token
     resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})

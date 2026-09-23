@@ -19,13 +19,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     AMM_API_HOST=0.0.0.0 \
     AMM_API_PORT=8080
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Servarr/.NET self-contained builds need ICU, OpenSSL, and SQLite from the OS.
+RUN apt-get update \
+    && ICU_PKG=$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -1) \
+    && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         ffmpeg \
         iproute2 \
         openvpn \
         wireguard-tools \
+        libssl3 \
+        libgssapi-krb5-2 \
+        zlib1g \
+        libsqlite3-0 \
+        sqlite3 \
+        libxml2 \
+        libncurses6 \
+        libfontconfig1 \
+        ${ICU_PKG} \
     && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \

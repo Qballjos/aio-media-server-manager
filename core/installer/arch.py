@@ -143,6 +143,9 @@ def score_asset_match(
         return -1
     if "source" in name_lower or "symbols" in name_lower:
         return -1
+    # Makeself/package-manager installers are not runnable app binaries.
+    if name_lower.endswith((".run", ".rpm", ".qpkg", ".flatpak", ".dmg", ".snap")):
+        return -1
 
     # Check architecture
     if not matches_arch_pattern(filename, arch):
@@ -172,5 +175,11 @@ def score_asset_match(
     # Avoid debug builds
     if "debug" in name_lower:
         score -= 30
+
+    # Debian/glibc hosts (this appliance image) cannot run musl/Alpine binaries.
+    if "musl" in name_lower:
+        score -= 80
+    if "linux-core" in name_lower:
+        score += 20
 
     return score

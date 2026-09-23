@@ -52,6 +52,39 @@ def test_phase4_catalog_plugins(catalog: ApplicationCatalog):
     assert catalog.get("nzbget").manifest.default_port == 6789
 
 
+def test_nzbget_start_uses_configfile_not_option(tmp_path: Path):
+    install_root = tmp_path / "apps"
+    bindir = install_root / "nzbget" / "usr" / "bin"
+    bindir.mkdir(parents=True)
+    exe = bindir / "nzbget"
+    exe.write_text("#!/bin/sh\n", encoding="utf-8")
+    exe.chmod(0o755)
+    webui = install_root / "nzbget" / "usr" / "share" / "nzbget" / "webui"
+    webui.mkdir(parents=True)
+
+    catalog = ApplicationCatalog(
+        app_settings=Settings(
+            config_dir=tmp_path / "config",
+            install_dir=install_root,
+            download_dir=tmp_path / "downloads",
+        )
+    )
+    app = catalog.get("nzbget")
+    cmd = app.start_command()
+
+    assert cmd[0] == str(exe)
+    assert "--configfile" in cmd
+    assert str(app.config_dir / "nzbget.conf") in cmd
+    assert "--server" in cmd
+    assert "OutputMode=log" in cmd
+    assert f"ControlPort={app.port}" in cmd
+    assert "ConfigFile=" not in " ".join(cmd)
+    assert app.config_file().is_file()
+    assert app.working_directory() == bindir
+    assert f"WebDir={webui}" in cmd
+    assert f"DestDir={tmp_path / 'downloads' / 'complete'}" in cmd
+
+
 def test_backup_create_list_and_restore(tmp_path: Path):
     cfg = tmp_path / "config"
     cfg.mkdir()

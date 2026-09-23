@@ -73,6 +73,42 @@ def test_score_asset_match():
     assert score_wrong_arch < 0
 
 
+def test_score_prefers_glibc_linux_core_over_musl():
+    musl = score_asset_match(
+        "Sonarr.main.4.0.14.2939.linux-musl-x64.tar.gz",
+        PlatformArch.X86_64,
+        PlatformOS.LINUX,
+    )
+    core = score_asset_match(
+        "Sonarr.main.4.0.14.2939.linux-core-x64.tar.gz",
+        PlatformArch.X86_64,
+        PlatformOS.LINUX,
+    )
+    generic = score_asset_match(
+        "Sonarr.main.4.0.14.2939.linux-x64.tar.gz",
+        PlatformArch.X86_64,
+        PlatformOS.LINUX,
+    )
+    assert core > musl
+    assert generic > musl
+    assert musl > 0
+
+
+def test_score_rejects_nzbget_run_installer():
+    run = score_asset_match(
+        "nzbget-26.3-bin-linux.run",
+        PlatformArch.X86_64,
+        PlatformOS.LINUX,
+    )
+    deb = score_asset_match(
+        "nzbget-26.3-amd64.deb",
+        PlatformArch.X86_64,
+        PlatformOS.LINUX,
+    )
+    assert run < 0
+    assert deb > 0
+
+
 def test_extractor_tar_gz(tmp_path):
     # Create a dummy tar.gz
     archive_path = tmp_path / "test.tar.gz"

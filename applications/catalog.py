@@ -94,6 +94,7 @@ class ApplicationCatalog:
             plugin = cls(
                 base_config_dir=self._settings.config_dir,
                 base_install_dir=self._settings.install_dir,
+                download_dir=self._settings.download_dir,
                 port=ports.get(cls.manifest.name),
                 puid=self._settings.puid,
                 pgid=self._settings.pgid,

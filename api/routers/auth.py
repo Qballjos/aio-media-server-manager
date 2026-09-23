@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from core.auth import COOKIE_ACCESS, auth_manager
+from core.auth import COOKIE_CSRF, auth_manager
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ class AuthStatusResponse(BaseModel):
     setup_required: bool
     authenticated: bool
     username: Optional[str] = None
+    csrf_token: Optional[str] = None
 
 
 @router.get("/status", response_model=AuthStatusResponse, summary="Check auth status")
@@ -47,6 +48,7 @@ async def auth_status(request: Request) -> dict:
             "setup_required": True,
             "authenticated": False,
             "username": None,
+            "csrf_token": None,
         }
 
     try:
@@ -55,12 +57,14 @@ async def auth_status(request: Request) -> dict:
             "setup_required": False,
             "authenticated": True,
             "username": username,
+            "csrf_token": request.cookies.get(COOKIE_CSRF),
         }
     except HTTPException:
         return {
             "setup_required": False,
             "authenticated": False,
             "username": None,
+            "csrf_token": None,
         }
 
 

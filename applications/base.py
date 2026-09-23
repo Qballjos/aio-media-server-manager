@@ -39,6 +39,7 @@ class BaseApplication(abc.ABC):
         *,
         base_config_dir: Path | None = None,
         base_install_dir: Path | None = None,
+        download_dir: Path | None = None,
         port: int | None = None,
         puid: int | None = None,
         pgid: int | None = None,
@@ -52,6 +53,7 @@ class BaseApplication(abc.ABC):
         self.config_dir: Path = config_dir_for(self.manifest, config_root)
         self.data_dir: Path = data_dir_for(self.manifest, config_root)
         self.install_dir: Path = install_root / self.manifest.name
+        self.download_dir: Path = Path(download_dir or settings.download_dir)
         self.port: int = port if port is not None else self.manifest.default_port
         self.puid = puid if puid is not None else settings.puid
         self.pgid = pgid if pgid is not None else settings.pgid

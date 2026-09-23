@@ -129,3 +129,13 @@ def test_authenticate_request_cookie_and_csrf(auth_mgr: AuthManager):
     post_request_with_csrf.headers = {CSRF_HEADER: csrf_secret}
     post_request_with_csrf.method = "POST"
     assert auth_mgr.authenticate_request(post_request_with_csrf) == "admin"
+
+
+def test_bearer_skips_csrf_when_session_cookie_also_present(auth_mgr: AuthManager):
+    """After a browser refresh the SPA still sends the httponly cookie plus Bearer."""
+    token = auth_mgr.issue_token("admin")
+    request = MagicMock()
+    request.cookies = {COOKIE_ACCESS: token, COOKIE_CSRF: "stale-or-unread"}
+    request.headers = {"Authorization": f"Bearer {token}"}
+    request.method = "POST"
+    assert auth_mgr.authenticate_request(request) == "admin"

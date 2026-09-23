@@ -8,7 +8,8 @@ const authStatus = ref({
   username: null
 })
 
-const csrfToken = ref('')
+const CSRF_COOKIE = 'amm_csrf'
+const csrfToken = ref(sessionStorage.getItem('amm_csrf') || '')
 const authToken = ref(localStorage.getItem('amm_token') || '')
 
 const authForm = ref({
@@ -69,6 +70,31 @@ const currentTime = ref(new Date().toLocaleTimeString())
 let clockInterval = null
 let pollInterval = null
 
+function readCookie(name) {
+  const prefix = `${name}=`
+  const parts = document.cookie.split(';')
+  for (const part of parts) {
+    const trimmed = part.trim()
+    if (trimmed.startsWith(prefix)) {
+      return decodeURIComponent(trimmed.slice(prefix.length))
+    }
+  }
+  return ''
+}
+
+function currentCsrfToken() {
+  return csrfToken.value || readCookie(CSRF_COOKIE) || sessionStorage.getItem('amm_csrf') || ''
+}
+
+function storeCsrf(token) {
+  csrfToken.value = token || ''
+  if (token) {
+    sessionStorage.setItem('amm_csrf', token)
+  } else {
+    sessionStorage.removeItem('amm_csrf')
+  }
+}
+
 // --- API Helper ---
 async function apiRequest(endpoint, options = {}) {
   const headers = {
@@ -76,8 +102,9 @@ async function apiRequest(endpoint, options = {}) {
     ...(options.headers || {})
   }
 
-  if (csrfToken.value) {
-    headers['X-CSRF-Token'] = csrfToken.value
+  const csrf = currentCsrfToken()
+  if (csrf) {
+    headers['X-CSRF-Token'] = csrf
   }
   if (authToken.value) {
     headers['Authorization'] = `Bearer ${authToken.value}`
@@ -106,6 +133,12 @@ async function checkAuthStatus() {
     if (res.ok) {
       const data = await res.json()
       authStatus.value = data
+      if (data.csrf_token) {
+        storeCsrf(data.csrf_token)
+      } else if (!csrfToken.value) {
+        const fromCookie = readCookie(CSRF_COOKIE)
+        if (fromCookie) storeCsrf(fromCookie)
+      }
       if (data.authenticated) {
         await refreshDashboard()
       }
@@ -149,7 +182,7 @@ async function handleSetup() {
       localStorage.setItem('amm_token', data.access_token)
     }
     if (data.csrf_token) {
-      csrfToken.value = data.csrf_token
+      storeCsrf(data.csrf_token)
     }
 
     authStatus.value = {
@@ -193,7 +226,7 @@ async function handleLogin() {
       localStorage.setItem('amm_token', data.access_token)
     }
     if (data.csrf_token) {
-      csrfToken.value = data.csrf_token
+      storeCsrf(data.csrf_token)
     }
 
     authStatus.value = {
@@ -216,6 +249,7 @@ async function handleLogout() {
     await apiRequest('/api/auth/logout', { method: 'POST' })
   } catch (_) {}
   authToken.value = ''
+  storeCsrf('')
   localStorage.removeItem('amm_token')
   authStatus.value.authenticated = false
   authStatus.value.username = null

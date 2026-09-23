@@ -193,14 +193,18 @@ class AuthManager:
             )
 
     def authenticate_request(self, request: Request) -> str:
-        token = request.cookies.get(COOKIE_ACCESS)
+        auth_header = request.headers.get("Authorization", "").strip()
+        cookie_token = request.cookies.get(COOKIE_ACCESS)
         using_bearer = False
+        token = None
 
-        if not token:
-            auth_header = request.headers.get("Authorization", "").strip()
-            if auth_header.startswith("Bearer "):
-                token = auth_header[7:].strip()
-                using_bearer = True
+        # Explicit Bearer wins so a refresh that still has the httponly session
+        # cookie does not require a CSRF header the SPA no longer has in memory.
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+            using_bearer = True
+        elif cookie_token:
+            token = cookie_token
 
         if not token:
             raise HTTPException(
