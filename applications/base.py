@@ -155,9 +155,8 @@ class BaseApplication(abc.ABC):
             )
         return self.build_start_command(exe)
 
-    @abc.abstractmethod
     def build_start_command(self, executable: Path) -> list[str]:
-        """Return the argv used to launch the installed binary."""
+        raise NotImplementedError
 
     def extra_env(self) -> dict[str, str]:
         return {}
@@ -193,6 +192,16 @@ class BaseApplication(abc.ABC):
             f"<{type(self).__name__} name={self.name!r} port={self.port} "
             f"install_dir={self.install_dir}>"
         )
+
+
+class SimpleApplication(BaseApplication):
+    """Default launcher: executable plus optional args from the plugin."""
+
+    def build_start_command(self, executable: Path) -> list[str]:
+        return [str(executable), *self.start_args()]
+
+    def start_args(self) -> list[str]:
+        return []
 
 
 def config_dir_for(manifest: AppManifest, config_root: Path) -> Path:

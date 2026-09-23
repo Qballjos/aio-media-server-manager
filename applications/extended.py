@@ -1,0 +1,331 @@
+from __future__ import annotations
+
+from applications.arr import ArrApplication
+from applications.base import SimpleApplication
+from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
+
+
+class LidarrApp(ArrApplication):
+    manifest = AppManifest(
+        name="lidarr",
+        display_name="Lidarr",
+        description="Music collection automation for Usenet and BitTorrent.",
+        github_repo="Lidarr/Lidarr",
+        upstream_url="https://github.com/Lidarr/Lidarr",
+        tier=AppTier.OPTIONAL,
+        category=AppCategory.AUTOMATION,
+        default_port=8686,
+        executable_name="Lidarr",
+        supported_architectures=("x86_64", "arm64", "armv7"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        optional_dependencies=("prowlarr", "sabnzbd", "qbittorrent"),
+        health_path="/ping",
+    )
+
+
+class ReadarrApp(ArrApplication):
+    manifest = AppManifest(
+        name="readarr",
+        display_name="Readarr",
+        description="Ebook and audiobook automation for the *Arr stack.",
+        github_repo="Readarr/Readarr",
+        upstream_url="https://github.com/Readarr/Readarr",
+        tier=AppTier.OPTIONAL,
+        category=AppCategory.AUTOMATION,
+        default_port=8787,
+        executable_name="Readarr",
+        supported_architectures=("x86_64", "arm64", "armv7"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        optional_dependencies=("prowlarr", "sabnzbd", "qbittorrent"),
+        health_path="/ping",
+    )
+
+
+class WhisparrApp(ArrApplication):
+    manifest = AppManifest(
+        name="whisparr",
+        display_name="Whisparr",
+        description="Adult video automation compatible with the *Arr ecosystem.",
+        github_repo="Whisparr/Whisparr",
+        upstream_url="https://github.com/Whisparr/Whisparr",
+        tier=AppTier.OPTIONAL,
+        category=AppCategory.AUTOMATION,
+        default_port=6969,
+        executable_name="Whisparr",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        optional_dependencies=("prowlarr", "sabnzbd", "qbittorrent"),
+        health_path="/ping",
+    )
+
+
+class NzbgetApp(SimpleApplication):
+    manifest = AppManifest(
+        name="nzbget",
+        display_name="NZBGet",
+        description="Alternative Usenet downloader with a web interface.",
+        github_repo="nzbgetcom/nzbget",
+        upstream_url="https://github.com/nzbgetcom/nzbget",
+        tier=AppTier.CORE,
+        category=AppCategory.DOWNLOADING,
+        default_port=6789,
+        executable_name="nzbget",
+        supported_architectures=("x86_64", "arm64", "armv7"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux", "bin"),
+        health_path="/jsonrpc",
+    )
+
+    def start_args(self) -> list[str]:
+        return [
+            "--server",
+            "--option",
+            f"ControlPort={self.port}",
+            "--option",
+            f"MainDir={self.data_dir}",
+            "--option",
+            f"ConfigFile={self.config_dir / 'nzbget.conf'}",
+            "--option",
+            "OutputMode=log",
+        ]
+
+
+class BazarrApp(SimpleApplication):
+    manifest = AppManifest(
+        name="bazarr",
+        display_name="Bazarr",
+        description="Subtitle management companion for Sonarr and Radarr.",
+        github_repo="morpheus65535/bazarr",
+        upstream_url="https://github.com/morpheus65535/bazarr",
+        tier=AppTier.RECOMMENDED,
+        category=AppCategory.SUBTITLES,
+        default_port=6767,
+        executable_name="bazarr",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.PYPI,
+        optional_dependencies=("sonarr", "radarr"),
+        health_path="/api/system/health",
+    )
+
+    def start_args(self) -> list[str]:
+        return ["--no-update", "--config", str(self.config_dir), "--port", str(self.port)]
+
+
+class UnpackerrApp(SimpleApplication):
+    manifest = AppManifest(
+        name="unpackerr",
+        display_name="Unpackerr",
+        description="Extracts completed archives from download clients automatically.",
+        github_repo="Unpackerr/unpackerr",
+        upstream_url="https://github.com/Unpackerr/unpackerr",
+        tier=AppTier.RECOMMENDED,
+        category=AppCategory.MAINTENANCE,
+        default_port=5656,
+        executable_name="unpackerr",
+        supported_architectures=("x86_64", "arm64", "armv7"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        health_path="/",
+    )
+
+    def start_args(self) -> list[str]:
+        return [f"--config={self.config_dir / 'unpackerr.conf'}"]
+
+
+class RecyclarrApp(SimpleApplication):
+    manifest = AppManifest(
+        name="recyclarr",
+        display_name="Recyclarr",
+        description="Synchronises TRaSH Guides quality profiles and custom formats.",
+        github_repo="Recyclarr/Recyclarr",
+        upstream_url="https://github.com/Recyclarr/Recyclarr",
+        tier=AppTier.RECOMMENDED,
+        category=AppCategory.OPTIMIZATION,
+        default_port=19001,
+        executable_name="recyclarr",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        optional_dependencies=("sonarr", "radarr"),
+        health_path="/",
+        daemon=False,
+    )
+
+
+class ProfilarrApp(SimpleApplication):
+    manifest = AppManifest(
+        name="profilarr",
+        display_name="Profilarr",
+        description="Quality profile management for the *Arr applications.",
+        github_repo="Dictionarry-Hub/profilarr",
+        upstream_url="https://github.com/Dictionarry-Hub/profilarr",
+        tier=AppTier.RECOMMENDED,
+        category=AppCategory.OPTIMIZATION,
+        default_port=6868,
+        executable_name="profilarr",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        optional_dependencies=("sonarr", "radarr"),
+        health_path="/",
+    )
+
+
+class NeutarrApp(SimpleApplication):
+    manifest = AppManifest(
+        name="neutarr",
+        display_name="NeutArr",
+        description="Hunts missing media and quality upgrades across the *Arr stack.",
+        github_repo="I-am-PUID-0/NeutArr",
+        upstream_url="https://github.com/I-am-PUID-0/NeutArr",
+        tier=AppTier.RECOMMENDED,
+        category=AppCategory.OPTIMIZATION,
+        default_port=9705,
+        executable_name="neutarr",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        optional_dependencies=("sonarr", "radarr"),
+        health_path="/",
+    )
+
+
+class Mylar3App(SimpleApplication):
+    manifest = AppManifest(
+        name="mylar3",
+        display_name="Mylar3",
+        description="Comic book automation compatible with the *Arr workflow.",
+        github_repo="mylar3/mylar3",
+        upstream_url="https://github.com/mylar3/mylar3",
+        tier=AppTier.OPTIONAL,
+        category=AppCategory.AUTOMATION,
+        default_port=8090,
+        executable_name="mylar3",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.PYPI,
+        optional_dependencies=("sabnzbd", "qbittorrent"),
+        health_path="/",
+    )
+
+
+class CleanuparrApp(SimpleApplication):
+    manifest = AppManifest(
+        name="cleanuparr",
+        display_name="Cleanuparr",
+        description="Cleans stalled and leftover downloads in the *Arr stack.",
+        github_repo="Cleanuparr/Cleanuparr",
+        upstream_url="https://github.com/Cleanuparr/Cleanuparr",
+        tier=AppTier.OPTIONAL,
+        category=AppCategory.MAINTENANCE,
+        default_port=11083,
+        executable_name="Cleanuparr",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        health_path="/",
+    )
+
+
+class MaintainerrApp(SimpleApplication):
+    manifest = AppManifest(
+        name="maintainerr",
+        display_name="Maintainerr",
+        description="Rules-based media library maintenance for Plex and Jellyfin.",
+        github_repo="jorenn92/maintainerr",
+        upstream_url="https://github.com/jorenn92/maintainerr",
+        tier=AppTier.OPTIONAL,
+        category=AppCategory.MAINTENANCE,
+        default_port=6246,
+        executable_name="maintainerr",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        optional_dependencies=("jellyfin", "plex"),
+        health_path="/api/health",
+    )
+
+
+class TautulliApp(SimpleApplication):
+    manifest = AppManifest(
+        name="tautulli",
+        display_name="Tautulli",
+        description="Watch history and statistics for Plex Media Server.",
+        github_repo="Tautulli/Tautulli",
+        upstream_url="https://github.com/Tautulli/Tautulli",
+        tier=AppTier.OPTIONAL,
+        category=AppCategory.MAINTENANCE,
+        default_port=8181,
+        executable_name="tautulli",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.PYPI,
+        optional_dependencies=("plex",),
+        health_path="/status",
+    )
+
+    def start_args(self) -> list[str]:
+        return ["--nolaunch", "--config", str(self.config_dir / "config.ini"), "--datadir", str(self.data_dir)]
+
+
+class AutobrrApp(SimpleApplication):
+    manifest = AppManifest(
+        name="autobrr",
+        display_name="Autobrr",
+        description="Automation for IRC and torrent announce workflows.",
+        github_repo="autobrr/autobrr",
+        upstream_url="https://github.com/autobrr/autobrr",
+        tier=AppTier.OPTIONAL,
+        category=AppCategory.DOWNLOADING,
+        default_port=7474,
+        executable_name="autobrr",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        health_path="/api/healthz/liveness",
+    )
+
+    def extra_env(self) -> dict[str, str]:
+        return {"AUTOBRR__SERVER__PORT": str(self.port), "AUTOBRR__CONFIG_PATH": str(self.config_dir)}
+
+
+class KometaApp(SimpleApplication):
+    manifest = AppManifest(
+        name="kometa",
+        display_name="Kometa",
+        description="Kometa (formerly Plex Meta Manager) for collections and overlays.",
+        github_repo="Kometa-Team/Kometa",
+        upstream_url="https://github.com/Kometa-Team/Kometa",
+        tier=AppTier.OPTIONAL,
+        category=AppCategory.MAINTENANCE,
+        default_port=19002,
+        executable_name="kometa",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.PYPI,
+        optional_dependencies=("plex",),
+        health_path="/",
+        daemon=False,
+    )
+
+
+class HuntarrApp(SimpleApplication):
+    manifest = AppManifest(
+        name="huntarr",
+        display_name="Huntarr",
+        description="Experimental missing-media hunter. Prefer NeutArr when both are available.",
+        github_repo="plexguide/Huntarr.io",
+        upstream_url="https://github.com/plexguide/Huntarr.io",
+        tier=AppTier.EXPERIMENTAL,
+        category=AppCategory.OPTIMIZATION,
+        default_port=9706,
+        executable_name="huntarr",
+        supported_architectures=("x86_64", "arm64"),
+        install_method=InstallMethod.GITHUB_RELEASE,
+        preferred_patterns=("linux",),
+        optional_dependencies=("sonarr", "radarr"),
+        health_path="/",
+    )
+
+    def extra_env(self) -> dict[str, str]:
+        return {"PORT": str(self.port), "CONFIG_DIR": str(self.config_dir)}

@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.routers import applications as applications_router
 from api.routers import auth as auth_router
+from api.routers import backups as backups_router
 from api.routers import catalog as catalog_router
 from api.routers import health as health_router
 from api.routers import integrations as integrations_router
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(logs_router.router)
     app.include_router(system_router.router)
     app.include_router(wizard_router.router)
+    app.include_router(backups_router.router)
 
     # Mount frontend dist if built
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"

@@ -93,10 +93,10 @@ Per PROMPT.md §37 Phase 3 — MVP stack only: manager, dashboard, catalog, proc
 
 Per PROMPT.md §37 Phase 4.
 
-* [ ] MVP-deferred core applications:
+* [x] MVP-deferred core applications:
   * **Plex** (media server — can run concurrently with Jellyfin on shared media library)
   * **NZBGet** (alternative Usenet client — user choice alongside or instead of SABnzbd)
-* [ ] Recommended & Optional Application Plugins:
+* [x] Recommended & Optional Application Plugins:
   * **Bazarr** (Subtitles)
   * **Unpackerr** (Archive extraction)
   * **Recyclarr** (TRaSH Guides synchronization)
@@ -109,15 +109,15 @@ Per PROMPT.md §37 Phase 4.
   * Bazarr ↔ Sonarr/Radarr library pairing
   * Post-install hooks for Recyclarr, Profilarr, and NeutArr
   * Plex and NZBGet wiring into existing download/indexer/request flows
-* [ ] Safe Application Updater:
+* [x] Safe Application Updater:
   * Pre-update snapshot of configuration and database
   * Automated post-update health check validation
   * Automatic rollback to prior version on startup failure
-* [ ] Centralized Backup & Restore System:
+* [x] Centralized Backup & Restore System:
   * Automated and manual backups of manager config, application config, API credentials, and databases
   * Excludes media, torrent payloads, temp files, and large caches
   * Configurable local backup path, retention (keep last N), and scheduled backups
-* [ ] Application Uninstallation Workflow:
+* [x] Application Uninstallation Workflow:
   * Clean binary removal with optional configuration/data purge
   * Explicit confirmation required; never delete media without user confirmation
 

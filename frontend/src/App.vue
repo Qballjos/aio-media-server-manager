@@ -356,6 +356,53 @@ async function restartApp(name) {
   }
 }
 
+async function updateApp(name) {
+  actionLoading.value[name] = 'update'
+  try {
+    const res = await apiRequest(`/api/applications/${name}/update`, { method: 'POST' })
+    const data = await res.json()
+    if (res.ok && data.status !== 'rolled_back') {
+      showToast(`Updated ${name} to ${data.version || 'latest'}`, 'success')
+      await refreshDashboard()
+    } else {
+      showToast(data.error || data.detail || `Update failed for ${name}`, 'error')
+    }
+  } catch (err) {
+    showToast(`Error updating ${name}: ${err.message}`, 'error')
+  } finally {
+    delete actionLoading.value[name]
+  }
+}
+
+async function uninstallApp(name) {
+  const removeConfig = window.confirm(
+    `Uninstall ${name}?\n\nOK = also remove configuration.\nCancel = keep configuration (binary only).`
+  )
+  const removeData = removeConfig && window.confirm(`Also delete ${name} application data? Media libraries are never deleted.`)
+  actionLoading.value[name] = 'uninstall'
+  try {
+    const res = await apiRequest(`/api/applications/${name}/uninstall`, {
+      method: 'POST',
+      body: JSON.stringify({
+        remove_application: true,
+        remove_config: removeConfig,
+        remove_data: !!removeData
+      })
+    })
+    const data = await res.json()
+    if (res.ok) {
+      showToast(`Uninstalled ${name}`, 'info')
+      await refreshDashboard()
+    } else {
+      showToast(data.detail || `Failed to uninstall ${name}`, 'error')
+    }
+  } catch (err) {
+    showToast(`Error uninstalling ${name}: ${err.message}`, 'error')
+  } finally {
+    delete actionLoading.value[name]
+  }
+}
+
 async function installApp(name, displayName) {
   actionLoading.value[name] = 'install'
   try {
@@ -923,6 +970,26 @@ onUnmounted(() => {
                     title="View Process Logs"
                   >
                     Logs
+                  </button>
+
+                  <button
+                    @click="updateApp(service.name)"
+                    class="btn-action"
+                    :disabled="!!actionLoading[service.name]"
+                    title="Update application"
+                  >
+                    <span v-if="actionLoading[service.name] === 'update'" class="spinner spinner-sm"></span>
+                    <span v-else>Update</span>
+                  </button>
+
+                  <button
+                    @click="uninstallApp(service.name)"
+                    class="btn-action btn-stop"
+                    :disabled="!!actionLoading[service.name]"
+                    title="Uninstall application"
+                  >
+                    <span v-if="actionLoading[service.name] === 'uninstall'" class="spinner spinner-sm"></span>
+                    <span v-else>Uninstall</span>
                   </button>
                 </div>
               </template>

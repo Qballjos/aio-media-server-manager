@@ -13,16 +13,27 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from pydantic import BaseModel
+
 from applications.catalog import ApplicationCatalog
 from core.auth import auth_manager
 from core.settings import settings
 from core.supervisor import ProcessSupervisor
+from core.uninstall import UninstallError, uninstall_application
+from core.updater import ApplicationUpdater
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/applications", tags=["Applications"])
 
 catalog = ApplicationCatalog(app_settings=settings)
+updater = ApplicationUpdater(app_settings=settings)
+
+
+class UninstallRequest(BaseModel):
+    remove_application: bool = True
+    remove_config: bool = False
+    remove_data: bool = False
 
 
 def _ensure_authenticated(request: Request) -> None:
@@ -70,6 +81,7 @@ async def list_applications(request: Request) -> dict[str, Any]:
                 "recent_crashes": recent_crashes,
                 "health_url": plugin.health_check_url(),
                 "web_ui_url": f"http://{request.url.hostname}:{plugin.port}",
+                "daemon": plugin.manifest.daemon,
             }
         )
 
@@ -91,6 +103,11 @@ async def start_application(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot start '{name}' because it is not installed.",
+        )
+    if not plugin.manifest.daemon:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{name}' is a CLI tool and is not started as a background service.",
         )
 
     supervisor = ProcessSupervisor.get()
@@ -213,4 +230,52 @@ async def reset_application_crash_loop(name: str, request: Request) -> dict[str,
         "name": name,
         "state": supervisor.status(name).value,
     }
+
+
+@router.get("/{name}/updates", summary="Check whether an application update is available")
+async def check_application_update(name: str, request: Request) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return updater.update_available(plugin)
+
+
+@router.post("/{name}/update", summary="Update an application with rollback on failure")
+async def update_application(name: str, request: Request) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if not plugin.is_installed():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot update '{name}' because it is not installed.",
+        )
+    return await updater.update(plugin)
+
+
+@router.post("/{name}/uninstall", summary="Uninstall an application")
+async def uninstall_managed_application(
+    name: str,
+    request: Request,
+    body: UninstallRequest | None = None,
+) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    payload = body or UninstallRequest()
+    try:
+        return await uninstall_application(
+            plugin,
+            remove_application=payload.remove_application,
+            remove_config=payload.remove_config,
+            remove_data=payload.remove_data,
+        )
+    except UninstallError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

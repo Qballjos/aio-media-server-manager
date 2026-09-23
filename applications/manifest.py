@@ -55,6 +55,7 @@ class AppManifest:
     health_path: str = "/ping"
     config_subdir: str = ""
     data_subdir: str = ""
+    daemon: bool = True
     tags: Sequence[str] = field(default_factory=tuple)
 
     def to_dict(self) -> dict:
@@ -76,4 +77,5 @@ class AppManifest:
             "health_path": self.health_path,
             "config_directory": self.config_subdir or self.name,
             "data_directory": self.data_subdir or self.name,
+            "daemon": self.daemon,
         }

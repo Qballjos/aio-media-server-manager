@@ -102,6 +102,20 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="Root log level.")
 
     # ------------------------------------------------------------------
+    # Backups
+    # ------------------------------------------------------------------
+    backup_dir: Path | None = Field(
+        default=None,
+        description="Local backup destination. Defaults to {config_dir}/backups.",
+        validation_alias="AMM_BACKUP_DIR",
+    )
+    backup_retention: int = Field(
+        default=7,
+        description="Number of full configuration backups to retain.",
+        validation_alias="AMM_BACKUP_RETENTION",
+    )
+
+    # ------------------------------------------------------------------
     # Validators
     # ------------------------------------------------------------------
 
@@ -139,6 +153,12 @@ class Settings(BaseSettings):
             self.install_dir = self.config_dir / "apps"
         else:
             self.install_dir = self.install_dir.expanduser().resolve()
+        if self.backup_dir is None:
+            self.backup_dir = self.config_dir / "backups"
+        else:
+            self.backup_dir = self.backup_dir.expanduser().resolve()
+        if self.backup_retention < 1:
+            raise ValueError("backup_retention must be at least 1.")
         return self
 
     # ------------------------------------------------------------------
@@ -157,6 +177,8 @@ class Settings(BaseSettings):
             "media_dir": str(self.media_dir),
             "cache_dir": str(self.cache_dir),
             "install_dir": str(self.install_dir),
+            "backup_dir": str(self.backup_dir),
+            "backup_retention": self.backup_retention,
             "puid": self.puid,
             "pgid": self.pgid,
             "api_host": self.api_host,

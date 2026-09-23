@@ -9,7 +9,26 @@ from collections import defaultdict, deque
 from typing import Iterable
 
 from applications.base import BaseApplication
+from applications.extended import (
+    AutobrrApp,
+    BazarrApp,
+    CleanuparrApp,
+    HuntarrApp,
+    KometaApp,
+    LidarrApp,
+    MaintainerrApp,
+    Mylar3App,
+    NeutarrApp,
+    NzbgetApp,
+    ProfilarrApp,
+    ReadarrApp,
+    RecyclarrApp,
+    TautulliApp,
+    UnpackerrApp,
+    WhisparrApp,
+)
 from applications.jellyfin import JellyfinApp
+from applications.plex import PlexApp
 from applications.prowlarr import ProwlarrApp
 from applications.qbittorrent import QBittorrentApp
 from applications.radarr import RadarrApp
@@ -22,15 +41,32 @@ from core.settings import Settings, settings
 
 logger = logging.getLogger(__name__)
 
-# MVP core stack — additional plugins register here in later phases.
+# MVP plus Phase 4 plugins register here.
 PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
     ProwlarrApp,
     SonarrApp,
     RadarrApp,
     SabnzbdApp,
+    NzbgetApp,
     QBittorrentApp,
     JellyfinApp,
+    PlexApp,
     SeerrApp,
+    BazarrApp,
+    UnpackerrApp,
+    RecyclarrApp,
+    ProfilarrApp,
+    NeutarrApp,
+    LidarrApp,
+    ReadarrApp,
+    WhisparrApp,
+    Mylar3App,
+    CleanuparrApp,
+    MaintainerrApp,
+    TautulliApp,
+    AutobrrApp,
+    KometaApp,
+    HuntarrApp,
 )
 
 

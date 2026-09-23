@@ -1,0 +1,109 @@
+"""Tests for Phase 4 catalog plugins, backups, and uninstall safeguards."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from applications.catalog import ApplicationCatalog
+from core.backup_manager import BackupManager
+from core.settings import Settings
+from core.uninstall import UninstallError, uninstall_application
+from core.updater import _is_newer
+
+
+@pytest.fixture
+def catalog(tmp_path: Path) -> ApplicationCatalog:
+    test_settings = Settings(
+        config_dir=tmp_path / "config",
+        install_dir=tmp_path / "apps",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        backup_dir=tmp_path / "backups",
+    )
+    return ApplicationCatalog(app_settings=test_settings)
+
+
+def test_phase4_catalog_plugins(catalog: ApplicationCatalog):
+    names = set(catalog.names())
+    expected = {
+        "plex",
+        "nzbget",
+        "bazarr",
+        "unpackerr",
+        "recyclarr",
+        "profilarr",
+        "neutarr",
+        "lidarr",
+        "readarr",
+        "whisparr",
+        "mylar3",
+        "cleanuparr",
+        "maintainerr",
+        "tautulli",
+        "autobrr",
+        "kometa",
+        "huntarr",
+    }
+    assert expected.issubset(names)
+    assert catalog.get("recyclarr").manifest.daemon is False
+    assert catalog.get("plex").manifest.default_port == 32400
+    assert catalog.get("nzbget").manifest.default_port == 6789
+
+
+def test_backup_create_list_and_restore(tmp_path: Path):
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    (cfg / "amm_config.json").write_text("{}", encoding="utf-8")
+    (cfg / "sonarr").mkdir()
+    (cfg / "sonarr" / "config.xml").write_text("<config/>", encoding="utf-8")
+    (cfg / "cache").mkdir()
+    (cfg / "cache" / "big.bin").write_text("skip", encoding="utf-8")
+    media = tmp_path / "media"
+    media.mkdir()
+    (media / "movie.mkv").write_text("nope", encoding="utf-8")
+
+    settings = Settings(
+        config_dir=cfg,
+        download_dir=tmp_path / "downloads",
+        media_dir=media,
+        backup_dir=tmp_path / "backups",
+        backup_retention=2,
+        install_dir=tmp_path / "apps",
+    )
+    manager = BackupManager(settings)
+    first = manager.create_backup(label="one")
+    assert Path(first["path"]).is_file()
+    manager.create_backup(label="two")
+    manager.create_backup(label="three")
+    backups = manager.list_backups()
+    assert len(backups) == 2
+
+    restore_dir = tmp_path / "restore"
+    restore_settings = Settings(
+        config_dir=restore_dir,
+        download_dir=tmp_path / "downloads",
+        media_dir=media,
+        backup_dir=tmp_path / "backups",
+        install_dir=tmp_path / "apps",
+    )
+    restored = BackupManager(restore_settings).restore_backup(backups[0]["name"])
+    assert restored["status"] == "restored"
+    assert (restore_dir / "amm_config.json").is_file()
+    assert not (restore_dir / "cache" / "big.bin").exists()
+
+
+@pytest.mark.asyncio
+async def test_uninstall_refuses_media_paths(tmp_path: Path, catalog: ApplicationCatalog):
+    plugin = catalog.get("sonarr")
+    plugin.config_dir = tmp_path / "media" / "sonarr"
+    plugin.config_dir.mkdir(parents=True)
+    with pytest.raises(UninstallError):
+        await uninstall_application(plugin, app_settings=catalog._settings)
+
+
+def test_version_compare():
+    assert _is_newer("1.2.0", "1.1.0")
+    assert not _is_newer("1.1.0", "1.2.0")
+    assert _is_newer("v2.0.0", "1.9.9")
