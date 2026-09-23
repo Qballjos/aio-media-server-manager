@@ -14,6 +14,21 @@ Published image: `ghcr.io/qballjos/aio-media-server-manager:latest` (`linux/amd6
 
 After the process is running, open `http://<host>:8080` and complete the first-run wizard.
 
+## Create folders over SSH
+
+SSH into the host first, then create the three bind-mount directories (adjust the paths for your NAS). Same filesystem for downloads and media is recommended so hardlinks work.
+
+```bash
+ssh user@host
+
+sudo mkdir -p /path/to/config /path/to/downloads /path/to/media /path/to/config/vpn
+sudo chown -R "$PUID:$PGID" /path/to/config /path/to/downloads /path/to/media
+# If you do not know PUID/PGID yet:
+id
+```
+
+Platform path examples and full commands: [Docker](../deploy/DOCKER.md), [Linux](../deploy/LINUX.md), [Unraid](../deploy/UNRAID.md), [Synology](../deploy/SYNOLOGY.md), [TrueNAS](../deploy/TRUENAS.md).
+
 ## What you need
 
 - Storage for **config**, **downloads**, and **media** (same filesystem recommended so hardlinks work).

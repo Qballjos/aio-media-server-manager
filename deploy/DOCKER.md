@@ -5,15 +5,35 @@ Primary deployment. One container runs the manager and every supervised applicat
 Image: `ghcr.io/qballjos/aio-media-server-manager:latest`  
 Architectures: `linux/amd64`, `linux/arm64`
 
+## Create folders over SSH
+
+SSH into the machine that will run Docker:
+
+```bash
+ssh user@host
+```
+
+Create the bind-mount directories, then set ownership to the media user (`id` prints `PUID`/`PGID`):
+
+```bash
+id
+export PUID="$(id -u)"
+export PGID="$(id -g)"
+
+sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,downloads,media}
+sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager
+```
+
+Use other paths if you already have libraries (for example `/srv/media` and `/srv/downloads`). Keep downloads and media on the same filesystem for hardlinks.
+
 ## Compose (recommended)
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
-mkdir -p config downloads media
 ```
 
-Edit `docker-compose.yml` so `PUID`/`PGID` match `id` on the host, and so the volume paths point at your libraries.
+Point the volume paths in `docker-compose.yml` at the folders you created, and set `PUID`/`PGID` to the values from `id`.
 
 ```bash
 docker compose pull
@@ -38,10 +58,10 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   --cap-add NET_ADMIN --cap-add SYS_MODULE \
   --device /dev/dri:/dev/dri \
   -p 8080:8080 \
-  -e PUID=1000 -e PGID=1000 \
-  -v /path/to/config:/config \
-  -v /path/to/downloads:/downloads \
-  -v /path/to/media:/media \
+  -e PUID="${PUID}" -e PGID="${PGID}" \
+  -v /opt/aio-media-manager/config:/config \
+  -v /opt/aio-media-manager/downloads:/downloads \
+  -v /opt/aio-media-manager/media:/media \
   ghcr.io/qballjos/aio-media-server-manager:latest
 ```
 
@@ -60,9 +80,14 @@ On GitHub: **Packages → aio-media-server-manager → Package settings → Chan
 
 ## VPN (qBittorrent only)
 
-1. Place a WireGuard (`wg0.conf`) or OpenVPN profile in `/config/vpn/` on the host volume.
-2. Set `AMM_VPN_ENABLED=true` (and `AMM_VPN_ENFORCE=true` if torrents must not run without a tunnel).
-3. Keep Usenet clients off the VPN; they stay on the container's normal network.
+```bash
+sudo mkdir -p /opt/aio-media-manager/config/vpn
+sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager/config/vpn
+# copy wg0.conf or an OpenVPN profile into that directory over SSH/SCP
+```
+
+1. Set `AMM_VPN_ENABLED=true` (and `AMM_VPN_ENFORCE=true` if torrents must not run without a tunnel).
+2. Keep Usenet clients off the VPN; they stay on the container's normal network.
 
 Privileged mode is required for network namespaces and `/dev/net/tun`.
 

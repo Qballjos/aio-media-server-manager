@@ -10,19 +10,38 @@ Use this when you want the appliance on Debian, Ubuntu, or a Proxmox LXC **witho
 - `ffmpeg` (transcoding / some media apps)
 - Optional VPN: `wireguard` or `openvpn`, plus `iproute2`; LXC needs `nesting=1` and `/dev/net/tun`
 
+## Create folders over SSH
+
+```bash
+ssh user@host
+
+sudo useradd --system --create-home --home-dir /opt/aio-media-manager --shell /usr/sbin/nologin amm || true
+sudo mkdir -p \
+  /opt/aio-media-manager \
+  /var/lib/aio-media-manager/config \
+  /var/lib/aio-media-manager/config/vpn \
+  /var/lib/aio-media-manager/downloads \
+  /var/lib/aio-media-manager/media
+sudo chown -R amm:amm /opt/aio-media-manager /var/lib/aio-media-manager
+id amm
+```
+
+To use existing library paths instead of `/var/lib/aio-media-manager/{downloads,media}`:
+
+```bash
+sudo mkdir -p /srv/downloads /srv/media
+sudo chown -R amm:amm /srv/downloads /srv/media
+```
+
 ## Install
 
 ```bash
-sudo useradd --system --create-home --home-dir /opt/aio-media-manager --shell /usr/sbin/nologin amm
-sudo mkdir -p /var/lib/aio-media-manager/{config,downloads,media}
-sudo chown -R amm:amm /opt/aio-media-manager /var/lib/aio-media-manager
-
 sudo -u amm git clone https://github.com/Qballjos/aio-media-server-manager.git /opt/aio-media-manager
 cd /opt/aio-media-manager
 sudo -u amm cp .env.example .env
 ```
 
-Point `AMM_CONFIG_DIR`, `AMM_DOWNLOAD_DIR`, and `AMM_MEDIA_DIR` in `.env` at `/var/lib/aio-media-manager/...` (or your real library paths). Set `PUID`/`PGID` to the media user that owns those directories.
+Point `AMM_CONFIG_DIR`, `AMM_DOWNLOAD_DIR`, and `AMM_MEDIA_DIR` in `.env` at the directories you created. Set `PUID`/`PGID` to `id amm` (or your media user).
 
 ```bash
 sudo -u amm poetry install --only main --no-interaction

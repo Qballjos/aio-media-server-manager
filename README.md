@@ -45,7 +45,10 @@ Inspired by the process supervision and declarative concepts of DUMB, with **zer
 
 ## Install (Docker)
 
+Over SSH, create the bind-mount folders first (see [docs/INSTALL.md](docs/INSTALL.md)), then:
+
 ```bash
+sudo mkdir -p /opt/aio-media-manager/{config,downloads,media}
 docker pull ghcr.io/qballjos/aio-media-server-manager:latest
 docker compose up -d
 ```

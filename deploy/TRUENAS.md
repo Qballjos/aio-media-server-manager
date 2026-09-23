@@ -4,26 +4,49 @@ Use a **single** custom app / Docker deployment. Do not deploy the *Arr stack as
 
 Image: `ghcr.io/qballjos/aio-media-server-manager:latest`
 
-## Datasets
+## Create datasets and folders over SSH
 
-Create datasets (examples):
+Enable SSH (System → Services → SSH), then:
 
-- `tank/apps/aio-media-manager` (config)
-- `tank/downloads`
-- `tank/media`
+```bash
+ssh admin@<truenas-ip>
+```
 
-Keep downloads and media on the same pool/dataset layout so hardlinks work. Set the dataset owner to your media user (for example UID 568 `apps`, or a dedicated user).
+Replace `tank` with your pool name. Create datasets, then the directories the container will mount:
+
+```bash
+sudo zfs create -p tank/apps/aio-media-manager
+sudo zfs create -p tank/downloads
+sudo zfs create -p tank/media
+
+sudo mkdir -p \
+  /mnt/tank/apps/aio-media-manager/vpn \
+  /mnt/tank/downloads \
+  /mnt/tank/media/{movies,tv}
+```
+
+Set the owner to your media user (TrueNAS `apps` is often UID/GID `568`; confirm with `id apps` or `id`):
+
+```bash
+id apps
+sudo chown -R 568:568 \
+  /mnt/tank/apps/aio-media-manager \
+  /mnt/tank/downloads \
+  /mnt/tank/media
+```
+
+Keep downloads and media on the same pool so hardlinks work.
 
 ## Custom App
 
 1. **Apps → Discover → Custom App** (or Launch Docker Image).
 2. Image: `ghcr.io/qballjos/aio-media-server-manager:latest`
 3. Port forwarding: `8080` → `8080` (and child WebUI ports, or host network).
-4. Storage:
-   - config dataset → `/config`
-   - downloads dataset → `/downloads`
-   - media dataset → `/media`
-5. Environment: `PUID` / `PGID` = dataset owner.
+4. Storage (paths from the SSH commands above):
+   - `/mnt/tank/apps/aio-media-manager` → `/config`
+   - `/mnt/tank/downloads` → `/downloads`
+   - `/mnt/tank/media` → `/media`
+5. Environment: `PUID` / `PGID` = the UID/GID you used with `chown`.
 6. Privileged / `NET_ADMIN` if you enable qBittorrent VPN.
 7. GPU: pass `/dev/dri` (Intel/AMD) or NVIDIA runtime when transcoding.
 
