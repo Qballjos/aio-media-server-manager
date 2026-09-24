@@ -155,19 +155,65 @@ def test_homepage_search_uses_seerr_when_running(tmp_path):
         patch("core.homepage._running_names", return_value={"seerr"}),
         patch("core.homepage.get_application_api_key", return_value="k"),
         patch(
+            "core.homepage._fetch_json",
+            return_value=(
+                {
+                    "results": [
+                        {"id": 42, "mediaType": "movie", "title": "Dune", "releaseDate": "2021-01-01", "posterPath": "/x.jpg"},
+                        {"id": 7, "mediaType": "tv", "name": "Dune: Prophecy", "mediaInfo": {"status": 5}},
+                        {"id": 9, "mediaType": "person", "name": "Denis Villeneuve"},
+                    ]
+                },
+                None,
+            ),
+        ) as fetch,
+    ):
+        data = homepage_search("host", "dune part two")
+    assert "query=dune%20part%20two" in fetch.call_args.args[0]
+    assert data["seerr"] is True
+    assert data["error"] is None
+    assert len(data["results"]) == 2
+    assert data["results"][0]["can_request"] is True
+    assert data["results"][0]["status"] == "missing"
+    assert data["results"][0]["mediaId"] == 42
+    assert "image.tmdb.org" in data["results"][0]["poster"]
+    assert data["results"][1]["status"] == "available"
+    assert data["results"][1]["can_request"] is False
+
+
+def test_homepage_search_falls_back_when_seerr_rejects_key(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path), _plugin("radarr", 7878, tmp_path)])
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr", "radarr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", return_value=(None, "HTTP 401")),
+        patch(
             "core.homepage._get_json",
-            return_value={
-                "results": [
-                    {"id": 42, "mediaType": "movie", "title": "Dune", "releaseDate": "2021-01-01", "posterPath": "/x.jpg"}
-                ]
-            },
+            return_value=[{"tmdbId": 1, "id": 3, "hasFile": True, "title": "Dune", "year": 2021}],
         ),
     ):
         data = homepage_search("host", "dune")
-    assert data["seerr"] is True
-    assert data["results"][0]["can_request"] is True
-    assert data["results"][0]["mediaId"] == 42
-    assert "image.tmdb.org" in data["results"][0]["poster"]
+    assert data["seerr"] is False
+    assert "401" in data["error"]
+    assert data["results"][0]["status"] == "available"
+
+
+def test_seerr_media_status_mapping():
+    from core.homepage import seerr_media_status
+
+    assert seerr_media_status({}) == "missing"
+    assert seerr_media_status({"mediaInfo": {"status": 2}}) == "requested"
+    assert seerr_media_status({"mediaInfo": {"status": 4}}) == "partial"
+    assert seerr_media_status({"mediaInfo": {"status": 5}}) == "available"
+
+
+def test_jellyfin_auth_header_carries_token():
+    from core.integrations.jellyfin import jellyfin_auth_headers
+
+    headers = jellyfin_auth_headers("abc123")
+    assert 'Token="abc123"' in headers["Authorization"]
+    assert headers["X-Emby-Token"] == "abc123"
 
 
 def test_homepage_request_without_seerr(tmp_path):

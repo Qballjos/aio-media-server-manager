@@ -28,6 +28,7 @@ const authLoading = ref(false)
 // Dashboard data
 const catalogApps = ref([])
 const updateStatus = ref({ available: [], last_check_at: null, last_apply_at: null, paused: false })
+const backupStatus = ref({})
 const catalogCategoriesSelected = ref([])
 const catalogStatusFilters = ref([])
 const catalogSort = ref('popularity')
@@ -62,7 +63,7 @@ const settingsForm = ref({
   port: 0,
   autostart: true,
   vuetorrent: false,
-  jellyfinApiKey: '',
+  apiKey: '',
   recyclarrYaml: '',
   recyclarrOriginalYaml: '',
   recyclarrNaming: 'plex',
@@ -365,8 +366,9 @@ function onSettingsSession(data) {
 
 async function fetchUpdateStatus() {
   try {
-    const res = await apiRequest('/api/updates/status')
+    const [res, bak] = await Promise.all([apiRequest('/api/updates/status'), apiRequest('/api/backups')])
     if (res.ok) updateStatus.value = await res.json()
+    if (bak.ok) backupStatus.value = (await bak.json()).schedule || {}
   } catch (err) {
     console.error('Update status error:', err)
   }
@@ -940,7 +942,7 @@ async function openAppSettings(service) {
       port: data.port,
       autostart: data.autostart,
       vuetorrent: !!data.vuetorrent,
-      jellyfinApiKey: '',
+      apiKey: '',
       recyclarrYaml: '',
       recyclarrOriginalYaml: '',
       recyclarrNaming: 'plex',
@@ -1023,8 +1025,8 @@ async function saveAppSettings() {
     if (settingsApp.value.name === 'qbittorrent') {
       payload.vuetorrent = !!settingsForm.value.vuetorrent
     }
-    if (settingsApp.value.name === 'jellyfin' && String(settingsForm.value.jellyfinApiKey || '').trim()) {
-      payload.api_key = String(settingsForm.value.jellyfinApiKey).trim()
+    if (['jellyfin', 'seerr'].includes(settingsApp.value.name) && String(settingsForm.value.apiKey || '').trim()) {
+      payload.api_key = String(settingsForm.value.apiKey).trim()
     }
     const res = await apiRequest(`/api/applications/${settingsApp.value.name}/settings`, {
       method: 'PATCH',
@@ -1520,6 +1522,10 @@ onUnmounted(() => {
                 Last update check {{ formatUpdateWhen(updateStatus.last_check_at) }}
                 · last apply {{ formatUpdateWhen(updateStatus.last_apply_at) }}
                 · {{ (updateStatus.available || []).length }} waiting
+              </span>
+              <span v-if="backupStatus.schedule">
+                · last backup {{ formatUpdateWhen(backupStatus.last_backup_at) }}
+                <span v-if="backupStatus.last_error" style="color: #fbbf24;">(last attempt failed)</span>
               </span>
             </p>
           </div>
@@ -2067,19 +2073,23 @@ onUnmounted(() => {
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
-          <div v-if="settingsApp.name === 'jellyfin'" class="ui-field-block">
+          <div v-if="settingsApp.name === 'jellyfin' || settingsApp.name === 'seerr'" class="ui-field-block">
             <label class="ui-field">
-              Jellyfin API key
+              {{ settingsApp.name === 'seerr' ? 'Seerr' : 'Jellyfin' }} API key
               <input
-                v-model="settingsForm.jellyfinApiKey"
+                v-model="settingsForm.apiKey"
                 class="ui-input font-mono"
                 type="password"
                 autocomplete="off"
-                :placeholder="settingsMeta.api_key_configured ? 'Saved — paste a new key to replace' : 'Dashboard → API Keys'"
+                :placeholder="settingsMeta.api_key_configured
+                  ? 'Saved — paste a new key to replace'
+                  : (settingsApp.name === 'seerr' ? 'Settings → General → API Key' : 'Dashboard → API Keys')"
               />
             </label>
             <p class="settings-hint">
-              Optional. Saved keys are used for Recently added. Leave empty to keep the current key.
+              Optional. Saved keys are used for
+              {{ settingsApp.name === 'seerr' ? 'homepage search and requests' : 'Recently added' }}.
+              Leave empty to keep the current key.
             </p>
           </div>
           <div v-if="settingsApp.name === 'qbittorrent'" class="ui-switch-row">

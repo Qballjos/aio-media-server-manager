@@ -16,6 +16,21 @@ _AUTH_HEADER = (
 )
 
 
+def jellyfin_auth_headers(api_key: Optional[str]) -> dict[str, str]:
+    """Token in the Authorization header; Jellyfin 10.11 rejects legacy X-Emby-Token by default."""
+    token = (api_key or "").strip().replace('"', "")
+    auth = _AUTH_HEADER.replace('Token=""', f'Token="{token}"')
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": auth,
+        "X-Emby-Authorization": auth,
+    }
+    if token:
+        headers["X-Emby-Token"] = token
+        headers["X-MediaBrowser-Token"] = token
+    return headers
+
+
 def _jellyfin_listen_port(config_dir: Path | None, fallback: int = 8096) -> int:
     try:
         from core.app_prefs import load_app_ports
@@ -73,13 +88,7 @@ class JellyfinClient:
         self.api_key = api_key
 
     def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["X-Emby-Token"] = self.api_key
-            headers["X-MediaBrowser-Token"] = self.api_key
-        headers.setdefault("Authorization", _AUTH_HEADER)
-        headers.setdefault("X-Emby-Authorization", _AUTH_HEADER)
-        return headers
+        return jellyfin_auth_headers(self.api_key)
 
     def authenticate(self, username: str, password: str) -> str:
         """Return a session AccessToken for the local Jellyfin user."""

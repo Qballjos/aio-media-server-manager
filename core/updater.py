@@ -4,6 +4,7 @@ core/updater.py — Safe application updates with snapshot + rollback.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 import time
@@ -57,18 +58,15 @@ class ApplicationUpdater:
 
         supervisor = ProcessSupervisor.get()
         was_running = supervisor.status(plugin.name).value == "running"
-        snapshot = self.backups.snapshot_application(
-            plugin.name,
-            [plugin.config_dir, plugin.data_dir, plugin.install_dir / ".amm_installed.json"],
-        )
+        if was_running:
+            await supervisor.stop(plugin.name)
+
+        snapshot = await asyncio.to_thread(self.backups.snapshot_application, plugin.name)
         previous_install = plugin.install_dir.with_name(f".{plugin.name}.pre-update")
         if previous_install.exists():
             shutil.rmtree(previous_install, ignore_errors=True)
         if plugin.install_dir.exists():
             shutil.copytree(plugin.install_dir, previous_install, dirs_exist_ok=True)
-
-        if was_running:
-            await supervisor.stop(plugin.name)
 
         try:
             result = plugin.install()
@@ -99,7 +97,7 @@ class ApplicationUpdater:
                     shutil.rmtree(plugin.install_dir, ignore_errors=True)
                 shutil.move(str(previous_install), str(plugin.install_dir))
             try:
-                self.backups.restore_application_snapshot(snapshot, plugin.config_dir.parent)
+                self.backups.restore_application_snapshot(snapshot)
             except Exception as restore_exc:
                 logger.error("Snapshot restore also failed for %s: %s", plugin.name, restore_exc)
             if was_running and plugin.manifest.daemon:

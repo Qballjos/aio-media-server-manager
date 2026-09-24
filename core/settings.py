@@ -43,6 +43,10 @@ _PERSISTED_KEYS = (
     "update_time",
     "update_weekday",
     "update_day_of_month",
+    "backup_schedule",
+    "backup_time",
+    "backup_weekday",
+    "backup_day_of_month",
 )
 _PERSISTED_ENV = {
     "timezone": ("AMM_TIMEZONE",),
@@ -62,6 +66,10 @@ _PERSISTED_ENV = {
     "update_time": ("AMM_UPDATE_TIME",),
     "update_weekday": ("AMM_UPDATE_WEEKDAY",),
     "update_day_of_month": ("AMM_UPDATE_DAY",),
+    "backup_schedule": ("AMM_BACKUP_SCHEDULE",),
+    "backup_time": ("AMM_BACKUP_TIME",),
+    "backup_weekday": ("AMM_BACKUP_WEEKDAY",),
+    "backup_day_of_month": ("AMM_BACKUP_DAY",),
 }
 
 
@@ -156,7 +164,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     backup_dir: Path | None = Field(
         default=None,
-        description="Local backup destination. Defaults to {config_dir}/backups.",
+        description="Backup destination. Defaults to /backups when that is a mounted volume, else {config_dir}/backups.",
         validation_alias="AMM_BACKUP_DIR",
     )
     backup_retention: int = Field(
@@ -164,6 +172,14 @@ class Settings(BaseSettings):
         description="Number of full configuration backups to retain.",
         validation_alias="AMM_BACKUP_RETENTION",
     )
+    backup_schedule: str = Field(default="daily", validation_alias="AMM_BACKUP_SCHEDULE")
+    backup_time: str = Field(default="03:30", validation_alias="AMM_BACKUP_TIME")
+    backup_weekday: int = Field(
+        default=0,
+        description="ISO weekday for weekly backups (0=Monday … 6=Sunday).",
+        validation_alias="AMM_BACKUP_WEEKDAY",
+    )
+    backup_day_of_month: int = Field(default=1, ge=1, le=28, validation_alias="AMM_BACKUP_DAY")
 
     # ------------------------------------------------------------------
     # Reverse proxy (optional)
@@ -250,6 +266,12 @@ class Settings(BaseSettings):
             raise ValueError(f"log_level must be one of {valid}, got {v!r}.")
         return level
 
+    @field_validator("backup_schedule", mode="before")
+    @classmethod
+    def _backup_sched(cls, v: Any) -> str:
+        item = str(v or "off").strip().lower()
+        return item if item in {"off", "daily", "weekly", "monthly"} else "off"
+
     @field_validator("update_check_schedule", mode="before")
     @classmethod
     def _check_sched(cls, v: Any) -> str:
@@ -262,13 +284,14 @@ class Settings(BaseSettings):
         item = str(v or "off").strip().lower()
         return item if item in {"off", "same", "daily", "weekly", "monthly"} else "off"
 
-    @field_validator("update_time", mode="before")
+    @field_validator("update_time", "backup_time", mode="before")
     @classmethod
-    def _update_hhmm(cls, v: Any) -> str:
-        text = str(v or "04:00").strip()
+    def _update_hhmm(cls, v: Any, info: Any) -> str:
+        fallback = "03:30" if info.field_name == "backup_time" else "04:00"
+        text = str(v or fallback).strip()
         match = re.match(r"^(\d{1,2}):(\d{2})$", text)
         if not match:
-            return "04:00"
+            return fallback
         hour = min(23, max(0, int(match.group(1))))
         minute = min(59, max(0, int(match.group(2))))
         return f"{hour:02d}:{minute:02d}"
@@ -288,7 +311,8 @@ class Settings(BaseSettings):
         else:
             self.install_dir = self.install_dir.expanduser().resolve()
         if self.backup_dir is None:
-            self.backup_dir = self.config_dir / "backups"
+            mounted = Path("/backups")
+            self.backup_dir = mounted if os.path.ismount(mounted) else self.config_dir / "backups"
         else:
             self.backup_dir = self.backup_dir.expanduser().resolve()
         if self.backup_retention < 1:
@@ -310,6 +334,7 @@ class Settings(BaseSettings):
         if self.vpn_protocol not in {"wireguard", "openvpn"}:
             raise ValueError("vpn_protocol must be 'wireguard' or 'openvpn'.")
         self.update_weekday = int(self.update_weekday) % 7
+        self.backup_weekday = int(self.backup_weekday) % 7
         return self
 
     # ------------------------------------------------------------------
@@ -350,6 +375,10 @@ class Settings(BaseSettings):
             "update_time": self.update_time,
             "update_weekday": self.update_weekday,
             "update_day_of_month": self.update_day_of_month,
+            "backup_schedule": self.backup_schedule,
+            "backup_time": self.backup_time,
+            "backup_weekday": self.backup_weekday,
+            "backup_day_of_month": self.backup_day_of_month,
         }
 
     def save(self) -> None:

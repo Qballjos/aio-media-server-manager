@@ -31,6 +31,12 @@ def _public_updates() -> dict[str, Any]:
     return status
 
 
+def _public_backups() -> dict[str, Any]:
+    from core.backup_jobs import backup_jobs
+
+    return backup_jobs.public_status()
+
+
 def _ensure_authenticated(request: Request) -> str:
     if auth_manager.setup_required():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Setup required.")
@@ -54,12 +60,17 @@ class SettingsPatch(BaseModel):
     trusted_proxies: Optional[str] = None
     github_token: Optional[str] = None
     jellyfin_api_key: Optional[str] = None
+    seerr_api_key: Optional[str] = None
     restart_children: bool = False
     update_check_schedule: Optional[str] = None
     update_apply_schedule: Optional[str] = None
     update_time: Optional[str] = None
     update_weekday: Optional[int] = Field(default=None, ge=0, le=6)
     update_day_of_month: Optional[int] = Field(default=None, ge=1, le=28)
+    backup_schedule: Optional[str] = None
+    backup_time: Optional[str] = None
+    backup_weekday: Optional[int] = Field(default=None, ge=0, le=6)
+    backup_day_of_month: Optional[int] = Field(default=None, ge=1, le=28)
 
 
 def _apply_timezone(value: str) -> None:
@@ -112,11 +123,13 @@ def public_settings() -> dict[str, Any]:
         "root_path": settings.root_path,
         "github_token_configured": bool(token),
         "jellyfin_api_key_configured": bool(secret_store.get_secret("jellyfin_api_key")),
+        "seerr_api_key_configured": bool(secret_store.get_secret("seerr_api_key")),
         "vpn": vpn_manager.status(),
         "cloudflare_tunnel": cloudflare_tunnel.status(),
         "storage": storage,
         "bind_mounts_editable": False,
         "updates": _public_updates(),
+        "backups": _public_backups(),
     }
 
 
@@ -191,14 +204,19 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         else:
             secret_store.delete_secret(GITHUB_TOKEN_SECRET)
             settings.github_token = None
-    if body.jellyfin_api_key is not None:
-        key = body.jellyfin_api_key.strip()
+    for app_name, label, value in (
+        ("jellyfin", "Jellyfin", body.jellyfin_api_key),
+        ("seerr", "Seerr", body.seerr_api_key),
+    ):
+        if value is None:
+            continue
+        key = value.strip()
         if key:
-            set_application_api_key("jellyfin", key)
-            notes.append("Saved Jellyfin API key.")
+            set_application_api_key(app_name, key)
+            notes.append(f"Saved {label} API key.")
         else:
-            secret_store.delete_secret("jellyfin_api_key")
-            notes.append("Cleared Jellyfin API key.")
+            secret_store.delete_secret(f"{app_name}_api_key")
+            notes.append(f"Cleared {label} API key.")
     if body.update_check_schedule is not None or body.update_apply_schedule is not None or body.update_time is not None:
         from core.update_schedule import normalize_apply_schedule, normalize_check_schedule, parse_hhmm
 
@@ -213,6 +231,19 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         settings.update_weekday = int(body.update_weekday) % 7
     if body.update_day_of_month is not None:
         settings.update_day_of_month = body.update_day_of_month
+    if body.backup_schedule is not None:
+        from core.update_schedule import normalize_check_schedule
+
+        settings.backup_schedule = normalize_check_schedule(body.backup_schedule)
+    if body.backup_time is not None:
+        from core.update_schedule import parse_hhmm
+
+        hour, minute = parse_hhmm(body.backup_time)
+        settings.backup_time = f"{hour:02d}:{minute:02d}"
+    if body.backup_weekday is not None:
+        settings.backup_weekday = int(body.backup_weekday) % 7
+    if body.backup_day_of_month is not None:
+        settings.backup_day_of_month = body.backup_day_of_month
 
     try:
         settings.save()

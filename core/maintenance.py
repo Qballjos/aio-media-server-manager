@@ -1,4 +1,4 @@
-"""Flags that pause scheduled catalog updates."""
+"""Flags that pause scheduled catalog updates and backups."""
 
 from __future__ import annotations
 
@@ -26,6 +26,19 @@ def begin_update() -> None:
 def end_update() -> None:
     global _update_depth
     _update_depth = max(0, _update_depth - 1)
+
+
+_backup_depth = 0
+
+
+@contextmanager
+def backup_in_progress():
+    global _backup_depth
+    _backup_depth += 1
+    try:
+        yield
+    finally:
+        _backup_depth = max(0, _backup_depth - 1)
 
 
 @contextmanager
@@ -58,4 +71,6 @@ def pause_reason() -> str | None:
         return "install"
     if _update_depth > 0:
         return "update"
+    if _backup_depth > 0:
+        return "backup"
     return None

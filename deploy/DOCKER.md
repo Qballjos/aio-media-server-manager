@@ -20,11 +20,13 @@ id
 export PUID="$(id -u)"
 export PGID="$(id -g)"
 
-sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,data/downloads,data/media}
+sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,data/downloads,data/media,backups}
 sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager
 ```
 
 Use other paths if you already have libraries (for example `/srv/data/media` and `/srv/data/downloads`). Keep downloads and media as subfolders of **one** host directory so hardlinks work. Two separate bind mounts, even on btrfs, often fail if they are different subvolumes.
+
+`backups` holds the configuration backups (mounted at `/backups`). Put it on a different disk or NAS share than `config` if you can, so a failed disk does not take both. Without a `/backups` mount the manager falls back to `/config/backups` and warns about it in Settings → Backups.
 
 ## Compose (recommended)
 
@@ -41,6 +43,8 @@ docker compose up -d
 ```
 
 Open `http://<host>:8080`. Create the administrator (username, **email**, password), then complete or skip the stack wizard ([Usage](../docs/USAGE.md)). If you already ran an older compose that only published `8080`, merge the current `ports:` list and `docker compose up -d --force-recreate`.
+
+Upgrading from a compose file without `/backups`: create the host folder, add `- /path/to/backups:/backups` under `volumes:`, and recreate the container. New backups go to `/backups`. Older ones in `/config/backups` stay listed and restorable, and you can delete them once you have fresh backups.
 
 Optional `GITHUB_TOKEN` (or Settings → GitHub) raises GitHub API limits for catalog installs and scheduled update checks. Do not commit the token; the example compose leaves it commented.
 
@@ -69,6 +73,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   -e TZ=UTC \
   -v /opt/aio-media-manager/config:/config \
   -v /opt/aio-media-manager/data:/data \
+  -v /opt/aio-media-manager/backups:/backups \
   -e AMM_DOWNLOAD_DIR=/data/downloads \
   -e AMM_MEDIA_DIR=/data/media \
   ghcr.io/qballjos/aio-media-server-manager:latest

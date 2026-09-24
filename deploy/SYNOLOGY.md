@@ -13,7 +13,7 @@ Enable SSH (Control Panel → Terminal & SNMP → Enable SSH service), then:
 ssh admin@<nas-ip>
 ```
 
-The install script creates `/volume1/docker/aio-media-manager`, a shared `/volume1/data` tree (`downloads` + `media`), and writes `docker-compose.yml` with your `PUID`/`PGID`. Downloads and media stay one bind (`/data`) so *Arr can hardlink.
+The install script creates `/volume1/docker/aio-media-manager` (with `config/` and `backups/`), a shared `/volume1/data` tree (`downloads` + `media`), and writes `docker-compose.yml` with your `PUID`/`PGID`. Downloads and media stay one bind (`/data`) so *Arr can hardlink. Config backups go to the `/backups` mount; include that folder in a Hyper Backup task, or point `BACKUPS=` at another volume.
 
 ```bash
 id
@@ -32,6 +32,7 @@ Other volume or paths:
 ```bash
 sudo VOLUME=/volume2 \
      DATA=/volume2/data \
+     BACKUPS=/volume1/backups/aio-media-manager \
      PUID=1026 PGID=100 \
      sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
 ```

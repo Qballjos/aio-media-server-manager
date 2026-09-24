@@ -28,6 +28,8 @@ services:
       # One host tree for downloads + media so *Arr can hardlink (same FS / btrfs subvolume).
       - ./config:/config
       - ./data:/data
+      # Config backups. Point this at another disk or NAS share so a failed /config disk keeps them.
+      - ./backups:/backups
     environment:
       PUID: "1000"
       PGID: "1000"

@@ -25,10 +25,12 @@ SSH into the host and create the bind mounts. Keep **downloads and media in one 
 ```bash
 ssh user@host
 
-sudo mkdir -p /path/to/config /path/to/data/downloads /path/to/data/media /path/to/config/vpn
-sudo chown -R "$PUID:$PGID" /path/to/config /path/to/data
+sudo mkdir -p /path/to/config /path/to/data/downloads /path/to/data/media /path/to/config/vpn /path/to/backups
+sudo chown -R "$PUID:$PGID" /path/to/config /path/to/data /path/to/backups
 id   # use this if you do not yet know PUID/PGID
 ```
+
+Mount `/path/to/backups` at `/backups` for configuration backups. Ideally it sits on a different disk or share than `config`. Without that mount, backups fall back to `/config/backups`.
 
 The appliance then creates library layout inside those mounts, for example:
 
@@ -40,7 +42,7 @@ Those paths are wired into Sonarr, Radarr, Lidarr, download clients, Jellyfin, a
 
 ## Requirements
 
-- Disk for **config**, **downloads**, and **media**
+- Disk for **config**, **downloads**, **media**, and **backups** (small; config only)
 - Media-user UID/GID (`id`) mapped as `PUID` / `PGID`
 - Optional: `/dev/dri` or NVIDIA devices for hardware transcoding
 - Optional: `NET_ADMIN` (or a privileged container) plus a WireGuard or OpenVPN profile if torrent traffic should use a VPN

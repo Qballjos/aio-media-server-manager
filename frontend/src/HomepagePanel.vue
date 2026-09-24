@@ -25,6 +25,8 @@ const query = ref('')
 const results = ref([])
 const searching = ref(false)
 const searchSeerr = ref(false)
+const searchError = ref('')
+const searchedFor = ref('')
 const notice = ref('')
 const requestBusy = ref('')
 let poll = null
@@ -82,6 +84,8 @@ async function runSearch() {
   if (q.length < 2) {
     results.value = []
     searchSeerr.value = false
+    searchError.value = ''
+    searchedFor.value = ''
     return
   }
   searching.value = true
@@ -91,12 +95,30 @@ async function runSearch() {
       const data = await res.json()
       results.value = data.results || []
       searchSeerr.value = !!data.seerr
+      searchError.value = data.error || ''
+    } else {
+      results.value = []
+      searchError.value = `Search failed (HTTP ${res.status})`
     }
-  } catch (_) {
+  } catch (err) {
     results.value = []
+    searchError.value = err?.message || 'Search failed'
   } finally {
+    searchedFor.value = q
     searching.value = false
   }
+}
+
+const STATUS_LABELS = {
+  available: 'Available',
+  partial: 'Partly available',
+  requested: 'Requested',
+  monitored: 'In library, not downloaded yet',
+  missing: 'Not in library',
+}
+
+function statusLabel(item) {
+  return STATUS_LABELS[item?.status] || ''
 }
 
 function onQueryInput() {
@@ -120,8 +142,10 @@ async function requestTitle(item) {
       }),
     })
     const data = await res.json().catch(() => ({}))
-    if (res.ok) {
+    if (res.ok && data.ok !== false) {
       notice.value = data.detail || 'Request submitted.'
+      item.status = 'requested'
+      item.can_request = false
     } else {
       notice.value = data.detail || 'Request failed.'
     }
@@ -293,15 +317,21 @@ onUnmounted(() => {
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="searching">Search</button>
         </div>
         <p v-if="notice" class="home-notice">{{ notice }}</p>
-        <p v-else-if="!snapshot.seerr.available" class="home-muted">
+        <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
+        <p v-else-if="!snapshot.seerr.available && !notice" class="home-muted">
           Install and start Seerr to request titles from this page.
+        </p>
+        <p v-if="searching" class="home-muted">Searching…</p>
+        <p v-else-if="searchedFor && !results.length && !searchError" class="home-muted">
+          No results for “{{ searchedFor }}”.
         </p>
         <ul v-if="results.length" class="home-results">
           <li v-for="item in results" :key="`${item.source}-${item.mediaType}-${item.mediaId}`" class="home-result">
             <img v-if="item.poster" :src="item.poster" alt="" class="home-poster" />
             <div class="home-result-body">
               <strong>{{ item.title }}</strong>
-              <span>{{ item.mediaType }} {{ String(item.year || '').slice(0, 4) }}</span>
+              <span>{{ item.mediaType === 'tv' ? 'TV' : 'Movie' }} {{ String(item.year || '').slice(0, 4) }}</span>
+              <span v-if="statusLabel(item)" class="home-status" :class="`is-${item.status}`">{{ statusLabel(item) }}</span>
             </div>
             <button
               v-if="item.can_request && searchSeerr"
@@ -310,7 +340,7 @@ onUnmounted(() => {
               :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
               @click="requestTitle(item)"
             >
-              Request
+              {{ requestBusy === `${item.mediaType}-${item.mediaId}` ? 'Requesting…' : 'Get it now' }}
             </button>
           </li>
         </ul>
@@ -533,6 +563,9 @@ onUnmounted(() => {
   color: var(--color-info);
   font-size: 0.9rem;
 }
+.home-notice-error {
+  color: var(--color-danger, #f87171);
+}
 .home-results {
   list-style: none;
   display: grid;
@@ -559,6 +592,26 @@ onUnmounted(() => {
 .home-result-body span {
   color: var(--text-muted);
   font-size: 0.82rem;
+}
+.home-result-body .home-status {
+  justify-self: start;
+  margin-top: 0.2rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid currentColor;
+}
+.home-status.is-available {
+  color: #34d399;
+}
+.home-status.is-partial,
+.home-status.is-requested,
+.home-status.is-monitored {
+  color: #fbbf24;
+}
+.home-status.is-missing {
+  color: var(--text-muted);
 }
 .home-widgets {
   display: grid;

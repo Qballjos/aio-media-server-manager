@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import VpnConfigFields from './VpnConfigFields.vue'
 
 const props = defineProps({
@@ -18,6 +18,11 @@ const share = ref({ active: false, url: '', expires_at: null, ttl_hours: 24 })
 const errors = ref([])
 const copied = ref(false)
 const backups = ref([])
+const backupInfo = ref({ backup_dir: '', legacy_dir: '', schedule: {} })
+const backupJob = ref(null)
+const restoreTarget = ref(null)
+const uploading = ref(false)
+let jobTimer = null
 const form = ref({
   username: '',
   email: '',
@@ -28,6 +33,10 @@ const form = ref({
   puid: 1000,
   pgid: 1000,
   backup_retention: 7,
+  backup_schedule: 'daily',
+  backup_time: '03:30',
+  backup_weekday: 0,
+  backup_day_of_month: 1,
   vpn_enabled: false,
   vpn_enforce: false,
   vpn_provider: 'privadovpn',
@@ -39,6 +48,7 @@ const form = ref({
   trusted_proxies: '',
   github_token: '',
   jellyfin_api_key: '',
+  seerr_api_key: '',
   update_check_schedule: 'off',
   update_apply_schedule: 'off',
   update_time: '04:00',
@@ -50,6 +60,7 @@ const vpnLive = ref({})
 const tunnelLive = ref({})
 const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
+const seerrConfigured = ref(false)
 
 const metrics = computed(() => props.systemInfo?.metrics || {})
 const storage = computed(() => snapshot.value.storage || props.systemInfo?.storage || {})
@@ -108,12 +119,19 @@ function applySettingsPayload(data) {
   form.value.github_token = ''
   jellyfinConfigured.value = !!data.jellyfin_api_key_configured
   form.value.jellyfin_api_key = ''
+  seerrConfigured.value = !!data.seerr_api_key_configured
+  form.value.seerr_api_key = ''
   const updates = data.updates || {}
   form.value.update_check_schedule = updates.check_schedule || 'off'
   form.value.update_apply_schedule = updates.apply_schedule || 'off'
   form.value.update_time = updates.time || '04:00'
   form.value.update_weekday = updates.weekday ?? 0
   form.value.update_day_of_month = updates.day_of_month || 1
+  const bak = data.backups || {}
+  form.value.backup_schedule = bak.schedule || 'off'
+  form.value.backup_time = bak.time || '03:30'
+  form.value.backup_weekday = bak.weekday ?? 0
+  form.value.backup_day_of_month = bak.day_of_month || 1
 }
 
 async function loadAll() {
@@ -136,6 +154,9 @@ async function loadAll() {
     if (bakRes.ok) {
       const bak = await bakRes.json()
       backups.value = bak.backups || []
+      backupInfo.value = bak
+      if (bak.job?.status === 'running' && !jobTimer) watchJob(bak.job)
+      else if (!jobTimer) backupJob.value = bak.job
     }
     if (diagRes.ok) {
       const diag = await diagRes.json()
@@ -236,41 +257,174 @@ async function runUpdateCheck() {
   }
 }
 
-async function createBackup() {
-  saving.value = true
+const backupJobRunning = computed(() => backupJob.value?.status === 'running')
+const backupOnConfigVolume = computed(() => {
+  const dir = backupInfo.value.backup_dir || ''
+  const config = snapshot.value.config_dir || ''
+  return !!dir && !!config && (dir === config || dir.startsWith(`${config}/`))
+})
+const backupJobPercent = computed(() => {
+  const job = backupJob.value
+  if (!job || !job.total) return 0
+  return Math.min(100, Math.round((job.done / job.total) * 100))
+})
+
+function stopJobPoll() {
+  if (jobTimer) clearInterval(jobTimer)
+  jobTimer = null
+}
+
+function describeJob(job) {
+  const result = job.result || {}
+  if (job.status === 'error') return `${job.kind} failed: ${job.error}`
+  if (job.kind === 'backup') {
+    const warn = (result.warnings || []).length
+    return `Created ${result.name}${warn ? ` with ${warn} warning(s)` : ''}.`
+  }
+  if (job.kind === 'verify') {
+    return result.ok
+      ? `${result.name} is intact (${result.checked} files checked).`
+      : `${result.name} failed verification: ${result.error}`
+  }
+  if (job.kind === 'restore') {
+    const parts = [`Restored ${result.files} files (${(result.sections || []).join(', ')}).`]
+    if (result.safety_backup) parts.push(`Previous state saved as ${result.safety_backup}.`)
+    if ((result.restarted || []).length) parts.push(`Restarted ${result.restarted.join(', ')}.`)
+    if ((result.restart_failed || []).length) parts.push(`Could not restart ${result.restart_failed.join(', ')}.`)
+    return parts.join(' ')
+  }
+  return 'Done.'
+}
+
+function watchJob(job) {
+  backupJob.value = job
+  stopJobPoll()
+  if (!job || job.status !== 'running') return
+  jobTimer = setInterval(async () => {
+    try {
+      const res = await props.apiRequest('/api/backups/job')
+      if (!res.ok) return
+      const data = await res.json()
+      backupJob.value = data.job
+      if (!data.job || data.job.status !== 'running') {
+        stopJobPoll()
+        if (data.job?.status === 'error' || (data.job?.kind === 'verify' && !data.job?.result?.ok)) {
+          error.value = describeJob(data.job)
+        } else if (data.job) {
+          notice.value = describeJob(data.job)
+        }
+        await loadAll()
+      }
+    } catch (_) {
+      /* keep polling */
+    }
+  }, 1000)
+}
+
+async function startBackupJob(endpoint, body) {
   error.value = ''
+  notice.value = ''
   try {
-    const res = await props.apiRequest('/api/backups', { method: 'POST', body: JSON.stringify({ label: 'manual' }) })
-    const data = await res.json()
+    const res = await props.apiRequest(endpoint, { method: 'POST', body: JSON.stringify(body || {}) })
+    const data = await res.json().catch(() => ({}))
     if (!res.ok) {
-      error.value = data.detail || 'Backup failed.'
+      error.value = apiError(data, 'Backup action failed.')
       return
     }
-    notice.value = `Created ${data.name}`
+    watchJob(data.job)
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+function createBackup() {
+  return startBackupJob('/api/backups', { label: 'manual' })
+}
+
+function verifyBackup(name) {
+  return startBackupJob(`/api/backups/${encodeURIComponent(name)}/verify`)
+}
+
+async function openRestore(name) {
+  error.value = ''
+  const res = await props.apiRequest(`/api/backups/${encodeURIComponent(name)}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    error.value = apiError(data, 'Could not read backup.')
+    return
+  }
+  restoreTarget.value = { name, sections: data.sections || [], selected: ['all'] }
+}
+
+function toggleRestoreSection(value) {
+  const target = restoreTarget.value
+  if (!target) return
+  if (value === 'all') {
+    target.selected = ['all']
+    return
+  }
+  const picked = new Set(target.selected.filter((item) => item !== 'all'))
+  if (picked.has(value)) picked.delete(value)
+  else picked.add(value)
+  target.selected = picked.size ? [...picked] : ['all']
+}
+
+async function confirmRestore() {
+  const target = restoreTarget.value
+  if (!target) return
+  const scope = target.selected.includes('all') ? 'everything' : target.selected.join(', ')
+  if (!window.confirm(`Restore ${scope} from ${target.name}? Affected apps are stopped, the current state is saved first, then apps restart.`)) return
+  restoreTarget.value = null
+  await startBackupJob(`/api/backups/${encodeURIComponent(target.name)}/restore`, {
+    sections: target.selected.includes('all') ? null : target.selected,
+  })
+}
+
+async function downloadBackup(name) {
+  error.value = ''
+  try {
+    const res = await props.apiRequest(`/api/backups/${encodeURIComponent(name)}/download`)
+    if (!res.ok) {
+      error.value = `Download failed (HTTP ${res.status}).`
+      return
+    }
+    const url = URL.createObjectURL(await res.blob())
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function uploadBackup(event) {
+  const file = event.target?.files?.[0]
+  if (event.target) event.target.value = ''
+  if (!file) return
+  uploading.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await props.apiRequest(`/api/backups/upload?filename=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      body: file,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      error.value = apiError(data, 'Upload failed.')
+      return
+    }
+    notice.value = `Uploaded ${data.backup?.name || file.name}. Verify it, then restore when ready.`
     await loadAll()
   } catch (err) {
     error.value = err.message
   } finally {
-    saving.value = false
-  }
-}
-
-async function restoreBackup(name) {
-  if (!window.confirm(`Restore ${name}? This replaces manager config files.`)) return
-  saving.value = true
-  error.value = ''
-  try {
-    const res = await props.apiRequest(`/api/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' })
-    const data = await res.json()
-    if (!res.ok) {
-      error.value = data.detail || 'Restore failed.'
-      return
-    }
-    notice.value = 'Backup restored. Restart the manager container if processes look stale.'
-  } catch (err) {
-    error.value = err.message
-  } finally {
-    saving.value = false
+    uploading.value = false
   }
 }
 
@@ -278,6 +432,15 @@ async function deleteBackup(name) {
   if (!window.confirm(`Delete ${name}?`)) return
   const res = await props.apiRequest(`/api/backups/${encodeURIComponent(name)}`, { method: 'DELETE' })
   if (res.ok) await loadAll()
+}
+
+function backupKindLabel(item) {
+  return {
+    manual: 'Manual',
+    scheduled: 'Scheduled',
+    'pre-restore': 'Before restore',
+    uploaded: 'Uploaded',
+  }[item.kind] || item.kind
 }
 
 async function loadStatus() {
@@ -371,6 +534,7 @@ watch(section, () => {
 })
 
 onMounted(loadAll)
+onBeforeUnmount(stopJobPoll)
 </script>
 
 <template>
@@ -617,26 +781,118 @@ onMounted(loadAll)
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Backups</h3>
-          <p>Config, secrets, and databases only — never media libraries. Stored in {{ snapshot.backup_dir }}.</p>
+          <p>
+            Manager settings, secrets, app config and databases. Media, downloads, caches, logs and artwork
+            caches are never included. Databases are copied safely while apps keep running.
+          </p>
         </div>
-        <form class="form-stack" @submit.prevent="patchSettings({ backup_retention: Number(form.backup_retention) })">
+        <p class="share-meta">
+          Stored in <span class="font-mono">{{ backupInfo.backup_dir || snapshot.backup_dir }}</span>
+          · last backup {{ formatWhen(backupInfo.schedule?.last_backup_at) }}
+          <span v-if="backupInfo.schedule?.last_error" class="backup-warn"> · last attempt failed: {{ backupInfo.schedule.last_error }}</span>
+        </p>
+        <p v-if="backupOnConfigVolume" class="settings-hint">
+          Backups sit on the same volume as /config. Map a separate disk or NAS share to <code>/backups</code>
+          (or set <code>AMM_BACKUP_DIR</code>) so a failed disk does not take the backups with it, or download them regularly.
+        </p>
+
+        <div v-if="backupJob && (backupJobRunning || backupJob.status === 'error')" class="backup-job">
+          <strong>{{ backupJob.kind }} · {{ backupJob.stage }}</strong>
+          <div v-if="backupJobRunning" class="backup-progress"><span :style="{ width: `${backupJobPercent}%` }"></span></div>
+          <span v-if="backupJobRunning && backupJob.total" class="path-line">{{ backupJob.done }} / {{ backupJob.total }} files</span>
+          <span v-if="backupJob.status === 'error'" class="backup-warn">{{ backupJob.error }}</span>
+        </div>
+
+        <form class="form-stack" @submit.prevent="patchSettings({
+          backup_retention: Number(form.backup_retention),
+          backup_schedule: form.backup_schedule,
+          backup_time: form.backup_time,
+          backup_weekday: Number(form.backup_weekday),
+          backup_day_of_month: Number(form.backup_day_of_month)
+        })">
+          <label class="ui-field">Automatic backups
+            <select v-model="form.backup_schedule" class="ui-input">
+              <option value="off">Off</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </label>
+          <label v-if="form.backup_schedule !== 'off'" class="ui-field">Time of day
+            <input v-model="form.backup_time" type="time" class="ui-input font-mono" />
+          </label>
+          <label v-if="form.backup_schedule === 'weekly'" class="ui-field">Weekday
+            <select v-model.number="form.backup_weekday" class="ui-input">
+              <option :value="0">Monday</option>
+              <option :value="1">Tuesday</option>
+              <option :value="2">Wednesday</option>
+              <option :value="3">Thursday</option>
+              <option :value="4">Friday</option>
+              <option :value="5">Saturday</option>
+              <option :value="6">Sunday</option>
+            </select>
+          </label>
+          <label v-if="form.backup_schedule === 'monthly'" class="ui-field">Day of month
+            <input v-model.number="form.backup_day_of_month" type="number" min="1" max="28" class="ui-input font-mono" />
+          </label>
           <label class="ui-field">Keep last N backups
             <input v-model.number="form.backup_retention" type="number" min="1" max="90" class="ui-input font-mono" />
           </label>
           <div class="share-row">
-            <button type="submit" class="ui-btn ui-btn-ghost" :disabled="saving">Save retention</button>
-            <button type="button" class="ui-btn ui-btn-primary" :disabled="saving" @click="createBackup">Backup now</button>
+            <button type="submit" class="ui-btn ui-btn-ghost" :disabled="saving">Save</button>
+            <button type="button" class="ui-btn ui-btn-primary" :disabled="backupJobRunning" @click="createBackup">Backup now</button>
+            <label class="ui-btn ui-btn-ghost backup-upload" :class="{ 'is-disabled': uploading || backupJobRunning }">
+              {{ uploading ? 'Uploading…' : 'Upload backup' }}
+              <input type="file" accept=".tar.gz,.tgz,application/gzip" :disabled="uploading || backupJobRunning" @change="uploadBackup" />
+            </label>
           </div>
         </form>
+
+        <div v-if="restoreTarget" class="backup-restore glass-card">
+          <strong>Restore from <span class="font-mono">{{ restoreTarget.name }}</span></strong>
+          <p class="settings-hint">
+            Pick everything or only some apps. The current state is backed up first, affected apps are stopped
+            during the restore and started again afterwards.
+          </p>
+          <div class="backup-sections">
+            <label class="backup-chip">
+              <input type="checkbox" :checked="restoreTarget.selected.includes('all')" @change="toggleRestoreSection('all')" />
+              Everything
+            </label>
+            <label v-for="item in restoreTarget.sections" :key="item" class="backup-chip">
+              <input
+                type="checkbox"
+                :checked="restoreTarget.selected.includes(item)"
+                @change="toggleRestoreSection(item)"
+              />
+              {{ item === 'manager' ? 'Manager settings & secrets' : item }}
+            </label>
+          </div>
+          <div class="share-row">
+            <button type="button" class="ui-btn ui-btn-primary" @click="confirmRestore">Restore</button>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="restoreTarget = null">Cancel</button>
+          </div>
+        </div>
+
         <ul class="backup-list">
           <li v-for="item in backups" :key="item.name">
             <div>
               <strong class="font-mono">{{ item.name }}</strong>
-              <span class="path-line">{{ formatWhen(item.modified_at) }} · {{ formatBytes(item.size_bytes) }}</span>
+              <span class="path-line">
+                {{ backupKindLabel(item) }} · {{ formatWhen(item.created_at) }} · {{ formatBytes(item.size_bytes) }}
+                <template v-if="item.file_count"> · {{ item.file_count }} files</template>
+                <template v-if="item.location === 'legacy'"> · old location</template>
+                <template v-if="item.format < 2"> · old format</template>
+              </span>
+              <span v-if="item.warnings.length" class="path-line backup-warn" :title="item.warnings.join('\n')">
+                {{ item.warnings.length }} warning(s): {{ item.warnings[0] }}
+              </span>
             </div>
             <div class="share-row">
-              <button type="button" class="ui-btn ui-btn-ghost" @click="restoreBackup(item.name)">Restore</button>
-              <button type="button" class="ui-btn ui-btn-ghost" @click="deleteBackup(item.name)">Delete</button>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="openRestore(item.name)">Restore</button>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="verifyBackup(item.name)">Verify</button>
+              <button type="button" class="ui-btn ui-btn-ghost" @click="downloadBackup(item.name)">Download</button>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="deleteBackup(item.name)">Delete</button>
             </div>
           </li>
           <li v-if="!backups.length" class="share-idle">No backups yet.</li>
@@ -735,6 +991,22 @@ onMounted(loadAll)
         <form class="form-stack" @submit.prevent="patchSettings({ jellyfin_api_key: form.jellyfin_api_key })">
           <label class="ui-field">API key
             <input v-model="form.jellyfin_api_key" type="password" class="ui-input font-mono" autocomplete="off" />
+          </label>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
+        </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>Seerr API key</h3>
+          <p>
+            Homepage search and requests use this key. AMM reads it from Seerr's settings.json when it can;
+            otherwise copy it from Seerr Settings → General. Leave blank and save to clear it.
+          </p>
+        </div>
+        <p class="share-meta">{{ seerrConfigured ? 'A Seerr API key is saved.' : 'No Seerr API key saved yet.' }}</p>
+        <form class="form-stack" @submit.prevent="patchSettings({ seerr_api_key: form.seerr_api_key })">
+          <label class="ui-field">API key
+            <input v-model="form.seerr_api_key" type="password" class="ui-input font-mono" autocomplete="off" />
           </label>
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
         </form>
@@ -976,6 +1248,67 @@ onMounted(loadAll)
   border-radius: 10px;
   background: rgba(15, 23, 42, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.backup-warn {
+  color: #fbbf24;
+}
+.backup-job {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-transform: capitalize;
+}
+.backup-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.backup-progress span {
+  display: block;
+  height: 100%;
+  background: var(--color-primary, #6366f1);
+  transition: width 0.3s ease;
+}
+.backup-upload {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.backup-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.backup-upload.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.backup-restore {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+}
+.backup-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.backup-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.85rem;
+  text-transform: capitalize;
 }
 .error-log {
   background: rgba(15, 23, 42, 0.7);

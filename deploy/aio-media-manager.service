@@ -9,8 +9,9 @@ Type=simple
 WorkingDirectory=/opt/aio-media-manager
 Environment=TZ=UTC
 Environment=AMM_CONFIG_DIR=/var/lib/aio-media-manager/config
-Environment=AMM_DOWNLOAD_DIR=/var/lib/aio-media-manager/downloads
-Environment=AMM_MEDIA_DIR=/var/lib/aio-media-manager/media
+Environment=AMM_DOWNLOAD_DIR=/var/lib/aio-media-manager/data/downloads
+Environment=AMM_MEDIA_DIR=/var/lib/aio-media-manager/data/media
+Environment=AMM_BACKUP_DIR=/var/lib/aio-media-manager/backups
 ExecStart=/opt/aio-media-manager/.venv/bin/python main.py
 Restart=on-failure
 RestartSec=5

@@ -304,8 +304,14 @@ scheduler = UpdateScheduler()
 async def scheduler_loop() -> None:
     import asyncio
 
+    from core.backup_jobs import backup_jobs
+
     while True:
         await asyncio.sleep(60)
+        try:
+            await backup_jobs.tick()
+        except Exception:
+            logger.exception("Scheduled backup tick failed")
         try:
             await scheduler.tick()
         except GitHubRateLimitError as exc:

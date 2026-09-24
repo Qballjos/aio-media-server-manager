@@ -13,13 +13,17 @@ ssh root@<unraid-ip>
 ```bash
 mkdir -p \
   /mnt/user/appdata/aio-media-manager/vpn \
+  /mnt/user/backups/aio-media-manager \
   /mnt/cache/data/downloads \
   /mnt/cache/data/media
 
 chown -R 99:100 \
   /mnt/user/appdata/aio-media-manager \
+  /mnt/user/backups/aio-media-manager \
   /mnt/cache/data
 ```
+
+`/mnt/user/backups/aio-media-manager` receives the configuration backups. Use a share that lives on the array (not only the cache pool), so a cache failure does not take the backups with it.
 
 TV, movies, anime, music, books, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
 
@@ -45,6 +49,7 @@ chown -R 99:100 /mnt/cache/appdata/aio-media-manager /mnt/cache/data
 8. Paths (must match the SSH folders):
    - `/config` → `/mnt/user/appdata/aio-media-manager`
    - `/data` → `/mnt/cache/data`
+   - `/backups` → `/mnt/user/backups/aio-media-manager`
 9. Variables: `PUID=99`, `PGID=100`, `TZ=<IANA timezone>`, `AMM_DOWNLOAD_DIR=/data/downloads`, `AMM_MEDIA_DIR=/data/media`. Optional: `GITHUB_TOKEN` for GitHub rate limits (or set it later in Settings → GitHub).
 
 A starting XML template is in [`unraid.xml`](unraid.xml) (copy into `/boot/config/plugins/dockerMan/templates-user/` if you maintain local templates).

@@ -106,7 +106,7 @@ Each catalog card includes a help control that opens that project's official wik
 Create bind-mount directories on the host (downloads and media as children of **one** folder so hardlinks work), then run the published image.
 
 ```bash
-sudo mkdir -p /opt/aio-media-manager/{config,data/downloads,data/media}
+sudo mkdir -p /opt/aio-media-manager/{config,data/downloads,data/media,backups}
 docker pull ghcr.io/qballjos/aio-media-server-manager:latest
 docker compose up -d
 ```

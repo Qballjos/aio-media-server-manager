@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/applications", tags=["Applications"])
 
 catalog = ApplicationCatalog(app_settings=settings)
+API_KEY_APPS = frozenset({"jellyfin", "seerr"})
 updater = ApplicationUpdater(app_settings=settings)
 
 
@@ -259,6 +260,10 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         notes.append(
             "Paste an API key from Jellyfin Dashboard → API Keys if homepage Recently added cannot log in automatically."
         )
+    elif plugin.name == "seerr":
+        notes.append(
+            "Paste the API key from Seerr Settings → General if homepage search and requests cannot find it automatically."
+        )
     elif plugin.manifest.daemon:
         notes.append(
             "Open UI uses http://<host>:<port>. If you change the port, publish it in compose "
@@ -297,10 +302,10 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         payload["vuetorrent_version"] = installed_meta(plugin.config_dir).get("version")
         payload["vuetorrent_path"] = str(vuetorrent_dir(plugin.config_dir))
         payload["vuetorrent_help"] = VUETORRENT_HELP
-    if plugin.name == "jellyfin":
+    if plugin.name in API_KEY_APPS:
         from core.crypto import secret_store
 
-        payload["api_key_configured"] = bool(secret_store.get_secret("jellyfin_api_key"))
+        payload["api_key_configured"] = bool(secret_store.get_secret(f"{plugin.name}_api_key"))
     return payload
 
 
@@ -377,19 +382,19 @@ async def patch_application_settings(
             ) from exc
 
     if body.api_key is not None:
-        if plugin.name != "jellyfin":
+        if plugin.name not in API_KEY_APPS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="API key can only be saved for Jellyfin.",
+                detail="API key can only be saved for Jellyfin or Seerr.",
             )
         from core.crypto import secret_store
         from core.integrations.credentials import set_application_api_key
 
         key = body.api_key.strip()
         if key:
-            set_application_api_key("jellyfin", key)
+            set_application_api_key(plugin.name, key)
         else:
-            secret_store.delete_secret("jellyfin_api_key")
+            secret_store.delete_secret(f"{plugin.name}_api_key")
 
     restarted = False
     supervisor = ProcessSupervisor.get()

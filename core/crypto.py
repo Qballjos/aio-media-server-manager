@@ -138,6 +138,11 @@ class SecretStore:
             logger.warning("Could not save secrets to %s: %s. Using in-memory fallback.", path, e)
 
 
+    def reload(self) -> None:
+        """Drop the cached key and in-memory copy so the next call reads disk (after a restore)."""
+        self._fernet = None
+        self._memory_data = {}
+
     def save_secret(self, name: str, value: str) -> None:
         """Encrypt and store a named secret."""
         encrypted_val = self.encrypt(value)

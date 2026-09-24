@@ -36,7 +36,7 @@ After the wizard, **Home** is the front page for watching and requesting. It reu
 - **Coming up** is a real calendar of Sonarr/Radarr airings: a full month on wide screens, the current week on phones.
 - **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
 - **Recently added** uses Jellyfin and/or Plex. AMM tries the manager login first. You can also paste a Jellyfin API key under **Settings → Integrations** (or Catalog → Jellyfin → Settings). Create the key in Jellyfin Dashboard → API Keys.
-- **Search** talks to Seerr when it is running (Request button). AMM reads `apiKey` from Seerr’s `settings.json` after Seerr’s first setup. Without Seerr, search falls back to Sonarr/Radarr lookup only.
+- **Search** talks to Seerr when it is running. Each result shows whether it is **Available**, **Partly available**, **Requested** or **Not in library**, with a **Get it now** button that sends a Seerr request. AMM reads `apiKey` from Seerr’s `settings.json`; if that fails, paste the key from Seerr Settings → General under **Settings → Integrations** (or Catalog → Seerr → Settings). If Seerr is missing or rejects the key, search falls back to Sonarr/Radarr lookup and shows the Seerr error above the results.
 - **Widget debug** on Home (or `?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
 
 Empty widgets stay hidden until debug is on. **Catalog** is still the admin dashboard for install, process controls, logs, and Auto-Wire.
@@ -102,9 +102,16 @@ Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `rec
 
 ## 7. Backups and updates
 
-**Settings → Backups** lists configuration archives (config, secrets, databases — never media). You can set retention, backup now, restore, or delete.
+**Settings → Backups** manages configuration archives: manager settings, secrets, app config and databases.
 
-**Catalog Update** on a card always runs snapshot → install → health check → rollback.
+- **What is included:** everything under `/config` except install binaries (`apps/`), caches, logs, transcode folders, artwork caches (Jellyfin `metadata`, Plex `Media`/`Metadata`), the *Arr apps' own `Backups` folders and media files. SQLite databases (Sonarr, Radarr, Jellyfin, Plex, …) are copied with SQLite's online backup, so they are consistent even while apps run. There is no size limit; anything that could not be read is listed as a warning on the backup.
+- **Where:** `/backups` when you map a volume there (the compose files do), otherwise `/config/backups`. Map `/backups` to a different disk or NAS share, or download backups regularly. Backups from the old `/config/backups` location still show up and can be restored.
+- **Schedule:** automatic backups default to daily at 03:30 in the host timezone (before the 04:00 update window). You can switch to weekly or monthly, or turn them off. **Keep last N** applies to all backups. The dashboard shows when the last backup ran.
+- **Verify** re-reads an archive and checks every file against the SHA-256 checksums in its manifest.
+- **Restore** lets you pick everything or individual apps (plus "Manager settings & secrets"). The manager first verifies the archive and saves the current state as a *Before restore* backup. It then stops the affected apps, writes the files back (clearing stale SQLite `-wal`/`-shm` files), reloads secrets and settings, and starts the apps again. Restoring manager settings from another server can sign you out.
+- **Download / Upload** moves archives off the box or onto a new server. Uploads must be `.tar.gz` backups; verify them before restoring.
+
+**Catalog Update** on a card always runs stop → snapshot → install → health check → rollback. The last three pre-update snapshots per app are kept under `/backups/app-snapshots/<app>/`.
 
 **Settings → Updates** schedules GitHub checks (off / daily / weekly / monthly) and optionally applies them (off = notify only, same as check, or a separate cadence). Time of day uses the host timezone from **Settings → General**. The job skips apps that are not installed or in a crash loop, respects `GITHUB_TOKEN` / Settings → GitHub, and pauses while the wizard is open or an install is running. Last check / last apply timestamps appear on the dashboard and in Settings.
 
@@ -119,7 +126,7 @@ The **Settings** nav item is the admin page for the appliance (separate from per
 | Updates | Check/apply schedules and Check now |
 | Storage | Architecture, CPU, memory, disk, filesystem format (read-only) |
 | Permissions | PUID / PGID — saving restarts running child processes |
-| Backups | Retention, backup now, restore, delete |
+| Backups | Schedule, retention, backup now, verify, per-app restore, download/upload, delete |
 | VPN | Enable, protocol, upload/paste config, path, kill switch |
 | Remote access | Cloudflare Tunnel on/off, token (write-only), trusted proxy IPs |
 | GitHub | Optional token for rate limits (not shown again after save) |

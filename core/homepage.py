@@ -6,10 +6,13 @@ import logging
 from calendar import monthrange
 from datetime import date, timedelta
 from typing import Any, Optional
+from urllib.parse import quote
+
 import requests
 
 from applications.catalog import ApplicationCatalog
 from core.integrations.credentials import get_application_api_key
+from core.integrations.jellyfin import jellyfin_auth_headers
 from core.integrations.nzbget import NZBGetClient
 from core.integrations.plex import PlexClient
 from core.integrations.qbittorrent import QBittorrentClient
@@ -84,16 +87,24 @@ def homepage_search(host: str, query: str) -> dict[str, Any]:
     running = _running_names()
     term = (query or "").strip()
     if len(term) < 2:
-        return {"query": term, "results": [], "seerr": False}
+        return {"query": term, "results": [], "seerr": False, "error": None}
+    seerr_error: str | None = None
     if catalog.has("seerr") and catalog.get("seerr").is_installed() and "seerr" in running:
-        results = _seerr_search(catalog, term)
-        return {"query": term, "results": results, "seerr": True}
-    results: list[dict[str, Any]] = []
+        results, seerr_error = _seerr_search(catalog, term)
+        if not seerr_error:
+            return {"query": term, "results": results, "seerr": True, "error": None}
+    results = []
     if catalog.has("sonarr") and catalog.get("sonarr").is_installed() and "sonarr" in running:
         results.extend(_sonarr_lookup(catalog, term))
     if catalog.has("radarr") and catalog.get("radarr").is_installed() and "radarr" in running:
         results.extend(_radarr_lookup(catalog, term))
-    return {"query": term, "results": results[:20], "seerr": False}
+    error = f"Seerr search failed ({seerr_error})" if seerr_error else None
+    if not results and not seerr_error and not any(
+        catalog.has(name) and catalog.get(name).is_installed() and name in running
+        for name in ("seerr", "sonarr", "radarr")
+    ):
+        error = "Start Seerr, Sonarr or Radarr to search."
+    return {"query": term, "results": results[:20], "seerr": False, "error": error}
 
 
 def homepage_request(payload: dict[str, Any]) -> dict[str, Any]:
@@ -490,13 +501,9 @@ def _collect_jellyfin_recent(
         return []
     plugin = catalog.get("jellyfin")
     key = get_application_api_key("jellyfin", plugin.config_dir)
-    headers = {"Content-Type": "application/json"}
-    if key:
-        headers["X-Emby-Token"] = key
-        headers["X-MediaBrowser-Token"] = key
     data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/Items",
-        headers=headers,
+        headers=jellyfin_auth_headers(key),
         params={
             "Recursive": "true",
             "SortBy": "DateCreated",
@@ -521,6 +528,8 @@ def _collect_jellyfin_recent(
                 }
             )
     payload_error = None if isinstance(data, dict) else "unexpected items payload"
+    if error in ("HTTP 401", "HTTP 403"):
+        error = f"{error} — Jellyfin rejected the API key; paste a new one in Settings → Integrations"
     return _finish_source(
         notes,
         "recent",
@@ -578,39 +587,61 @@ def _collect_plex_recent(
     )
 
 
-def _seerr_search(catalog: ApplicationCatalog, term: str) -> list[dict[str, Any]]:
+_SEERR_MEDIA_STATUS = {2: "requested", 3: "requested", 4: "partial", 5: "available"}
+
+
+def seerr_media_status(row: dict[str, Any]) -> str:
+    info = row.get("mediaInfo")
+    try:
+        code = int(info.get("status")) if isinstance(info, dict) else 0
+    except (TypeError, ValueError):
+        code = 0
+    return _SEERR_MEDIA_STATUS.get(code, "missing")
+
+
+def _seerr_search(catalog: ApplicationCatalog, term: str) -> tuple[list[dict[str, Any]], str | None]:
     plugin = catalog.get("seerr")
     key = get_application_api_key("seerr", plugin.config_dir)
-    headers = {"Content-Type": "application/json"}
-    if key:
-        headers["X-Api-Key"] = key
-    data = _get_json(
-        f"http://127.0.0.1:{plugin.port}/api/v1/search",
+    if not key:
+        return [], "no Seerr API key; add one in Settings → Integrations"
+    headers = {"Content-Type": "application/json", "X-Api-Key": key}
+    # Seerr rejects '+' for spaces and unescaped reserved characters in the query.
+    data, error = _fetch_json(
+        f"http://127.0.0.1:{plugin.port}/api/v1/search?query={quote(term, safe='')}&page=1",
         headers=headers,
-        params={"query": term, "page": 1},
     )
+    if error:
+        if error in ("HTTP 401", "HTTP 403"):
+            error = f"{error}: Seerr rejected the API key"
+        return [], error
     rows = data.get("results") if isinstance(data, dict) else None
     items: list[dict[str, Any]] = []
     if not isinstance(rows, list):
-        return items
-    for row in rows[:20]:
+        return items, "unexpected search payload"
+    for row in rows:
         if not isinstance(row, dict):
             continue
         media_type = str(row.get("mediaType") or "").lower()
+        if media_type not in {"movie", "tv"}:
+            continue
         title = row.get("title") or row.get("name") or "Title"
         poster = row.get("posterPath")
+        status = seerr_media_status(row)
         items.append(
             {
                 "source": "seerr",
-                "mediaType": "tv" if media_type in {"tv", "series"} else "movie",
+                "mediaType": media_type,
                 "mediaId": row.get("id"),
                 "title": title,
                 "year": row.get("releaseDate") or row.get("firstAirDate") or "",
                 "poster": f"https://image.tmdb.org/t/p/w154{poster}" if poster else "",
-                "can_request": True,
+                "status": status,
+                "can_request": status in {"missing", "partial"},
             }
         )
-    return items
+        if len(items) >= 20:
+            break
+    return items, None
 
 
 def _sonarr_lookup(catalog: ApplicationCatalog, term: str) -> list[dict[str, Any]]:
@@ -634,6 +665,7 @@ def _sonarr_lookup(catalog: ApplicationCatalog, term: str) -> list[dict[str, Any
                 "title": row.get("title") or "Series",
                 "year": str(row.get("year") or ""),
                 "poster": row.get("remotePoster") or "",
+                "status": _sonarr_status(row),
                 "can_request": False,
             }
         )
@@ -661,10 +693,30 @@ def _radarr_lookup(catalog: ApplicationCatalog, term: str) -> list[dict[str, Any
                 "title": row.get("title") or "Movie",
                 "year": str(row.get("year") or ""),
                 "poster": row.get("remotePoster") or "",
+                "status": _radarr_status(row),
                 "can_request": False,
             }
         )
     return items
+
+
+def _sonarr_status(row: dict[str, Any]) -> str:
+    if not row.get("id"):
+        return "missing"
+    stats = row.get("statistics") if isinstance(row.get("statistics"), dict) else {}
+    try:
+        percent = float(stats.get("percentOfEpisodes") or 0)
+    except (TypeError, ValueError):
+        percent = 0.0
+    if percent >= 100:
+        return "available"
+    return "partial" if percent > 0 else "monitored"
+
+
+def _radarr_status(row: dict[str, Any]) -> str:
+    if not row.get("id"):
+        return "missing"
+    return "available" if row.get("hasFile") else "monitored"
 
 
 def _pct(value: Any) -> int:

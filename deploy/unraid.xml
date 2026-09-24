@@ -31,6 +31,7 @@
   <Config Name="Plex" Target="32400" Default="32400" Mode="tcp" Type="Port" Display="always"/>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/aio-media-manager" Mode="rw" Type="Path" Display="always"/>
   <Config Name="Data" Target="/data" Default="/mnt/cache/data" Mode="rw" Type="Path" Display="always"/>
+  <Config Name="Backups" Target="/backups" Default="/mnt/user/backups/aio-media-manager" Mode="rw" Type="Path" Display="always" Description="Configuration backups. Keep on the array, not only on cache."/>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Type="Variable" Display="always"/>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Type="Variable" Display="always"/>
   <Config Name="Download dir" Target="AMM_DOWNLOAD_DIR" Default="/data/downloads" Mode="" Type="Variable" Display="always"/>

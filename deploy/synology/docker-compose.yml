@@ -29,6 +29,8 @@ services:
       - /volume1/docker/aio-media-manager/config:/config
       # Same shared folder (not two separate DSM shares) so *Arr can hardlink.
       - /volume1/data:/data
+      # Config backups. Prefer a different volume or a Hyper Backup target folder.
+      - /volume1/docker/aio-media-manager/backups:/backups
     environment:
       PUID: "1026"
       PGID: "100"
