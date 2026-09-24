@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Single AIO appliance image — all apps run as supervised processes inside this container.
 
-FROM node:22-alpine AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /ui
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
@@ -9,7 +9,7 @@ COPY frontend/ ./
 COPY logo-aio-media-manager.png ./public/logo-aio-media-manager.png
 RUN npm run build
 
-FROM node:22-bookworm-slim AS nodebin
+FROM node:24-bookworm-slim AS nodebin
 
 FROM eclipse-temurin:25-jre-noble AS jre
 
