@@ -644,7 +644,12 @@ function closeHealthModal() {
   }
 }
 
-const vpnUnprotected = computed(() => systemInfo.value?.vpn?.qbittorrent_unprotected)
+const vpnUnprotected = computed(() => {
+  const vpn = systemInfo.value?.vpn
+  if (!vpn) return false
+  if (Array.isArray(vpn.unprotected_apps) && vpn.unprotected_apps.length) return true
+  return Boolean(vpn.qbittorrent_unprotected || vpn.prowlarr_unprotected || vpn.flaresolverr_unprotected)
+})
 const cloudflareTunnelIssue = computed(() => {
   const tunnel = systemInfo.value?.cloudflare_tunnel
   return Boolean(tunnel?.enabled && !tunnel?.connected)
@@ -1467,7 +1472,7 @@ onUnmounted(() => {
           class="alert-banner alert-error"
           style="margin-bottom: 1.25rem;"
         >
-          qBittorrent is running without an active VPN tunnel while VPN enforcement is enabled. Usenet traffic is not routed through the VPN.
+          A tunneled app (qBittorrent, Prowlarr, or Flaresolverr) is running without an active VPN tunnel while VPN enforcement is enabled. Usenet traffic is not routed through the VPN.
         </div>
 
         <div
@@ -1971,6 +1976,7 @@ onUnmounted(() => {
         </div>
         <div v-if="settingsError" class="ui-alert ui-alert-error">{{ settingsError }}</div>
         <form class="app-settings-form" @submit.prevent="saveAppSettings">
+          <div class="app-settings-body">
           <template v-if="settingsApp.name === 'recyclarr' && recyclarrMeta">
             <p class="settings-hint">
               Official TRaSH Guides profiles via Recyclarr v8. HD is on by default; 4K is opt-in.
@@ -2052,7 +2058,8 @@ onUnmounted(() => {
             <li v-for="note in settingsMeta.notes" :key="note">{{ note }}</li>
           </ul>
           </template>
-          <div class="wizard-nav" style="justify-content: flex-end; margin-top: 0.75rem;">
+          </div>
+          <div class="wizard-nav app-settings-actions">
             <button type="button" class="ui-btn ui-btn-ghost" @click="closeAppSettings">Cancel</button>
             <button
               v-if="settingsApp.name === 'recyclarr'"
@@ -2320,8 +2327,7 @@ onUnmounted(() => {
 }
 
 .service-card.glass-card,
-.catalog-toolbar.glass-card,
-.settings-modal.glass-card {
+.catalog-toolbar.glass-card {
   overflow: visible;
 }
 
@@ -3034,18 +3040,59 @@ onUnmounted(() => {
 }
 
 .settings-modal {
+  display: flex;
+  flex-direction: column;
   width: min(520px, 100%);
-  max-height: min(90dvh, 900px);
-  overflow: auto;
-  padding: clamp(1rem, 3vw, 1.4rem);
+  max-width: 100%;
+  max-height: min(90dvh, calc(100dvh - 1.25rem), 900px);
+  overflow: hidden;
+  padding: clamp(0.85rem, 2.5vw, 1.25rem);
+  box-sizing: border-box;
+}
+
+.settings-modal .modal-header {
+  flex: 0 0 auto;
+  padding: 0 0 0.75rem;
+  margin: 0;
 }
 
 .settings-modal-wide {
   width: min(760px, 100%);
 }
 
+.app-settings-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.75rem;
+}
+
+.app-settings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding-right: 0.15rem;
+}
+
+.app-settings-actions {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .recyclarr-yaml {
-  min-height: 16rem;
+  min-height: 8rem;
+  max-height: min(28vh, 18rem);
+  overflow: auto;
   font-size: 0.75rem;
   line-height: 1.45;
   resize: vertical;
@@ -3174,12 +3221,6 @@ onUnmounted(() => {
   text-transform: lowercase;
 }
 
-.app-settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-
 .app-settings-dl {
   margin: 0;
   display: flex;
@@ -3226,6 +3267,7 @@ onUnmounted(() => {
   color: #94a3b8;
   font-size: 0.8rem;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Modal */

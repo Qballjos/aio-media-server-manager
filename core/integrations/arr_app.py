@@ -9,6 +9,118 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+_PROTOCOL = {"Sabnzbd": "usenet", "Nzbget": "usenet", "QBittorrent": "torrent"}
+
+
+def post_servarr_download_client(
+    base_url: str,
+    headers: dict[str, str],
+    *,
+    name: str,
+    implementation: str,
+    config_contract: str,
+    fields: list[dict[str, Any]],
+    label: str,
+) -> bool:
+    """Create a download client from schema when possible, skipping the live test."""
+    payload = _download_client_payload(
+        base_url,
+        headers,
+        name=name,
+        implementation=implementation,
+        config_contract=config_contract,
+        fields=fields,
+    )
+    try:
+        resp = requests.post(
+            f"{base_url}/downloadclient",
+            headers=headers,
+            params={"forceSave": "true"},
+            json=payload,
+            timeout=15.0,
+        )
+        if resp.status_code in (200, 201):
+            return True
+        logger.warning("%s add %s failed (%s): %s", label, implementation, resp.status_code, resp.text[:500])
+        return False
+    except Exception as exc:
+        logger.debug("%s add %s error: %s", label, implementation, exc)
+        return False
+
+
+def _download_client_payload(
+    base_url: str,
+    headers: dict[str, str],
+    *,
+    name: str,
+    implementation: str,
+    config_contract: str,
+    fields: list[dict[str, Any]],
+) -> dict[str, Any]:
+    template = _schema_template(base_url, headers, implementation)
+    protocol = _PROTOCOL.get(implementation, "torrent")
+    if template:
+        merged = dict(template)
+        merged.pop("presets", None)
+        merged["id"] = 0
+        merged["enable"] = True
+        merged["name"] = name
+        merged["implementation"] = implementation
+        merged["configContract"] = config_contract
+        merged["protocol"] = template.get("protocol") or protocol
+        merged["tags"] = template.get("tags") or []
+        merged["priority"] = template.get("priority") or 1
+        merged["fields"] = _overlay_fields(template.get("fields") or [], fields)
+        return merged
+    return {
+        "enable": True,
+        "protocol": protocol,
+        "priority": 1,
+        "removeCompletedDownloads": True,
+        "removeFailedDownloads": True,
+        "name": name,
+        "implementation": implementation,
+        "configContract": config_contract,
+        "tags": [],
+        "fields": fields,
+    }
+
+
+def _schema_template(base_url: str, headers: dict[str, str], implementation: str) -> dict[str, Any] | None:
+    try:
+        resp = requests.get(f"{base_url}/downloadclient/schema", headers=headers, timeout=8.0)
+        if resp.status_code != 200:
+            return None
+        rows = resp.json()
+        if not isinstance(rows, list):
+            return None
+        for row in rows:
+            if isinstance(row, dict) and row.get("implementation") == implementation:
+                return row
+    except Exception as exc:
+        logger.debug("download client schema error: %s", exc)
+    return None
+
+
+def _overlay_fields(schema_fields: list[Any], overrides: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    values = {item.get("name"): item.get("value") for item in overrides if item.get("name")}
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for field in schema_fields:
+        if not isinstance(field, dict):
+            continue
+        item = dict(field)
+        field_name = str(item.get("name") or "")
+        if field_name in values:
+            item["value"] = values[field_name]
+            seen.add(field_name)
+        merged.append(item)
+    for item in overrides:
+        field_name = str(item.get("name") or "")
+        if field_name and field_name not in seen:
+            merged.append(dict(item))
+    return merged
+
 
 class ArrAppClient:
     """Minimal *Arr v1 client used for Lidarr wiring."""
@@ -146,30 +258,12 @@ class ArrAppClient:
         config_contract: str,
         fields: list[dict[str, Any]],
     ) -> bool:
-        payload = {
-            "enable": True,
-            "name": name,
-            "implementation": implementation,
-            "configContract": config_contract,
-            "fields": fields,
-        }
-        try:
-            resp = requests.post(
-                f"{self.base_url}/downloadclient",
-                headers=self._headers(),
-                json=payload,
-                timeout=8.0,
-            )
-            if resp.status_code in (200, 201):
-                return True
-            logger.warning(
-                "%s add %s failed (%s): %s",
-                self.label,
-                implementation,
-                resp.status_code,
-                resp.text[:500],
-            )
-            return False
-        except Exception as exc:
-            logger.debug("%s add %s error: %s", self.label, implementation, exc)
-            return False
+        return post_servarr_download_client(
+            self.base_url,
+            self._headers(),
+            name=name,
+            implementation=implementation,
+            config_contract=config_contract,
+            fields=fields,
+            label=self.label,
+        )

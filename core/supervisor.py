@@ -146,6 +146,19 @@ class ProcessSupervisor:
     # Public API
     # ------------------------------------------------------------------
 
+    def run_coroutine_sync(self, coro, timeout: float = 90.0):
+        """Run a supervisor coroutine from a worker thread (integration wiring)."""
+        loop = getattr(self, "_loop", None)
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if loop is not None and loop.is_running() and running is not loop:
+            return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
+        if running is not None:
+            raise RuntimeError("Cannot block the process supervisor event loop.")
+        return asyncio.run(coro)
+
     async def start(
         self,
         name: str,
@@ -177,6 +190,7 @@ class ProcessSupervisor:
                 entry.spec = spec
 
             await self._do_start(entry)
+            self._loop = asyncio.get_running_loop()
 
             if name not in self._start_order:
                 self._start_order.append(name)

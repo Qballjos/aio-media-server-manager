@@ -26,7 +26,7 @@ from core.integrations.local_auth import apply_shared_local_logins
 from core.integrations.nzbget import NZBGetClient, nzbget_credentials
 from core.integrations.plex import PlexClient
 from core.integrations.prowlarr import ProwlarrClient
-from core.integrations.qbittorrent import QBittorrentClient, qbittorrent_credentials
+from core.integrations.qbittorrent import QBittorrentClient, apply_qbittorrent_webui_login, qbittorrent_credentials
 from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient
 from core.integrations.seerr import SeerrClient
@@ -105,6 +105,17 @@ class IntegrationEngine:
         except Exception:
             return {}
 
+    def _downloaders_for_arr(self, *, sab_key: str | None) -> list[str]:
+        """Register every installed, running downloader *Arr can talk to."""
+        ready: list[str] = []
+        if self._installed("sabnzbd") and self._is_app_running("sabnzbd") and sab_key:
+            ready.append("sabnzbd")
+        if self._installed("nzbget") and self._is_app_running("nzbget"):
+            ready.append("nzbget")
+        if self._installed("qbittorrent") and self._is_app_running("qbittorrent"):
+            ready.append("qbittorrent")
+        return ready
+
     def _chosen_apps(self, *names: str, selection_key: str = "") -> list[str]:
         selected = self._wizard_selections().get(selection_key) if selection_key else None
         if isinstance(selected, str):
@@ -171,7 +182,6 @@ class IntegrationEngine:
 
         qb_user, qb_pass = qbittorrent_credentials()
         nzb_user, nzb_pass = nzbget_credentials()
-        downloader_register: list[str] = []
         sab_port = self._port("sabnzbd", 8085)
         nzb_port = self._port("nzbget", 6789)
         qb_port = self._port("qbittorrent", 8081)
@@ -205,8 +215,6 @@ class IntegrationEngine:
             usenet = load_usenet_server()
             if usenet and usenet.get("host"):
                 sab_ok = sab_client.add_news_server(**usenet) and sab_ok
-            if sab_ok and sab_key:
-                downloader_register.append("sabnzbd")
             steps.append(_step("sabnzbd", "configure_folders_and_categories", sab_ok, str(layout.complete)))
 
         if not self._skip_unavailable(steps, "nzbget", "configure_folders_and_categories"):
@@ -217,27 +225,37 @@ class IntegrationEngine:
             usenet = load_usenet_server()
             if usenet and usenet.get("host"):
                 nzb_ok = nzb.add_news_server(**usenet) and nzb_ok
-            if nzb_ok:
-                downloader_register.append("nzbget")
             steps.append(_step("nzbget", "configure_folders_and_categories", nzb_ok, str(layout.complete)))
 
         if not self._skip_unavailable(steps, "qbittorrent", "configure_folders_and_categories"):
-            qb_client = QBittorrentClient(port=qb_port)
-            logged_in = qb_client.login()
-            qb_ok = False
+            qb_plugin = self._catalog.get("qbittorrent")
+            login_ok = apply_qbittorrent_webui_login(qb_plugin.config_dir, qb_port)
+            qb_user, qb_pass = qbittorrent_credentials()
+            qb_client = QBittorrentClient(port=qb_port, username=qb_user, password=qb_pass)
+            logged_in = qb_client.login() or qb_client.app_accessible()
+            qb_ok = login_ok
             if logged_in:
-                shared = shared_admin_credentials()
-                if shared:
-                    qb_client.set_webui_login(shared[0], shared[1])
-                qb_user, qb_pass = qb_client.username, qb_client.password
-                qb_ok = qb_client.set_download_paths(str(layout.torrents), str(layout.incomplete))
+                qb_ok = qb_client.set_download_paths(str(layout.torrents), str(layout.incomplete)) and qb_ok
                 for category in DOWNLOAD_CATEGORIES:
                     qb_ok = qb_client.create_category(
                         category.name,
                         save_path=str(layout.torrent_path(category.library)),
                     ) and qb_ok
-                downloader_register.append("qbittorrent")
-            steps.append(_step("qbittorrent", "configure_folders_and_categories", qb_ok, str(layout.torrents)))
+            steps.append(
+                _step(
+                    "qbittorrent",
+                    "configure_folders_and_categories",
+                    qb_ok,
+                    f"login={login_ok} paths={logged_in} user={qb_user}",
+                )
+            )
+
+        sab_key = get_application_api_key("sabnzbd") or sab_key
+        sonarr_key = get_application_api_key("sonarr") or sonarr_key
+        radarr_key = get_application_api_key("radarr") or radarr_key
+        lidarr_key = get_application_api_key("lidarr") or lidarr_key
+        qb_user, qb_pass = qbittorrent_credentials()
+        downloader_register = self._downloaders_for_arr(sab_key=sab_key)
 
         roots = arr_root_folders(layout)
         if not self._skip_uninstalled(steps, "sonarr", "wire_clients_and_storage"):
@@ -261,7 +279,7 @@ class IntegrationEngine:
                     "sonarr",
                     "wire_clients_and_storage",
                     sonarr_root and sonarr_dl,
-                    f"roots={','.join(str(p) for p in roots['sonarr'])} downloaders={sonarr_dl} naming={sonarr_naming}",
+                    f"roots={','.join(str(p) for p in roots['sonarr'])} clients={','.join(downloader_register) or 'none'} downloaders={sonarr_dl} naming={sonarr_naming}",
                 )
             )
 
@@ -286,7 +304,7 @@ class IntegrationEngine:
                     "radarr",
                     "wire_clients_and_storage",
                     radarr_root and radarr_dl,
-                    f"roots={','.join(str(p) for p in roots['radarr'])} downloaders={radarr_dl} naming={radarr_naming}",
+                    f"roots={','.join(str(p) for p in roots['radarr'])} clients={','.join(downloader_register) or 'none'} downloaders={radarr_dl} naming={radarr_naming}",
                 )
             )
 

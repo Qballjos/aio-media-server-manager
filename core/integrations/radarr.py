@@ -11,6 +11,8 @@ import logging
 from typing import Any, Optional
 import requests
 
+from core.integrations.arr_app import post_servarr_download_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -83,17 +85,17 @@ class RadarrClient:
                 {"name": "useSsl", "value": False},
             ],
         }
-        try:
-            resp = requests.post(f"{self.base_url}/downloadclient", headers=self._headers(), json=payload, timeout=8.0)
-            if resp.status_code in (200, 201):
-                return True
-            logger.warning("Radarr add SABnzbd failed (%s): %s", resp.status_code, resp.text[:500])
-            return False
-        except Exception as exc:
-            logger.debug("Radarr add SABnzbd error: %s", exc)
-            return False
+        return post_servarr_download_client(
+            self.base_url,
+            self._headers(),
+            name=str(payload["name"]),
+            implementation="Sabnzbd",
+            config_contract="SabnzbdSettings",
+            fields=list(payload["fields"]),
+            label="Radarr",
+        )
 
-    def add_qbittorrent_client(self, host: str = "127.0.0.1", port: int = 8085, username: str = "admin", password: str = "adminadmin", category: str = "radarr") -> bool:
+    def add_qbittorrent_client(self, host: str = "127.0.0.1", port: int = 8081, username: str = "admin", password: str = "adminadmin", category: str = "radarr") -> bool:
         clients = self.get_download_clients()
         if any(c.get("implementation") == "QBittorrent" for c in clients):
             logger.info("Radarr qBittorrent download client already exists.")
@@ -113,15 +115,15 @@ class RadarrClient:
                 {"name": "useSsl", "value": False},
             ],
         }
-        try:
-            resp = requests.post(f"{self.base_url}/downloadclient", headers=self._headers(), json=payload, timeout=8.0)
-            if resp.status_code in (200, 201):
-                return True
-            logger.warning("Radarr add qBittorrent failed (%s): %s", resp.status_code, resp.text[:500])
-            return False
-        except Exception as exc:
-            logger.debug("Radarr add qBittorrent error: %s", exc)
-            return False
+        return post_servarr_download_client(
+            self.base_url,
+            self._headers(),
+            name=str(payload["name"]),
+            implementation="QBittorrent",
+            config_contract="QBittorrentSettings",
+            fields=list(payload["fields"]),
+            label="Radarr",
+        )
 
     def add_nzbget_client(
         self,
@@ -149,20 +151,15 @@ class RadarrClient:
                 {"name": "useSsl", "value": False},
             ],
         }
-        try:
-            resp = requests.post(
-                f"{self.base_url}/downloadclient",
-                headers=self._headers(),
-                json=payload,
-                timeout=8.0,
-            )
-            if resp.status_code in (200, 201):
-                return True
-            logger.warning("Radarr add NZBGet failed (%s): %s", resp.status_code, resp.text[:500])
-            return False
-        except Exception as exc:
-            logger.debug("Radarr add NZBGet error: %s", exc)
-            return False
+        return post_servarr_download_client(
+            self.base_url,
+            self._headers(),
+            name=str(payload["name"]),
+            implementation="Nzbget",
+            config_contract="NzbgetSettings",
+            fields=list(payload["fields"]),
+            label="Radarr",
+        )
 
     def configure_naming_defaults(self) -> bool:
         """Set standard movie naming format."""

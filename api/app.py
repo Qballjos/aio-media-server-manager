@@ -92,7 +92,7 @@ def create_app() -> FastAPI:
         if started:
             from core.integrations.lifecycle import schedule_full_wiring
 
-            asyncio.create_task(schedule_full_wiring())
+            asyncio.create_task(schedule_full_wiring(wait_for_apps=True))
         from core.update_schedule import scheduler_loop
 
         asyncio.create_task(scheduler_loop())

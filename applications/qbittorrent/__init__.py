@@ -37,18 +37,13 @@ class QBittorrentApp(BaseApplication):
     def build_start_command(self, executable: Path) -> list[str]:
         username, password = "", ""
         try:
-            from core.integrations.qbittorrent import qbittorrent_credentials
-            from core.shared_credentials import shared_admin_credentials
+            from core.integrations.qbittorrent import target_webui_credentials
 
-            shared = shared_admin_credentials()
-            if shared:
-                username, password = shared
-            else:
-                stored_user, stored_pass = qbittorrent_credentials()
-                if stored_pass and stored_pass != "adminadmin":
-                    username, password = stored_user, stored_pass
+            username, password = target_webui_credentials()
+            if username == "admin" and password == "adminadmin":
+                username, password = "", ""
         except Exception:
-            pass
+            username, password = "", ""
         ensure_webui_localhost_access(self.config_dir, username=username, password=password)
         cmd = [
             str(executable),

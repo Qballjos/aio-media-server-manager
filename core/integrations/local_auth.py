@@ -53,13 +53,12 @@ def apply_shared_local_logins(
     steps: list[dict[str, Any]] = []
 
     if installed("qbittorrent"):
-        from applications.qbittorrent.webui import ensure_webui_localhost_access
-        from core.integrations.qbittorrent import QBittorrentClient
+        from core.integrations.qbittorrent import apply_qbittorrent_webui_login
 
-        ensure_webui_localhost_access(config_dir_for("qbittorrent"), username=username, password=password)
-        client = QBittorrentClient(port=port_for("qbittorrent", 8081))
-        logged_in = client.login()
-        ok = logged_in and client.set_webui_login(username, password)
+        ok = apply_qbittorrent_webui_login(
+            config_dir_for("qbittorrent"),
+            port_for("qbittorrent", 8081),
+        )
         steps.append(_step("qbittorrent", "set_shared_login", ok, username))
 
     if installed("sabnzbd"):

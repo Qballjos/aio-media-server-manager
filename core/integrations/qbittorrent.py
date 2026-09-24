@@ -8,25 +8,36 @@ to separate and route BitTorrent downloads.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 import json
 import requests
 
 from core.crypto import secret_store
 from core.shared_credentials import shared_admin_credentials
+from applications.qbittorrent.webui import ensure_webui_localhost_access
 
 logger = logging.getLogger(__name__)
 
 
-def qbittorrent_credentials() -> tuple[str, str]:
-    username = secret_store.get_secret("qbittorrent_username")
-    password = secret_store.get_secret("qbittorrent_password")
+def target_webui_credentials() -> tuple[str, str]:
+    """Manager login unless the operator set a distinct qBittorrent user and password."""
+    shared = shared_admin_credentials()
+    username = (secret_store.get_secret("qbittorrent_username") or "").strip()
+    password = secret_store.get_secret("qbittorrent_password") or ""
+    if shared:
+        if not username or username == "admin":
+            username = shared[0]
+        if not password:
+            password = shared[1]
+        return username, password
     if username and password:
         return username, password
-    shared = shared_admin_credentials()
-    if shared:
-        return shared
     return "admin", "adminadmin"
+
+
+def qbittorrent_credentials() -> tuple[str, str]:
+    return target_webui_credentials()
 
 
 class QBittorrentClient:
@@ -97,6 +108,13 @@ class QBittorrentClient:
             return resp.status_code in (200, 201)
         except Exception as exc:
             logger.debug("qBittorrent relax_local_auth error: %s", exc)
+            return False
+
+    def app_accessible(self) -> bool:
+        try:
+            resp = self.session.get(f"{self.base_url}/app/version", timeout=5.0)
+            return resp.status_code == 200
+        except Exception:
             return False
 
     def set_webui_login(self, username: str, password: str) -> bool:
@@ -175,3 +193,62 @@ class QBittorrentClient:
         except Exception as exc:
             logger.debug("qBittorrent setPreferences error: %s", exc)
             return False
+
+
+def apply_qbittorrent_webui_login(config_dir, port: int, *, restart_if_needed: bool = True) -> bool:
+    """Persist the manager (or wizard) WebUI login via API, then conf + restart if needed."""
+    username, password = target_webui_credentials()
+    if not username or not password:
+        return False
+    secret_store.save_secret("qbittorrent_username", username)
+    secret_store.save_secret("qbittorrent_password", password)
+
+    client = QBittorrentClient(port=port, username=username, password=password)
+    if (client.login() or client.app_accessible()) and client.set_webui_login(username, password):
+        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        return True
+    if not restart_if_needed:
+        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        return False
+    if not _rewrite_login_and_restart(config_dir, username, password):
+        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        return False
+    time.sleep(2)
+    verify = QBittorrentClient(port=port, username=username, password=password)
+    if verify.login():
+        verify.set_webui_login(username, password)
+        return True
+    return verify.app_accessible()
+
+
+def _rewrite_login_and_restart(config_dir, username: str, password: str) -> bool:
+    from applications.catalog import ApplicationCatalog
+    from core.settings import settings
+    from core.supervisor import ProcessSupervisor
+
+    catalog = ApplicationCatalog()
+    if not catalog.has("qbittorrent"):
+        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        return False
+    plugin = catalog.get("qbittorrent")
+    supervisor = ProcessSupervisor.get()
+
+    async def _cycle() -> None:
+        if supervisor.status("qbittorrent").value == "running":
+            await supervisor.stop("qbittorrent")
+        ensure_webui_localhost_access(plugin.config_dir, username=username, password=password)
+        await supervisor.start(
+            name="qbittorrent",
+            cmd=plugin.start_command(),
+            cwd=plugin.working_directory(),
+            env=plugin.extra_env(),
+            log_dir=settings.config_dir / "logs",
+        )
+
+    try:
+        supervisor.run_coroutine_sync(_cycle(), timeout=90.0)
+        return True
+    except Exception as exc:
+        logger.warning("Could not restart qBittorrent after writing WebUI login: %s", exc)
+        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        return False

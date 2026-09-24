@@ -86,7 +86,7 @@ Copy [`.env.example`](../.env.example) for a native install. Compose already set
 | `AMM_UPDATE_APPLY_SCHEDULE` | `off` / `same` / `daily` / `weekly` / `monthly` |
 | `AMM_UPDATE_TIME` | `HH:MM` in the host timezone |
 | `AMM_CLOUDFLARE_TUNNEL_*` | Optional tunnel; also Settings → Remote access |
-| `AMM_VPN_*` | Optional torrent VPN; also Settings → VPN |
+| `AMM_VPN_*` | Optional VPN for qBittorrent, Prowlarr, and Flaresolverr; also Settings → VPN |
 
 ## Development clone
 

@@ -643,7 +643,7 @@ onMounted(loadAll)
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>VPN</h3>
-          <p>Torrent traffic only. Usenet always bypasses the tunnel.</p>
+          <p>qBittorrent, Prowlarr, and Flaresolverr. Usenet always bypasses the tunnel.</p>
         </div>
         <p class="share-meta">Tunnel {{ vpnLive.tunnel_up ? 'up' : 'down' }} · config {{ vpnLive.config_present ? 'present' : 'missing' }}</p>
         <form class="form-stack" @submit.prevent="saveVpn">

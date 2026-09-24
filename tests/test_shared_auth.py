@@ -11,6 +11,7 @@ from core.integrations.local_auth import (
     sha256_hex,
 )
 from core.shared_credentials import save_shared_admin_credentials, shared_admin_credentials
+from core.integrations.qbittorrent import apply_qbittorrent_webui_login, target_webui_credentials
 
 
 def test_save_and_read_shared_admin_credentials(tmp_path: Path, monkeypatch):
@@ -19,6 +20,46 @@ def test_save_and_read_shared_admin_credentials(tmp_path: Path, monkeypatch):
     assert shared_admin_credentials() is None
     save_shared_admin_credentials("amm", "SharedPass123!")
     assert shared_admin_credentials() == ("amm", "SharedPass123!")
+
+
+def test_qbittorrent_credentials_follow_manager_login(tmp_path: Path, monkeypatch):
+    store = SecretStore(key_path=tmp_path / "secret.key", storage_path=tmp_path / "secrets.enc")
+    monkeypatch.setattr("core.shared_credentials.secret_store", store)
+    monkeypatch.setattr("core.integrations.qbittorrent.secret_store", store)
+    save_shared_admin_credentials("qballjos", "ManagerPass123!")
+    assert target_webui_credentials() == ("qballjos", "ManagerPass123!")
+    store.save_secret("qbittorrent_username", "admin")
+    store.save_secret("qbittorrent_password", "")
+    assert target_webui_credentials() == ("qballjos", "ManagerPass123!")
+
+
+def test_apply_qbittorrent_webui_login_sets_preferences(tmp_path: Path, monkeypatch):
+    store = SecretStore(key_path=tmp_path / "secret.key", storage_path=tmp_path / "secrets.enc")
+    monkeypatch.setattr("core.shared_credentials.secret_store", store)
+    monkeypatch.setattr("core.integrations.qbittorrent.secret_store", store)
+    save_shared_admin_credentials("qballjos", "ManagerPass123!")
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            self.username = kwargs.get("username")
+            self.password = kwargs.get("password")
+
+        def login(self):
+            return True
+
+        def app_accessible(self):
+            return True
+
+        def set_webui_login(self, username, password):
+            assert username == "qballjos"
+            assert password == "ManagerPass123!"
+            return True
+
+    monkeypatch.setattr("core.integrations.qbittorrent.QBittorrentClient", FakeClient)
+    assert apply_qbittorrent_webui_login(tmp_path, 8081, restart_if_needed=False) is True
+    conf = (tmp_path / "qBittorrent" / "qBittorrent.conf").read_text(encoding="utf-8")
+    assert "WebUI\\Username=qballjos" in conf
+    assert "WebUI\\Password_PBKDF2=" in conf
 
 
 @patch("core.integrations.local_auth.requests.put")

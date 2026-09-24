@@ -22,7 +22,7 @@ _wiring_lock = asyncio.Lock()
 _pending_wiring = 0
 
 
-async def schedule_full_wiring() -> dict[str, Any]:
+async def schedule_full_wiring(*, wait_for_apps: bool = False) -> dict[str, Any]:
     """Coalesce overlapping wiring requests so the event loop stays free."""
     global _pending_wiring
     _pending_wiring += 1
@@ -30,6 +30,8 @@ async def schedule_full_wiring() -> dict[str, Any]:
         if _pending_wiring == 0:
             return {"status": "coalesced"}
         _pending_wiring = 0
+        if wait_for_apps:
+            await _wait_wiring_prereqs()
         return await asyncio.to_thread(integration_engine.run_full_wiring)
 
 
@@ -65,7 +67,7 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
                 plugin.name,
             )
 
-    if plugin.name not in WIRE_AFTER_INSTALL:
+    if not plugin.manifest.daemon and plugin.name not in WIRE_AFTER_INSTALL:
         return report
 
     logger.info("Running integration wiring after '%s' install.", plugin.name)
@@ -90,3 +92,40 @@ async def _wait_healthy(plugin: BaseApplication, timeout: float = 90.0) -> bool:
             pass
         await asyncio.sleep(1.5)
     return False
+
+
+async def _wait_wiring_prereqs(timeout: float = 90.0) -> None:
+    """Give *Arr and download clients time to write API keys after autostart."""
+    from applications.catalog import ApplicationCatalog
+    from core.integrations.credentials import APPS_WITH_FILE_API_KEYS, get_application_api_key
+
+    catalog = ApplicationCatalog()
+    names = [
+        plugin.name
+        for plugin in catalog.all_plugins()
+        if plugin.manifest.daemon and plugin.is_installed() and plugin.name in WIRE_AFTER_INSTALL
+    ]
+    if not names:
+        return
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        ready = True
+        for name in names:
+            plugin = catalog.get(name)
+            if not await _probe_url(plugin.health_check_url()):
+                ready = False
+                break
+            if name in APPS_WITH_FILE_API_KEYS and not get_application_api_key(name):
+                ready = False
+                break
+        if ready:
+            return
+        await asyncio.sleep(1.5)
+
+
+async def _probe_url(url: str) -> bool:
+    try:
+        resp = await asyncio.to_thread(requests.get, url, timeout=2.0)
+        return resp.status_code < 500
+    except Exception:
+        return False

@@ -10,11 +10,19 @@ from pathlib import Path
 _WEBUI_LOCAL_DEFAULTS = {
     "WebUI\\LocalHostAuth": "false",
     "WebUI\\AuthSubnetWhitelistEnabled": "true",
-    "WebUI\\AuthSubnetWhitelist": "127.0.0.0/8, ::1",
+    "WebUI\\AuthSubnetWhitelist": "127.0.0.0/8, ::1, 10.200.200.0/24",
     "WebUI\\CSRFProtection": "false",
     "WebUI\\HostHeaderValidation": "false",
     "WebUI\\BannedIPs": "",
 }
+
+
+def qbit_conf_paths(profile_dir: Path) -> tuple[Path, Path]:
+    root = Path(profile_dir)
+    return (
+        root / "qBittorrent" / "qBittorrent.conf",
+        root / "qBittorrent" / "config" / "qBittorrent.conf",
+    )
 
 
 def qbittorrent_pbkdf2(password: str, *, salt: bytes | None = None) -> str:
@@ -31,8 +39,14 @@ def ensure_webui_localhost_access(
     username: str = "",
     password: str = "",
 ) -> Path:
-    """Let *Arr on 127.0.0.1 talk to the WebUI, and persist LAN login when credentials exist."""
-    conf = Path(profile_dir) / "qBittorrent" / "qBittorrent.conf"
+    """Let *Arr and AMM talk to the WebUI, and persist LAN login when credentials exist."""
+    written = None
+    for conf in qbit_conf_paths(profile_dir):
+        written = _write_webui_conf(conf, username=username, password=password)
+    return written or qbit_conf_paths(profile_dir)[0]
+
+
+def _write_webui_conf(conf: Path, *, username: str, password: str) -> Path:
     conf.parent.mkdir(parents=True, exist_ok=True)
     text = conf.read_text(encoding="utf-8") if conf.is_file() else ""
     lines = text.splitlines()
@@ -46,6 +60,8 @@ def ensure_webui_localhost_access(
     rewritten: list[str] = []
     for line in lines:
         stripped = line.strip()
+        if stripped.startswith("WebUI\\Password_ha1="):
+            continue
         matched = False
         for key, value in extras.items():
             if stripped.startswith(f"{key}="):

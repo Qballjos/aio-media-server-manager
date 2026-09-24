@@ -43,6 +43,11 @@ class FlaresolverrApp(SimpleApplication):
             env["CHROME_BIN"] = chrome
         return env
 
+    def build_start_command(self, executable: Path) -> list[str]:
+        from core.vpn import vpn_manager
+
+        return vpn_manager.wrap_isolated_command(super().build_start_command(executable))
+
     def install(self) -> InstallResult:
         installer = AppInstaller()
         try:

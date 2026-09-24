@@ -1,9 +1,9 @@
 """
-core/vpn.py — Optional VPN isolation for BitTorrent and Prowlarr.
+core/vpn.py — Optional VPN isolation for BitTorrent, Prowlarr, and Flaresolverr.
 
 Usenet (SABnzbd/NZBGet) always stays on the host network. When VPN is enabled
-on Linux, qBittorrent and Prowlarr run inside the `amm-torrent` netns so their
-egress uses the tunnel only. Local WebUIs are DNAT'd from 127.0.0.1.
+on Linux, qBittorrent, Prowlarr, and Flaresolverr run inside the `amm-torrent`
+netns so their egress uses the tunnel only. Local WebUIs are DNAT'd from 127.0.0.1.
 """
 
 from __future__ import annotations
@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 
 PROVIDERS = ("privadovpn", "mullvad", "protonvpn", "airvpn", "ivpn", "custom")
 TORRENT_NETNS = "amm-torrent"
-VPN_TUNNELED_APPS = frozenset({"qbittorrent", "prowlarr"})
+VPN_TUNNELED_APPS = frozenset({"qbittorrent", "prowlarr", "flaresolverr"})
 MAX_VPN_CONFIG_BYTES = 256 * 1024
 _VETH_HOST = "amm-veth-h"
 _VETH_NS = "amm-veth-n"
 _NS_HOST_IP = "10.200.200.1"
 _NS_PEER_IP = "10.200.200.2"
-_DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696}
+_DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191}
 
 
 class VpnIsolationError(RuntimeError):
@@ -91,12 +91,16 @@ class VpnManager:
     def status(self) -> dict[str, Any]:
         tunnel_up = self._tunnel_up()
         netns = self._netns_exists()
-        qbit_running = ProcessSupervisor.get().status("qbittorrent").value == "running"
-        prowlarr_running = ProcessSupervisor.get().status("prowlarr").value == "running"
         isolated = bool(self.settings.vpn_enabled and netns and tunnel_up)
-        qbit_unprotected = self._unprotected(qbit_running, isolated)
-        prowlarr_unprotected = self._unprotected(prowlarr_running, isolated)
-        return {
+        supervisor = ProcessSupervisor.get()
+        running: dict[str, bool] = {}
+        unprotected: list[str] = []
+        for name in sorted(VPN_TUNNELED_APPS):
+            is_running = supervisor.status(name).value == "running"
+            running[name] = is_running
+            if self._unprotected(is_running, isolated):
+                unprotected.append(name)
+        payload = {
             "enabled": self.settings.vpn_enabled,
             "enforce": self.settings.vpn_enforce,
             "provider": self.settings.vpn_provider,
@@ -108,14 +112,18 @@ class VpnManager:
             "netns": TORRENT_NETNS if os.name == "posix" else None,
             "netns_ready": netns,
             "platform_linux": self._is_linux(),
-            "qbittorrent_running": qbit_running,
-            "qbittorrent_unprotected": qbit_unprotected,
-            "prowlarr_running": prowlarr_running,
-            "prowlarr_unprotected": prowlarr_unprotected,
+            "qbittorrent_running": running.get("qbittorrent", False),
+            "qbittorrent_unprotected": "qbittorrent" in unprotected,
+            "prowlarr_running": running.get("prowlarr", False),
+            "prowlarr_unprotected": "prowlarr" in unprotected,
+            "flaresolverr_running": running.get("flaresolverr", False),
+            "flaresolverr_unprotected": "flaresolverr" in unprotected,
             "tunneled_apps": sorted(VPN_TUNNELED_APPS),
+            "unprotected_apps": unprotected,
             "supported_providers": list(PROVIDERS),
             "usenet_bypasses_vpn": True,
         }
+        return payload
 
     def wrap_torrent_command(self, cmd: list[str]) -> list[str]:
         return self.wrap_isolated_command(cmd)

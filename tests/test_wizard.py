@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 from api.app import create_app
 from core.settings import Settings
 from core.wizard import WizardEngine, WIZARD_STEPS
+from core.crypto import SecretStore
+from core.shared_credentials import save_shared_admin_credentials
 
 
 def test_wizard_engine_lifecycle(tmp_path: Path):
@@ -122,6 +124,23 @@ def test_wizard_writes_pasted_vpn_config(tmp_path: Path):
     assert step6["has_vpn_config"] is True
     assert "vpn_config_text" not in engine.get_status()["selections"]
     assert engine.get_status()["selections"]["vpn_config_path"] == str(dest)
+
+
+def test_wizard_blank_qbittorrent_login_uses_manager_account(tmp_path: Path, monkeypatch):
+    store = SecretStore(key_path=tmp_path / "secret.key", storage_path=tmp_path / "secrets.enc")
+    monkeypatch.setattr("core.wizard.secret_store", store)
+    monkeypatch.setattr("core.shared_credentials.secret_store", store)
+    save_shared_admin_credentials("qballjos", "ManagerPass123!")
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        install_dir=tmp_path / "apps",
+    )
+    engine = WizardEngine(state_file=tmp_path / "wizard_state.json", cfg=cfg)
+    engine.apply_initial_settings()
+    assert store.get_secret("qbittorrent_username") == "qballjos"
+    assert store.get_secret("qbittorrent_password") == "ManagerPass123!"
 
 
 @pytest.mark.asyncio

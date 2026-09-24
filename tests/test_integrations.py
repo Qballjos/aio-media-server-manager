@@ -23,7 +23,7 @@ from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient, write_bootstrap_ini
 from core.integrations.seerr import SeerrClient
 from core.integrations.sonarr import SonarrClient
-from core.integrations.engine import WIRE_AFTER_INSTALL, _register_download_clients
+from core.integrations.engine import IntegrationEngine, WIRE_AFTER_INSTALL, _register_download_clients
 
 
 def test_credentials_discovery(tmp_path: Path):
@@ -188,11 +188,60 @@ def test_register_download_clients_skips_clients_that_are_not_ready():
     assert _register_download_clients([], add_sab=lambda: False, add_nzb=lambda: False, add_qb=lambda: False) is True
 
 
+def test_downloaders_for_arr_uses_running_apps():
+    engine = IntegrationEngine()
+    with patch.object(engine, "_installed", side_effect=lambda name: name in {"sabnzbd", "qbittorrent"}), patch.object(
+        engine, "_is_app_running", side_effect=lambda name: name in {"sabnzbd", "qbittorrent"}
+    ):
+        assert engine._downloaders_for_arr(sab_key="abc") == ["sabnzbd", "qbittorrent"]
+        assert engine._downloaders_for_arr(sab_key=None) == ["qbittorrent"]
+
+
+@patch("requests.get")
+@patch("requests.post")
+def test_sonarr_adds_download_client_with_force_save(mock_post, mock_get):
+    def fake_get(url, *args, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        if url.endswith("/downloadclient/schema"):
+            resp.json.return_value = [
+                {
+                    "implementation": "QBittorrent",
+                    "protocol": "torrent",
+                    "priority": 1,
+                    "fields": [
+                        {"name": "host", "value": ""},
+                        {"name": "port", "value": 8080},
+                        {"name": "username", "value": ""},
+                        {"name": "password", "value": ""},
+                        {"name": "tvCategory", "value": ""},
+                    ],
+                }
+            ]
+        else:
+            resp.json.return_value = []
+        return resp
+
+    mock_get.side_effect = fake_get
+    mock_post.return_value.status_code = 201
+    assert SonarrClient(api_key="k").add_qbittorrent_client(port=8081, username="amm", password="pw") is True
+    assert mock_post.call_args.kwargs["params"] == {"forceSave": "true"}
+    fields = {item["name"]: item.get("value") for item in mock_post.call_args.kwargs["json"]["fields"]}
+    assert fields["host"] == "127.0.0.1"
+    assert fields["port"] == 8081
+    assert fields["password"] == "pw"
+    assert mock_post.call_args.kwargs["json"]["protocol"] == "torrent"
+
+
 def test_qbittorrent_profile_bypasses_localhost_auth(tmp_path: Path):
     conf = ensure_webui_localhost_access(tmp_path)
     text = conf.read_text(encoding="utf-8")
     assert "WebUI\\LocalHostAuth=false" in text
     assert "127.0.0.0/8" in text
+    assert "10.200.200.0/24" in text
+    nested = tmp_path / "qBittorrent" / "config" / "qBittorrent.conf"
+    assert nested.is_file()
+    assert "10.200.200.0/24" in nested.read_text(encoding="utf-8")
 
 
 def test_qbittorrent_profile_seeds_shared_webui_password(tmp_path: Path):

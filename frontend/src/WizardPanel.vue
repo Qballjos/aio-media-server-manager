@@ -123,7 +123,7 @@ async function loadStep(id) {
       selections.pgid = data.pgid || data.current_gid || 1000
     } else if (id === 5) {
       selections.download_clients = [...(data.selected || [])]
-      selections.qbittorrent_username = data.qbittorrent_username || 'admin'
+      selections.qbittorrent_username = data.qbittorrent_username || ''
       selections.qbittorrent_password = ''
       selections.usenet_host = data.usenet_host || ''
       selections.usenet_port = data.usenet_port || 563
@@ -418,13 +418,13 @@ onMounted(async () => {
           <template v-if="showQbitCreds">
             <label class="ui-field">
               <span>qBittorrent WebUI username</span>
-              <input v-model="selections.qbittorrent_username" class="ui-input font-mono" />
+              <input v-model="selections.qbittorrent_username" class="ui-input font-mono" placeholder="Leave blank to use the manager username" />
             </label>
             <label class="ui-field">
               <span>qBittorrent WebUI password</span>
               <input v-model="selections.qbittorrent_password" type="password" class="ui-input" placeholder="Leave blank to use the manager password" />
             </label>
-            <p class="wizard-muted">Blank qBittorrent fields use the same username and password as AIO Media Server Manager.</p>
+            <p class="wizard-muted">Blank qBittorrent username and password use the same login as AIO Media Server Manager.</p>
           </template>
           <template v-if="showUsenetCreds">
             <p class="wizard-muted">Optional. These Usenet provider details are pushed into SABnzbd and/or NZBGet after install.</p>

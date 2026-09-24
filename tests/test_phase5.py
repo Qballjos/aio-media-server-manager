@@ -82,7 +82,8 @@ def test_vpn_status_without_tunnel(tmp_path: Path):
     status = mgr.status()
     assert status["enabled"] is True
     assert status["usenet_bypasses_vpn"] is True
-    assert status["tunneled_apps"] == ["prowlarr", "qbittorrent"]
+    assert status["tunneled_apps"] == ["flaresolverr", "prowlarr", "qbittorrent"]
+    assert status["unprotected_apps"] == []
     assert status["tunnel_up"] is False
     assert "privadovpn" in status["supported_providers"]
     cmd = mgr.wrap_torrent_command(["qbittorrent-nox"])
@@ -125,6 +126,7 @@ def test_vpn_kill_switch_blocks_tunneled_apps(tmp_path: Path, monkeypatch):
         except VpnIsolationError:
             pass
     mgr.assert_can_start_tunneled_app("sabnzbd")
+    assert "flaresolverr" in VPN_TUNNELED_APPS
 
 
 def test_save_vpn_config_text_writes_default_path(tmp_path: Path):
@@ -141,6 +143,29 @@ def test_save_vpn_config_text_writes_default_path(tmp_path: Path):
     assert dest == cfg.config_dir / "vpn" / "client.ovpn"
     assert dest.is_file()
     assert "remote vpn.example" in dest.read_text(encoding="utf-8")
+
+
+def test_flaresolverr_start_command_wraps_on_linux(tmp_path: Path, monkeypatch):
+    from applications.community import FlaresolverrApp
+    from core import vpn as vpn_mod
+
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_is_linux", lambda: True)
+    monkeypatch.setattr(mgr, "_netns_exists", lambda: True)
+    monkeypatch.setattr("core.vpn.shutil.which", lambda name: "/sbin/ip" if name == "ip" else None)
+    monkeypatch.setattr(vpn_mod, "vpn_manager", mgr)
+    app = FlaresolverrApp(base_config_dir=tmp_path, base_install_dir=tmp_path)
+    exe = tmp_path / "flaresolverr"
+    exe.write_text("x", encoding="utf-8")
+    exe.chmod(0o755)
+    cmd = app.build_start_command(exe)
+    assert cmd[:4] == ["ip", "netns", "exec", TORRENT_NETNS]
 
 
 def test_qbittorrent_start_command_not_netns_on_non_linux(tmp_path: Path):

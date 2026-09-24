@@ -79,7 +79,7 @@ class WizardEngine:
                 "media_servers": ["jellyfin"],
                 "request_system": "seerr",
                 "preferred_download_client": "qbittorrent",
-                "qbittorrent_username": "admin",
+                "qbittorrent_username": "",
                 "qbittorrent_password": "",
                 "usenet_host": "",
                 "usenet_port": 563,
@@ -200,7 +200,7 @@ class WizardEngine:
                 ),
                 "selected": selections.get("download_clients", []),
                 "preferred_download_client": selections.get("preferred_download_client", "qbittorrent"),
-                "qbittorrent_username": selections.get("qbittorrent_username", "admin"),
+                "qbittorrent_username": selections.get("qbittorrent_username", ""),
                 "has_qbittorrent_password": bool(selections.get("qbittorrent_password")),
                 "usenet_host": selections.get("usenet_host", ""),
                 "usenet_port": selections.get("usenet_port", 563),
@@ -453,12 +453,19 @@ class WizardEngine:
         from core.shared_credentials import shared_admin_credentials
 
         shared = shared_admin_credentials()
-        username = selections.get("qbittorrent_username") or (shared[0] if shared else "admin")
-        password = selections.get("qbittorrent_password") or (shared[1] if shared else "")
+        username = str(selections.get("qbittorrent_username") or "").strip()
+        password = str(selections.get("qbittorrent_password") or "")
+        if shared:
+            if not username:
+                username = shared[0]
+            if not password:
+                password = shared[1]
+        elif not username:
+            username = "admin"
         try:
-            secret_store.save_secret("qbittorrent_username", str(username))
+            secret_store.save_secret("qbittorrent_username", username)
             if password:
-                secret_store.save_secret("qbittorrent_password", str(password))
+                secret_store.save_secret("qbittorrent_password", password)
                 selections["qbittorrent_password"] = ""
             preferred = selections.get("preferred_download_client") or (
                 (selections.get("download_clients") or ["qbittorrent"])[0]

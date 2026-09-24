@@ -11,6 +11,8 @@ import logging
 from typing import Any, Optional
 import requests
 
+from core.integrations.arr_app import post_servarr_download_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -85,7 +87,7 @@ class SonarrClient:
         }
         return self._post_download_client("SABnzbd", payload)
 
-    def add_qbittorrent_client(self, host: str = "127.0.0.1", port: int = 8085, username: str = "admin", password: str = "adminadmin", category: str = "sonarr") -> bool:
+    def add_qbittorrent_client(self, host: str = "127.0.0.1", port: int = 8081, username: str = "admin", password: str = "adminadmin", category: str = "sonarr") -> bool:
         clients = self.get_download_clients()
         if any(c.get("implementation") == "QBittorrent" for c in clients):
             logger.info("Sonarr qBittorrent download client already exists.")
@@ -136,20 +138,15 @@ class SonarrClient:
         return self._post_download_client("NZBGet", payload)
 
     def _post_download_client(self, label: str, payload: dict[str, Any]) -> bool:
-        try:
-            resp = requests.post(
-                f"{self.base_url}/downloadclient",
-                headers=self._headers(),
-                json=payload,
-                timeout=8.0,
-            )
-            if resp.status_code in (200, 201):
-                return True
-            logger.warning("Sonarr add %s failed (%s): %s", label, resp.status_code, resp.text[:500])
-            return False
-        except Exception as exc:
-            logger.debug("Sonarr add %s error: %s", label, exc)
-            return False
+        return post_servarr_download_client(
+            self.base_url,
+            self._headers(),
+            name=str(payload.get("name") or label),
+            implementation=str(payload.get("implementation") or ""),
+            config_contract=str(payload.get("configContract") or ""),
+            fields=list(payload.get("fields") or []),
+            label="Sonarr",
+        )
 
     def configure_naming_defaults(self) -> bool:
         """Set Servarr episode naming tokens (not Python format strings)."""

@@ -57,7 +57,7 @@ Typical *Arr deployments become a Compose file per application: Sonarr, Radarr, 
 - **Shared local login** — the manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin, Seerr). Plex still uses a Plex account.
 - **Automatic wiring** — after an app is healthy: categories, root folders, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr / Profilarr / NeutArr.
 - **Storage model** — `config`, `downloads`, and `media` with `PUID` / `PGID` and hardlink checks.
-- **VPN isolation** — qBittorrent and Prowlarr can run in a Linux network namespace bound to WireGuard or OpenVPN; Usenet stays off the tunnel.
+- **VPN isolation** — qBittorrent, Prowlarr, and Flaresolverr can run in a Linux network namespace bound to WireGuard or OpenVPN; Usenet stays off the tunnel.
 - **Hardware transcoding** — VAAPI / QSV / NVIDIA when the host exposes devices.
 - **Optional Cloudflare Tunnel** — `cloudflared` runs inside this appliance, not as a second Compose service.
 - **Dashboard** — official app logos, help/wiki links, search and sort, Health graphs, updates, backups, and uninstall.
