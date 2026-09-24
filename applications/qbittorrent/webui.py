@@ -25,6 +25,14 @@ def qbit_conf_paths(profile_dir: Path) -> tuple[Path, Path]:
     )
 
 
+def _ini_scalar(value: str) -> str:
+    """Quote INI values that Qt would otherwise truncate (spaces, #, ;)."""
+    text = str(value)
+    if any(ch in text for ch in ' \t#;="'):
+        return '"' + text.replace("\\", "/").replace('"', r"\"") + '"'
+    return text
+
+
 def qbittorrent_pbkdf2(password: str, *, salt: bytes | None = None) -> str:
     """qBittorrent 4.2+ WebUI\\Password_PBKDF2 value (SHA-512, 100000 iterations)."""
     salt_bytes = salt if salt is not None else os.urandom(16)
@@ -69,10 +77,16 @@ def _write_webui_conf(
         extras["WebUI\\Username"] = user
         extras["WebUI\\Password_PBKDF2"] = qbittorrent_pbkdf2(secret)
     if alternative_ui_root is not None:
+        root = Path(alternative_ui_root).expanduser()
+        try:
+            root = root.resolve()
+        except OSError:
+            root = root.absolute()
         extras["WebUI\\AlternativeUIEnabled"] = "true"
-        extras["WebUI\\RootFolder"] = str(Path(alternative_ui_root))
+        extras["WebUI\\RootFolder"] = _ini_scalar(str(root))
     else:
         extras["WebUI\\AlternativeUIEnabled"] = "false"
+        extras["WebUI\\RootFolder"] = ""
     found = {key: False for key in extras}
     rewritten: list[str] = []
     for line in lines:

@@ -35,8 +35,8 @@ After the wizard, **Home** is the front page for watching and requesting. It reu
 - **Launcher** lists installed apps that have a WebUI. Recyclarr is omitted (CLI only). Stopped apps still appear dimmed.
 - **Coming up** uses Sonarr and Radarr calendars when those processes are running.
 - **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
-- **Recently added** uses Jellyfin and/or Plex.
-- **Search** talks to Seerr when it is running (Request button). Without Seerr, it falls back to Sonarr/Radarr lookup only.
+- **Recently added** uses Jellyfin and/or Plex. AMM tries the manager login first. You can also paste a Jellyfin API key under **Settings → Integrations** (or Catalog → Jellyfin → Settings). Create the key in Jellyfin Dashboard → API Keys.
+- **Search** talks to Seerr when it is running (Request button). AMM reads `apiKey` from Seerr’s `settings.json` after Seerr’s first setup. Without Seerr, search falls back to Sonarr/Radarr lookup only.
 - **Widget debug** on Home (or `?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
 
 Empty widgets stay hidden until debug is on. **Catalog** is still the admin dashboard for install, process controls, logs, and Auto-Wire.
@@ -60,7 +60,7 @@ The dashboard lists the **17** catalog applications (installed vs available coun
 
 qBittorrent on localhost is allowed without the WebUI login prompt. **Open UI** from another LAN machine uses the manager username and password (seeded into `qBittorrent.conf` before start). Restart qBittorrent once after upgrading if an older run already created a temporary WebUI password.
 
-**VueTorrent:** Catalog → qBittorrent → Settings → **VueTorrent WebUI** downloads the latest [VueTorrent](https://github.com/VueTorrent/VueTorrent) zip and sets qBittorrent’s alternative WebUI folder. Same listen port (`8081` by default) and the same WebAPI, so *Arr download clients keep working. Turn the switch off to return to the stock WebUI; the files stay on disk so you can enable it again without another download.
+**VueTorrent:** Catalog → qBittorrent → Settings → **VueTorrent WebUI** downloads the latest [VueTorrent](https://github.com/VueTorrent/VueTorrent) zip and sets qBittorrent’s alternative WebUI folder (quoted absolute path, readable by PUID/PGID). Same listen port (`8081` by default) and the same WebAPI, so *Arr download clients keep working. Turn the switch off to return to the stock WebUI; the files stay on disk so you can enable it again without another download. If Open UI fails after enabling, turn VueTorrent off, save (qBittorrent restarts on the stock UI), then enable it again.
 
 Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Rebuild/recreate the image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`. Form login uses the manager username and password (YAML stores a SHA-256 of the password; type the same plaintext you used in the wizard).
 

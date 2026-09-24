@@ -37,6 +37,7 @@ class AppSettingsPatch(BaseModel):
     port: int | None = None
     autostart: bool | None = None
     vuetorrent: bool | None = None
+    api_key: str | None = None
     restart: bool = True
 
 
@@ -254,6 +255,10 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
             "VueTorrent is an optional alternative WebUI. Turning it on downloads the latest zip "
             "from GitHub and restarts qBittorrent. The WebAPI stays the same for *Arr."
         )
+    elif plugin.name == "jellyfin":
+        notes.append(
+            "Paste an API key from Jellyfin Dashboard → API Keys if homepage Recently added cannot log in automatically."
+        )
     elif plugin.manifest.daemon:
         notes.append(
             "Open UI uses http://<host>:<port>. If you change the port, publish it in compose "
@@ -292,6 +297,10 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         payload["vuetorrent_version"] = installed_meta(plugin.config_dir).get("version")
         payload["vuetorrent_path"] = str(vuetorrent_dir(plugin.config_dir))
         payload["vuetorrent_help"] = VUETORRENT_HELP
+    if plugin.name == "jellyfin":
+        from core.crypto import secret_store
+
+        payload["api_key_configured"] = bool(secret_store.get_secret("jellyfin_api_key"))
     return payload
 
 
@@ -316,7 +325,7 @@ async def patch_application_settings(
         plugin = catalog.get(name)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if body.port is None and body.autostart is None and body.vuetorrent is None:
+    if body.port is None and body.autostart is None and body.vuetorrent is None and body.api_key is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No settings to change.")
 
     taken = {item.name: item.port for item in catalog.all_plugins()}
@@ -366,6 +375,21 @@ async def patch_application_settings(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Could not apply VueTorrent: {exc}",
             ) from exc
+
+    if body.api_key is not None:
+        if plugin.name != "jellyfin":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="API key can only be saved for Jellyfin.",
+            )
+        from core.crypto import secret_store
+        from core.integrations.credentials import set_application_api_key
+
+        key = body.api_key.strip()
+        if key:
+            set_application_api_key("jellyfin", key)
+        else:
+            secret_store.delete_secret("jellyfin_api_key")
 
     restarted = False
     supervisor = ProcessSupervisor.get()

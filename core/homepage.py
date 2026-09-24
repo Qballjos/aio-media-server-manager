@@ -439,7 +439,7 @@ def _collect_qbittorrent_queue(
         return []
     plugin = catalog.get("qbittorrent")
     client = QBittorrentClient(port=plugin.port)
-    if not client.login():
+    if not (client.app_accessible() or client.login()):
         return _finish_source(notes, "downloads", "qbittorrent", [], "WebUI login failed", "queue is empty")
     try:
         resp = client.session.get(f"{client.base_url}/torrents/info", timeout=_TIMEOUT)

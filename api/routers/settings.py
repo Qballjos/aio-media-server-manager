@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from core.auth import auth_manager
 from core.cloudflare_tunnel import cloudflare_tunnel
 from core.crypto import secret_store
+from core.integrations.credentials import set_application_api_key
 from core.settings import settings
 from core.supervisor import ProcessSupervisor, ProcessState
 from core.vpn import vpn_manager, PROVIDERS, save_vpn_config_text
@@ -52,6 +53,7 @@ class SettingsPatch(BaseModel):
     cloudflare_tunnel_token: Optional[str] = None
     trusted_proxies: Optional[str] = None
     github_token: Optional[str] = None
+    jellyfin_api_key: Optional[str] = None
     restart_children: bool = False
     update_check_schedule: Optional[str] = None
     update_apply_schedule: Optional[str] = None
@@ -109,6 +111,7 @@ def public_settings() -> dict[str, Any]:
         "trusted_proxies": settings.trusted_proxies,
         "root_path": settings.root_path,
         "github_token_configured": bool(token),
+        "jellyfin_api_key_configured": bool(secret_store.get_secret("jellyfin_api_key")),
         "vpn": vpn_manager.status(),
         "cloudflare_tunnel": cloudflare_tunnel.status(),
         "storage": storage,
@@ -188,6 +191,14 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         else:
             secret_store.delete_secret(GITHUB_TOKEN_SECRET)
             settings.github_token = None
+    if body.jellyfin_api_key is not None:
+        key = body.jellyfin_api_key.strip()
+        if key:
+            set_application_api_key("jellyfin", key)
+            notes.append("Saved Jellyfin API key.")
+        else:
+            secret_store.delete_secret("jellyfin_api_key")
+            notes.append("Cleared Jellyfin API key.")
     if body.update_check_schedule is not None or body.update_apply_schedule is not None or body.update_time is not None:
         from core.update_schedule import normalize_apply_schedule, normalize_check_schedule, parse_hhmm
 

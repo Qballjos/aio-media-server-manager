@@ -167,14 +167,16 @@ class SABnzbdClient:
 
     def list_servers(self) -> list[dict[str, Any]]:
         data = self._request("get_config", {"section": "servers"})
-        rows = data.get("config")
-        if isinstance(rows, dict):
-            rows = rows.get("servers")
-        if rows is None:
-            rows = data.get("servers")
-        if not isinstance(rows, list):
-            return []
-        return [item for item in rows if isinstance(item, dict)]
+        rows = _server_dicts(data)
+        seen: set[str] = set()
+        unique: list[dict[str, Any]] = []
+        for item in rows:
+            ident = str(item.get("name") or item.get("displayname") or item.get("host") or "")
+            if ident in seen:
+                continue
+            seen.add(ident)
+            unique.append(item)
+        return unique
 
     def _has_news_server(self, host: str) -> bool:
         want = host.strip().lower()
@@ -185,14 +187,73 @@ class SABnzbdClient:
                 return True
         return False
 
-    def _remove_accidental_servers(self) -> None:
+    def remove_accidental_servers(self, config_dir: Path | None = None) -> int:
         """Drop servers created by the old per-keyword set_config loop (named host, port, ssl, …)."""
+        removed = 0
         for item in self.list_servers():
-            ident = str(item.get("name") or item.get("host") or "").strip().lower()
-            if ident not in _JUNK_SERVER_NAMES:
+            ident = str(item.get("name") or item.get("displayname") or "").strip()
+            if ident.lower() not in _JUNK_SERVER_NAMES:
                 continue
             self._request("del_config", {"section": "servers", "keyword": ident})
+            self._request("del_config", {"section": "servers", "name": ident})
             logger.info("Removed extra SABnzbd server entry '%s'.", ident)
+            removed += 1
+        if config_dir:
+            removed += strip_junk_servers_ini(Path(config_dir) / "sabnzbd.ini")
+        return removed
+
+    def _remove_accidental_servers(self) -> None:
+        self.remove_accidental_servers()
+
+
+def _server_dicts(obj: Any) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    if isinstance(obj, dict):
+        keys = {str(key).lower() for key in obj}
+        if "host" in keys or ("name" in keys and ("ssl" in keys or "connections" in keys or "displayname" in keys)):
+            found.append(obj)
+        else:
+            for value in obj.values():
+                found.extend(_server_dicts(value))
+    elif isinstance(obj, list):
+        for value in obj:
+            found.extend(_server_dicts(value))
+    return found
+
+
+def strip_junk_servers_ini(path: Path) -> int:
+    """Remove [[host]] / [[ssl]] leftover server blocks from sabnzbd.ini."""
+    if not path.is_file():
+        return 0
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    in_servers = False
+    skip = False
+    removed = 0
+    for line in lines:
+        stripped = line.strip()
+        if stripped.lower() == "[servers]":
+            in_servers = True
+            skip = False
+            out.append(line)
+            continue
+        if stripped.startswith("[") and not stripped.startswith("[["):
+            in_servers = False
+            skip = False
+        if in_servers and stripped.startswith("[[") and stripped.endswith("]]"):
+            name = stripped[2:-2].strip().lower()
+            skip = name in _JUNK_SERVER_NAMES
+            if skip:
+                removed += 1
+                continue
+        if skip:
+            continue
+        out.append(line)
+    if removed:
+        path.write_text("".join(out), encoding="utf-8")
+        logger.info("Stripped %s extra Usenet server block(s) from %s", removed, path)
+    return removed
 
 
 def _ini_value(value: object) -> str:

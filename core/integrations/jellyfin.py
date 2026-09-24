@@ -3,11 +3,68 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Optional
+from pathlib import Path
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+_AUTH_HEADER = (
+    'MediaBrowser Client="AIO Media Server Manager", Device="AMM", DeviceId="amm-jellyfin", Version="1.0.0", Token=""'
+)
+
+
+def _jellyfin_listen_port(config_dir: Path | None, fallback: int = 8096) -> int:
+    try:
+        from core.app_prefs import load_app_ports
+
+        stored = int(load_app_ports().get("jellyfin") or 0)
+        if stored:
+            return stored
+    except Exception:
+        pass
+    if config_dir:
+        xml = Path(config_dir) / "network.xml"
+        if xml.is_file():
+            try:
+                match = re.search(r"<InternalHttpPort>(\d+)</InternalHttpPort>", xml.read_text(encoding="utf-8"))
+                if match:
+                    return int(match.group(1))
+            except OSError:
+                pass
+    return int(fallback or 8096)
+
+
+def discover_jellyfin_api_key(config_dir: Path | None = None, port: int = 8096) -> str:
+    """Finish startup if needed, then log in with the shared manager account."""
+    from core.shared_credentials import admin_email, shared_admin_credentials
+
+    creds = shared_admin_credentials()
+    if not creds:
+        return ""
+    username, password = creds
+    if not username or not password:
+        return ""
+    client = JellyfinClient(port=_jellyfin_listen_port(config_dir, port))
+    client.complete_startup(username, password)
+    names = [username]
+    email = (admin_email() or "").strip()
+    if email:
+        names.append(email)
+        names.append(email.split("@", 1)[0])
+    names.extend(client.public_usernames())
+    seen: set[str] = set()
+    for name in names:
+        label = (name or "").strip()
+        if not label or label.lower() in seen:
+            continue
+        seen.add(label.lower())
+        token = client.authenticate(label, password)
+        if token:
+            return client.create_api_key("AIO-Media-Manager") or token
+    return ""
 
 
 class JellyfinClient:
@@ -20,7 +77,109 @@ class JellyfinClient:
         if self.api_key:
             headers["X-Emby-Token"] = self.api_key
             headers["X-MediaBrowser-Token"] = self.api_key
+        headers.setdefault("Authorization", _AUTH_HEADER)
+        headers.setdefault("X-Emby-Authorization", _AUTH_HEADER)
         return headers
+
+    def authenticate(self, username: str, password: str) -> str:
+        """Return a session AccessToken for the local Jellyfin user."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": _AUTH_HEADER,
+            "X-Emby-Authorization": _AUTH_HEADER,
+        }
+        bodies = (
+            {"Username": username, "Pw": password},
+            {"Username": username, "Password": password},
+        )
+        for body in bodies:
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/Users/AuthenticateByName",
+                    headers=headers,
+                    json=body,
+                    timeout=5.0,
+                )
+                if resp.status_code != 200:
+                    logger.debug("Jellyfin authenticate failed (%s): %s", resp.status_code, resp.text[:300])
+                    continue
+                data = resp.json()
+                token = str((data or {}).get("AccessToken") or "").strip()
+                if token:
+                    self.api_key = token
+                    return token
+            except Exception as exc:
+                logger.debug("Jellyfin authenticate error: %s", exc)
+        return ""
+
+    def public_usernames(self) -> list[str]:
+        try:
+            resp = requests.get(f"{self.base_url}/Users/Public", timeout=4.0)
+            if resp.status_code != 200:
+                return []
+            rows = resp.json()
+            if not isinstance(rows, list):
+                return []
+            names: list[str] = []
+            for row in rows:
+                if isinstance(row, dict) and row.get("Name"):
+                    names.append(str(row["Name"]))
+            return names
+        except Exception as exc:
+            logger.debug("Jellyfin public users error: %s", exc)
+            return []
+
+    def complete_startup(self, username: str, password: str) -> bool:
+        """Create the first admin if Jellyfin is still on the startup wizard."""
+        try:
+            info = requests.get(f"{self.base_url}/System/Info/Public", timeout=4.0)
+            wizard_done = False
+            if info.status_code == 200:
+                payload = info.json() if info.content else {}
+                if isinstance(payload, dict):
+                    wizard_done = bool(payload.get("StartupWizardCompleted"))
+            if wizard_done:
+                return True
+            requests.post(
+                f"{self.base_url}/Startup/User",
+                json={"Name": username, "Password": password},
+                timeout=5.0,
+            )
+            done = requests.post(f"{self.base_url}/Startup/Complete", timeout=5.0)
+            return done.status_code in (200, 204)
+        except Exception as exc:
+            logger.debug("Jellyfin complete_startup error: %s", exc)
+            return False
+
+    def create_api_key(self, app_name: str = "AIO-Media-Manager") -> str:
+        if not self.api_key:
+            return ""
+        try:
+            resp = requests.post(
+                f"{self.base_url}/Auth/Keys",
+                headers=self._headers(),
+                params={"app": app_name},
+                timeout=5.0,
+            )
+            if resp.status_code not in (200, 204):
+                return ""
+            listed = requests.get(f"{self.base_url}/Auth/Keys", headers=self._headers(), timeout=5.0)
+            if listed.status_code != 200:
+                return ""
+            data = listed.json()
+            rows = data.get("Items") if isinstance(data, dict) else data
+            if not isinstance(rows, list):
+                return ""
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                token = str(row.get("AccessToken") or row.get("Token") or "").strip()
+                if token:
+                    self.api_key = token
+                    return token
+        except Exception as exc:
+            logger.debug("Jellyfin create_api_key error: %s", exc)
+        return ""
 
     def list_virtual_folders(self) -> list[dict[str, Any]]:
         try:

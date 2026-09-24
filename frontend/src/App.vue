@@ -62,6 +62,7 @@ const settingsForm = ref({
   port: 0,
   autostart: true,
   vuetorrent: false,
+  jellyfinApiKey: '',
   recyclarrYaml: '',
   recyclarrOriginalYaml: '',
   recyclarrNaming: 'plex',
@@ -939,6 +940,7 @@ async function openAppSettings(service) {
       port: data.port,
       autostart: data.autostart,
       vuetorrent: !!data.vuetorrent,
+      jellyfinApiKey: '',
       recyclarrYaml: '',
       recyclarrOriginalYaml: '',
       recyclarrNaming: 'plex',
@@ -1020,6 +1022,9 @@ async function saveAppSettings() {
     }
     if (settingsApp.value.name === 'qbittorrent') {
       payload.vuetorrent = !!settingsForm.value.vuetorrent
+    }
+    if (settingsApp.value.name === 'jellyfin' && String(settingsForm.value.jellyfinApiKey || '').trim()) {
+      payload.api_key = String(settingsForm.value.jellyfinApiKey).trim()
     }
     const res = await apiRequest(`/api/applications/${settingsApp.value.name}/settings`, {
       method: 'PATCH',
@@ -2061,6 +2066,21 @@ onUnmounted(() => {
             >
               <span class="ui-switch-thumb"></span>
             </button>
+          </div>
+          <div v-if="settingsApp.name === 'jellyfin'" class="ui-field-block">
+            <label class="ui-field">
+              Jellyfin API key
+              <input
+                v-model="settingsForm.jellyfinApiKey"
+                class="ui-input font-mono"
+                type="password"
+                autocomplete="off"
+                :placeholder="settingsMeta.api_key_configured ? 'Saved — paste a new key to replace' : 'Dashboard → API Keys'"
+              />
+            </label>
+            <p class="settings-hint">
+              Optional. Saved keys are used for Recently added. Leave empty to keep the current key.
+            </p>
           </div>
           <div v-if="settingsApp.name === 'qbittorrent'" class="ui-switch-row">
             <div class="ui-switch-copy">

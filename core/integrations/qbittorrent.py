@@ -53,20 +53,26 @@ def qbittorrent_credentials() -> tuple[str, str]:
 class QBittorrentClient:
     def __init__(self, host: str = "127.0.0.1", port: int = 8081, username: str | None = None, password: str | None = None):
         stored_user, stored_pass = qbittorrent_credentials()
-        self.base_url = f"http://{host}:{port}/api/v2"
+        origin = f"http://{host}:{port}"
+        self.base_url = f"{origin}/api/v2"
         self.username = username if username is not None else stored_user
         self.password = password if password is not None else stored_pass
         self.session = requests.Session()
+        self.session.headers.update({"Referer": f"{origin}/", "Origin": origin})
         self._authenticated = False
 
     def login(self) -> bool:
         """Authenticate with qBittorrent WebUI session cookie."""
+        if self.app_accessible():
+            self._authenticated = True
+            return True
         attempts: list[tuple[str, str]] = [(self.username, self.password)]
         shared = shared_admin_credentials()
         if shared:
             attempts.append(shared)
         # Localhost is often allowed with a blank password after LocalHostAuth=false.
         attempts.append((self.username or "admin", ""))
+        attempts.append(("admin", "adminadmin"))
         if not secret_store.get_secret("qbittorrent_password"):
             attempts.append(("admin", ""))
         seen: set[tuple[str, str]] = set()
@@ -81,7 +87,9 @@ class QBittorrentClient:
                     timeout=5.0,
                 )
                 cookie = resp.headers.get("Set-Cookie") or resp.headers.get("set-cookie") or ""
-                if resp.status_code == 200 and (resp.text.strip() == "Ok." or "SID" in cookie):
+                sid = self.session.cookies.get("SID") or ""
+                ok_body = resp.text.strip() in {"Ok.", "Ok"}
+                if resp.status_code == 200 and (ok_body or "SID" in cookie or sid):
                     self.username = username
                     self.password = password
                     self._authenticated = True
@@ -92,10 +100,10 @@ class QBittorrentClient:
                     return True
                 if resp.status_code == 403:
                     logger.warning("qBittorrent login blocked (banned or CSRF); skipping further attempts")
-                    return False
+                    return self.app_accessible()
             except Exception as exc:
                 logger.debug("qBittorrent login failed: %s", exc)
-        return False
+        return self.app_accessible()
 
     def relax_local_auth(self) -> bool:
         """Bypass WebUI auth for 127.0.0.1 and clear any IP bans from wiring retries."""

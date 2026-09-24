@@ -27,7 +27,11 @@ def get_application_api_key(app_name: str, app_config_dir: Optional[Path] = None
     """
     secret_key_name = f"{app_name.lower()}_api_key"
     cfg_dir = app_config_dir or (settings.config_dir / app_name.lower())
-    if not cfg_dir.exists() and app_name.lower() != "sabnzbd":
+    if app_name.lower() == "jellyfin":
+        stored = secret_store.get_secret(secret_key_name)
+        if stored:
+            return stored
+    if not cfg_dir.exists() and app_name.lower() not in {"sabnzbd", "jellyfin", "seerr"}:
         stored = secret_store.get_secret(secret_key_name)
         return stored
 
@@ -52,11 +56,22 @@ def get_application_api_key(app_name: str, app_config_dir: Optional[Path] = None
         if parsed.get("api_key"):
             api_key = parsed["api_key"]
 
+    if app_name.lower() == "seerr" and not api_key:
+        from core.integrations.seerr import discover_seerr_api_key, read_seerr_api_key
+
+        seerr_dir = cfg_dir if cfg_dir.exists() else settings.config_dir / "seerr"
+        api_key = read_seerr_api_key(seerr_dir) or discover_seerr_api_key(seerr_dir)
+
     # Fallback: secret store (after disk so regenerated SAB keys win).
     if not api_key:
         stored = secret_store.get_secret(secret_key_name)
         if stored:
             return stored
+
+    if not api_key and app_name.lower() == "jellyfin":
+        from core.integrations.jellyfin import discover_jellyfin_api_key
+
+        api_key = discover_jellyfin_api_key(cfg_dir if cfg_dir.exists() else None)
 
     if api_key:
         secret_store.save_secret(secret_key_name, api_key)
@@ -67,7 +82,7 @@ def get_application_api_key(app_name: str, app_config_dir: Optional[Path] = None
 
 # Apps that write an API key to disk after first boot. Flaresolverr / qBittorrent / Plex do not.
 APPS_WITH_FILE_API_KEYS = frozenset(
-    {"sonarr", "radarr", "lidarr", "prowlarr", "sabnzbd", "bazarr"}
+    {"sonarr", "radarr", "lidarr", "prowlarr", "sabnzbd", "bazarr", "seerr"}
 )
 
 

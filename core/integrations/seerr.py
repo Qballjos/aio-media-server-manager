@@ -7,11 +7,103 @@ so user media requests automatically route to the appropriate downloader and lib
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import Any, Optional
 import requests
 
 logger = logging.getLogger(__name__)
+
+
+def read_seerr_api_key(config_dir: Path | None) -> str:
+    """Read Seerr/Jellyseerr apiKey from settings.json (written after first setup)."""
+    if not config_dir:
+        return ""
+    root = Path(config_dir)
+    candidates = [root / "settings.json", root / "settings" / "main.json"]
+    if root.is_dir():
+        candidates.extend(sorted(root.glob("**/settings.json"))[:8])
+    seen: set[Path] = set()
+    for path in candidates:
+        if path in seen or not path.is_file():
+            continue
+        seen.add(path)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        key = _find_api_key(data)
+        if key:
+            return key
+    return ""
+
+
+def _find_api_key(obj: Any) -> str:
+    if isinstance(obj, dict):
+        for name in ("apiKey", "api_key"):
+            value = str(obj.get(name) or "").strip()
+            if len(value) >= 20:
+                return value
+        nested = obj.get("main")
+        if isinstance(nested, dict):
+            found = _find_api_key(nested)
+            if found:
+                return found
+        for value in obj.values():
+            found = _find_api_key(value)
+            if found:
+                return found
+    elif isinstance(obj, list):
+        for item in obj:
+            found = _find_api_key(item)
+            if found:
+                return found
+    return ""
+
+
+def discover_seerr_api_key(config_dir: Path | None = None, port: int = 5055) -> str:
+    """Initialize or sign in, then read apiKey from Seerr settings."""
+    from core.app_prefs import load_app_ports
+    from core.shared_credentials import admin_email, shared_admin_credentials
+
+    disk = read_seerr_api_key(config_dir)
+    if disk:
+        return disk
+    creds = shared_admin_credentials()
+    if not creds:
+        return ""
+    username, password = creds
+    email = (admin_email() or "").strip() or f"{username}@localhost"
+    try:
+        port = int(load_app_ports().get("seerr") or port or 5055)
+    except Exception:
+        port = int(port or 5055)
+    client = SeerrClient(port=port)
+    client.setup_local_admin(email, username, password)
+    session = requests.Session()
+    try:
+        login = session.post(
+            f"{client.base_url}/auth/local",
+            json={"email": email, "username": username, "password": password},
+            timeout=8.0,
+        )
+        if login.status_code not in (200, 201):
+            login = session.post(
+                f"{client.base_url}/auth/local",
+                json={"email": email, "password": password},
+                timeout=8.0,
+            )
+        if login.status_code not in (200, 201):
+            return read_seerr_api_key(config_dir)
+        settings = session.get(f"{client.base_url}/settings/main", timeout=8.0)
+        if settings.status_code == 200:
+            key = _find_api_key(settings.json())
+            if key:
+                return key
+    except Exception as exc:
+        logger.debug("Seerr API key discovery error: %s", exc)
+    return read_seerr_api_key(config_dir)
 
 
 class SeerrClient:

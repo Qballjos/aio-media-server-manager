@@ -214,6 +214,7 @@ class IntegrationEngine:
             sab_ok = sab_client.set_folders(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
                 sab_ok = sab_client.add_category(category.name, dir_path=category.library) and sab_ok
+            sab_client.remove_accidental_servers(sab_cfg)
             usenet = load_usenet_server()
             if usenet and usenet.get("host"):
                 sab_ok = sab_client.add_news_server(**usenet) and sab_ok

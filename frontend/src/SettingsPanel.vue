@@ -38,6 +38,7 @@ const form = ref({
   cloudflare_tunnel_token: '',
   trusted_proxies: '',
   github_token: '',
+  jellyfin_api_key: '',
   update_check_schedule: 'off',
   update_apply_schedule: 'off',
   update_time: '04:00',
@@ -48,6 +49,7 @@ const snapshot = ref({})
 const vpnLive = ref({})
 const tunnelLive = ref({})
 const githubConfigured = ref(false)
+const jellyfinConfigured = ref(false)
 
 const metrics = computed(() => props.systemInfo?.metrics || {})
 const storage = computed(() => snapshot.value.storage || props.systemInfo?.storage || {})
@@ -104,6 +106,8 @@ function applySettingsPayload(data) {
   form.value.cloudflare_tunnel_token = ''
   githubConfigured.value = !!data.github_token_configured
   form.value.github_token = ''
+  jellyfinConfigured.value = !!data.jellyfin_api_key_configured
+  form.value.jellyfin_api_key = ''
   const updates = data.updates || {}
   form.value.update_check_schedule = updates.check_schedule || 'off'
   form.value.update_apply_schedule = updates.apply_schedule || 'off'
@@ -388,6 +392,7 @@ onMounted(loadAll)
         ['backups', 'Backups'],
         ['vpn', 'VPN'],
         ['remote', 'Remote access'],
+        ['integrations', 'Integrations'],
         ['github', 'GitHub'],
         ['debug', 'Debug']
       ]" :key="item[0]" type="button" class="settings-nav-btn" :class="{ active: section === item[0] }" @click="section = item[0]">
@@ -713,6 +718,25 @@ onMounted(loadAll)
             <input v-model="form.trusted_proxies" class="ui-input font-mono" placeholder="10.0.0.1,10.0.0.0/8" />
           </label>
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save</button>
+        </form>
+      </div>
+    </template>
+
+    <template v-else-if="section === 'integrations'">
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>Jellyfin API key</h3>
+          <p>
+            Homepage Recently added uses this key. Create one in Jellyfin Dashboard → API Keys
+            (or paste the access token). Leave blank and save to clear it.
+          </p>
+        </div>
+        <p class="share-meta">{{ jellyfinConfigured ? 'A Jellyfin API key is saved.' : 'No Jellyfin API key saved yet.' }}</p>
+        <form class="form-stack" @submit.prevent="patchSettings({ jellyfin_api_key: form.jellyfin_api_key })">
+          <label class="ui-field">API key
+            <input v-model="form.jellyfin_api_key" type="password" class="ui-input font-mono" autocomplete="off" />
+          </label>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
         </form>
       </div>
     </template>

@@ -1,9 +1,11 @@
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from applications.jellyfin import JellyfinApp, jellyfin_repo_arch, pick_jellyfin_archive
+from core.crypto import secret_store
+from core.integrations.credentials import get_application_api_key
 from core.installer.installer import InstallResult
 
 
@@ -92,3 +94,42 @@ def test_jellyfin_start_passes_webdir(tmp_path: Path):
     assert f"<InternalHttpPort>{app.port}</InternalHttpPort>" in xml
     app.apply_listen_port(18096)
     assert "<InternalHttpPort>18096</InternalHttpPort>" in network.read_text(encoding="utf-8")
+
+
+def test_discover_jellyfin_api_key_from_login(tmp_path, monkeypatch):
+    secret_store.save_secret("jellyfin_api_key", "")
+    monkeypatch.setattr(
+        "core.shared_credentials.shared_admin_credentials",
+        lambda: ("admin", "SharedPass123!"),
+    )
+    monkeypatch.setattr("core.app_prefs.load_app_ports", lambda: {"jellyfin": 18096})
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"AccessToken": "jellyfin-access-token-abcdefghijklmnopqrstuvwxyz"}
+    mock_resp.content = b"{}"
+
+    public = MagicMock()
+    public.status_code = 200
+    public.json.return_value = [{"Name": "admin"}]
+
+    info = MagicMock()
+    info.status_code = 200
+    info.json.return_value = {"StartupWizardCompleted": True}
+    info.content = b"{}"
+
+    def fake_get(url, timeout=4.0, headers=None):
+        if url.endswith("/Users/Public"):
+            return public
+        return info
+
+    def fake_post(url, headers=None, json=None, params=None, timeout=5.0):
+        return mock_resp
+
+    with (
+        patch("core.integrations.jellyfin.requests.get", side_effect=fake_get),
+        patch("core.integrations.jellyfin.requests.post", side_effect=fake_post) as posted,
+    ):
+        key = get_application_api_key("jellyfin", app_config_dir=tmp_path / "missing-jellyfin")
+    assert key == "jellyfin-access-token-abcdefghijklmnopqrstuvwxyz"
+    assert any("AuthenticateByName" in str(call.args[0]) for call in posted.call_args_list)

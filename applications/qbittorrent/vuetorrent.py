@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -48,7 +49,12 @@ def installed_meta(config_dir: Path) -> dict[str, Any]:
 
 def alternative_ui_root(config_dir: Path, *, app_settings=None) -> Path | None:
     if vuetorrent_enabled(app_settings=app_settings) and ui_ready(config_dir):
-        return vuetorrent_dir(config_dir)
+        root = vuetorrent_dir(config_dir)
+        _make_webui_readable(root)
+        try:
+            return root.resolve()
+        except OSError:
+            return root.absolute()
     return None
 
 
@@ -80,6 +86,7 @@ def install_vuetorrent(config_dir: Path, *, app_settings=None) -> dict[str, Any]
 
     if not (target / "index.html").is_file():
         raise RuntimeError("VueTorrent zip did not contain index.html.")
+    _make_webui_readable(target)
     meta = {"repo": VUETORRENT_REPO, "version": version, "asset": name}
     (target / _META_NAME).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     logger.info("Installed VueTorrent %s at %s", version, target)
@@ -110,6 +117,23 @@ def _download(url: str, destination: Path, *, token: str | None) -> None:
             for chunk in resp.iter_content(chunk_size=1024 * 256):
                 if chunk:
                     fh.write(chunk)
+
+
+def _make_webui_readable(root: Path) -> None:
+    """qBittorrent runs as PUID/PGID and needs to read every VueTorrent asset."""
+    for path in [root, *root.rglob("*")]:
+        try:
+            mode = path.stat().st_mode
+            path.chmod(mode | (0o755 if path.is_dir() else 0o644))
+        except OSError:
+            continue
+    try:
+        uid = int(settings.puid)
+        gid = int(settings.pgid)
+        for path in [root, *root.rglob("*")]:
+            os.chown(path, uid, gid)
+    except Exception:
+        logger.debug("Could not chown VueTorrent files to PUID/PGID", exc_info=True)
 
 
 def _find_index_root(extracted: Path) -> Path:

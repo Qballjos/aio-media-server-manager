@@ -51,6 +51,19 @@ def test_credentials_discovery(tmp_path: Path):
     )
     assert get_application_api_key("sabnzbd", app_config_dir=sab_dir) == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
+    seerr_dir = tmp_path / "seerr"
+    seerr_dir.mkdir()
+    (seerr_dir / "settings.json").write_text(
+        '{"main":{"apiKey":"seerr-api-key-abcdefghijklmnopqrstuvwxyz"}}',
+        encoding="utf-8",
+    )
+    assert get_application_api_key("seerr", app_config_dir=seerr_dir) == "seerr-api-key-abcdefghijklmnopqrstuvwxyz"
+
+    set_application_api_key("jellyfin", "jf-user-supplied-key-abcdefghijklmnopqrstuvwxyz")
+    assert get_application_api_key("jellyfin", app_config_dir=tmp_path / "jellyfin-empty") == (
+        "jf-user-supplied-key-abcdefghijklmnopqrstuvwxyz"
+    )
+
 
 @patch("requests.get")
 def test_sabnzbd_client(mock_get):
@@ -148,6 +161,34 @@ def test_sabnzbd_news_server_skips_existing_and_drops_junk_rows(mock_get):
     assert not any(
         call.kwargs["params"].get("mode") == "set_config" for call in mock_get.call_args_list
     )
+
+
+def test_strip_junk_servers_ini(tmp_path: Path):
+    from core.integrations.sabnzbd import strip_junk_servers_ini
+
+    path = tmp_path / "sabnzbd.ini"
+    path.write_text(
+        "[servers]\n"
+        "[[connections]]\n"
+        "host = news.newshosting.com\n"
+        "[[displayname]]\n"
+        "enable = 1\n"
+        "[[enable]]\n"
+        "ssl = 1\n"
+        "[[host]]\n"
+        "port = 563\n"
+        "[[news.newshosting.com]]\n"
+        "host = news.newshosting.com\n"
+        "username = nzb-user\n",
+        encoding="utf-8",
+    )
+    assert strip_junk_servers_ini(path) == 4
+    text = path.read_text(encoding="utf-8")
+    assert "[[news.newshosting.com]]" in text
+    assert "[[connections]]" not in text
+    assert "[[displayname]]" not in text
+    assert "[[enable]]" not in text
+    assert "[[host]]" not in text
 
 
 def test_sabnzbd_bootstrap_ini_includes_usenet(tmp_path: Path):
@@ -379,6 +420,19 @@ def test_qbittorrent_profile_bypasses_localhost_auth(tmp_path: Path):
     assert "10.200.200.0/24" in nested.read_text(encoding="utf-8")
 
 
+def test_qbittorrent_conf_quotes_vuetorrent_path_with_spaces(tmp_path: Path):
+    profile = tmp_path / "AIO Media Server Manager" / "qbittorrent"
+    ui = profile / "vuetorrent"
+    ui.mkdir(parents=True)
+    (ui / "index.html").write_text("<html></html>", encoding="utf-8")
+    conf = ensure_webui_localhost_access(profile, alternative_ui_root=ui)
+    text = conf.read_text(encoding="utf-8")
+    line = next(item for item in text.splitlines() if item.startswith("WebUI\\RootFolder="))
+    assert line.startswith('WebUI\\RootFolder="')
+    assert "AIO Media Server Manager" in line
+    assert line.endswith('"')
+
+
 def test_qbittorrent_conf_enables_vuetorrent(tmp_path: Path):
     ui = tmp_path / "vuetorrent"
     ui.mkdir()
@@ -386,7 +440,7 @@ def test_qbittorrent_conf_enables_vuetorrent(tmp_path: Path):
     conf = ensure_webui_localhost_access(tmp_path, alternative_ui_root=ui)
     text = conf.read_text(encoding="utf-8")
     assert "WebUI\\AlternativeUIEnabled=true" in text
-    assert f"WebUI\\RootFolder={ui}" in text
+    assert str(ui.resolve()) in text
     conf = ensure_webui_localhost_access(tmp_path, alternative_ui_root=None)
     text = conf.read_text(encoding="utf-8")
     assert "WebUI\\AlternativeUIEnabled=false" in text
