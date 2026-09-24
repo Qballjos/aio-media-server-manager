@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,7 +19,9 @@ from api.routers import diagnostics as diagnostics_router
 from api.routers import health as health_router
 from api.routers import integrations as integrations_router
 from api.routers import logs as logs_router
+from api.routers import settings as settings_router
 from api.routers import system as system_router
+from api.routers import updates as updates_router
 from api.routers import wizard as wizard_router
 from api.routers import vpn as vpn_router
 from api.routers import cloudflare_tunnel as cloudflare_tunnel_router
@@ -60,6 +63,36 @@ def create_app() -> FastAPI:
         from core.diagnostics import diagnostics
 
         diagnostics.install_logging_hook()
+        from core.app_prefs import autostart_for
+        from applications.catalog import ApplicationCatalog
+        from core.supervisor import ProcessSupervisor
+
+        supervisor = ProcessSupervisor.get()
+        boot_catalog = ApplicationCatalog()
+        started = False
+        for plugin in boot_catalog.all_plugins():
+            if not plugin.manifest.daemon or not plugin.is_installed():
+                continue
+            if not autostart_for(plugin.name, default=True):
+                continue
+            try:
+                await supervisor.start(
+                    name=plugin.name,
+                    cmd=plugin.start_command(),
+                    cwd=plugin.working_directory(),
+                    env=plugin.extra_env(),
+                    log_dir=settings.config_dir / "logs",
+                )
+                started = True
+            except Exception as err:
+                logger.warning("Autostart skipped for %s: %s", plugin.name, err)
+        if started:
+            from core.integrations.lifecycle import schedule_full_wiring
+
+            asyncio.create_task(schedule_full_wiring())
+        from core.update_schedule import scheduler_loop
+
+        asyncio.create_task(scheduler_loop())
         yield
         logger.info("FastAPI application shutting down.")
 
@@ -104,6 +137,8 @@ def create_app() -> FastAPI:
     app.include_router(integrations_router.router)
     app.include_router(logs_router.router)
     app.include_router(system_router.router)
+    app.include_router(settings_router.router)
+    app.include_router(updates_router.router)
     app.include_router(wizard_router.router)
     app.include_router(backups_router.router)
     app.include_router(vpn_router.router)

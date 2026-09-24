@@ -36,4 +36,6 @@
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Type="Variable" Display="always"/>
   <Config Name="Download dir" Target="AMM_DOWNLOAD_DIR" Default="/data/downloads" Mode="" Type="Variable" Display="always"/>
   <Config Name="Media dir" Target="AMM_MEDIA_DIR" Default="/data/media" Mode="" Type="Variable" Display="always"/>
+  <Config Name="Timezone" Target="TZ" Default="UTC" Mode="" Type="Variable" Display="always"/>
+  <Config Name="GitHub token" Target="GITHUB_TOKEN" Default="" Mode="" Type="Variable" Display="advanced"/>
 </Container>

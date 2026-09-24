@@ -90,3 +90,39 @@ class NZBGetClient:
         dest = self._call("configset", ["DestDir", complete_dir])
         inter = self._call("configset", ["InterDir", incomplete_dir])
         return dest is not None and dest is not False and inter is not None and inter is not False
+
+    def add_news_server(
+        self,
+        *,
+        host: str,
+        port: int = 563,
+        username: str = "",
+        password: str = "",
+        ssl: bool = True,
+        connections: int = 8,
+        displayname: str = "",
+    ) -> bool:
+        host = (host or "").strip()
+        if not host:
+            return False
+        name = (displayname or host).strip()
+        encryption = "yes" if ssl else "no"
+        pairs = [
+            ("Server1.Active", "yes"),
+            ("Server1.Name", name),
+            ("Server1.Host", host),
+            ("Server1.Port", str(int(port) or 563)),
+            ("Server1.Username", username or ""),
+            ("Server1.Password", password or ""),
+            ("Server1.Encryption", encryption),
+            ("Server1.Connections", str(max(1, int(connections) or 8))),
+        ]
+        ok = True
+        for key, value in pairs:
+            result = self._call("configset", [key, value])
+            if result is None or result is False:
+                ok = False
+        self._call("save")
+        if ok:
+            logger.info("Configured NZBGet Usenet server '%s'.", name)
+        return ok

@@ -33,6 +33,7 @@ services:
     environment:
       PUID: "1026"
       PGID: "100"
+      TZ: UTC
       AMM_DOWNLOAD_DIR: /data/downloads
       AMM_MEDIA_DIR: /data/media
       AMM_VPN_ENABLED: "false"
@@ -40,6 +41,8 @@ services:
       AMM_CLOUDFLARE_TUNNEL_ENABLED: "false"
       AMM_CLOUDFLARE_TUNNEL_TOKEN_FILE: /config/cloudflare/tunnel.token
       AMM_TRUSTED_PROXIES: ""
+      # Optional GitHub token for install/update rate limits (or Settings → GitHub):
+      # GITHUB_TOKEN: ""
     cap_add:
       - NET_ADMIN
       - SYS_MODULE

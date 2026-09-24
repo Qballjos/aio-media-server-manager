@@ -170,6 +170,19 @@ class VpnManager:
         # No default route via the veth: the only WAN path is the VPN interface.
         return None
 
+    def _webui_ports(self) -> dict[str, int]:
+        ports = dict(_DEFAULT_PORTS)
+        try:
+            from applications.catalog import ApplicationCatalog
+
+            catalog = ApplicationCatalog(app_settings=self.settings)
+            for name in VPN_TUNNELED_APPS:
+                if catalog.has(name):
+                    ports[name] = catalog.get(name).port
+        except Exception:
+            logger.debug("Using default VPN WebUI ports", exc_info=True)
+        return ports
+
     def _teardown_netns(self) -> None:
         self._ip(["link", "delete", _VETH_HOST])
         if self._netns_exists():
@@ -186,7 +199,7 @@ class VpnManager:
             text=True,
             timeout=5,
         )
-        for port in _DEFAULT_PORTS.values():
+        for port in self._webui_ports().values():
             rule = [
                 iptables,
                 "-t",

@@ -34,9 +34,10 @@ def test_setup_required_initially(auth_mgr: AuthManager):
 
 def test_create_admin_and_verify(auth_mgr: AuthManager):
     """Admin creation hashes password and updates setup status."""
-    auth_mgr.create_admin("admin", "AdminPassword123!")
+    auth_mgr.create_admin("admin", "AdminPassword123!", email="admin@example.com")
     assert auth_mgr.setup_required() is False
     assert auth_mgr.username() == "admin"
+    assert auth_mgr.email() == "admin@example.com"
 
     # Verifying password
     assert auth_mgr.verify_password("admin", "AdminPassword123!") is True

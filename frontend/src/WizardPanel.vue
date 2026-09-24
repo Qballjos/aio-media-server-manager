@@ -124,6 +124,12 @@ async function loadStep(id) {
       selections.download_clients = [...(data.selected || [])]
       selections.qbittorrent_username = data.qbittorrent_username || 'admin'
       selections.qbittorrent_password = ''
+      selections.usenet_host = data.usenet_host || ''
+      selections.usenet_port = data.usenet_port || 563
+      selections.usenet_ssl = data.usenet_ssl !== false
+      selections.usenet_username = data.usenet_username || ''
+      selections.usenet_password = ''
+      selections.usenet_connections = data.usenet_connections || 8
     } else if (id === 6) {
       selections.vpn_provider = data.selected || 'none'
       selections.vpn_config_path = data.vpn_config_path || ''
@@ -152,9 +158,15 @@ function bodyForStep(id) {
   if (id === 5) {
     const body = {
       download_clients: selections.download_clients,
-      qbittorrent_username: selections.qbittorrent_username
+      qbittorrent_username: selections.qbittorrent_username,
+      usenet_host: selections.usenet_host,
+      usenet_port: Number(selections.usenet_port) || 563,
+      usenet_ssl: !!selections.usenet_ssl,
+      usenet_username: selections.usenet_username,
+      usenet_connections: Number(selections.usenet_connections) || 8
     }
     if (selections.qbittorrent_password) body.qbittorrent_password = selections.qbittorrent_password
+    if (selections.usenet_password) body.usenet_password = selections.usenet_password
     return body
   }
   if (id === 6) {
@@ -204,14 +216,21 @@ async function back() {
 
 async function skip() {
   saving.value = true
+  error.value = ''
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
   try {
-    const res = await props.apiRequest('/api/wizard/skip', { method: 'POST' })
+    const res = await props.apiRequest('/api/wizard/skip', {
+      method: 'POST',
+      signal: controller.signal
+    })
     if (!res.ok) throw new Error('Could not skip wizard')
-    emit('done')
   } catch (err) {
-    error.value = err.message
+    if (err.name !== 'AbortError') error.value = err.message
   } finally {
+    clearTimeout(timer)
     saving.value = false
+    emit('done')
   }
 }
 
@@ -257,6 +276,10 @@ async function finish() {
 const summary = computed(() => payload.value.summary || payload.value.selections || {})
 const showPlexClaim = computed(() => (selections.media_servers || []).includes('plex'))
 const showQbitCreds = computed(() => (selections.download_clients || []).includes('qbittorrent'))
+const showUsenetCreds = computed(() => {
+  const clients = selections.download_clients || []
+  return clients.includes('sabnzbd') || clients.includes('nzbget')
+})
 const showVpnFields = computed(() => selections.vpn_provider && selections.vpn_provider !== 'none')
 
 onMounted(async () => {
@@ -396,6 +419,33 @@ onMounted(async () => {
             </label>
             <p class="wizard-muted">Blank qBittorrent fields use the same username and password as AIO Media Server Manager.</p>
           </template>
+          <template v-if="showUsenetCreds">
+            <p class="wizard-muted">Optional. These Usenet provider details are pushed into SABnzbd and/or NZBGet after install.</p>
+            <label class="ui-field">
+              <span>Usenet server host</span>
+              <input v-model="selections.usenet_host" class="ui-input font-mono" placeholder="news.example.com" />
+            </label>
+            <label class="ui-field">
+              <span>Port</span>
+              <input v-model.number="selections.usenet_port" type="number" min="1" max="65535" class="ui-input font-mono" />
+            </label>
+            <label class="wizard-option" :class="{ selected: selections.usenet_ssl }">
+              <input type="checkbox" v-model="selections.usenet_ssl" />
+              SSL / TLS
+            </label>
+            <label class="ui-field">
+              <span>Usenet username</span>
+              <input v-model="selections.usenet_username" class="ui-input font-mono" />
+            </label>
+            <label class="ui-field">
+              <span>Usenet password</span>
+              <input v-model="selections.usenet_password" type="password" class="ui-input" :placeholder="payload.has_usenet_password ? 'Saved — leave blank to keep' : ''" />
+            </label>
+            <label class="ui-field">
+              <span>Connections</span>
+              <input v-model.number="selections.usenet_connections" type="number" min="1" max="100" class="ui-input font-mono" />
+            </label>
+          </template>
         </template>
 
         <template v-else-if="step === 6">
@@ -514,6 +564,7 @@ onMounted(async () => {
           <dl class="wizard-dl">
             <div><dt>*Arr</dt><dd>{{ (summary.arr_apps || []).join(', ') || '—' }}</dd></div>
             <div><dt>Download</dt><dd>{{ (summary.download_clients || []).join(', ') || '—' }}</dd></div>
+            <div><dt>Usenet</dt><dd>{{ summary.usenet_host || (summary.has_usenet_account ? 'configured' : '—') }}</dd></div>
             <div><dt>Media</dt><dd>{{ (summary.media_servers || []).join(', ') || '—' }}</dd></div>
             <div><dt>Requests</dt><dd>{{ summary.request_system || '—' }}</dd></div>
             <div><dt>VPN</dt><dd>{{ summary.vpn_provider || 'none' }}</dd></div>
@@ -545,11 +596,12 @@ onMounted(async () => {
   justify-content: center;
   align-items: flex-start;
   min-height: 60vh;
-  padding: 0.5rem 0 2.5rem;
+  padding: 0.5rem clamp(0.5rem, 2vw, 0.75rem) 2.5rem;
+  min-width: 0;
 }
 .wizard-card {
   width: min(640px, 100%);
-  padding: 2.25rem;
+  padding: clamp(1.25rem, 4vw, 2.25rem);
   background: rgba(19, 23, 34, 0.65);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -557,6 +609,7 @@ onMounted(async () => {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
   position: relative;
   overflow: hidden;
+  min-width: 0;
 }
 .wizard-glow {
   position: absolute;
@@ -651,6 +704,7 @@ onMounted(async () => {
 .wizard-option {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.75rem 0.9rem;
   border-radius: 10px;
@@ -659,6 +713,12 @@ onMounted(async () => {
   color: #e2e8f0;
   cursor: pointer;
   font-size: 0.9rem;
+  min-width: 0;
+}
+.wizard-option > span:not(.wizard-app-badge) {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .wizard-option:hover {
   border-color: rgba(255, 255, 255, 0.15);
@@ -702,6 +762,7 @@ onMounted(async () => {
   border: 1px solid rgba(147, 197, 253, 0.4);
   text-decoration: none;
   background: rgba(59, 130, 246, 0.12);
+  flex-shrink: 0;
 }
 .wizard-dl {
   display: grid;
@@ -727,6 +788,7 @@ onMounted(async () => {
   margin: 0;
   color: #e2e8f0;
   font-size: 0.88rem;
+  overflow-wrap: anywhere;
 }
 .wizard-install {
   display: flex;
@@ -737,6 +799,8 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   font-size: 0.8rem;
   font-weight: 600;
   color: #cbd5e1;
@@ -776,17 +840,21 @@ onMounted(async () => {
 .wizard-install-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.65rem 0.8rem;
   border-radius: 10px;
   background: rgba(15, 23, 42, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 0;
 }
 .wizard-install-name {
-  flex: 1;
+  flex: 1 1 8rem;
+  min-width: 0;
   font-size: 0.9rem;
   font-weight: 600;
   color: #f3f4f6;
+  overflow-wrap: anywhere;
 }
 .wizard-status {
   display: inline-flex;
@@ -834,6 +902,7 @@ onMounted(async () => {
 }
 .wizard-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.55rem;
 }
 .ui-alert {
@@ -854,5 +923,22 @@ onMounted(async () => {
 }
 @keyframes wizard-spin {
   to { transform: rotate(360deg); }
+}
+@media (max-width: 560px) {
+  .wizard-dl div {
+    grid-template-columns: 1fr;
+  }
+  .wizard-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .wizard-nav {
+    width: 100%;
+  }
+  .wizard-nav .ui-btn,
+  .wizard-actions > .ui-btn {
+    flex: 1 1 auto;
+    width: 100%;
+  }
 }
 </style>

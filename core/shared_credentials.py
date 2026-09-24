@@ -10,12 +10,17 @@ SHARED_USERNAME_KEY = "shared_admin_username"
 SHARED_PASSWORD_KEY = "shared_admin_password"
 
 
-def save_shared_admin_credentials(username: str, password: str) -> None:
+ADMIN_EMAIL_KEY = "admin_email"
+
+
+def save_shared_admin_credentials(username: str, password: str, email: str = "") -> None:
     user = (username or "").strip() or "admin"
     if not password:
         return
     secret_store.save_secret(SHARED_USERNAME_KEY, user)
     secret_store.save_secret(SHARED_PASSWORD_KEY, password)
+    if email:
+        secret_store.save_secret(ADMIN_EMAIL_KEY, email.strip().lower())
 
 
 def shared_admin_credentials() -> Optional[tuple[str, str]]:
@@ -24,3 +29,8 @@ def shared_admin_credentials() -> Optional[tuple[str, str]]:
     if not username or not password:
         return None
     return username, password
+
+
+def admin_email() -> str:
+    stored = secret_store.get_secret(ADMIN_EMAIL_KEY) or ""
+    return stored.strip()

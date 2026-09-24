@@ -7,6 +7,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/aio-media-manager
+Environment=TZ=UTC
 Environment=AMM_CONFIG_DIR=/var/lib/aio-media-manager/config
 Environment=AMM_DOWNLOAD_DIR=/var/lib/aio-media-manager/downloads
 Environment=AMM_MEDIA_DIR=/var/lib/aio-media-manager/media

@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict, deque
 from typing import Iterable
+from weakref import WeakSet
 
 from applications.base import BaseApplication
 from applications.extended import (
@@ -27,10 +28,13 @@ from applications.sabnzbd import SabnzbdApp
 from applications.seerr import SeerrApp
 from applications.sonarr import SonarrApp
 from applications.manifest import AppTier
+from core.app_prefs import load_app_ports
 from core.installer.arch import detect_system_arch
 from core.settings import Settings, settings
 
 logger = logging.getLogger(__name__)
+
+_LIVE_CATALOGS: WeakSet[ApplicationCatalog] = WeakSet()
 
 # MVP plus Phase 4 plugins register here.
 PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
@@ -70,16 +74,17 @@ class ApplicationCatalog:
         self._classes = tuple(plugin_classes or PLUGIN_CLASSES)
         self._plugins: dict[str, BaseApplication] = {}
         self.reload()
+        _LIVE_CATALOGS.add(self)
 
     def reload(self, ports: dict[str, int] | None = None) -> None:
-        ports = ports or {}
+        merged = {**load_app_ports(self._settings), **(ports or {})}
         self._plugins = {}
         for cls in self._classes:
             plugin = cls(
                 base_config_dir=self._settings.config_dir,
                 base_install_dir=self._settings.install_dir,
                 download_dir=self._settings.download_dir,
-                port=ports.get(cls.manifest.name),
+                port=merged.get(cls.manifest.name),
                 puid=self._settings.puid,
                 pgid=self._settings.pgid,
             )
@@ -105,7 +110,7 @@ class ApplicationCatalog:
 
     def set_port(self, name: str, port: int) -> None:
         plugin = self.get(name)
-        plugin.port = port
+        plugin.apply_listen_port(port)
 
     def entries(self) -> list[dict]:
         arch = detect_system_arch().value
@@ -169,3 +174,8 @@ class ApplicationCatalog:
         return [
             p.name for p in self._plugins.values() if p.manifest.tier == AppTier.CORE
         ]
+
+
+def refresh_live_catalogs() -> None:
+    for catalog in list(_LIVE_CATALOGS):
+        catalog.reload()

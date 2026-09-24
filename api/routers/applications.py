@@ -15,7 +15,8 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from pydantic import BaseModel
 
-from applications.catalog import ApplicationCatalog
+from applications.catalog import ApplicationCatalog, refresh_live_catalogs
+from core.app_prefs import AppPrefsError, autostart_for, update_app_prefs
 from core.auth import auth_manager
 from core.settings import settings
 from core.supervisor import ProcessSupervisor
@@ -29,6 +30,12 @@ router = APIRouter(prefix="/api/applications", tags=["Applications"])
 
 catalog = ApplicationCatalog(app_settings=settings)
 updater = ApplicationUpdater(app_settings=settings)
+
+
+class AppSettingsPatch(BaseModel):
+    port: int | None = None
+    autostart: bool | None = None
+    restart: bool = True
 
 
 class UninstallRequest(BaseModel):
@@ -65,6 +72,7 @@ async def list_applications(request: Request) -> dict[str, Any]:
         uptime = int(time.monotonic() - started_at) if (started_at and state == "running") else 0
         is_crash_loop = proc_info.get("is_crash_loop", False) if proc_info else False
         recent_crashes = proc_info.get("recent_crashes", 0) if proc_info else 0
+        autostart = autostart_for(name, default=plugin.manifest.daemon)
 
         results.append(
             {
@@ -73,6 +81,8 @@ async def list_applications(request: Request) -> dict[str, Any]:
                 "category": plugin.manifest.category.value,
                 "tier": plugin.manifest.tier.value,
                 "port": plugin.port,
+                "default_port": plugin.manifest.default_port,
+                "autostart": autostart,
                 "installed": is_installed,
                 "installed_version": meta.get("version"),
                 "state": state,
@@ -218,6 +228,106 @@ async def get_application_logs(name: str, request: Request) -> dict[str, Any]:
     }
 
 
+def _application_settings(plugin, request: Request) -> dict[str, Any]:
+    supervisor = ProcessSupervisor.get()
+    state = supervisor.status(plugin.name).value
+    notes = []
+    if plugin.name == "plex":
+        notes.append(
+            "Plex Media Server usually stays on 32400. This field updates the Open UI link; "
+            "change the listen port inside Plex as well if you retarget it."
+        )
+    elif plugin.name in VPN_TUNNELED_APPS:
+        notes.append(
+            "This app can run inside the torrent VPN namespace. After a port change, restart "
+            "the VPN tunnel so local forwarding matches."
+        )
+    notes.append(
+        "Open UI uses http://<host>:<port>. If you change the port, publish it in compose "
+        "(or use host networking) and recreate the container."
+    )
+    if not plugin.manifest.daemon:
+        notes.append("This is a CLI/sync tool, not a background WebUI service.")
+    return {
+        "name": plugin.name,
+        "display_name": plugin.manifest.display_name,
+        "port": plugin.port,
+        "default_port": plugin.manifest.default_port,
+        "autostart": autostart_for(plugin.name, default=plugin.manifest.daemon),
+        "daemon": plugin.manifest.daemon,
+        "installed": plugin.is_installed(),
+        "state": state,
+        "config_dir": str(plugin.config_dir),
+        "install_dir": str(plugin.install_dir),
+        "data_dir": str(plugin.data_dir),
+        "health_url": plugin.health_check_url(),
+        "help_url": plugin.manifest.to_dict().get("help_url") or plugin.manifest.upstream_url,
+        "vpn_tunneled": plugin.name in VPN_TUNNELED_APPS,
+        "notes": notes,
+    }
+
+
+@router.get("/{name}/settings", summary="Read per-application settings")
+async def get_application_settings(name: str, request: Request) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return _application_settings(plugin, request)
+
+
+@router.patch("/{name}/settings", summary="Update per-application port and autostart")
+async def patch_application_settings(
+    name: str,
+    request: Request,
+    body: AppSettingsPatch,
+) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if body.port is None and body.autostart is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No settings to change.")
+
+    taken = {item.name: item.port for item in catalog.all_plugins()}
+    try:
+        update_app_prefs(
+            name,
+            port=body.port,
+            autostart=body.autostart,
+            reserved_ports={settings.api_port},
+            taken_by=taken,
+        )
+    except AppPrefsError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
+
+    refresh_live_catalogs()
+    plugin = catalog.get(name)
+    if body.port is not None:
+        plugin.apply_listen_port(body.port)
+
+    restarted = False
+    supervisor = ProcessSupervisor.get()
+    running = supervisor.status(name).value == "running"
+    if body.port is not None and body.restart and running and plugin.manifest.daemon:
+        await supervisor.stop(name)
+        await supervisor.start(
+            name=name,
+            cmd=plugin.start_command(),
+            cwd=plugin.working_directory(),
+            env=plugin.extra_env(),
+            log_dir=settings.config_dir / "logs",
+        )
+        restarted = True
+
+    payload = _application_settings(plugin, request)
+    payload["restarted"] = restarted
+    payload["status"] = "updated"
+    return payload
+
+
 @router.post("/{name}/reset-crash-loop", summary="Reset crash loop state")
 async def reset_application_crash_loop(name: str, request: Request) -> dict[str, Any]:
     """
@@ -261,7 +371,10 @@ async def update_application(name: str, request: Request) -> dict[str, Any]:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot update '{name}' because it is not installed.",
         )
-    return await updater.update(plugin)
+    from core.maintenance import update_in_progress
+
+    with update_in_progress():
+        return await updater.update(plugin)
 
 
 @router.post("/{name}/uninstall", summary="Uninstall an application")

@@ -37,7 +37,9 @@ On Synology use `/volume1/docker/aio-media-manager/config/cloudflare/`. On Unrai
 
 ## Enable on the appliance
 
-Set:
+In the manager UI: **Settings → Remote access**, turn Cloudflare Tunnel on, and paste the token once (it is not shown again).
+
+Or set environment variables and restart:
 
 ```bash
 AMM_CLOUDFLARE_TUNNEL_ENABLED=true
@@ -46,7 +48,7 @@ AMM_CLOUDFLARE_TUNNEL_TOKEN_FILE=/config/cloudflare/tunnel.token
 
 or pass `AMM_CLOUDFLARE_TUNNEL_TOKEN` (the manager writes it to the token file and starts `cloudflared tunnel --no-autoupdate run --token-file …`).
 
-Restart the container or native service. Dashboard shows a warning if the tunnel is enabled but not connected. Status: `GET /api/cloudflare/tunnel/status` (no token is returned).
+Dashboard Health / Settings show whether the tunnel is connected. Status: `GET /api/cloudflare/tunnel/status` (no token is returned).
 
 ## Docker Compose
 

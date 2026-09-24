@@ -55,9 +55,11 @@ async def list_ports(request: Request) -> dict[str, Any]:
     Returns active port allocations, collision checks, and suggested alternates.
     """
     _ensure_authenticated(request)
+    for plugin in catalog.all_plugins():
+        port_manager.register(plugin.name, plugin.port)
     allocations = []
     for plugin in catalog.all_plugins():
-        alloc = port_manager.allocate(plugin.name, plugin.manifest.default_port)
+        alloc = port_manager.inspect(plugin.name, plugin.manifest.default_port)
         allocations.append(
             {
                 "app_name": alloc.app_name,
@@ -111,7 +113,11 @@ async def install_application(
             "version": plugin.installed_metadata().get("version"),
         }
 
+    from core.diagnostics import diagnostics
+    from core.maintenance import begin_install, end_install
+
     async def _do_install():
+        begin_install()
         try:
             logger.info("Starting background install for '%s'...", name)
             plugin.install()
@@ -122,9 +128,10 @@ async def install_application(
                 logger.error("Post-install wiring failed for '%s': %s", name, err, exc_info=True)
         except Exception as err:
             logger.error("Failed to install '%s': %s", name, err, exc_info=True)
-            from core.diagnostics import diagnostics
 
             diagnostics.record_exception(err, source=f"install:{name}")
+        finally:
+            end_install()
 
     background_tasks.add_task(_do_install)
 

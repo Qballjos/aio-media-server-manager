@@ -8,6 +8,7 @@ keys into SecretStore.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -64,14 +65,22 @@ def get_application_api_key(app_name: str, app_config_dir: Optional[Path] = None
     return None
 
 
-def wait_for_application_api_key(app_name: str, timeout: float = 90.0) -> Optional[str]:
+# Apps that write an API key to disk after first boot. Flaresolverr / qBittorrent / Plex do not.
+APPS_WITH_FILE_API_KEYS = frozenset(
+    {"sonarr", "radarr", "lidarr", "prowlarr", "sabnzbd", "bazarr"}
+)
+
+
+async def wait_for_application_api_key(app_name: str, timeout: float = 90.0) -> Optional[str]:
     """Poll config.xml / secret store until the app has generated an API key."""
+    if app_name not in APPS_WITH_FILE_API_KEYS:
+        return get_application_api_key(app_name)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         key = get_application_api_key(app_name)
         if key:
             return key
-        time.sleep(1.5)
+        await asyncio.sleep(1.5)
     return get_application_api_key(app_name)
 
 

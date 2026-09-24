@@ -11,6 +11,8 @@ import logging
 
 from fastapi import APIRouter
 
+import psutil
+
 from core.library_layout import LibraryLayout
 from core.metrics import collect_metrics
 from core.settings import settings
@@ -38,7 +40,7 @@ async def system_info() -> dict:
 
     paths_summary = {}
     for label, info in path_info.items():
-        paths_summary[label] = {
+        entry = {
             "path": str(info.path),
             "exists": info.exists,
             "is_dir": info.is_dir,
@@ -48,6 +50,16 @@ async def system_info() -> dict:
             "is_fuse_fs": info.is_fuse_fs,
             "hardlinks_supported": info.hardlinks_supported,
         }
+        try:
+            usage = psutil.disk_usage(str(info.path) if info.exists else "/")
+            entry["disk_total"] = usage.total
+            entry["disk_used"] = usage.used
+            entry["disk_percent"] = usage.percent
+        except Exception:
+            entry["disk_total"] = 0
+            entry["disk_used"] = 0
+            entry["disk_percent"] = 0
+        paths_summary[label] = entry
 
     supervisor = ProcessSupervisor.get()
     processes = supervisor.list_processes()

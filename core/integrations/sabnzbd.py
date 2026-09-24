@@ -68,3 +68,44 @@ class SABnzbdClient:
         user_ok = self._request("set_config", {"section": "misc", "keyword": "username", "value": username})
         pass_ok = self._request("set_config", {"section": "misc", "keyword": "password", "value": password})
         return bool(user_ok.get("status", False)) and bool(pass_ok.get("status", False))
+
+    def add_news_server(
+        self,
+        *,
+        host: str,
+        port: int = 563,
+        username: str = "",
+        password: str = "",
+        ssl: bool = True,
+        connections: int = 8,
+        displayname: str = "",
+    ) -> bool:
+        """Add or update a Usenet news server in SABnzbd."""
+        host = (host or "").strip()
+        if not host:
+            return False
+        name = (displayname or host).strip()
+        fields = {
+            "host": host,
+            "port": str(int(port) or 563),
+            "username": username or "",
+            "password": password or "",
+            "connections": str(max(1, int(connections) or 8)),
+            "ssl": "1" if ssl else "0",
+            "enable": "1",
+            "displayname": name,
+        }
+        added = self._request("addserver", {"name": name, **fields})
+        if bool(added.get("status", False)):
+            logger.info("Added SABnzbd Usenet server '%s'.", name)
+            return True
+        ok = True
+        for keyword, value in fields.items():
+            res = self._request(
+                "set_config",
+                {"section": "servers", "keyword": keyword, "value": value, "name": name},
+            )
+            ok = bool(res.get("status", False)) and ok
+        if ok:
+            logger.info("Configured SABnzbd Usenet server '%s'.", name)
+        return ok

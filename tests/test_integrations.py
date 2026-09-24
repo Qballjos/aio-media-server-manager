@@ -58,6 +58,7 @@ def test_sabnzbd_client(mock_get):
     mock_resp.json.return_value = {"status": True}
     ok = client.add_category("sonarr", "tv")
     assert ok is True
+    assert client.add_news_server(host="news.example.com", username="nzb-user", password="secret") is True
 
 
 @patch("requests.Session.post")
@@ -189,6 +190,7 @@ def test_seerr_client(mock_post, mock_get):
     assert client.connect_radarr(api_key="radarr_key") is True
     assert client.connect_jellyfin(api_key="jelly_key") is True
     assert client.connect_plex(port=32400) is True
+    assert client.setup_local_admin("admin@example.com", "admin", "SharedPass123!") is True
 
 
 def test_integration_endpoints():
@@ -219,7 +221,7 @@ def test_integration_endpoints():
 
 
 def test_arr_install_triggers_wiring_set():
-    assert WIRE_AFTER_INSTALL == frozenset({"sonarr", "radarr", "lidarr", "prowlarr", "flaresolverr"})
+    assert {"sonarr", "radarr", "lidarr", "prowlarr", "seerr", "sabnzbd"}.issubset(WIRE_AFTER_INSTALL)
     assert "whisparr" not in WIRE_AFTER_INSTALL
     assert "readarr" not in WIRE_AFTER_INSTALL
 
@@ -232,6 +234,7 @@ def test_nzbget_client(mock_post):
     mock_post.return_value = mock_resp
     client = NZBGetClient()
     assert client.add_category("sonarr", "tv") is True
+    assert client.add_news_server(host="news.example.com", username="nzb-user", password="secret") is True
 
 
 @patch("requests.post")

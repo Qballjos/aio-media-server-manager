@@ -70,6 +70,24 @@ The manager UI listens on **8080**. Child applications bind in the same containe
 | Recyclarr | 19001 |
 | Plex | 32400 |
 
+## Environment
+
+Copy [`.env.example`](../.env.example) for a native install. Compose already sets `PUID` / `PGID`, `TZ`, and the `/data` paths. Values you change in **Settings** (timezone, log level, PUID, VPN, update schedules) persist in `/config/amm_config.json`. Environment variables still win when they are set in compose.
+
+| Variable | Purpose |
+|----------|---------|
+| `PUID` / `PGID` | Child process user (also Settings → Permissions) |
+| `TZ` / `AMM_TIMEZONE` | Clock, logs, scheduled updates (also Settings → General) |
+| `AMM_LOG_LEVEL` | Root log level |
+| `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Bind paths — change mounts in compose, not the UI |
+| `AMM_API_HOST` / `AMM_API_PORT` | Manager listen address (compose/env only) |
+| `GITHUB_TOKEN` | Optional; also Settings → GitHub (not written back to compose) |
+| `AMM_UPDATE_CHECK_SCHEDULE` | `off` / `daily` / `weekly` / `monthly` |
+| `AMM_UPDATE_APPLY_SCHEDULE` | `off` / `same` / `daily` / `weekly` / `monthly` |
+| `AMM_UPDATE_TIME` | `HH:MM` in the host timezone |
+| `AMM_CLOUDFLARE_TUNNEL_*` | Optional tunnel; also Settings → Remote access |
+| `AMM_VPN_*` | Optional torrent VPN; also Settings → VPN |
+
 ## Development clone
 
 Use a git checkout only when changing the code. Production should use the GHCR image or a tagged release.

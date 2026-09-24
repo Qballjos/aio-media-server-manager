@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Sequence
 
@@ -25,7 +26,23 @@ class ArrApplication(BaseApplication):
             str(executable),
             "-nobrowser",
             f"-data={self.config_dir}",
+            f"-port={self.port}",
         ]
+
+    def apply_listen_port(self, port: int) -> None:
+        self.port = int(port)
+        config = self.config_dir / "config.xml"
+        if not config.is_file():
+            return
+        text = config.read_text(encoding="utf-8")
+        updated, count = re.subn(
+            r"<Port>\d+</Port>",
+            f"<Port>{self.port}</Port>",
+            text,
+            count=1,
+        )
+        if count:
+            config.write_text(updated, encoding="utf-8")
 
     def working_directory(self) -> Path | None:
         exe = self.executable_path()

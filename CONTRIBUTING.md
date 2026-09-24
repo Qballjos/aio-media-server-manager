@@ -46,6 +46,7 @@ Optional: `pre-commit install` for Ruff and basic file checks on commit.
 - Do not log or return secrets in API responses.
 - Never delete media libraries in uninstall or backup paths.
 - Shared form controls live in `frontend/src/style.css` (`.ui-input`, `.ui-btn`, `.ui-btn-primary`, `.ui-btn-ghost`, `.ui-switch`). Match the first-run wizard; do not restyle inputs only in a scoped SFC.
+- When you add env vars, ports, or Settings behaviour, update `.env.example`, Compose/templates (`docker-compose.yml`, `deploy/synology/`, `deploy/unraid.xml`), and `docs/` / `deploy/*.md` in the same change.
 
 Report vulnerabilities through [GitHub private advisories](https://github.com/Qballjos/aio-media-server-manager/security/advisories/new), not public issues.
 

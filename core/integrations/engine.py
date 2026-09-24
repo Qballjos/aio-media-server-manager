@@ -31,6 +31,7 @@ from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient
 from core.integrations.seerr import SeerrClient
 from core.integrations.sonarr import SonarrClient
+from core.integrations.usenet import load_usenet_server
 from core.library_layout import (
     DOWNLOAD_CATEGORIES,
     LIBRARY_FOLDERS,
@@ -38,13 +39,28 @@ from core.library_layout import (
     jellyfin_libraries,
 )
 from core.settings import settings
-from core.shared_credentials import shared_admin_credentials
+from core.shared_credentials import admin_email, shared_admin_credentials
 from core.storage import StorageManager
 from core.supervisor import ProcessSupervisor
 
 logger = logging.getLogger(__name__)
 
-WIRE_AFTER_INSTALL = frozenset({"sonarr", "radarr", "lidarr", "prowlarr", "flaresolverr"})
+WIRE_AFTER_INSTALL = frozenset(
+    {
+        "sonarr",
+        "radarr",
+        "lidarr",
+        "prowlarr",
+        "flaresolverr",
+        "sabnzbd",
+        "nzbget",
+        "qbittorrent",
+        "jellyfin",
+        "plex",
+        "seerr",
+        "bazarr",
+    }
+)
 
 _STATUS_APPS = (
     "sabnzbd",
@@ -81,8 +97,27 @@ class IntegrationEngine:
     def _installed(self, name: str) -> bool:
         return self._catalog.has(name) and self._catalog.get(name).is_installed()
 
+    def _wizard_selections(self) -> dict[str, Any]:
+        try:
+            from core.wizard import wizard_engine
+
+            return dict(wizard_engine._state.get("selections") or {})
+        except Exception:
+            return {}
+
+    def _chosen_apps(self, *names: str, selection_key: str = "") -> list[str]:
+        selected = self._wizard_selections().get(selection_key) if selection_key else None
+        if isinstance(selected, str):
+            selected = [selected] if selected and selected != "none" else []
+        chosen = [name for name in names if self._installed(name)]
+        if selected is None:
+            return chosen
+        wanted = {str(item) for item in selected}
+        return [name for name in chosen if name in wanted]
+
     def _skip_uninstalled(self, steps: list[dict[str, Any]], name: str, action: str) -> bool:
-        return self._skip_unavailable(steps, name, action, require_running=False)
+        """Skip HTTP wiring until the app is installed *and* running."""
+        return self._skip_unavailable(steps, name, action, require_running=True)
 
     def _skip_unavailable(
         self,
@@ -167,6 +202,9 @@ class IntegrationEngine:
             sab_ok = sab_client.set_folders(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
                 sab_ok = sab_client.add_category(category.name, dir_path=category.library) and sab_ok
+            usenet = load_usenet_server()
+            if usenet and usenet.get("host"):
+                sab_ok = sab_client.add_news_server(**usenet) and sab_ok
             if sab_ok and sab_key:
                 downloader_register.append("sabnzbd")
             steps.append(_step("sabnzbd", "configure_folders_and_categories", sab_ok, str(layout.complete)))
@@ -176,6 +214,9 @@ class IntegrationEngine:
             nzb_ok = nzb.set_download_dirs(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
                 nzb_ok = nzb.add_category(category.name, dest_dir=str(layout.complete_path(category.library))) and nzb_ok
+            usenet = load_usenet_server()
+            if usenet and usenet.get("host"):
+                nzb_ok = nzb.add_news_server(**usenet) and nzb_ok
             if nzb_ok:
                 downloader_register.append("nzbget")
             steps.append(_step("nzbget", "configure_folders_and_categories", nzb_ok, str(layout.complete)))
@@ -307,17 +348,49 @@ class IntegrationEngine:
 
         if not self._skip_uninstalled(steps, "seerr", "connect_media_services"):
             seerr_client = SeerrClient(port=seerr_port, api_key=seerr_key)
-            seerr_ok = any(
-                [
-                    seerr_client.connect_sonarr(port=sonarr_port, api_key=sonarr_key or "", root_folder=str(layout.tv)),
+            shared = shared_admin_credentials()
+            email = admin_email()
+            try:
+                from core.auth import auth_manager
+
+                email = email or auth_manager.email()
+                seerr_user = auth_manager.username()
+            except Exception:
+                seerr_user = shared[0] if shared else "admin"
+            seerr_pass = shared[1] if shared else ""
+            setup_ok = True
+            if email and seerr_pass:
+                setup_ok = seerr_client.setup_local_admin(email, seerr_user, seerr_pass)
+            media_servers = self._chosen_apps("jellyfin", "plex", selection_key="media_servers")
+            arr_apps = self._chosen_apps("sonarr", "radarr", selection_key="arr_apps")
+            links: list[bool] = []
+            if "sonarr" in arr_apps:
+                links.append(
+                    seerr_client.connect_sonarr(
+                        port=sonarr_port, api_key=sonarr_key or "", root_folder=str(layout.tv)
+                    )
+                )
+            if "radarr" in arr_apps:
+                links.append(
                     seerr_client.connect_radarr(
                         port=radarr_port, api_key=radarr_key or "", root_folder=str(layout.movies)
-                    ),
-                    seerr_client.connect_jellyfin(port=jelly_port, api_key=jellyfin_key or ""),
-                    seerr_client.connect_plex(port=plex_port),
-                ]
-            )
-            steps.append(_step("seerr", "connect_media_services", seerr_ok, "Seerr → Sonarr/Radarr/Jellyfin/Plex"))
+                    )
+                )
+            if "jellyfin" in media_servers:
+                links.append(seerr_client.connect_jellyfin(port=jelly_port, api_key=jellyfin_key or ""))
+            if "plex" in media_servers:
+                links.append(seerr_client.connect_plex(port=plex_port))
+            seerr_ok = setup_ok and (any(links) if links else True)
+            detail = "Seerr local admin"
+            if links:
+                wired = []
+                if "sonarr" in arr_apps:
+                    wired.append("Sonarr")
+                if "radarr" in arr_apps:
+                    wired.append("Radarr")
+                wired.extend(name.title() for name in media_servers)
+                detail = "Seerr → " + "/".join(wired) if wired else detail
+            steps.append(_step("seerr", "connect_media_services", seerr_ok, detail))
 
         if not self._skip_uninstalled(steps, "bazarr", "pair_libraries"):
             bazarr_client = BazarrClient(port=bazarr_port, api_key=bazarr_key)

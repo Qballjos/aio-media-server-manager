@@ -73,6 +73,23 @@ def test_wizard_engine_lifecycle(tmp_path: Path):
     assert step5["has_qbittorrent_password"] is True
     assert "qbittorrent_password" not in engine.get_status()["selections"]
 
+    engine.update_step_selections(
+        5,
+        {
+            "download_clients": ["sabnzbd"],
+            "usenet_host": "news.example.com",
+            "usenet_port": 563,
+            "usenet_ssl": True,
+            "usenet_username": "nzb-user",
+            "usenet_password": "nzb-secret",
+            "usenet_connections": 20,
+        },
+    )
+    step5 = engine.get_step_data(5)
+    assert step5["usenet_host"] == "news.example.com"
+    assert step5["has_usenet_password"] is True
+    assert "usenet_password" not in engine.get_status()["selections"]
+
     engine.skip()
     assert engine.is_completed() is True
 
@@ -106,7 +123,7 @@ async def test_wizard_api_endpoints(tmp_path: Path):
     assert res_exec.status_code == 200
     exec_data = res_exec.json()
     assert exec_data["completed"] is True
-    assert "wiring" in exec_data
+    assert exec_data["wiring"]["status"] == "deferred_until_apps_healthy"
     assert "target_apps" in exec_data
 
     res_skip = client.post("/api/wizard/skip")

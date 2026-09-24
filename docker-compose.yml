@@ -32,12 +32,15 @@ services:
     environment:
       PUID: "1000"
       PGID: "1000"
+      TZ: UTC
       AMM_DOWNLOAD_DIR: /data/downloads
       AMM_MEDIA_DIR: /data/media
       AMM_VPN_ENABLED: "false"
       AMM_VPN_ENFORCE: "false"
       AMM_CLOUDFLARE_TUNNEL_ENABLED: "false"
       AMM_TRUSTED_PROXIES: ""
+      # Optional GitHub token for install/update rate limits (or set it in Settings → GitHub):
+      # GITHUB_TOKEN: ""
     devices:
       - /dev/dri:/dev/dri
     cap_add:

@@ -53,16 +53,17 @@ Typical *Arr deployments become a Compose file per application: Sonarr, Radarr, 
 
 - **Process supervisor** — start, stop, restart, crash-loop detection, log tails, and graceful shutdown.
 - **Catalog installers** — GitHub releases, official binaries (Jellyfin, Plex), and PyPI applications.
-- **First-run wizard** — pick *Arr apps, download clients, media servers, VPN, and recommended tools; persist paths and credentials; start installs.
-- **Shared local login** — the manager admin username and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin). Plex still uses a Plex account.
-- **Automatic wiring** — categories, root folders, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr / Profilarr / NeutArr.
+- **First-run wizard** — pick *Arr apps, download clients (including Usenet provider fields), media servers, VPN, and recommended tools; persist paths and credentials; start installs. Admin setup requires an email.
+- **Shared local login** — the manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin, Seerr). Plex still uses a Plex account.
+- **Automatic wiring** — after an app is healthy: categories, root folders, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr / Profilarr / NeutArr.
 - **Storage model** — `config`, `downloads`, and `media` with `PUID` / `PGID` and hardlink checks.
 - **VPN isolation** — qBittorrent and Prowlarr can run in a Linux network namespace bound to WireGuard or OpenVPN; Usenet stays off the tunnel.
 - **Hardware transcoding** — VAAPI / QSV / NVIDIA when the host exposes devices.
 - **Optional Cloudflare Tunnel** — `cloudflared` runs inside this appliance, not as a second Compose service.
-- **Dashboard** — official app logos, help/wiki links, search and sort, updates, backups, and uninstall.
+- **Dashboard** — official app logos, help/wiki links, search and sort, Health graphs, updates, backups, and uninstall.
 - **Open UI** — each catalog card opens `http://<host>:<app-port>`. Compose (and the NAS templates) publish those ports; host networking is an alternative.
-- **Settings** — admin **Error manager** with an on/off debug-share toggle (time-limited `/debug/{token}` URL). Account, storage, VPN, and update-schedule screens are not built yet.
+- **Settings** — account, timezone, PUID/PGID, backups, VPN, Cloudflare Tunnel, GitHub token, scheduled catalog updates, and a debug-share toggle.
+- **Scheduled updates** — Settings → Updates checks GitHub on a timer (notify only or auto-apply). Manual **Update** on a card still snapshots and rolls back on failure.
 
 ---
 
@@ -90,7 +91,7 @@ Each catalog card includes a help control that opens that project's official wik
 | Guide | Contents |
 |-------|----------|
 | [Installation](docs/INSTALL.md) | Host folders, ports, platform index |
-| [Usage](docs/USAGE.md) | First-run wizard, catalog, shared login |
+| [Usage](docs/USAGE.md) | First-run wizard, catalog, Settings, scheduled updates |
 | [Docker](deploy/DOCKER.md) | Primary deployment |
 | [Linux / LXC](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md) | Platform notes |
 | [Cloudflare Tunnel](deploy/CLOUDFLARE.md) | Remote access without inbound ports |

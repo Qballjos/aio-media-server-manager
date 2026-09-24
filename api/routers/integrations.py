@@ -6,6 +6,7 @@ Provides endpoints to inspect connectivity and trigger automatic inter-applicati
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -41,5 +42,4 @@ async def run_integration_wiring(request: Request) -> dict[str, Any]:
     and media server linking.
     """
     _ensure_authenticated(request)
-    result = integration_engine.run_full_wiring()
-    return result
+    return await asyncio.to_thread(integration_engine.run_full_wiring)

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import secrets
 import time
 from dataclasses import dataclass, field
@@ -26,12 +27,23 @@ COOKIE_ACCESS = "amm_access"
 COOKIE_CSRF = "amm_csrf"
 CSRF_HEADER = "X-CSRF-Token"
 JWT_ALGORITHM = "HS256"
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 JWT_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_BYTES = 72
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 10
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
+
+
+def normalize_email(value: str) -> str:
+    email = (value or "").strip()
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(
+            status_code=_UNPROCESSABLE,
+            detail="A valid email address is required.",
+        )
+    return email.lower()
 
 
 @dataclass
@@ -109,7 +121,10 @@ class AuthManager:
     def username(self) -> str:
         return str(self._read_auth().get("username") or "admin")
 
-    def create_admin(self, username: str, password: str) -> None:
+    def email(self) -> str:
+        return str(self._read_auth().get("email") or "").strip()
+
+    def create_admin(self, username: str, password: str, email: str = "") -> None:
         if not self.setup_required():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -117,12 +132,13 @@ class AuthManager:
             )
         self._validate_password(password)
         hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
-        self._write_auth(
-            {
-                "username": username.strip() or "admin",
-                "password_hash": hashed.decode("utf-8"),
-            }
-        )
+        payload = {
+            "username": username.strip() or "admin",
+            "password_hash": hashed.decode("utf-8"),
+        }
+        if email:
+            payload["email"] = email.strip().lower()
+        self._write_auth(payload)
         logger.info("Created local admin account '%s'.", username)
 
     def verify_password(self, username: str, password: str) -> bool:
@@ -156,6 +172,32 @@ class AuthManager:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired session.",
             ) from exc
+
+    def update_account(
+        self,
+        current_username: str,
+        *,
+        current_password: str,
+        email: str | None = None,
+        new_username: str | None = None,
+        new_password: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.verify_password(current_username, current_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Current password is incorrect.",
+            )
+        data = self._read_auth()
+        username = (new_username or current_username).strip() or current_username
+        data["username"] = username
+        if email is not None:
+            data["email"] = normalize_email(email)
+        if new_password:
+            self._validate_password(new_password)
+            hashed = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt())
+            data["password_hash"] = hashed.decode("utf-8")
+        self._write_auth(data)
+        return {"username": username, "email": str(data.get("email") or "")}
 
     def set_session_cookies(self, response: Response, token: str) -> str:
         csrf = secrets.token_urlsafe(32)

@@ -88,6 +88,8 @@ class JellyfinApp(BaseApplication):
             str(settings.config_dir / "logs" / "jellyfin"),
             "--cachedir",
             str(settings.cache_dir / "jellyfin"),
+            "--http-port",
+            str(self.port),
         ]
         webdir = self._webdir()
         if webdir is not None:

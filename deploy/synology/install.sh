@@ -55,6 +55,7 @@ services:
     environment:
       PUID: "${PUID}"
       PGID: "${PGID}"
+      TZ: UTC
       AMM_DOWNLOAD_DIR: /data/downloads
       AMM_MEDIA_DIR: /data/media
       AMM_VPN_ENABLED: "false"

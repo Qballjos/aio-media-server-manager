@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from core.auth import COOKIE_CSRF, auth_manager
+from core.auth import COOKIE_CSRF, auth_manager, normalize_email
 from core.shared_credentials import save_shared_admin_credentials
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 class SetupRequest(BaseModel):
     username: str = Field(default="admin", min_length=1)
     password: str = Field(min_length=8)
+    email: str = Field(min_length=3)
 
 
 class LoginRequest(BaseModel):
@@ -34,6 +35,7 @@ class AuthStatusResponse(BaseModel):
     setup_required: bool
     authenticated: bool
     username: Optional[str] = None
+    email: Optional[str] = None
     csrf_token: Optional[str] = None
 
 
@@ -49,6 +51,7 @@ async def auth_status(request: Request) -> dict:
             "setup_required": True,
             "authenticated": False,
             "username": None,
+            "email": None,
             "csrf_token": None,
         }
 
@@ -58,6 +61,7 @@ async def auth_status(request: Request) -> dict:
             "setup_required": False,
             "authenticated": True,
             "username": username,
+            "email": auth_manager.email() or None,
             "csrf_token": request.cookies.get(COOKIE_CSRF),
         }
     except HTTPException:
@@ -65,6 +69,7 @@ async def auth_status(request: Request) -> dict:
             "setup_required": False,
             "authenticated": False,
             "username": None,
+            "email": None,
             "csrf_token": None,
         }
 
@@ -74,13 +79,15 @@ async def setup_admin(req: SetupRequest, response: Response) -> dict:
     """
     Creates the first local administrator account if none exists.
     """
-    auth_manager.create_admin(username=req.username, password=req.password)
-    save_shared_admin_credentials(req.username, req.password)
+    email = normalize_email(req.email)
+    auth_manager.create_admin(username=req.username, password=req.password, email=email)
+    save_shared_admin_credentials(req.username, req.password, email=email)
     token = auth_manager.issue_token(req.username)
     csrf = auth_manager.set_session_cookies(response, token)
     return {
         "status": "ok",
         "username": req.username,
+        "email": email,
         "csrf_token": csrf,
         "access_token": token,
     }
@@ -128,4 +135,34 @@ async def logout(response: Response) -> dict:
 async def get_current_user(request: Request) -> dict:
     """Return profile for the currently authenticated user."""
     username = auth_manager.authenticate_request(request)
-    return {"username": username}
+    return {"username": username, "email": auth_manager.email() or None}
+
+
+class AccountPatch(BaseModel):
+    current_password: str = Field(min_length=1)
+    username: Optional[str] = None
+    email: Optional[str] = None
+    new_password: Optional[str] = Field(default=None, min_length=8)
+
+
+@router.patch("/account", summary="Update admin username, email, or password")
+async def update_account(req: AccountPatch, request: Request, response: Response) -> dict:
+    username = auth_manager.authenticate_request(request)
+    updated = auth_manager.update_account(
+        username,
+        current_password=req.current_password,
+        email=req.email,
+        new_username=req.username,
+        new_password=req.new_password,
+    )
+    password_for_share = req.new_password or req.current_password
+    save_shared_admin_credentials(updated["username"], password_for_share, email=updated.get("email") or "")
+    token = auth_manager.issue_token(updated["username"])
+    csrf = auth_manager.set_session_cookies(response, token)
+    return {
+        "status": "ok",
+        "username": updated["username"],
+        "email": updated.get("email") or None,
+        "csrf_token": csrf,
+        "access_token": token,
+    }

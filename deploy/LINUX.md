@@ -41,7 +41,7 @@ cd /opt/aio-media-manager
 sudo -u amm cp .env.example .env
 ```
 
-Point `AMM_CONFIG_DIR`, `AMM_DOWNLOAD_DIR`, and `AMM_MEDIA_DIR` in `.env` at the directories you created. Set `PUID`/`PGID` to `id amm` (or your media user).
+Point `AMM_CONFIG_DIR`, `AMM_DOWNLOAD_DIR`, and `AMM_MEDIA_DIR` in `.env` at the directories you created. Set `PUID`/`PGID` to `id amm` (or your media user). Set `TZ` (or `AMM_TIMEZONE`) to your IANA timezone. Optional `GITHUB_TOKEN` and update-schedule variables are documented in `.env.example`; you can also set them in **Settings** after first-run.
 
 ```bash
 sudo -u amm poetry install --only main --no-interaction

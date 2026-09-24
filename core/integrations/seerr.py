@@ -134,3 +134,34 @@ class SeerrClient:
         except Exception as exc:
             logger.debug("Seerr connect_plex error: %s", exc)
             return False
+
+    def setup_local_admin(self, email: str, username: str, password: str) -> bool:
+        """Create the first Seerr local admin when email and password are known."""
+        email = (email or "").strip()
+        username = (username or "").strip() or "admin"
+        if not email or not password:
+            return False
+        payload = {"email": email, "username": username, "password": password}
+        try:
+            init = requests.post(
+                f"{self.base_url}/settings/initialize",
+                headers=self._headers(),
+                json=payload,
+                timeout=8.0,
+            )
+            if init.status_code in (200, 201):
+                logger.info("Initialized Seerr local admin '%s'.", username)
+                return True
+            local = requests.post(
+                f"{self.base_url}/auth/local",
+                headers=self._headers(),
+                json=payload,
+                timeout=8.0,
+            )
+            if local.status_code in (200, 201, 409):
+                logger.info("Seerr local auth ready for '%s'.", username)
+                return True
+            return False
+        except Exception as exc:
+            logger.debug("Seerr setup_local_admin error: %s", exc)
+            return False

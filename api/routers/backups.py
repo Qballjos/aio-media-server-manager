@@ -48,3 +48,13 @@ async def restore_backup(name: str, request: Request) -> dict[str, Any]:
         return manager.restore_backup(name)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.delete("/{name}", summary="Delete a configuration backup")
+async def delete_backup(name: str, request: Request) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    archive = manager.backup_root / name
+    if not archive.is_file() or archive.parent.resolve() != manager.backup_root.resolve():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found.")
+    archive.unlink()
+    return {"status": "deleted", "name": name}

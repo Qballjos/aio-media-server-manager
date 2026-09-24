@@ -28,7 +28,6 @@ from typing import Any, Optional
 from applications.catalog import ApplicationCatalog
 from applications.manifest import help_url_for
 from core.crypto import secret_store
-from core.integrations.engine import integration_engine
 from core.library_layout import LibraryLayout
 from core.settings import settings
 from core.storage import StorageManager
@@ -82,6 +81,11 @@ class WizardEngine:
                 "preferred_download_client": "qbittorrent",
                 "qbittorrent_username": "admin",
                 "qbittorrent_password": "",
+                "usenet_host": "",
+                "usenet_port": 563,
+                "usenet_ssl": True,
+                "usenet_username": "",
+                "usenet_connections": 8,
                 "vpn_config_path": "",
                 "vpn_protocol": "wireguard",
                 "vpn_enforce": False,
@@ -124,6 +128,7 @@ class WizardEngine:
     def get_status(self) -> dict[str, Any]:
         selections = dict(self._state.get("selections", {}))
         selections.pop("qbittorrent_password", None)
+        selections.pop("usenet_password", None)
         return {
             "current_step": self._state.get("current_step", 1),
             "completed": self.is_completed(),
@@ -197,6 +202,12 @@ class WizardEngine:
                 "preferred_download_client": selections.get("preferred_download_client", "qbittorrent"),
                 "qbittorrent_username": selections.get("qbittorrent_username", "admin"),
                 "has_qbittorrent_password": bool(selections.get("qbittorrent_password")),
+                "usenet_host": selections.get("usenet_host", ""),
+                "usenet_port": selections.get("usenet_port", 563),
+                "usenet_ssl": bool(selections.get("usenet_ssl", True)),
+                "usenet_username": selections.get("usenet_username", ""),
+                "usenet_connections": selections.get("usenet_connections", 8),
+                "has_usenet_password": bool(selections.get("usenet_password")),
             }
 
         if step_id == 6:
@@ -270,9 +281,15 @@ class WizardEngine:
             }
 
         if step_id == 11:
+            summary = dict(selections)
+            summary.pop("qbittorrent_password", None)
+            summary.pop("usenet_password", None)
+            summary["has_usenet_account"] = bool(
+                selections.get("usenet_host") or selections.get("usenet_username")
+            )
             return {
                 "step": 11,
-                "summary": selections,
+                "summary": summary,
             }
 
         return {
@@ -305,6 +322,24 @@ class WizardEngine:
                 selections["qbittorrent_username"] = data["qbittorrent_username"]
             if data.get("qbittorrent_password"):
                 selections["qbittorrent_password"] = data["qbittorrent_password"]
+            if "usenet_host" in data:
+                selections["usenet_host"] = str(data.get("usenet_host") or "").strip()
+            if "usenet_port" in data:
+                try:
+                    selections["usenet_port"] = int(data.get("usenet_port") or 563)
+                except (TypeError, ValueError):
+                    selections["usenet_port"] = 563
+            if "usenet_ssl" in data:
+                selections["usenet_ssl"] = bool(data.get("usenet_ssl"))
+            if "usenet_username" in data:
+                selections["usenet_username"] = str(data.get("usenet_username") or "").strip()
+            if data.get("usenet_password"):
+                selections["usenet_password"] = data["usenet_password"]
+            if "usenet_connections" in data:
+                try:
+                    selections["usenet_connections"] = max(1, int(data.get("usenet_connections") or 8))
+                except (TypeError, ValueError):
+                    selections["usenet_connections"] = 8
         elif step_id == 6:
             selections["vpn_provider"] = data.get("vpn_provider", "none")
             if "vpn_config_path" in data:
@@ -392,6 +427,7 @@ class WizardEngine:
         except Exception as exc:
             logger.warning("Could not persist wizard settings: %s", exc)
 
+        from core.integrations.usenet import save_usenet_server
         from core.shared_credentials import shared_admin_credentials
 
         shared = shared_admin_credentials()
@@ -410,6 +446,16 @@ class WizardEngine:
             if claim:
                 secret_store.save_secret("plex_claim", str(claim))
                 selections["plex_claim"] = ""
+            if selections.get("usenet_host"):
+                save_usenet_server(
+                    host=str(selections.get("usenet_host") or ""),
+                    port=int(selections.get("usenet_port") or 563),
+                    ssl=bool(selections.get("usenet_ssl", True)),
+                    username=str(selections.get("usenet_username") or ""),
+                    password=str(selections.get("usenet_password") or ""),
+                    connections=int(selections.get("usenet_connections") or 8),
+                )
+                selections["usenet_password"] = ""
         except Exception as exc:
             logger.warning("Could not persist wizard secrets: %s", exc)
 
@@ -430,8 +476,6 @@ class WizardEngine:
             else:
                 install_results.append({"app": app_name, "installed": False, "status": "pending_catalog_install"})
 
-        wiring_report = integration_engine.run_full_wiring()
-
         self._state["completed"] = True
         self._state["current_step"] = 12
         self._save_state()
@@ -440,7 +484,7 @@ class WizardEngine:
             "completed": True,
             "target_apps": target_apps,
             "installations": install_results,
-            "wiring": wiring_report,
+            "wiring": {"status": "deferred_until_apps_healthy"},
         }
 
 

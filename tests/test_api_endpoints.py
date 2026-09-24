@@ -67,12 +67,14 @@ def test_auth_status_setup_and_login_flow(client: TestClient):
     # 2. Complete setup
     setup_payload = {
         "username": "admin",
+        "email": "admin@example.com",
         "password": "StrongPassword123!",
     }
     resp = client.post("/api/auth/setup", json=setup_payload)
     assert resp.status_code == 200
     data = resp.json()
     assert data["username"] == "admin"
+    assert data["email"] == "admin@example.com"
     assert "access_token" in data
     assert "csrf_token" in data
 
@@ -89,6 +91,7 @@ def test_auth_status_setup_and_login_flow(client: TestClient):
     resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     assert resp.json()["username"] == "admin"
+    assert resp.json()["email"] == "admin@example.com"
 
     # 5. Login with invalid password
     resp = client.post("/api/auth/login", json={"username": "admin", "password": "WrongPassword"})
@@ -99,6 +102,14 @@ def test_auth_status_setup_and_login_flow(client: TestClient):
     assert resp.status_code == 200
     new_token = resp.json()["access_token"]
     assert new_token is not None
+
+
+def test_setup_requires_email(client: TestClient):
+    resp = client.post(
+        "/api/auth/setup",
+        json={"username": "admin", "password": "StrongPassword123!"},
+    )
+    assert resp.status_code in (400, 422)
 
 
 def test_catalog_endpoints(client: TestClient):
@@ -155,3 +166,6 @@ def test_system_info_endpoint(client: TestClient):
     assert "settings" in data
     assert "puid" in data["settings"]
     assert "pgid" in data["settings"]
+    media = data["storage"].get("media_dir") or next(iter(data["storage"].values()), {})
+    assert "fs_type" in media
+    assert "disk_total" in media

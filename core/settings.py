@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,46 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CONFIG_NAME = "amm_config.json"
+
+# UI-editable keys stored in amm_config.json. Bind mounts and API bind stay env-only.
+_PERSISTED_KEYS = (
+    "timezone",
+    "log_level",
+    "puid",
+    "pgid",
+    "backup_retention",
+    "trusted_proxies",
+    "vpn_enabled",
+    "vpn_enforce",
+    "vpn_provider",
+    "vpn_protocol",
+    "vpn_config_path",
+    "cloudflare_tunnel_enabled",
+    "update_check_schedule",
+    "update_apply_schedule",
+    "update_time",
+    "update_weekday",
+    "update_day_of_month",
+)
+_PERSISTED_ENV = {
+    "timezone": ("AMM_TIMEZONE",),
+    "log_level": ("AMM_LOG_LEVEL",),
+    "puid": ("PUID", "AMM_PUID"),
+    "pgid": ("PGID", "AMM_PGID"),
+    "backup_retention": ("AMM_BACKUP_RETENTION",),
+    "trusted_proxies": ("AMM_TRUSTED_PROXIES",),
+    "vpn_enabled": ("AMM_VPN_ENABLED",),
+    "vpn_enforce": ("AMM_VPN_ENFORCE",),
+    "vpn_provider": ("AMM_VPN_PROVIDER",),
+    "vpn_protocol": ("AMM_VPN_PROTOCOL",),
+    "vpn_config_path": ("AMM_VPN_CONFIG",),
+    "cloudflare_tunnel_enabled": ("AMM_CLOUDFLARE_TUNNEL_ENABLED",),
+    "update_check_schedule": ("AMM_UPDATE_CHECK_SCHEDULE",),
+    "update_apply_schedule": ("AMM_UPDATE_APPLY_SCHEDULE",),
+    "update_time": ("AMM_UPDATE_TIME",),
+    "update_weekday": ("AMM_UPDATE_WEEKDAY",),
+    "update_day_of_month": ("AMM_UPDATE_DAY",),
+}
 
 
 class Settings(BaseSettings):
@@ -99,7 +140,16 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Logging
     # ------------------------------------------------------------------
-    log_level: str = Field(default="INFO", description="Root log level.")
+    log_level: str = Field(
+        default="INFO",
+        description="Root log level.",
+        validation_alias="AMM_LOG_LEVEL",
+    )
+    timezone: str = Field(
+        default_factory=lambda: os.environ.get("TZ") or "UTC",
+        description="IANA timezone for logs and schedules.",
+        validation_alias="AMM_TIMEZONE",
+    )
 
     # ------------------------------------------------------------------
     # Backups
@@ -164,6 +214,19 @@ class Settings(BaseSettings):
     vpn_config_path: Path | None = Field(default=None, validation_alias="AMM_VPN_CONFIG")
 
     # ------------------------------------------------------------------
+    # Scheduled catalog updates
+    # ------------------------------------------------------------------
+    update_check_schedule: str = Field(default="off", validation_alias="AMM_UPDATE_CHECK_SCHEDULE")
+    update_apply_schedule: str = Field(default="off", validation_alias="AMM_UPDATE_APPLY_SCHEDULE")
+    update_time: str = Field(default="04:00", validation_alias="AMM_UPDATE_TIME")
+    update_weekday: int = Field(
+        default=0,
+        description="ISO weekday for weekly checks (0=Monday … 6=Sunday).",
+        validation_alias="AMM_UPDATE_WEEKDAY",
+    )
+    update_day_of_month: int = Field(default=1, ge=1, le=28, validation_alias="AMM_UPDATE_DAY")
+
+    # ------------------------------------------------------------------
     # Validators
     # ------------------------------------------------------------------
 
@@ -186,6 +249,29 @@ class Settings(BaseSettings):
         if level not in valid:
             raise ValueError(f"log_level must be one of {valid}, got {v!r}.")
         return level
+
+    @field_validator("update_check_schedule", mode="before")
+    @classmethod
+    def _check_sched(cls, v: Any) -> str:
+        item = str(v or "off").strip().lower()
+        return item if item in {"off", "daily", "weekly", "monthly"} else "off"
+
+    @field_validator("update_apply_schedule", mode="before")
+    @classmethod
+    def _apply_sched(cls, v: Any) -> str:
+        item = str(v or "off").strip().lower()
+        return item if item in {"off", "same", "daily", "weekly", "monthly"} else "off"
+
+    @field_validator("update_time", mode="before")
+    @classmethod
+    def _update_hhmm(cls, v: Any) -> str:
+        text = str(v or "04:00").strip()
+        match = re.match(r"^(\d{1,2}):(\d{2})$", text)
+        if not match:
+            return "04:00"
+        hour = min(23, max(0, int(match.group(1))))
+        minute = min(59, max(0, int(match.group(2))))
+        return f"{hour:02d}:{minute:02d}"
 
     @model_validator(mode="after")
     def _resolve_paths(self) -> "Settings":
@@ -223,6 +309,7 @@ class Settings(BaseSettings):
         self.vpn_protocol = str(self.vpn_protocol).lower()
         if self.vpn_protocol not in {"wireguard", "openvpn"}:
             raise ValueError("vpn_protocol must be 'wireguard' or 'openvpn'.")
+        self.update_weekday = int(self.update_weekday) % 7
         return self
 
     # ------------------------------------------------------------------
@@ -248,6 +335,7 @@ class Settings(BaseSettings):
             "api_host": self.api_host,
             "api_port": self.api_port,
             "log_level": self.log_level,
+            "timezone": self.timezone,
             "github_token_configured": bool(self.github_token),
             "trusted_proxies": self.trusted_proxies,
             "root_path": self.root_path,
@@ -257,6 +345,11 @@ class Settings(BaseSettings):
             "vpn_protocol": self.vpn_protocol,
             "vpn_config_path": str(self.vpn_config_path) if self.vpn_config_path else "",
             "cloudflare_tunnel_enabled": self.cloudflare_tunnel_enabled,
+            "update_check_schedule": self.update_check_schedule,
+            "update_apply_schedule": self.update_apply_schedule,
+            "update_time": self.update_time,
+            "update_weekday": self.update_weekday,
+            "update_day_of_month": self.update_day_of_month,
         }
 
     def save(self) -> None:
@@ -265,6 +358,39 @@ class Settings(BaseSettings):
         with self.config_file.open("w", encoding="utf-8") as fh:
             json.dump(self.as_serialisable_dict(), fh, indent=2)
         logger.debug("Settings saved to %s", self.config_file)
+
+    def apply_timezone(self) -> None:
+        """Apply timezone to the process for logs and local clocks."""
+        tz = (self.timezone or "UTC").strip() or "UTC"
+        self.timezone = tz
+        os.environ["TZ"] = tz
+        if hasattr(__import__("time"), "tzset"):
+            import time
+
+            time.tzset()
+
+    def _load_persisted(self) -> None:
+        if not self.config_file.is_file():
+            return
+        try:
+            data = json.loads(self.config_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Could not read %s: %s", self.config_file, exc)
+            return
+        if not isinstance(data, dict):
+            return
+        for key in _PERSISTED_KEYS:
+            if key not in data:
+                continue
+            if any(os.environ.get(name) for name in _PERSISTED_ENV.get(key, ())):
+                continue
+            value = data[key]
+            if key == "vpn_config_path" and value:
+                value = Path(value).expanduser()
+            try:
+                setattr(self, key, value)
+            except Exception as exc:
+                logger.warning("Ignoring persisted %s: %s", key, exc)
 
     def initialise(self) -> None:
         """
@@ -282,6 +408,9 @@ class Settings(BaseSettings):
         if not self.config_file.exists():
             self.save()
             logger.info("Created default config file at %s", self.config_file)
+        else:
+            self._load_persisted()
+        self.apply_timezone()
 
     @classmethod
     def load_or_create(cls) -> "Settings":

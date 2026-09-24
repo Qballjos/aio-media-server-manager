@@ -17,6 +17,7 @@ const authToken = ref(localStorage.getItem('amm_token') || '')
 
 const authForm = ref({
   username: 'admin',
+  email: '',
   password: '',
   confirmPassword: ''
 })
@@ -25,6 +26,7 @@ const authLoading = ref(false)
 
 // Dashboard data
 const catalogApps = ref([])
+const updateStatus = ref({ available: [], last_check_at: null, last_apply_at: null, paused: false })
 const catalogCategoriesSelected = ref([])
 const catalogStatusFilters = ref([])
 const catalogSort = ref('popularity')
@@ -53,6 +55,12 @@ function showToast(message, type = 'info') {
 // Logs Modal
 const showLogModal = ref(false)
 const activeLogApp = ref(null)
+const openCardMenu = ref('')
+const settingsApp = ref(null)
+const settingsForm = ref({ port: 0, autostart: true })
+const settingsMeta = ref(null)
+const settingsLoading = ref(false)
+const settingsError = ref('')
 const logLines = ref([])
 const logLoading = ref(false)
 const autoScrollLogs = ref(true)
@@ -165,6 +173,10 @@ async function handleSetup() {
     authError.value = 'Password must be at least 8 characters long.'
     return
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authForm.value.email.trim())) {
+    authError.value = 'A valid email address is required.'
+    return
+  }
   if (authForm.value.password !== authForm.value.confirmPassword) {
     authError.value = 'Passwords do not match.'
     return
@@ -178,6 +190,7 @@ async function handleSetup() {
       credentials: 'include',
       body: JSON.stringify({
         username: authForm.value.username,
+        email: authForm.value.email.trim(),
         password: authForm.value.password
       })
     })
@@ -299,6 +312,7 @@ async function fetchSystemInfo() {
     const res = await apiRequest('/api/system/info')
     if (res.ok) {
       systemInfo.value = await res.json()
+      recordHealthSample()
     }
   } catch (err) {
     console.error('System info fetch error:', err)
@@ -329,9 +343,33 @@ async function onWizardDone() {
   await refreshDashboard()
 }
 
+function onSettingsSession(data) {
+  if (data?.access_token) {
+    authToken.value = data.access_token
+    localStorage.setItem('amm_token', data.access_token)
+  }
+  if (data?.csrf_token) storeCsrf(data.csrf_token)
+  if (data?.username) authStatus.value.username = data.username
+}
+
+async function fetchUpdateStatus() {
+  try {
+    const res = await apiRequest('/api/updates/status')
+    if (res.ok) updateStatus.value = await res.json()
+  } catch (err) {
+    console.error('Update status error:', err)
+  }
+}
+
+function formatUpdateWhen(ts) {
+  if (!ts) return 'never'
+  const ms = ts > 1e12 ? ts : ts * 1000
+  return new Date(ms).toLocaleString()
+}
+
 async function refreshDashboard() {
   isLoadingData.value = true
-  await Promise.all([fetchCatalog(), fetchApplications(), fetchSystemInfo()])
+  await Promise.all([fetchCatalog(), fetchApplications(), fetchSystemInfo(), fetchUpdateStatus()])
   isLoadingData.value = false
 }
 
@@ -352,16 +390,23 @@ const combinedServices = computed(() => {
       category: cat.category,
       iconSrc: appIconSrc(cat.name),
       tier: cat.tier,
-      port: cat.port || cat.default_port,
+      port: live?.port || cat.port || cat.default_port,
+      defaultPort: cat.default_port,
       installed: cat.installed || (live && live.installed) || false,
       installedVersion: cat.installed_version || (live && live.version),
-      webUrl: `http://${host}:${cat.port || cat.default_port}`,
+      webUrl: `http://${host}:${live?.port || cat.port || cat.default_port}`,
       state: live ? live.state : (cat.installed ? 'stopped' : 'not_installed'),
       pid: live ? live.pid : null,
       uptime: live ? live.uptime_seconds : null,
+      is_crash_loop: live ? live.is_crash_loop : false,
+      recent_crashes: live ? live.recent_crashes : 0,
+      autostart: live?.autostart ?? cat.daemon !== false,
+      daemon: cat.daemon !== false,
       arm64: cat.arm64_supported,
       popularity: cat.popularity ?? 0,
-      helpUrl: cat.help_url || ''
+      helpUrl: cat.help_url || '',
+      updateAvailable: !!(updateStatus.value.available || []).find((row) => row.name === cat.name),
+      latestVersion: ((updateStatus.value.available || []).find((row) => row.name === cat.name) || {}).latest_version
     }
   })
 })
@@ -488,6 +533,87 @@ const catalogSize = computed(() => combinedServices.value.length)
 
 const cpuPercent = computed(() => systemInfo.value?.metrics?.cpu_percent)
 const memPercent = computed(() => systemInfo.value?.metrics?.memory?.percent)
+const diskPercent = computed(() => systemInfo.value?.metrics?.disk?.percent)
+const showHealthModal = ref(false)
+const healthHistory = ref([])
+const HEALTH_MAX_SAMPLES = 60
+let healthPoll = null
+
+function formatBytes(n) {
+  const v = Number(n) || 0
+  if (v < 1024) return `${Math.round(v)} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let x = v
+  let i = -1
+  do {
+    x /= 1024
+    i += 1
+  } while (x >= 1024 && i < units.length - 1)
+  return `${x >= 10 ? x.toFixed(0) : x.toFixed(1)} ${units[i]}`
+}
+
+function recordHealthSample() {
+  const metrics = systemInfo.value?.metrics
+  if (!metrics) return
+  healthHistory.value = [
+    ...healthHistory.value,
+    {
+      t: Date.now(),
+      cpu: Number(metrics.cpu_percent) || 0,
+      mem: Number(metrics.memory?.percent) || 0,
+      disk: Number(metrics.disk?.percent) || 0
+    }
+  ].slice(-HEALTH_MAX_SAMPLES)
+}
+
+function chartPath(values) {
+  const w = 320
+  const h = 88
+  const pad = 6
+  const series = values.length ? values : [0]
+  const pts = series.length === 1 ? [series[0], series[0]] : series
+  const n = Math.max(pts.length - 1, 1)
+  const coords = pts.map((v, i) => {
+    const x = pad + (i / n) * (w - pad * 2)
+    const y = pad + (1 - Math.min(100, Math.max(0, Number(v) || 0)) / 100) * (h - pad * 2)
+    return [x, y]
+  })
+  const line = coords.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
+  const last = coords[coords.length - 1]
+  const first = coords[0]
+  const fill = `${line} L${last[0].toFixed(1)} ${(h - pad).toFixed(1)} L${first[0].toFixed(1)} ${(h - pad).toFixed(1)} Z`
+  return { line, fill, w, h }
+}
+
+const cpuChart = computed(() => chartPath(healthHistory.value.map(s => s.cpu)))
+const memChart = computed(() => chartPath(healthHistory.value.map(s => s.mem)))
+const diskChart = computed(() => chartPath(healthHistory.value.map(s => s.disk)))
+
+const healthTone = computed(() => {
+  const cpu = Number(cpuPercent.value) || 0
+  const mem = Number(memPercent.value) || 0
+  const disk = Number(diskPercent.value) || 0
+  if (cpu >= 90 || mem >= 90 || disk >= 90) return 'warn'
+  return 'ok'
+})
+
+function openHealthModal() {
+  showHealthModal.value = true
+  fetchSystemInfo()
+  if (healthPoll) clearInterval(healthPoll)
+  healthPoll = setInterval(() => {
+    fetchSystemInfo()
+  }, 2000)
+}
+
+function closeHealthModal() {
+  showHealthModal.value = false
+  if (healthPoll) {
+    clearInterval(healthPoll)
+    healthPoll = null
+  }
+}
+
 const vpnUnprotected = computed(() => systemInfo.value?.vpn?.qbittorrent_unprotected)
 const cloudflareTunnelIssue = computed(() => {
   const tunnel = systemInfo.value?.cloudflare_tunnel
@@ -746,6 +872,84 @@ function formatUptime(seconds) {
   return `${s}s`
 }
 
+function isServiceActive(service) {
+  return service.state === 'running' || service.state === 'healthy'
+}
+
+function toggleCardMenu(name) {
+  openCardMenu.value = openCardMenu.value === name ? '' : name
+}
+
+function closeCardMenu() {
+  openCardMenu.value = ''
+}
+
+async function openAppSettings(service) {
+  closeCardMenu()
+  settingsError.value = ''
+  settingsApp.value = service
+  settingsLoading.value = true
+  try {
+    const res = await apiRequest(`/api/applications/${service.name}/settings`)
+    const data = await res.json()
+    if (!res.ok) {
+      settingsError.value = data.detail || 'Could not load settings.'
+      settingsMeta.value = null
+      settingsForm.value = { port: service.port, autostart: service.autostart }
+      return
+    }
+    settingsMeta.value = data
+    settingsForm.value = { port: data.port, autostart: data.autostart }
+  } catch (err) {
+    settingsError.value = err.message || 'Could not load settings.'
+  } finally {
+    settingsLoading.value = false
+  }
+}
+
+function closeAppSettings() {
+  settingsApp.value = null
+  settingsMeta.value = null
+  settingsError.value = ''
+}
+
+async function saveAppSettings() {
+  if (!settingsApp.value) return
+  settingsLoading.value = true
+  settingsError.value = ''
+  try {
+    const res = await apiRequest(`/api/applications/${settingsApp.value.name}/settings`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        port: Number(settingsForm.value.port),
+        autostart: settingsForm.value.autostart,
+        restart: true
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      settingsError.value = data.detail || 'Could not save settings.'
+      return
+    }
+    showToast(
+      data.restarted
+        ? `Saved ${data.display_name} and restarted on port ${data.port}`
+        : `Saved ${data.display_name} settings`,
+      'success'
+    )
+    closeAppSettings()
+    await refreshDashboard()
+  } catch (err) {
+    settingsError.value = err.message || 'Could not save settings.'
+  } finally {
+    settingsLoading.value = false
+  }
+}
+
+function onDocumentClick() {
+  closeCardMenu()
+}
+
 function statusBadgeClass(state, isCrashLoop = false) {
   if (isCrashLoop || state === 'crash_loop') return 'badge-failed font-bold'
   switch (state) {
@@ -767,6 +971,7 @@ onMounted(async () => {
   clockInterval = setInterval(() => {
     currentTime.value = new Date().toLocaleTimeString()
   }, 1000)
+  document.addEventListener('click', onDocumentClick)
 
   await checkAuthStatus()
 
@@ -781,6 +986,8 @@ onUnmounted(() => {
   if (clockInterval) clearInterval(clockInterval)
   if (pollInterval) clearInterval(pollInterval)
   if (logPollInterval) clearInterval(logPollInterval)
+  if (healthPoll) clearInterval(healthPoll)
+  document.removeEventListener('click', onDocumentClick)
 })
 </script>
 
@@ -803,16 +1010,11 @@ onUnmounted(() => {
       </div>
 
       <div class="nav-metrics">
-        <div class="metric-pill">
+        <div class="metric-pill hide-compact" :title="currentTime">
           <span class="pulse-dot"></span>
-          <span class="metric-label">TIME</span>
           <span class="metric-val font-mono">{{ currentTime }}</span>
         </div>
-        <div v-if="hostArch" class="metric-pill">
-          <span class="metric-label">ARCH</span>
-          <span class="metric-val font-mono">{{ hostArch.toUpperCase() }}</span>
-        </div>
-        <div v-if="transcodingAvailable" class="metric-pill">
+        <div v-if="transcodingAvailable" class="metric-pill hide-narrow">
           <span class="metric-label">GPU</span>
           <span class="metric-val font-mono">HW</span>
         </div>
@@ -833,7 +1035,7 @@ onUnmounted(() => {
           title="Trigger automatic integration wiring across applications"
         >
           <span v-if="wiringRunning" class="spinner spinner-sm"></span>
-          <span v-else>⚡ Auto-Wire Services</span>
+          <span v-else>⚡ <span class="hide-compact">Auto-Wire</span></span>
         </button>
         <div v-if="authStatus.authenticated" class="user-pill">
           <span class="user-avatar">{{ authStatus.username?.[0]?.toUpperCase() || 'A' }}</span>
@@ -879,6 +1081,19 @@ onUnmounted(() => {
                 placeholder="admin"
                 required
                 class="ui-input font-mono"
+              />
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label class="ui-field">Email address
+              <input
+                v-model="authForm.email"
+                type="email"
+                placeholder="you@example.com"
+                required
+                autocomplete="email"
+                class="ui-input"
               />
               </label>
             </div>
@@ -980,7 +1195,13 @@ onUnmounted(() => {
 
       <!-- 4. Dashboard View -->
       <div v-else class="dashboard-layout animate-fade">
-        <SettingsPanel v-if="currentView === 'settings'" :api-request="apiRequest" />
+        <SettingsPanel
+          v-if="currentView === 'settings'"
+          :api-request="apiRequest"
+          :system-info="systemInfo"
+          :host-arch="hostArch"
+          @session="onSettingsSession"
+        />
         <template v-else>
         <!-- Metric Cards -->
         <section class="metrics-grid">
@@ -1064,19 +1285,26 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="stat-card glass-card">
-            <div class="stat-icon-wrapper refresh-color" @click="refreshDashboard" style="cursor: pointer;" title="Refresh now">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ 'spin-anim': isLoadingData }">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          <div
+            class="stat-card glass-card stat-card-filter"
+            :class="{ 'is-filter-on': showHealthModal }"
+            role="button"
+            tabindex="0"
+            title="Open host health graphs"
+            @click="openHealthModal"
+            @keydown.enter.prevent="openHealthModal"
+            @keydown.space.prevent="openHealthModal"
+          >
+            <div class="stat-icon-wrapper refresh-color">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">SUPERVISOR / CPU</div>
+              <div class="stat-label">HEALTH</div>
               <div class="stat-value font-mono">
-                <span class="text-emerald">ONLINE</span>
-                <span class="stat-sub"> / {{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</span>
+                <span :class="healthTone === 'ok' ? 'text-emerald' : 'text-warn'">{{ healthTone === 'ok' ? 'OK' : 'HIGH' }}</span>
+                <span class="stat-sub"> · CPU {{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</span>
               </div>
             </div>
           </div>
@@ -1111,7 +1339,14 @@ onUnmounted(() => {
         <div class="section-title-row">
           <div>
             <h2 class="section-title">Core Applications Stack</h2>
-            <p class="section-subtitle">Supervised media pipeline components running bare-metal inside a unified container.</p>
+            <p class="section-subtitle">
+              Supervised media pipeline components running bare-metal inside a unified container.
+              <span v-if="updateStatus.last_check_at || (updateStatus.available || []).length">
+                Last update check {{ formatUpdateWhen(updateStatus.last_check_at) }}
+                · last apply {{ formatUpdateWhen(updateStatus.last_apply_at) }}
+                · {{ (updateStatus.available || []).length }} waiting
+              </span>
+            </p>
           </div>
           <button @click="refreshDashboard" class="ui-btn ui-btn-ghost" :disabled="isLoadingData">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ 'spin-anim': isLoadingData }">
@@ -1259,6 +1494,7 @@ onUnmounted(() => {
                       :title="'Help / wiki for ' + service.displayName"
                     >?</a>
                     <span class="category-pill">{{ service.category }}</span>
+                    <span v-if="service.updateAvailable" class="update-pill">Update available</span>
                   </div>
                   <div class="service-port font-mono">
                     <span class="port-label">PORT:</span>
@@ -1293,7 +1529,7 @@ onUnmounted(() => {
 
             <!-- Metadata footer -->
             <div class="service-meta font-mono">
-              <span v-if="service.installedVersion">v{{ service.installedVersion }}</span>
+              <span v-if="service.installedVersion">v{{ service.installedVersion }}<template v-if="service.latestVersion"> → {{ service.latestVersion }}</template></span>
               <span v-else-if="service.installed">Installed</span>
               <span v-else class="text-dim">Not Installed</span>
 
@@ -1305,7 +1541,6 @@ onUnmounted(() => {
 
             <!-- Action Controls -->
             <div class="service-actions">
-              <!-- Not installed -> Install button -->
               <template v-if="!service.installed">
                 <button
                   @click="installApp(service.name, service.displayName)"
@@ -1313,99 +1548,85 @@ onUnmounted(() => {
                   :disabled="actionLoading[service.name] === 'install'"
                 >
                   <span v-if="actionLoading[service.name] === 'install'" class="spinner spinner-sm"></span>
-                  <span v-else>Download & Install</span>
+                  <span v-else>Install</span>
+                </button>
+                <button type="button" class="btn-action btn-logs" @click.stop="openAppSettings(service)">
+                  Settings
                 </button>
               </template>
 
-              <!-- Installed -> Lifecycle buttons -->
               <template v-else>
-                <div class="action-btn-group">
-                  <!-- Reset Crash Loop button -->
+                <button
+                  v-if="service.is_crash_loop"
+                  @click="resetCrashLoop(service.name)"
+                  class="btn-action btn-stop"
+                  title="Clear crash history and unlock auto-restart"
+                >
+                  Reset
+                </button>
+                <button
+                  v-else-if="!isServiceActive(service) && service.daemon"
+                  @click="startApp(service.name)"
+                  class="btn-action btn-start"
+                  :disabled="!!actionLoading[service.name]"
+                >
+                  <span v-if="actionLoading[service.name] === 'start'" class="spinner spinner-sm"></span>
+                  <span v-else>Start</span>
+                </button>
+                <button
+                  v-else-if="isServiceActive(service)"
+                  @click="stopApp(service.name)"
+                  class="btn-action btn-stop"
+                  :disabled="!!actionLoading[service.name]"
+                >
+                  <span v-if="actionLoading[service.name] === 'stop'" class="spinner spinner-sm"></span>
+                  <span v-else>Stop</span>
+                </button>
+                <a
+                  v-if="service.daemon"
+                  :href="service.webUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn-action btn-webui"
+                >
+                  Open UI
+                </a>
+                <div class="card-menu-wrap" @click.stop>
                   <button
-                    v-if="service.is_crash_loop"
-                    @click="resetCrashLoop(service.name)"
-                    class="btn-action"
-                    style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171;"
-                    title="Clear crash history and unlock auto-restart"
+                    type="button"
+                    class="btn-action btn-more"
+                    :class="{ open: openCardMenu === service.name }"
+                    title="More actions"
+                    @click="toggleCardMenu(service.name)"
                   >
-                    Reset Crash
+                    More
                   </button>
-
-                  <!-- Start button -->
-                  <button
-                    v-if="(service.state === 'stopped' || service.state === 'not_installed' || service.state === 'crashed' || service.state === 'failed') && !service.is_crash_loop"
-                    @click="startApp(service.name)"
-                    class="btn-action btn-start"
-                    :disabled="!!actionLoading[service.name]"
-                    title="Start Process"
-                  >
-                    <span v-if="actionLoading[service.name] === 'start'" class="spinner spinner-sm"></span>
-                    <span v-else>Start</span>
-                  </button>
-
-                  <!-- Stop button -->
-                  <button
-                    v-if="service.state === 'running' || service.state === 'healthy'"
-                    @click="stopApp(service.name)"
-                    class="btn-action btn-stop"
-                    :disabled="!!actionLoading[service.name]"
-                    title="Stop Process"
-                  >
-                    <span v-if="actionLoading[service.name] === 'stop'" class="spinner spinner-sm"></span>
-                    <span v-else>Stop</span>
-                  </button>
-
-                  <!-- Restart button -->
-                  <button
-                    v-if="service.state === 'running' || service.state === 'healthy'"
-                    @click="restartApp(service.name)"
-                    class="btn-action btn-restart"
-                    :disabled="!!actionLoading[service.name]"
-                    title="Restart Process"
-                  >
-                    <span v-if="actionLoading[service.name] === 'restart'" class="spinner spinner-sm"></span>
-                    <span v-else>Restart</span>
-                  </button>
-
-                  <!-- Web UI button -->
-                  <a
-                    :href="service.webUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="btn-action btn-webui"
-                    title="Open in new tab"
-                  >
-                    Open UI
-                  </a>
-
-                  <!-- Logs button -->
-                  <button
-                    @click="openLogs(service)"
-                    class="btn-action btn-logs"
-                    title="View Process Logs"
-                  >
-                    Logs
-                  </button>
-
-                  <button
-                    @click="updateApp(service.name)"
-                    class="btn-action"
-                    :disabled="!!actionLoading[service.name]"
-                    title="Update application"
-                  >
-                    <span v-if="actionLoading[service.name] === 'update'" class="spinner spinner-sm"></span>
-                    <span v-else>Update</span>
-                  </button>
-
-                  <button
-                    @click="uninstallApp(service.name)"
-                    class="btn-action btn-stop"
-                    :disabled="!!actionLoading[service.name]"
-                    title="Uninstall application"
-                  >
-                    <span v-if="actionLoading[service.name] === 'uninstall'" class="spinner spinner-sm"></span>
-                    <span v-else>Uninstall</span>
-                  </button>
+                  <div v-if="openCardMenu === service.name" class="card-menu">
+                    <button
+                      v-if="isServiceActive(service)"
+                      type="button"
+                      @click="closeCardMenu(); restartApp(service.name)"
+                    >
+                      Restart
+                    </button>
+                    <button type="button" @click="closeCardMenu(); openLogs(service)">Logs</button>
+                    <button type="button" @click="openAppSettings(service)">Settings</button>
+                    <button
+                      type="button"
+                      :disabled="!!actionLoading[service.name]"
+                      @click="closeCardMenu(); updateApp(service.name)"
+                    >
+                      {{ actionLoading[service.name] === 'update' ? 'Updating…' : 'Update' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="danger"
+                      :disabled="!!actionLoading[service.name]"
+                      @click="closeCardMenu(); uninstallApp(service.name)"
+                    >
+                      Uninstall
+                    </button>
+                  </div>
                 </div>
               </template>
             </div>
@@ -1437,8 +1658,7 @@ onUnmounted(() => {
               type="text"
               v-model="logFilter"
               placeholder="Search logs..."
-              class="ui-input font-mono"
-              style="padding: 4px 8px; font-size: 11px; width: 140px; height: 28px;"
+              class="ui-input font-mono log-search"
             />
             <label class="toggle-control font-mono">
               <input type="checkbox" v-model="logOnlyErrors" />
@@ -1490,6 +1710,126 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <div v-if="showHealthModal" class="modal-backdrop" @click.self="closeHealthModal">
+      <div class="health-modal glass-card animate-scale" @click.stop>
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <h3>Host health</h3>
+            <span class="font-mono" :class="healthTone === 'ok' ? 'text-emerald' : 'text-warn'">
+              {{ healthTone === 'ok' ? 'OK' : 'HIGH LOAD' }}
+            </span>
+          </div>
+          <button type="button" class="btn-icon" title="Close" @click="closeHealthModal">×</button>
+        </div>
+        <div class="health-body">
+          <article class="health-chart-card">
+            <div class="health-chart-head">
+              <span>CPU</span>
+              <strong class="font-mono">{{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</strong>
+            </div>
+            <p class="health-chart-meta">{{ systemInfo?.metrics?.cpu_count || '—' }} cores</p>
+            <svg class="health-svg" :viewBox="`0 0 ${cpuChart.w} ${cpuChart.h}`" preserveAspectRatio="none" aria-hidden="true">
+              <path :d="cpuChart.fill" class="health-fill cpu"></path>
+              <path :d="cpuChart.line" class="health-line cpu"></path>
+            </svg>
+          </article>
+          <article class="health-chart-card">
+            <div class="health-chart-head">
+              <span>RAM</span>
+              <strong class="font-mono">{{ memPercent != null ? Math.round(memPercent) + '%' : '—' }}</strong>
+            </div>
+            <p class="health-chart-meta">
+              {{ formatBytes((systemInfo?.metrics?.memory?.total || 0) - (systemInfo?.metrics?.memory?.available || 0)) }}
+              used of {{ formatBytes(systemInfo?.metrics?.memory?.total) }}
+            </p>
+            <svg class="health-svg" :viewBox="`0 0 ${memChart.w} ${memChart.h}`" preserveAspectRatio="none" aria-hidden="true">
+              <path :d="memChart.fill" class="health-fill mem"></path>
+              <path :d="memChart.line" class="health-line mem"></path>
+            </svg>
+          </article>
+          <article class="health-chart-card">
+            <div class="health-chart-head">
+              <span>Disk</span>
+              <strong class="font-mono">{{ diskPercent != null ? Math.round(diskPercent) + '%' : '—' }}</strong>
+            </div>
+            <p class="health-chart-meta">
+              {{ formatBytes(systemInfo?.metrics?.disk?.used) }}
+              used of {{ formatBytes(systemInfo?.metrics?.disk?.total) }}
+            </p>
+            <svg class="health-svg" :viewBox="`0 0 ${diskChart.w} ${diskChart.h}`" preserveAspectRatio="none" aria-hidden="true">
+              <path :d="diskChart.fill" class="health-fill disk"></path>
+              <path :d="diskChart.line" class="health-line disk"></path>
+            </svg>
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="settingsApp" class="modal-backdrop" @click.self="closeAppSettings">
+      <div class="settings-modal glass-card animate-scale">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <h3>{{ settingsApp.displayName }} settings</h3>
+            <span class="font-mono text-dim">({{ settingsApp.name }})</span>
+          </div>
+          <button type="button" class="btn-icon btn-close" title="Close" @click="closeAppSettings">×</button>
+        </div>
+        <div v-if="settingsError" class="ui-alert ui-alert-error">{{ settingsError }}</div>
+        <form class="app-settings-form" @submit.prevent="saveAppSettings">
+          <label class="ui-field">
+            Listen port
+            <input
+              v-model.number="settingsForm.port"
+              class="ui-input font-mono"
+              type="number"
+              min="1024"
+              max="65535"
+              required
+            />
+          </label>
+          <p v-if="settingsMeta?.default_port" class="settings-hint">
+            Default is {{ settingsMeta.default_port }}.
+            <button
+              type="button"
+              class="link-btn"
+              @click="settingsForm.port = settingsMeta.default_port"
+            >
+              Reset
+            </button>
+          </p>
+          <div v-if="settingsMeta?.daemon !== false" class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong>Start with the manager</strong>
+              <span>When on, this app starts after the appliance boots if it is installed.</span>
+            </div>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="settingsForm.autostart ? 'true' : 'false'"
+              @click="settingsForm.autostart = !settingsForm.autostart"
+            >
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
+          <dl v-if="settingsMeta" class="app-settings-dl font-mono">
+            <div><dt>Config</dt><dd>{{ settingsMeta.config_dir }}</dd></div>
+            <div><dt>Install</dt><dd>{{ settingsMeta.install_dir }}</dd></div>
+            <div><dt>Health</dt><dd>{{ settingsMeta.health_url }}</dd></div>
+          </dl>
+          <ul v-if="settingsMeta?.notes?.length" class="app-settings-notes">
+            <li v-for="note in settingsMeta.notes" :key="note">{{ note }}</li>
+          </ul>
+          <div class="wizard-nav" style="justify-content: flex-end; margin-top: 0.75rem;">
+            <button type="button" class="ui-btn ui-btn-ghost" @click="closeAppSettings">Cancel</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="settingsLoading">
+              {{ settingsLoading ? 'Saving…' : 'Save' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Toast Notifications -->
     <div class="toast-container">
       <div
@@ -1508,30 +1848,40 @@ onUnmounted(() => {
 /* Main Layout */
 .app-container {
   min-height: 100vh;
+  min-height: 100dvh;
   background: radial-gradient(circle at 10% 20%, rgba(18, 20, 32, 1) 0%, rgba(10, 11, 16, 1) 90%);
   color: #e2e8f0;
   font-family: 'Inter', sans-serif;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .top-nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 2rem;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding: 0.85rem clamp(0.85rem, 3vw, 2rem);
   background: rgba(15, 17, 26, 0.7);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   position: sticky;
   top: 0;
   z-index: 50;
+  min-width: 0;
 }
 
 .nav-brand {
   display: flex;
   align-items: center;
   gap: 0.85rem;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .logo-orb {
@@ -1569,6 +1919,7 @@ onUnmounted(() => {
 .brand-titles {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .brand-name {
@@ -1579,6 +1930,7 @@ onUnmounted(() => {
   background: linear-gradient(90deg, #ffffff, #cbd5e1);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  overflow-wrap: anywhere;
 }
 
 .brand-tagline {
@@ -1590,7 +1942,11 @@ onUnmounted(() => {
 .nav-metrics {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .metric-pill {
@@ -1603,6 +1959,8 @@ onUnmounted(() => {
   border-radius: 8px;
   font-size: 0.75rem;
   color: #94a3b8;
+  flex-shrink: 0;
+  max-width: 100%;
 }
 
 .metric-pill-action {
@@ -1689,11 +2047,12 @@ onUnmounted(() => {
 /* Content */
 .content-wrapper {
   flex: 1;
-  max-width: 1360px;
+  width: min(1360px, 100%);
+  max-width: 100%;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
-  width: 100%;
+  padding: clamp(1rem, 2.5vw, 2rem) clamp(0.85rem, 3vw, 1.5rem);
   box-sizing: border-box;
+  min-width: 0;
 }
 
 /* Glass Card */
@@ -1705,6 +2064,15 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.service-card.glass-card,
+.catalog-toolbar.glass-card,
+.settings-modal.glass-card {
+  overflow: visible;
 }
 
 .glass-card:hover {
@@ -1717,12 +2085,14 @@ onUnmounted(() => {
   justify-content: center;
   align-items: center;
   min-height: 60vh;
+  padding: 0 0.25rem;
+  min-width: 0;
 }
 
 .auth-card {
   width: 100%;
-  max-width: 440px;
-  padding: 2.25rem;
+  max-width: min(440px, 100%);
+  padding: clamp(1.15rem, 4vw, 2.25rem);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
 }
 
@@ -1781,7 +2151,7 @@ onUnmounted(() => {
 /* Dashboard Metrics */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 1.25rem;
   margin-bottom: 2rem;
 }
@@ -1790,7 +2160,23 @@ onUnmounted(() => {
   padding: 1.25rem 1.5rem;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
+  min-width: 0;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 8rem;
+}
+
+.stat-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  overflow-wrap: anywhere;
 }
 
 .stat-card-filter {
@@ -1840,22 +2226,11 @@ onUnmounted(() => {
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-.stat-content {
-  display: flex;
-  flex-direction: column;
-}
-
 .stat-label {
   font-size: 0.7rem;
   color: #64748b;
   font-weight: 600;
   letter-spacing: 0.05em;
-}
-
-.stat-value {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: #f1f5f9;
 }
 
 .stat-sub {
@@ -1878,6 +2253,10 @@ onUnmounted(() => {
   color: #34d399;
 }
 
+.text-warn {
+  color: #fbbf24;
+}
+
 .status-indicator-tag {
   font-size: 0.85rem;
   color: #fbbf24;
@@ -1889,6 +2268,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.85rem 1rem;
   margin-bottom: 1.25rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -1925,12 +2306,14 @@ onUnmounted(() => {
 }
 
 .catalog-sort-group {
-  flex: 0 0 auto;
+  flex: 1 1 10rem;
+  min-width: 0;
 }
 
 .catalog-search-group {
   flex: 1 1 14rem;
   max-width: 22rem;
+  min-width: 0;
 }
 
 .catalog-filter-label {
@@ -1991,7 +2374,8 @@ onUnmounted(() => {
 }
 
 .catalog-sort-select {
-  min-width: 10rem;
+  min-width: 0;
+  width: 100%;
 }
 
 .catalog-count {
@@ -2024,8 +2408,8 @@ onUnmounted(() => {
 
 .services-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 1.1rem;
 }
 
 .service-card {
@@ -2033,6 +2417,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  overflow: visible;
+  min-width: 0;
 }
 
 .service-card.is-running {
@@ -2044,6 +2430,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.6rem;
   margin-bottom: 0.85rem;
 }
 
@@ -2051,6 +2439,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.85rem;
+  min-width: 0;
+  flex: 1 1 12rem;
 }
 
 .app-badge {
@@ -2093,7 +2483,9 @@ onUnmounted(() => {
 .service-name-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .service-name {
@@ -2101,6 +2493,20 @@ onUnmounted(() => {
   font-weight: 600;
   margin: 0;
   color: #f8fafc;
+  overflow-wrap: anywhere;
+}
+
+.update-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #86efac;
+  border: 1px solid rgba(134, 239, 172, 0.35);
+  background: rgba(22, 163, 74, 0.15);
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+  white-space: nowrap;
 }
 
 .help-btn {
@@ -2204,14 +2610,18 @@ onUnmounted(() => {
 .service-desc {
   font-size: 0.82rem;
   color: #94a3b8;
-  margin: 0 0 1rem 0;
+  margin: 0 0 0.85rem 0;
   line-height: 1.45;
-  min-height: 2.4rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .service-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   font-size: 0.75rem;
   color: #64748b;
@@ -2226,18 +2636,23 @@ onUnmounted(() => {
 
 .service-actions {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .action-btn-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
   width: 100%;
+  min-width: 0;
 }
 
 .btn-action {
-  flex: 1;
-  padding: 0.45rem 0.6rem;
+  flex: 1 1 5.5rem;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
   border-radius: 6px;
   font-size: 0.78rem;
   font-weight: 500;
@@ -2251,7 +2666,7 @@ onUnmounted(() => {
 }
 
 .btn-install {
-  width: 100%;
+  flex: 2;
   background: linear-gradient(135deg, #3b82f6, #6366f1);
   color: #fff;
   font-weight: 600;
@@ -2307,6 +2722,197 @@ onUnmounted(() => {
   background: rgba(51, 65, 85, 0.7);
 }
 
+.btn-more {
+  flex: 0 0 auto;
+  min-width: 4.2rem;
+  background: rgba(30, 41, 59, 0.7);
+  color: #cbd5e1;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.btn-more.open,
+.btn-more:hover {
+  color: #fff;
+  background: rgba(51, 65, 85, 0.9);
+}
+
+.card-menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.card-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.35rem);
+  min-width: 10.5rem;
+  max-width: min(16rem, calc(100vw - 2rem));
+  padding: 0.35rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-menu button {
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  text-align: left;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.card-menu button:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.card-menu button.danger {
+  color: #fca5a5;
+}
+
+.card-menu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-modal {
+  width: min(520px, 100%);
+  max-height: min(90dvh, 900px);
+  overflow: auto;
+  padding: clamp(1rem, 3vw, 1.4rem);
+}
+
+.health-modal {
+  width: min(720px, 100%);
+  max-height: min(90dvh, 900px);
+  overflow: auto;
+}
+
+.health-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 0.85rem;
+  padding: 1rem 1.15rem 1.25rem;
+}
+
+.health-chart-card {
+  min-width: 0;
+  padding: 0.85rem 0.9rem 0.7rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.health-chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.health-chart-head strong {
+  font-size: 1.15rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #f8fafc;
+}
+
+.health-chart-meta {
+  margin: 0.2rem 0 0.55rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.health-svg {
+  display: block;
+  width: 100%;
+  height: 72px;
+}
+
+.health-fill {
+  fill-opacity: 0.22;
+  stroke: none;
+}
+
+.health-line {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.health-fill.cpu { fill: #22d3ee; }
+.health-line.cpu { stroke: #22d3ee; }
+.health-fill.mem { fill: #c084fc; }
+.health-line.mem { stroke: #c084fc; }
+.health-fill.disk { fill: #fbbf24; }
+.health-line.disk { stroke: #fbbf24; }
+
+.app-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.app-settings-dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.app-settings-dl div {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.5rem;
+}
+
+.app-settings-dl dt {
+  color: #64748b;
+}
+
+.app-settings-dl dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #cbd5e1;
+}
+
+.app-settings-notes {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #93c5fd;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.settings-hint {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  margin: 0;
+}
+
 /* Modal */
 .modal-backdrop {
   position: fixed;
@@ -2317,13 +2923,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   z-index: 100;
-  padding: 1.5rem;
+  padding: clamp(0.6rem, 3vw, 1.5rem);
 }
 
 .log-modal {
   width: 100%;
   max-width: 900px;
-  height: 80vh;
+  height: min(80vh, 80dvh);
+  max-height: calc(100dvh - 1.5rem);
   display: flex;
   flex-direction: column;
   background: #0f121b;
@@ -2335,6 +2942,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -2342,7 +2951,23 @@ onUnmounted(() => {
 .modal-title-group {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.6rem;
+  min-width: 0;
+}
+
+.modal-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.log-search {
+  padding: 4px 8px;
+  font-size: 11px;
+  width: min(140px, 100%);
+  height: 28px;
 }
 
 .modal-title-group h3 {
@@ -2356,12 +2981,6 @@ onUnmounted(() => {
   height: 8px;
   border-radius: 50%;
   background: #6366f1;
-}
-
-.modal-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
 }
 
 .toggle-control {
@@ -2413,6 +3032,7 @@ onUnmounted(() => {
 .log-line {
   display: flex;
   gap: 1rem;
+  min-width: 0;
 }
 
 .line-num {
@@ -2433,10 +3053,18 @@ onUnmounted(() => {
   position: fixed;
   bottom: 1.5rem;
   right: 1.5rem;
+  left: auto;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   z-index: 200;
+  width: min(24rem, calc(100vw - 1.5rem));
+  max-width: calc(100vw - 1.5rem);
+  pointer-events: none;
+}
+
+.toast-container > * {
+  pointer-events: auto;
 }
 
 .toast-pill {
@@ -2507,5 +3135,100 @@ onUnmounted(() => {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 960px) {
+  .hide-narrow {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .hide-compact {
+    display: none;
+  }
+
+  .brand-tagline {
+    display: none;
+  }
+
+  .user-name {
+    display: none;
+  }
+
+  .catalog-count {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .catalog-sort-select,
+  .catalog-search-group,
+  .catalog-filter-group {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .section-title-row .ui-btn {
+    width: 100%;
+  }
+
+  .stat-card {
+    padding: 1rem 1.1rem;
+  }
+
+  .service-card {
+    padding: 1.1rem;
+  }
+
+  .service-actions .btn-action {
+    flex: 1 1 calc(50% - 0.4rem);
+  }
+
+  .card-menu {
+    top: calc(100% + 0.35rem);
+    bottom: auto;
+  }
+
+  .app-settings-dl div {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+
+  .modal-header {
+    padding: 0.85rem 1rem;
+  }
+
+  .log-search {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand-name {
+    font-size: 1rem;
+  }
+
+  .logo-orb {
+    width: 36px;
+    height: 36px;
+  }
+
+  .metrics-grid,
+  .services-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .service-actions .btn-action,
+  .service-actions .btn-install {
+    flex: 1 1 100%;
+  }
+
+  .toast-container {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: calc(100vw - 1.5rem);
+  }
 }
 </style>

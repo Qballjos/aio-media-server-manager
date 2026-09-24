@@ -4,19 +4,19 @@ This guide covers what you do after the appliance is running. Installation and h
 
 ## 1. Create the administrator
 
-The first visit to `http://<host>:8080` requires a local admin account. That username and password protect the **manager dashboard and API only** at this step. They are stored as a bcrypt hash for the manager, and an encrypted copy is kept so compatible applications can use the same local login.
+The first visit to `http://<host>:8080` requires a local admin account: **username, email, and password**. The account protects the manager dashboard and API. Credentials are stored as a bcrypt hash, and an encrypted copy is kept so compatible applications (and **Seerr**) can use the same local identity.
 
-Password rules: at least 8 characters, at most 72 bytes (bcrypt limit).
+Password rules: at least 8 characters, at most 72 bytes (bcrypt limit). You can change username, email, and password later under **Settings → Account** (current password required).
 
 ## 2. First-run wizard
 
-After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now**.
+After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now**. Skip is a short save; the dashboard opens even if the API is busy with an install.
 
 | Step | You choose |
 |------|------------|
 | 1 | Media, download, and config directories (same `/data` parent for hardlinks) |
 | 2 | `PUID` / `PGID` (pre-filled from the host / compose user) |
-| 3 | Download clients (SABnzbd, NZBGet, qBittorrent) |
+| 3 | Download clients (SABnzbd, NZBGet, qBittorrent). Usenet host, port, SSL, username, password, and connections are saved for SABnzbd/NZBGet. qBittorrent username/password may be blank to reuse the manager admin login |
 | 4 | VPN: none, PrivadoVPN-style isolation, or a custom WireGuard / OpenVPN path |
 | 5 | *Arr apps: Prowlarr, Sonarr, Radarr, Lidarr |
 | 6 | Media servers: Jellyfin and/or Plex (optional Plex claim token) |
@@ -24,7 +24,7 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 | 8 | Recommended tools (Bazarr and Flaresolverr selected by default) |
 | 9 | Review, then save and install |
 
-qBittorrent username and password in the wizard may be left blank. Blank fields reuse the manager admin login.
+**Finish** persists settings and queues catalog installs. Wiring (indexers, download clients, libraries, Seerr) runs **after each app is installed and answers its health check**, not during the Finish request. Apps that are not installed or not running are skipped so *Arr is not pointed at a dead downloader.
 
 **Skip** opens the dashboard without installing anything. You can install applications later from the catalog.
 
@@ -36,49 +36,66 @@ The dashboard lists the **17** catalog applications (installed vs available coun
 - Sort by **popularity** or **A–Z**
 - **Search** by name
 - **?** opens that application's official wiki or documentation
+- **Health** (header) shows CPU, RAM, and disk graphs
 - **Download & Install** fetches the upstream binary and starts the process when it is a daemon
-- Installed apps expose Start, Stop, Restart, Open UI, Logs, Update, and Uninstall
+- Installed apps: **Start** or **Stop**, **Open UI**, and **More** (Restart, Logs, Settings, Update, Uninstall).
+- Catalog **Settings** on a card changes the listen **port** (persisted, running apps are restarted) and **start with the manager**. Config/install paths are shown read-only. Bind mounts still change in compose, not here.
+- Cards show **Update available** when a scheduled or manual check found a newer GitHub release. Manual **Update** still uses snapshot → install → health check → rollback.
 
 **Open UI** uses `http://<host>:<app-port>` (for example Sonarr `8989`). That only works if the appliance compose/template publishes those ports, or the container uses host networking. Recreate the container after pulling an image that added port mappings.
 
-Wiring (indexers, download clients, libraries) runs after relevant apps are installed **and running**. Clients that are not installed or not healthy are skipped so Sonarr/Radarr are not pointed at a dead NZBGet/SABnzbd/qBittorrent. qBittorrent on localhost is allowed without the WebUI login prompt.
+qBittorrent on localhost is allowed without the WebUI login prompt.
 
 Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Rebuild/recreate the image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`.
 
 ## 4. Shared local login
 
-When you create the admin (and again on later successful logins), the manager stores the username and password in the encrypted secret store and applies them to applications that support a **local user**:
+When you create the admin (and again on later successful logins or account changes), the manager stores the username, password, and email in the encrypted secret store and applies them to applications that support a **local user**:
 
 - Sonarr, Radarr, Lidarr, Prowlarr
 - SABnzbd, NZBGet, qBittorrent
 - Bazarr
 - Jellyfin (a matching local Jellyfin user)
+- Seerr (local admin from the manager email when Seerr is chosen in the wizard)
 
 These remain separate accounts inside each product. They are created to **match** the manager credentials; signing into the manager does not SSO into those UIs.
 
 **Not shared:**
 
 - **Plex** — Plex account or claim token
-- **Seerr** — typically Jellyfin or Plex sign-in
 - Tools with no web login (Recyclarr, Flaresolverr, and similar)
 
 Open **Open UI** on each app the first time to confirm that product's own setup finished (especially Jellyfin and Plex).
 
 ## 5. VPN and remote access
 
-- Place a WireGuard or OpenVPN profile under the config VPN directory and enable VPN in the wizard or environment. Only **qBittorrent** and **Prowlarr** are tunneled. Usenet clients stay on the normal network.
-- Optional [Cloudflare Tunnel](../deploy/CLOUDFLARE.md) runs `cloudflared` inside this appliance.
+- Place a WireGuard or OpenVPN profile under the config VPN directory and enable VPN in the wizard, **Settings → VPN**, or environment. Only **qBittorrent** and **Prowlarr** are tunneled. Usenet clients stay on the normal network.
+- Optional [Cloudflare Tunnel](../deploy/CLOUDFLARE.md) can be toggled from **Settings → Remote access** or `AMM_CLOUDFLARE_TUNNEL_*`. `cloudflared` runs inside this appliance.
 
 ## 6. Backups and updates
 
-Use the dashboard to update an application (snapshot, health check, rollback on failure) and to run configuration backups. Media libraries and torrent payloads are never deleted by uninstall or backup jobs. There is no scheduled update checker yet — updates run when you click **Update** on a card.
+**Settings → Backups** lists configuration archives (config, secrets, databases — never media). You can set retention, backup now, restore, or delete.
+
+**Catalog Update** on a card always runs snapshot → install → health check → rollback.
+
+**Settings → Updates** schedules GitHub checks (off / daily / weekly / monthly) and optionally applies them (off = notify only, same as check, or a separate cadence). Time of day uses the host timezone from **Settings → General**. The job skips apps that are not installed or in a crash loop, respects `GITHUB_TOKEN` / Settings → GitHub, and pauses while the wizard is open or an install is running. Last check / last apply timestamps appear on the dashboard and in Settings.
 
 ## 7. Settings
 
-The **Settings** nav item opens an admin page (separate from the catalog). Today it includes:
+The **Settings** nav item is the admin page for the appliance (separate from per-app catalog cards). Bind mounts and the manager listen address stay in compose/env.
 
-- **Error manager** — recent ERROR+ events from this process
-- **Debug share URL** — a toggle. On creates a time-limited, secret-redacted report at `/debug/{token}` (24 hours). Off revokes it. Copy the URL only while the toggle is on.
+| Section | What it does |
+|---------|----------------|
+| Account | Username, email, password (current password required) |
+| General | Timezone, log level; manager bind host/port is shown read-only |
+| Updates | Check/apply schedules and Check now |
+| Storage | Architecture, CPU, memory, disk, filesystem format (read-only) |
+| Permissions | PUID / PGID — saving restarts running child processes |
+| Backups | Retention, backup now, restore, delete |
+| VPN | Enable, protocol, config path, kill switch |
+| Remote access | Cloudflare Tunnel on/off, token (write-only), trusted proxy IPs |
+| GitHub | Optional token for rate limits (not shown again after save) |
+| Debug | Error ring + time-limited share URL (`/debug/{token}`) |
 
 Do not leave debug sharing on after you finish a support conversation.
 

@@ -170,6 +170,10 @@ class BaseApplication(abc.ABC):
     def working_directory(self) -> Path | None:
         return self.install_dir
 
+    def apply_listen_port(self, port: int) -> None:
+        """Persist the listen port used by start_command / Open UI."""
+        self.port = int(port)
+
     def health_check_url(self) -> str:
         path = self.manifest.health_path
         if not path.startswith("/"):

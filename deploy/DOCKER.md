@@ -33,14 +33,16 @@ git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
 ```
 
-Point the volume paths in `docker-compose.yml` at the folders you created, and set `PUID`/`PGID` to the values from `id`.
+Point the volume paths in `docker-compose.yml` at the folders you created, and set `PUID`/`PGID` to the values from `id`. Set `TZ` to your IANA timezone (or change it later in Settings → General).
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-Open `http://<host>:8080`. Create the administrator, then complete or skip the stack wizard ([Usage](../docs/USAGE.md)). If you already ran an older compose that only published `8080`, merge the current `ports:` list and `docker compose up -d --force-recreate`.
+Open `http://<host>:8080`. Create the administrator (username, **email**, password), then complete or skip the stack wizard ([Usage](../docs/USAGE.md)). If you already ran an older compose that only published `8080`, merge the current `ports:` list and `docker compose up -d --force-recreate`.
+
+Optional `GITHUB_TOKEN` (or Settings → GitHub) raises GitHub API limits for catalog installs and scheduled update checks. Do not commit the token; the example compose leaves it commented.
 
 To rebuild from this checkout instead of GHCR:
 
@@ -64,6 +66,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 \
   -p 19001:19001 -p 32400:32400 \
   -e PUID="${PUID}" -e PGID="${PGID}" \
+  -e TZ=UTC \
   -v /opt/aio-media-manager/config:/config \
   -v /opt/aio-media-manager/data:/data \
   -e AMM_DOWNLOAD_DIR=/data/downloads \

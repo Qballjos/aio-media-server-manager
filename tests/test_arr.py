@@ -16,7 +16,7 @@ def test_sonarr_start_uses_data_dir_and_exe_cwd(tmp_path: Path) -> None:
 
     assert cmd[0] == str(exe)
     assert "-nobrowser" in cmd
-    assert f"-data={app.config_dir}" in cmd
+    assert f"-port={app.port}" in cmd
     assert app.working_directory() == nested
     assert "linux-core" in app.preferred_patterns()
     assert app.extra_env()["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] == "0"
