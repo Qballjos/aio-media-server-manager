@@ -45,7 +45,7 @@ def test_log_websocket_accepts_access_cookie(monkeypatch):
     from core.auth import COOKIE_ACCESS, auth_manager
 
     monkeypatch.setattr(auth_manager, "setup_required", lambda: False)
-    monkeypatch.setattr(auth_manager, "jwt_secret", lambda: "test-jwt-secret-for-logs-ws-32b")
+    monkeypatch.setattr(auth_manager, "jwt_secret", lambda: "test-jwt-secret-for-logs-websocket-32b")
     token = auth_manager.issue_token("tester")
     websocket = SimpleNamespace(
         cookies={COOKIE_ACCESS: token},

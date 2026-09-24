@@ -1,10 +1,21 @@
 """Canonical library folder layout."""
 
+import platform
 from pathlib import Path
+
+import pytest
 
 from core.library_layout import LIBRARY_FOLDERS, LibraryLayout
 from core.settings import Settings
-from core.storage import StorageManager
+from core.storage import StorageManager, _fs_type_macos
+
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="macOS statfs only")
+def test_fs_type_macos_reads_type_name(tmp_path: Path):
+    for _ in range(200):
+        fs_type = _fs_type_macos(tmp_path)
+    assert fs_type not in ("", "unknown")
+    assert fs_type.isprintable()
 
 
 def test_storage_creates_media_download_and_transcode_folders(tmp_path: Path):

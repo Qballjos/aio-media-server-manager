@@ -338,9 +338,10 @@ def _fs_type_linux(path: Path) -> str:
 def _fs_type_macos(path: Path) -> str:
     """Use statfs(2) via ctypes on macOS to retrieve filesystem type."""
     try:
-        # struct statfs layout on macOS includes f_fstypename at a fixed offset
-        # Use os.statvfs which doesn't expose type name, so we use ctypes.
-        MFSNAMELEN = 16
+        # Full 64-bit-inode struct statfs from <sys/mount.h>. The kernel writes
+        # the whole struct, so an undersized buffer corrupts the heap.
+        MFSTYPENAMELEN = 16
+        MAXPATHLEN = 1024
 
         class StatFS(ctypes.Structure):
             _fields_ = [
@@ -351,19 +352,29 @@ def _fs_type_macos(path: Path) -> str:
                 ("f_bavail", ctypes.c_uint64),
                 ("f_files", ctypes.c_uint64),
                 ("f_ffree", ctypes.c_uint64),
-                ("f_fsid", ctypes.c_int64),
+                ("f_fsid", ctypes.c_int32 * 2),
                 ("f_owner", ctypes.c_uint32),
                 ("f_type", ctypes.c_uint32),
-                ("f_flags", ctypes.c_uint64),
+                ("f_flags", ctypes.c_uint32),
                 ("f_fssubtype", ctypes.c_uint32),
-                ("f_fstypename", ctypes.c_char * MFSNAMELEN),
-                # Remaining fields omitted — we only need f_fstypename
-                ("_pad", ctypes.c_char * 512),
+                ("f_fstypename", ctypes.c_char * MFSTYPENAMELEN),
+                ("f_mntonname", ctypes.c_char * MAXPATHLEN),
+                ("f_mntfromname", ctypes.c_char * MAXPATHLEN),
+                ("f_flags_ext", ctypes.c_uint32),
+                ("f_reserved", ctypes.c_uint32 * 7),
             ]
 
         buf = StatFS()
         libc = ctypes.CDLL("libc.dylib", use_errno=True)
-        ret = libc.statfs(str(path).encode(), ctypes.byref(buf))
+        # Intel exports the 64-bit-inode layout under a suffixed symbol;
+        # Apple Silicon only has plain statfs (already 64-bit-inode).
+        try:
+            statfs = libc["statfs$INODE64"]
+        except AttributeError:
+            statfs = libc.statfs
+        statfs.argtypes = [ctypes.c_char_p, ctypes.POINTER(StatFS)]
+        statfs.restype = ctypes.c_int
+        ret = statfs(os.fsencode(str(path)), ctypes.byref(buf))
         if ret == 0:
             return buf.f_fstypename.decode("utf-8", errors="replace").rstrip("\x00")
         return "unknown"
