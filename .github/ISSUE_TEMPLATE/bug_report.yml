@@ -44,5 +44,10 @@ body:
     id: logs
     attributes:
       label: Relevant logs
-      description: Redact secrets first.
+      description: Redact secrets first. Prefer a Settings → Debug share URL when you can.
       render: text
+  - type: input
+    id: debug-share
+    attributes:
+      label: Debug share URL (optional)
+      description: Time-limited `/debug/{token}` from Settings → Debug. Do not paste passwords or VPN configs.

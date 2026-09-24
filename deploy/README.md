@@ -15,4 +15,4 @@ AIO Media Server Manager is **one process tree** (typically **one container**). 
 
 Overview: [docs/INSTALL.md](../docs/INSTALL.md) · first-run: [docs/USAGE.md](../docs/USAGE.md)
 
-The published image is one container. Recreate after pull so WebUI port mappings and the Python 3.13 child runtime apply.
+The published image is one container. Recreate after pull so WebUI port mappings, the Python 3.13 child runtime (Bazarr), and Debian `unrar` (SABnzbd) apply. Recyclarr is CLI-only and has no host port.

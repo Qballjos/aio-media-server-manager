@@ -64,7 +64,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   -p 8191:8191 -p 5055:5055 -p 6060:6060 \
   -p 6767:6767 -p 6789:6789 -p 6868:6868 \
   -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 \
-  -p 19001:19001 -p 32400:32400 \
+  -p 32400:32400 \
   -e PUID="${PUID}" -e PGID="${PGID}" \
   -e TZ=UTC \
   -v /opt/aio-media-manager/config:/config \
@@ -87,7 +87,7 @@ docker pull ghcr.io/qballjos/aio-media-server-manager:latest
 
 On GitHub: **Packages → aio-media-server-manager → Package settings → Change visibility → Public**.
 
-## VPN (qBittorrent only)
+## VPN (qBittorrent, Prowlarr, Flaresolverr)
 
 ```bash
 sudo mkdir -p /opt/aio-media-manager/config/vpn

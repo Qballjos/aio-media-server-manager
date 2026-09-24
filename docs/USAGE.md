@@ -21,10 +21,10 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 | 5 | *Arr apps: Prowlarr, Sonarr, Radarr, Lidarr |
 | 6 | Media servers: Jellyfin and/or Plex (optional Plex claim token) |
 | 7 | Requests (Seerr) |
-| 8 | Recommended tools (Bazarr and Flaresolverr selected by default) |
+| 8 | Recommended tools (Bazarr and Flaresolverr on by default; Recyclarr, Profilarr, NeutArr, Grimmory, Shelfmark optional) |
 | 9 | Review, then save and install |
 
-**Finish** persists settings and queues catalog installs. Wiring (indexers, download clients, libraries, Seerr) runs **after each app is installed and answers its health check**, not during the Finish request. Apps that are not installed or not running are skipped so *Arr is not pointed at a dead downloader.
+**Finish** persists settings and queues catalog installs. Wiring (indexers, download clients, libraries, Seerr, Recyclarr sync) runs **after each app is installed and answers its health check**, not during the Finish request. Apps that are not installed or not running are skipped so *Arr is not pointed at a dead downloader. You can run the same wiring later with **Auto-Wire** on the catalog.
 
 **Skip** opens the household homepage without installing anything. You can install applications later from **Catalog**.
 
@@ -52,12 +52,15 @@ The dashboard lists the **17** catalog applications (installed vs available coun
 - **Health** (header) opens host CPU/RAM/disk graphs plus per-application CPU and memory (including child processes)
 - **Download & Install** fetches the upstream binary and starts the process when it is a daemon
 - Installed apps: **Start** or **Stop**, **Open UI**, and **More** (Restart, Logs, Settings, Update, Uninstall).
+- **Auto-Wire** (header) re-runs integration after apps are healthy: download clients in Sonarr/Radarr (qBittorrent and SABnzbd when installed), Prowlarr, Seerr, Bazarr, and a Recyclarr `sync` when Recyclarr is installed.
 - Catalog **Settings** on a card changes the listen **port** (persisted, running apps are restarted) and **start with the manager**. Config/install paths are shown read-only. Bind mounts still change in compose, not here.
 - Cards show **Update available** when a scheduled or manual check found a newer GitHub release. Manual **Update** still uses snapshot → install → health check → rollback.
 
-**Open UI** uses `http://<host>:<app-port>` (for example Sonarr `8989`). That only works if the appliance compose/template publishes those ports, or the container uses host networking. Recreate the container after pulling an image that added port mappings.
+**Open UI** uses `http://<host>:<app-port>` (for example Sonarr `8989`). That only works if the appliance compose/template publishes those ports, or the container uses host networking. Recreate the container after pulling an image that added port mappings. Recyclarr has no WebUI.
 
-qBittorrent on localhost is allowed without the WebUI login prompt. **Open UI** from another LAN machine uses the manager username and password (seeded into `qBittorrent.conf` before start). Restart qBittorrent once after upgrading if an older run already created a temporary WebUI password. **Catalog → qBittorrent → Settings** has a **VueTorrent WebUI** switch that downloads [VueTorrent](https://github.com/VueTorrent/VueTorrent) and uses it as the alternative WebUI (same port and WebAPI).
+qBittorrent on localhost is allowed without the WebUI login prompt. **Open UI** from another LAN machine uses the manager username and password (seeded into `qBittorrent.conf` before start). Restart qBittorrent once after upgrading if an older run already created a temporary WebUI password.
+
+**VueTorrent:** Catalog → qBittorrent → Settings → **VueTorrent WebUI** downloads the latest [VueTorrent](https://github.com/VueTorrent/VueTorrent) zip and sets qBittorrent’s alternative WebUI folder. Same listen port (`8081` by default) and the same WebAPI, so *Arr download clients keep working. Turn the switch off to return to the stock WebUI; the files stay on disk so you can enable it again without another download.
 
 Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Rebuild/recreate the image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`. Form login uses the manager username and password (YAML stores a SHA-256 of the password; type the same plaintext you used in the wizard).
 
@@ -78,13 +81,19 @@ These remain separate accounts inside each product. They are created to **match*
 
 **Not a second login (use these as intended):**
 
-- **Recyclarr** — CLI only (no Open UI, no login, no background process). Auto-Wire and **Sync** on the catalog card run `recyclarr sync` once with `RECYCLARR_CONFIG_DIR` (Recyclarr 8 dropped `--app-data`). It writes an official Recyclarr v8 / [TRaSH Guides](https://trash-guides.info/) `recyclarr.yml`: HD WEB-1080p, Anime Remux-1080p, and HD Bluray+WEB by default, with Golden Rule / Unwanted custom-format groups. 4K profiles are opt-in. Open **Catalog → Recyclarr → Settings** to toggle profiles, change Plex/Jellyfin naming, edit YAML, or restore defaults. Custom YAML is kept until you restore defaults.
+- **Recyclarr** — CLI only (no Open UI, no login, no background daemon). See below.
 - **NeutArr** — LAN access bypass is on for RFC1918, so Open UI from your home network should not ask you to invent an account. It hunts missing/upgrade items through the *Arr APIs. Create a NeutArr user only if you expose it beyond the LAN.
 - **Profilarr** — `AUTH=local` skips login on the local network. Dictionarry still has its own first-user screen if you open it from a non-local address; use the manager username and password there. Styling needs the Vite `static` (or `client`) tree next to the binary after install. Instances are pre-filled for Sonarr/Radarr (and Lidarr when installed).
 - **Plex** — Plex account or claim token
 - **Flaresolverr** — no web login
 
 Open **Open UI** on each app the first time to confirm that product's own setup finished (especially Jellyfin and Plex).
+
+### Recyclarr (TRaSH Guides)
+
+Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `recyclarr sync` with `RECYCLARR_CONFIG_DIR` (Recyclarr 8 dropped `--app-data`). It writes an official Recyclarr v8 / [TRaSH Guides](https://trash-guides.info/) `recyclarr.yml`: HD WEB-1080p, Anime Remux-1080p, and HD Bluray+WEB by default, with Golden Rule / Unwanted custom-format groups. 4K profiles are opt-in.
+
+**Catalog → Recyclarr → Settings** toggles profiles, Plex/Jellyfin naming, YAML edit, and restore defaults. Custom YAML is kept until you restore defaults. Last-sync details appear on the debug share when diagnostics are on.
 
 ## 6. VPN and remote access
 

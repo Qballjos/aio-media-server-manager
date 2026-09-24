@@ -55,13 +55,15 @@ Typical *Arr deployments become a Compose file per application: Sonarr, Radarr, 
 - **Catalog installers** — GitHub releases, official binaries (Jellyfin, Plex), and PyPI applications.
 - **First-run wizard** — pick *Arr apps, download clients (including Usenet provider fields), media servers, VPN, and recommended tools; persist paths and credentials; start installs. Admin setup requires an email.
 - **Shared local login** — the manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin, Seerr). Plex still uses a Plex account.
-- **Automatic wiring** — after an app is healthy: categories, root folders, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr / Profilarr / NeutArr.
+- **Automatic wiring** — after an app is healthy (or when you click **Auto-Wire**): categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr / Profilarr / NeutArr.
+- **Household homepage** — launcher plus calendar, downloads, recently added, and Seerr search. Widget debug explains empty tiles without showing API keys.
 - **Storage model** — `config`, `downloads`, and `media` with `PUID` / `PGID` and hardlink checks.
 - **VPN isolation** — qBittorrent, Prowlarr, and Flaresolverr can run in a Linux network namespace bound to WireGuard or OpenVPN; Usenet stays off the tunnel.
 - **Hardware transcoding** — VAAPI / QSV / NVIDIA when the host exposes devices.
 - **Optional Cloudflare Tunnel** — `cloudflared` runs inside this appliance, not as a second Compose service.
 - **Dashboard** — official app logos, help/wiki links, search and sort, Health graphs, updates, backups, and uninstall.
 - **Open UI** — each catalog card opens `http://<host>:<app-port>`. Compose (and the NAS templates) publish those ports; host networking is an alternative.
+- **qBittorrent WebUI** — stock UI, or [VueTorrent](https://github.com/VueTorrent/VueTorrent) from Catalog → qBittorrent → Settings (same port and WebAPI).
 - **Settings** — account, timezone, PUID/PGID, backups, VPN, Cloudflare Tunnel, GitHub token, scheduled catalog updates, and a debug-share toggle.
 - **Scheduled updates** — Settings → Updates checks GitHub on a timer (notify only or auto-apply). Manual **Update** on a card still snapshots and rolls back on failure.
 
@@ -75,7 +77,7 @@ Seventeen applications ship in the catalog. Install only what you select.
 |------|----------------|
 | Indexers | Prowlarr, Flaresolverr |
 | Automation | Sonarr, Radarr, Lidarr |
-| Downloaders | SABnzbd, NZBGet, qBittorrent |
+| Downloaders | SABnzbd, NZBGet, qBittorrent (optional VueTorrent WebUI) |
 | Media servers | Jellyfin, Plex (may share the same libraries) |
 | Requests | Seerr, Shelfmark |
 | Books | Grimmory |
@@ -91,7 +93,7 @@ Each catalog card includes a help control that opens that project's official wik
 | Guide | Contents |
 |-------|----------|
 | [Installation](docs/INSTALL.md) | Host folders, ports, platform index |
-| [Usage](docs/USAGE.md) | First-run wizard, catalog, Settings, scheduled updates |
+| [Usage](docs/USAGE.md) | First-run wizard, homepage, catalog, Auto-Wire, Settings |
 | [Docker](deploy/DOCKER.md) | Primary deployment |
 | [Linux / LXC](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md) | Platform notes |
 | [Cloudflare Tunnel](deploy/CLOUDFLARE.md) | Remote access without inbound ports |

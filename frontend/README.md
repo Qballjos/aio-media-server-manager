@@ -8,6 +8,6 @@ npm run dev      # development server (proxies API)
 npm run build    # production assets → dist/
 ```
 
-FastAPI serves `frontend/dist` in production. Shared buttons, fields, and the Settings debug switch are defined in `src/style.css` (`ui-*` classes) so they match the first-run wizard.
+FastAPI serves `frontend/dist` in production. `App.vue` is the catalog dashboard, `HomepagePanel.vue` is the household homepage, and `SettingsPanel.vue` is appliance settings. Shared buttons, fields, and switches live in `src/style.css` (`ui-*` classes) so they match the first-run wizard.
 
 See the repository [README](../README.md) and [docs/USAGE.md](../docs/USAGE.md).

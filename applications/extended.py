@@ -276,6 +276,7 @@ class RecyclarrApp(SimpleApplication):
         upstream_url="https://github.com/Recyclarr/Recyclarr",
         tier=AppTier.RECOMMENDED,
         category=AppCategory.OPTIMIZATION,
+        # Internal catalog placeholder only; Recyclarr does not listen and is not published.
         default_port=19001,
         executable_name="recyclarr",
         supported_architectures=("x86_64", "arm64"),

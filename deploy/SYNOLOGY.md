@@ -72,7 +72,7 @@ If `/dev/dri` exists, add this block under `aio-media-manager` in the project co
 ls -l /dev/dri
 ```
 
-## VPN (qBittorrent only)
+## VPN (qBittorrent, Prowlarr, Flaresolverr)
 
 ```bash
 sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn

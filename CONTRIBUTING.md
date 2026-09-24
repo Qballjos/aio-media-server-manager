@@ -42,6 +42,7 @@ Optional: `pre-commit install` for Ruff and basic file checks on commit.
 
 - One manager, many **managed processes**. Do not add per-application Docker Compose services.
 - No Debrid functionality (Real-Debrid, Zurg, Riven, mounts, caches).
+- The catalog stays **17 applications**. VueTorrent is a qBittorrent WebUI option, not a catalog app.
 - Application-specific behaviour lives in `applications/` plugins, not in `core/`.
 - Do not log or return secrets in API responses.
 - Never delete media libraries in uninstall or backup paths.

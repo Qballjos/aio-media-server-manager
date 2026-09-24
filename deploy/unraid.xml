@@ -28,7 +28,6 @@
   <Config Name="Sonarr" Target="8989" Default="8989" Mode="tcp" Type="Port" Display="always"/>
   <Config Name="Prowlarr" Target="9696" Default="9696" Mode="tcp" Type="Port" Display="always"/>
   <Config Name="NeutArr" Target="9705" Default="9705" Mode="tcp" Type="Port" Display="always"/>
-  <Config Name="Recyclarr" Target="19001" Default="19001" Mode="tcp" Type="Port" Display="always"/>
   <Config Name="Plex" Target="32400" Default="32400" Mode="tcp" Type="Port" Display="always"/>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/aio-media-manager" Mode="rw" Type="Path" Display="always"/>
   <Config Name="Data" Target="/data" Default="/mnt/cache/data" Mode="rw" Type="Path" Display="always"/>

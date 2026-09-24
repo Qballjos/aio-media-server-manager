@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 _LIVE_CATALOGS: WeakSet[ApplicationCatalog] = WeakSet()
 
-# MVP plus Phase 4 plugins register here.
+# Seventeen catalog plugins. Do not add apps here without an explicit product decision.
 PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
     ProwlarrApp,
     SonarrApp,
