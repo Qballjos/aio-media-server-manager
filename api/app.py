@@ -20,6 +20,7 @@ from api.routers import health as health_router
 from api.routers import homepage as homepage_router
 from api.routers import integrations as integrations_router
 from api.routers import logs as logs_router
+from api.routers import recyclarr as recyclarr_router
 from api.routers import settings as settings_router
 from api.routers import system as system_router
 from api.routers import updates as updates_router
@@ -137,6 +138,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router)
     app.include_router(catalog_router.router)
     app.include_router(applications_router.router)
+    app.include_router(recyclarr_router.router)
     app.include_router(integrations_router.router)
     app.include_router(logs_router.router)
     app.include_router(system_router.router)

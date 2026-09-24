@@ -67,7 +67,7 @@ The manager UI listens on **8080**. Child applications bind in the same containe
 | Seerr | 5055 |
 | Grimmory | 6060 |
 | NeutArr | 9705 |
-| Recyclarr | 19001 |
+| Recyclarr | CLI (no listen port; catalog dummy 19001) |
 | Plex | 32400 |
 
 ## Environment

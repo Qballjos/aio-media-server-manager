@@ -242,11 +242,17 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
             "This app can run inside the torrent VPN namespace. After a port change, restart "
             "the VPN tunnel so local forwarding matches."
         )
-    notes.append(
-        "Open UI uses http://<host>:<port>. If you change the port, publish it in compose "
-        "(or use host networking) and recreate the container."
-    )
-    if not plugin.manifest.daemon:
+    if plugin.name == "recyclarr":
+        notes.append(
+            "Recyclarr is a one-shot CLI. Use Settings to pick TRaSH profiles, edit recyclarr.yml, "
+            "or restore defaults. Sync on the card (or Sync now) runs recyclarr sync against Sonarr/Radarr."
+        )
+    elif plugin.manifest.daemon:
+        notes.append(
+            "Open UI uses http://<host>:<port>. If you change the port, publish it in compose "
+            "(or use host networking) and recreate the container."
+        )
+    else:
         notes.append("This is a CLI/sync tool, not a background WebUI service.")
     return {
         "name": plugin.name,

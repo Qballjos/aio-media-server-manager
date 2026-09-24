@@ -350,8 +350,14 @@ def test_optimization_hooks(tmp_path: Path):
     assert rec.is_file()
     rec_text = rec.read_text(encoding="utf-8")
     assert "base_url: http://127.0.0.1:8989" in rec_text
+    assert "web-1080p:" in rec_text
+    assert "hd-bluray-web:" in rec_text
+    assert "sonarr-anime-remux-1080p:" in rec_text
+    assert "web-2160p:" not in rec_text
     assert "trash_id: 72dae194fc92bf828f32cde7744e51a1" in rec_text
     assert "trash_id: d1d67249d3890e49bc12e275d989a7e9" in rec_text
+    assert "reset_unmatched_scores" in rec_text
+    assert "custom_format_groups:" in rec_text
     assert "plex-tv" in rec_text
     pro = write_profilarr_config(
         tmp_path / "profilarr",

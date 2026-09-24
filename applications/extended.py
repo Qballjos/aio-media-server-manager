@@ -271,7 +271,7 @@ class RecyclarrApp(SimpleApplication):
     manifest = AppManifest(
         name="recyclarr",
         display_name="Recyclarr",
-        description="Synchronises TRaSH Guides quality profiles and custom formats.",
+        description="CLI that syncs TRaSH Guides quality profiles into Sonarr and Radarr.",
         github_repo="Recyclarr/Recyclarr",
         upstream_url="https://github.com/Recyclarr/Recyclarr",
         tier=AppTier.RECOMMENDED,
@@ -291,6 +291,22 @@ class RecyclarrApp(SimpleApplication):
 
     def extra_env(self) -> dict[str, str]:
         return {"RECYCLARR_APP_DATA": str(self.config_dir)}
+
+    def post_install(self) -> None:
+        from applications.catalog import ApplicationCatalog
+        from core.integrations.credentials import get_application_api_key
+        from core.recyclarr import write_recyclarr_config
+
+        catalog = ApplicationCatalog()
+        sonarr_port = catalog.get("sonarr").port if catalog.has("sonarr") else 8989
+        radarr_port = catalog.get("radarr").port if catalog.has("radarr") else 7878
+        write_recyclarr_config(
+            self.config_dir,
+            sonarr_url=f"http://127.0.0.1:{sonarr_port}",
+            sonarr_key=get_application_api_key("sonarr") or "",
+            radarr_url=f"http://127.0.0.1:{radarr_port}",
+            radarr_key=get_application_api_key("radarr") or "",
+        )
 
 
 class ProfilarrApp(SimpleApplication):

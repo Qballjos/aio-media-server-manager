@@ -407,9 +407,9 @@ class IntegrationEngine:
                 radarr_url=radarr_url,
                 radarr_key=radarr_key or "",
             )
-            steps.append(_step("recyclarr", "write_starter_config", True, str(rec_path)))
+            steps.append(_step("recyclarr", "write_trash_config", True, str(rec_path)))
         except Exception as exc:
-            steps.append(_step("recyclarr", "write_starter_config", False, str(exc)))
+            steps.append(_step("recyclarr", "write_trash_config", False, str(exc)))
 
         try:
             pro_path = write_profilarr_config(

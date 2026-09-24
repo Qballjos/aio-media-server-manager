@@ -77,7 +77,7 @@ These remain separate accounts inside each product. They are created to **match*
 
 **Not a second login (use these as intended):**
 
-- **Recyclarr** — CLI only (`daemon=False`). There is no Open UI and no username. It talks to Sonarr/Radarr with their API keys and a TRaSH Guides `recyclarr.yml` (WEB-1080p TV, anime remux, HD Bluray+WEB movies). Run **Start** to `recyclarr sync`.
+- **Recyclarr** — CLI only (no Open UI, no login). It writes an official Recyclarr v8 / [TRaSH Guides](https://trash-guides.info/) `recyclarr.yml`: HD WEB-1080p, Anime Remux-1080p, and HD Bluray+WEB by default, with Golden Rule / Unwanted custom-format groups. 4K profiles are opt-in. Open **Catalog → Recyclarr → Settings** to toggle profiles, change Plex/Jellyfin naming, edit YAML, or restore defaults. **Sync** (not Start) runs `recyclarr sync` once. Custom YAML is kept until you restore defaults.
 - **NeutArr** — LAN access bypass is on for RFC1918, so Open UI from your home network should not ask you to invent an account. It hunts missing/upgrade items through the *Arr APIs. Create a NeutArr user only if you expose it beyond the LAN.
 - **Profilarr** — `AUTH=local` skips login on the local network. Dictionarry still has its own first-user screen if you open it from a non-local address; use the manager username and password there. Styling needs the Vite `static` (or `client`) tree next to the binary after install. Instances are pre-filled for Sonarr/Radarr (and Lidarr when installed).
 - **Plex** — Plex account or claim token

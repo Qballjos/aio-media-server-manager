@@ -58,8 +58,16 @@ const showLogModal = ref(false)
 const activeLogApp = ref(null)
 const openCardMenu = ref('')
 const settingsApp = ref(null)
-const settingsForm = ref({ port: 0, autostart: true })
+const settingsForm = ref({
+  port: 0,
+  autostart: true,
+  recyclarrYaml: '',
+  recyclarrOriginalYaml: '',
+  recyclarrNaming: 'plex',
+  recyclarrPrefs: {}
+})
 const settingsMeta = ref(null)
+const recyclarrMeta = ref(null)
 const settingsLoading = ref(false)
 const settingsError = ref('')
 const logLines = ref([])
@@ -921,7 +929,19 @@ async function openAppSettings(service) {
       return
     }
     settingsMeta.value = data
-    settingsForm.value = { port: data.port, autostart: data.autostart }
+    settingsForm.value = { port: data.port, autostart: data.autostart, recyclarrYaml: '', recyclarrOriginalYaml: '', recyclarrNaming: 'plex', recyclarrPrefs: {} }
+    recyclarrMeta.value = null
+    if (service.name === 'recyclarr') {
+      const rec = await apiRequest('/api/recyclarr')
+      const recData = await rec.json()
+      if (rec.ok) {
+        recyclarrMeta.value = recData
+        settingsForm.value.recyclarrYaml = recData.yaml || ''
+        settingsForm.value.recyclarrOriginalYaml = recData.yaml || ''
+        settingsForm.value.recyclarrNaming = recData.prefs?.naming || 'plex'
+        settingsForm.value.recyclarrPrefs = { ...(recData.prefs || {}) }
+      }
+    }
   } catch (err) {
     settingsError.value = err.message || 'Could not load settings.'
   } finally {
@@ -932,6 +952,7 @@ async function openAppSettings(service) {
 function closeAppSettings() {
   settingsApp.value = null
   settingsMeta.value = null
+  recyclarrMeta.value = null
   settingsError.value = ''
 }
 
@@ -940,6 +961,44 @@ async function saveAppSettings() {
   settingsLoading.value = true
   settingsError.value = ''
   try {
+    if (settingsApp.value.name === 'recyclarr') {
+      if (!recyclarrMeta.value) {
+        settingsError.value = 'Could not load Recyclarr config.'
+        return
+      }
+      const yamlChanged = settingsForm.value.recyclarrYaml !== settingsForm.value.recyclarrOriginalYaml
+      if (yamlChanged) {
+        const rec = await apiRequest('/api/recyclarr', {
+          method: 'PUT',
+          body: JSON.stringify({ yaml: settingsForm.value.recyclarrYaml })
+        })
+        const recData = await rec.json()
+        if (!rec.ok) {
+          settingsError.value = recData.detail || 'Could not save Recyclarr YAML.'
+          return
+        }
+      } else {
+        const rec = await apiRequest('/api/recyclarr', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            sonarr_web_1080p: !!settingsForm.value.recyclarrPrefs.sonarr_web_1080p,
+            sonarr_web_2160p: !!settingsForm.value.recyclarrPrefs.sonarr_web_2160p,
+            sonarr_anime: !!settingsForm.value.recyclarrPrefs.sonarr_anime,
+            radarr_hd: !!settingsForm.value.recyclarrPrefs.radarr_hd,
+            radarr_uhd: !!settingsForm.value.recyclarrPrefs.radarr_uhd,
+            naming: settingsForm.value.recyclarrNaming
+          })
+        })
+        const recData = await rec.json()
+        if (!rec.ok) {
+          settingsError.value = recData.detail || 'Could not save Recyclarr profiles.'
+          return
+        }
+      }
+      showToast('Saved Recyclarr TRaSH config', 'success')
+      closeAppSettings()
+      return
+    }
     const res = await apiRequest(`/api/applications/${settingsApp.value.name}/settings`, {
       method: 'PATCH',
       body: JSON.stringify({
@@ -972,9 +1031,57 @@ function onDocumentClick() {
   closeCardMenu()
 }
 
-function statusBadgeClass(state, isCrashLoop = false) {
-  if (isCrashLoop || state === 'crash_loop') return 'badge-failed font-bold'
-  switch (state) {
+async function resetRecyclarrDefaults() {
+  settingsLoading.value = true
+  settingsError.value = ''
+  try {
+    const rec = await apiRequest('/api/recyclarr/reset', { method: 'POST' })
+    const recData = await rec.json()
+    if (!rec.ok) {
+      settingsError.value = recData.detail || 'Could not reset Recyclarr.'
+      return
+    }
+    recyclarrMeta.value = recData
+    settingsForm.value.recyclarrYaml = recData.yaml || ''
+    settingsForm.value.recyclarrOriginalYaml = recData.yaml || ''
+    settingsForm.value.recyclarrNaming = recData.prefs?.naming || 'plex'
+    settingsForm.value.recyclarrPrefs = { ...(recData.prefs || {}) }
+    showToast('Restored TRaSH Recyclarr defaults', 'success')
+  } catch (err) {
+    settingsError.value = err.message || 'Could not reset Recyclarr.'
+  } finally {
+    settingsLoading.value = false
+  }
+}
+
+async function syncRecyclarr() {
+  closeCardMenu()
+  actionLoading.value.recyclarr = 'sync'
+  try {
+    const res = await apiRequest('/api/recyclarr/sync', { method: 'POST' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.detail || 'Recyclarr sync failed', 'error')
+      return
+    }
+    showToast('Recyclarr sync finished', 'success')
+  } catch (err) {
+    showToast(err.message || 'Recyclarr sync failed', 'error')
+  } finally {
+    delete actionLoading.value.recyclarr
+  }
+}
+
+function statusLabel(service) {
+  if (service.is_crash_loop) return `CRASH LOOP (${service.recent_crashes || 5})`
+  if (!service.daemon && !isServiceActive(service)) return 'CLI'
+  return String(service.state || 'stopped').toUpperCase().replace('_', ' ')
+}
+
+function statusBadgeClass(service) {
+  if (service.is_crash_loop || service.state === 'crash_loop') return 'badge-failed font-bold'
+  if (!service.daemon && !isServiceActive(service)) return 'badge-inactive'
+  switch (service.state) {
     case 'healthy':
     case 'running':
       return 'badge-running'
@@ -1541,7 +1648,7 @@ onUnmounted(() => {
                     <span class="category-pill">{{ service.category }}</span>
                     <span v-if="service.updateAvailable" class="update-pill">Update available</span>
                   </div>
-                  <div class="service-port font-mono">
+                  <div v-if="service.daemon" class="service-port font-mono">
                     <span class="port-label">PORT:</span>
                     <a
                       :href="service.webUrl"
@@ -1562,10 +1669,9 @@ onUnmounted(() => {
               </div>
 
               <!-- Status Badge -->
-              <span class="status-badge" :class="statusBadgeClass(service.state, service.is_crash_loop)">
+              <span class="status-badge" :class="statusBadgeClass(service)">
                 <span class="badge-dot"></span>
-                <span v-if="service.is_crash_loop">CRASH LOOP ({{ service.recent_crashes || 5 }})</span>
-                <span v-else>{{ service.state.toUpperCase().replace('_', ' ') }}</span>
+                <span>{{ statusLabel(service) }}</span>
               </span>
             </div>
 
@@ -1626,6 +1732,16 @@ onUnmounted(() => {
                 >
                   <span v-if="actionLoading[service.name] === 'stop'" class="spinner spinner-sm"></span>
                   <span v-else>Stop</span>
+                </button>
+                <button
+                  v-else-if="!service.daemon"
+                  type="button"
+                  class="btn-action btn-start"
+                  :disabled="!!actionLoading[service.name]"
+                  @click="syncRecyclarr"
+                >
+                  <span v-if="actionLoading[service.name] === 'sync'" class="spinner spinner-sm"></span>
+                  <span v-else>Sync</span>
                 </button>
                 <a
                   v-if="service.daemon"
@@ -1842,7 +1958,10 @@ onUnmounted(() => {
     </div>
 
     <div v-if="settingsApp" class="modal-backdrop" @click.self="closeAppSettings">
-      <div class="settings-modal glass-card animate-scale">
+      <div
+        class="settings-modal glass-card animate-scale"
+        :class="{ 'settings-modal-wide': settingsApp.name === 'recyclarr' }"
+      >
         <div class="modal-header">
           <div class="modal-title-group">
             <h3>{{ settingsApp.displayName }} settings</h3>
@@ -1852,6 +1971,42 @@ onUnmounted(() => {
         </div>
         <div v-if="settingsError" class="ui-alert ui-alert-error">{{ settingsError }}</div>
         <form class="app-settings-form" @submit.prevent="saveAppSettings">
+          <template v-if="settingsApp.name === 'recyclarr' && recyclarrMeta">
+            <p class="settings-hint">
+              Official TRaSH Guides profiles via Recyclarr v8. HD is on by default; 4K is opt-in.
+              Saving profile checkboxes regenerates YAML. Editing YAML marks the file as custom until you reset.
+            </p>
+            <p v-if="recyclarrMeta.yaml_path" class="settings-hint font-mono">{{ recyclarrMeta.yaml_path }}</p>
+            <label v-for="profile in recyclarrMeta.profiles" :key="profile.id" class="ui-switch-row">
+              <div class="ui-switch-copy">
+                <strong>{{ profile.label }}</strong>
+                <a :href="profile.guide" target="_blank" rel="noopener noreferrer" class="link-btn">Guide</a>
+              </div>
+              <button
+                type="button"
+                class="ui-switch"
+                role="switch"
+                :aria-checked="settingsForm.recyclarrPrefs[profile.id] ? 'true' : 'false'"
+                @click="settingsForm.recyclarrPrefs[profile.id] = !settingsForm.recyclarrPrefs[profile.id]"
+              >
+                <span class="ui-switch-thumb"></span>
+              </button>
+            </label>
+            <label class="ui-field">
+              Folder naming
+              <select v-model="settingsForm.recyclarrNaming" class="ui-input">
+                <option v-for="opt in recyclarrMeta.naming_options" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
+              </select>
+            </label>
+            <label class="ui-field">
+              recyclarr.yml
+              <textarea v-model="settingsForm.recyclarrYaml" class="ui-input font-mono recyclarr-yaml" spellcheck="false" />
+            </label>
+            <p v-if="recyclarrMeta.user_edited || settingsForm.recyclarrYaml !== settingsForm.recyclarrOriginalYaml" class="settings-hint">
+              Custom YAML is kept as-is on Save. Profile checkboxes apply only when the YAML is unchanged.
+            </p>
+          </template>
+          <template v-else>
           <label class="ui-field">
             Listen port
             <input
@@ -1896,8 +2051,27 @@ onUnmounted(() => {
           <ul v-if="settingsMeta?.notes?.length" class="app-settings-notes">
             <li v-for="note in settingsMeta.notes" :key="note">{{ note }}</li>
           </ul>
+          </template>
           <div class="wizard-nav" style="justify-content: flex-end; margin-top: 0.75rem;">
             <button type="button" class="ui-btn ui-btn-ghost" @click="closeAppSettings">Cancel</button>
+            <button
+              v-if="settingsApp.name === 'recyclarr'"
+              type="button"
+              class="ui-btn ui-btn-ghost"
+              :disabled="settingsLoading"
+              @click="resetRecyclarrDefaults"
+            >
+              Restore TRaSH defaults
+            </button>
+            <button
+              v-if="settingsApp.name === 'recyclarr'"
+              type="button"
+              class="ui-btn ui-btn-ghost"
+              :disabled="settingsLoading || !!actionLoading.recyclarr"
+              @click="syncRecyclarr"
+            >
+              Sync now
+            </button>
             <button type="submit" class="ui-btn ui-btn-primary" :disabled="settingsLoading">
               {{ settingsLoading ? 'Saving…' : 'Save' }}
             </button>
@@ -2799,8 +2973,8 @@ onUnmounted(() => {
 }
 
 .btn-more {
-  flex: 0 0 auto;
-  min-width: 4.2rem;
+  width: 100%;
+  height: 100%;
   background: rgba(30, 41, 59, 0.7);
   color: #cbd5e1;
   border-color: rgba(255, 255, 255, 0.1);
@@ -2814,7 +2988,9 @@ onUnmounted(() => {
 
 .card-menu-wrap {
   position: relative;
-  flex: 0 0 auto;
+  flex: 1 1 5.5rem;
+  min-width: 0;
+  display: flex;
 }
 
 .card-menu {
@@ -2862,6 +3038,17 @@ onUnmounted(() => {
   max-height: min(90dvh, 900px);
   overflow: auto;
   padding: clamp(1rem, 3vw, 1.4rem);
+}
+
+.settings-modal-wide {
+  width: min(760px, 100%);
+}
+
+.recyclarr-yaml {
+  min-height: 16rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  resize: vertical;
 }
 
 .health-modal {
@@ -3310,7 +3497,8 @@ onUnmounted(() => {
     padding: 1.1rem;
   }
 
-  .service-actions .btn-action {
+  .service-actions .btn-action,
+  .service-actions .card-menu-wrap {
     flex: 1 1 calc(50% - 0.4rem);
   }
 
@@ -3349,7 +3537,8 @@ onUnmounted(() => {
   }
 
   .service-actions .btn-action,
-  .service-actions .btn-install {
+  .service-actions .btn-install,
+  .service-actions .card-menu-wrap {
     flex: 1 1 100%;
   }
 
