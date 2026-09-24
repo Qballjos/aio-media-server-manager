@@ -49,6 +49,7 @@ class SabnzbdApp(BaseApplication):
     def start_command(self) -> list[str]:
         self._ensure_runtime()
         self._write_runner()
+        self._own_config()
         return super().start_command()
 
     def extra_env(self) -> dict[str, str]:
@@ -139,39 +140,60 @@ class SabnzbdApp(BaseApplication):
         self._ensure_runtime()
         self._write_runner()
         self.post_install()
+        self._own_config()
         return result
 
     def post_install(self) -> None:
         ini = self.config_dir / "sabnzbd.ini"
-        if ini.exists():
-            return
-        from core.integrations.sabnzbd import write_bootstrap_ini
-        from core.integrations.usenet import load_usenet_server
-        from core.library_layout import LibraryLayout
-        from core.settings import settings as app_settings
-        from core.shared_credentials import shared_admin_credentials
-        from core.integrations.credentials import set_application_api_key
+        if not ini.exists():
+            from core.integrations.sabnzbd import write_bootstrap_ini
+            from core.integrations.usenet import load_usenet_server
+            from core.library_layout import LibraryLayout
+            from core.settings import settings as app_settings
+            from core.shared_credentials import shared_admin_credentials
+            from core.integrations.credentials import set_application_api_key
 
-        layout = LibraryLayout.from_settings(app_settings)
-        shared = shared_admin_credentials()
-        username = shared[0] if shared else ""
-        password = shared[1] if shared else ""
-        written = write_bootstrap_ini(
-            ini,
-            port=self.port,
-            complete_dir=str(layout.complete),
-            incomplete_dir=str(layout.incomplete),
-            username=username,
-            password=password,
-            usenet=load_usenet_server(),
-        )
-        text = written.read_text(encoding="utf-8")
-        for line in text.splitlines():
-            if line.lower().startswith("api_key"):
-                key = line.split("=", 1)[-1].strip().strip('"')
-                if key:
-                    set_application_api_key(self.name, key)
-                break
+            layout = LibraryLayout.from_settings(app_settings)
+            shared = shared_admin_credentials()
+            username = shared[0] if shared else ""
+            password = shared[1] if shared else ""
+            written = write_bootstrap_ini(
+                ini,
+                port=self.port,
+                complete_dir=str(layout.complete),
+                incomplete_dir=str(layout.incomplete),
+                username=username,
+                password=password,
+                usenet=load_usenet_server(),
+            )
+            text = written.read_text(encoding="utf-8")
+            for line in text.splitlines():
+                if line.lower().startswith("api_key"):
+                    key = line.split("=", 1)[-1].strip().strip('"')
+                    if key:
+                        set_application_api_key(self.name, key)
+                    break
+        self._own_config()
+
+    def _own_config(self) -> None:
+        """SABnzbd must rewrite sabnzbd.ini; keep the config dir owned by PUID/PGID."""
+        from core.settings import settings as app_settings
+        from core.storage import StorageManager
+
+        mgr = StorageManager(app_settings)
+        mgr.ensure_dir(self.config_dir, self.puid, self.pgid)
+        try:
+            os.chmod(self.config_dir, 0o775)
+        except OSError:
+            pass
+        ini = self.config_dir / "sabnzbd.ini"
+        if not ini.is_file():
+            return
+        mgr.apply_permissions(ini, self.puid, self.pgid)
+        try:
+            os.chmod(ini, 0o664)
+        except OSError:
+            pass
 
     def build_start_command(self, executable: Path) -> list[str]:
         extra = [

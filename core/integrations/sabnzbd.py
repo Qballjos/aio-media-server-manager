@@ -149,6 +149,7 @@ def write_bootstrap_ini(
         f"port = {int(port) or 8085}",
         "auto_browser = 0",
         "check_new_rel = 0",
+        "helpful_warnings = 0",
         f"complete_dir = {_ini_value(complete_dir)}",
         f"download_dir = {_ini_value(incomplete_dir)}",
         f"api_key = {key}",

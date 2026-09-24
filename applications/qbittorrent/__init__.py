@@ -35,7 +35,21 @@ class QBittorrentApp(BaseApplication):
     manifest = MANIFEST
 
     def build_start_command(self, executable: Path) -> list[str]:
-        ensure_webui_localhost_access(self.config_dir)
+        username, password = "", ""
+        try:
+            from core.integrations.qbittorrent import qbittorrent_credentials
+            from core.shared_credentials import shared_admin_credentials
+
+            shared = shared_admin_credentials()
+            if shared:
+                username, password = shared
+            else:
+                stored_user, stored_pass = qbittorrent_credentials()
+                if stored_pass and stored_pass != "adminadmin":
+                    username, password = stored_user, stored_pass
+        except Exception:
+            pass
+        ensure_webui_localhost_access(self.config_dir, username=username, password=password)
         cmd = [
             str(executable),
             f"--webui-port={self.port}",

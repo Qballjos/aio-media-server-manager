@@ -14,7 +14,7 @@ from core.cloudflare_tunnel import cloudflare_tunnel
 from core.crypto import secret_store
 from core.settings import settings
 from core.supervisor import ProcessSupervisor, ProcessState
-from core.vpn import vpn_manager, PROVIDERS
+from core.vpn import vpn_manager, PROVIDERS, save_vpn_config_text
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
@@ -47,6 +47,7 @@ class SettingsPatch(BaseModel):
     vpn_provider: Optional[str] = None
     vpn_protocol: Optional[str] = None
     vpn_config_path: Optional[str] = None
+    vpn_config_text: Optional[str] = None
     cloudflare_tunnel_enabled: Optional[bool] = None
     cloudflare_tunnel_token: Optional[str] = None
     trusted_proxies: Optional[str] = None
@@ -158,7 +159,20 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
             raise HTTPException(status_code=422, detail="vpn_protocol must be wireguard or openvpn.")
         settings.vpn_protocol = proto
     if body.vpn_config_path is not None:
-        settings.vpn_config_path = Path(body.vpn_config_path).expanduser()
+        requested = body.vpn_config_path.strip()
+        if requested:
+            settings.vpn_config_path = Path(requested).expanduser()
+    if body.vpn_config_text:
+        try:
+            dest = save_vpn_config_text(
+                settings,
+                body.vpn_config_text,
+                protocol=settings.vpn_protocol,
+                path=str(settings.vpn_config_path) if settings.vpn_config_path else None,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        notes.append(f"Wrote VPN config to {dest}.")
     if body.trusted_proxies is not None:
         settings.trusted_proxies = body.trusted_proxies.strip()
     if body.cloudflare_tunnel_enabled is not None:

@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.app import create_app
+from core.settings import Settings
 from core.wizard import WizardEngine, WIZARD_STEPS
 
 
@@ -96,6 +97,31 @@ def test_wizard_engine_lifecycle(tmp_path: Path):
     # Reload from disk to test persistence
     reloaded_engine = WizardEngine(state_file=state_file)
     assert reloaded_engine.get_status()["selections"]["vpn_provider"] == "privadovpn"
+
+
+def test_wizard_writes_pasted_vpn_config(tmp_path: Path):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        install_dir=tmp_path / "apps",
+    )
+    engine = WizardEngine(state_file=tmp_path / "wizard_state.json", cfg=cfg)
+    engine.update_step_selections(
+        6,
+        {
+            "vpn_provider": "custom",
+            "vpn_protocol": "wireguard",
+            "vpn_config_text": "[Interface]\nPrivateKey = dGVzdA==\nAddress = 10.8.0.2/32\n",
+        },
+    )
+    dest = cfg.config_dir / "vpn" / "wg0.conf"
+    assert dest.is_file()
+    assert "[Interface]" in dest.read_text(encoding="utf-8")
+    step6 = engine.get_step_data(6)
+    assert step6["has_vpn_config"] is True
+    assert "vpn_config_text" not in engine.get_status()["selections"]
+    assert engine.get_status()["selections"]["vpn_config_path"] == str(dest)
 
 
 @pytest.mark.asyncio

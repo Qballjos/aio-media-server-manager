@@ -16,7 +16,7 @@ AIO Media Server Manager is **one appliance**. The manager and every *Arr app, d
 | TrueNAS SCALE | [deploy/TRUENAS.md](../deploy/TRUENAS.md) |
 | Cloudflare Tunnel (optional) | [deploy/CLOUDFLARE.md](../deploy/CLOUDFLARE.md) |
 
-When the process is up, open `http://<host>:8080` and follow [Usage](USAGE.md). After `docker compose pull`, recreate the container so published WebUI ports and the Python 3.13 child runtime (Bazarr) match the current image.
+When the process is up, open `http://<host>:8080` and follow [Usage](USAGE.md). After `docker compose pull`, recreate the container so published WebUI ports, the Python 3.13 child runtime (Bazarr), and Debian `unrar` (SABnzbd) match the current image.
 
 ## Host directories
 

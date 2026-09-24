@@ -17,7 +17,7 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 | 1 | Media, download, and config directories (same `/data` parent for hardlinks) |
 | 2 | `PUID` / `PGID` (pre-filled from the host / compose user) |
 | 3 | Download clients (SABnzbd, NZBGet, qBittorrent). Usenet host, port, SSL, username, password, and connections are saved for SABnzbd/NZBGet. qBittorrent username/password may be blank to reuse the manager admin login |
-| 4 | VPN: none, PrivadoVPN-style isolation, or a custom WireGuard / OpenVPN path |
+| 4 | VPN: none, PrivadoVPN-style isolation, or a custom WireGuard / OpenVPN profile (upload, paste, or path) |
 | 5 | *Arr apps: Prowlarr, Sonarr, Radarr, Lidarr |
 | 6 | Media servers: Jellyfin and/or Plex (optional Plex claim token) |
 | 7 | Requests (Seerr) |
@@ -44,9 +44,11 @@ The dashboard lists the **17** catalog applications (installed vs available coun
 
 **Open UI** uses `http://<host>:<app-port>` (for example Sonarr `8989`). That only works if the appliance compose/template publishes those ports, or the container uses host networking. Recreate the container after pulling an image that added port mappings.
 
-qBittorrent on localhost is allowed without the WebUI login prompt.
+qBittorrent on localhost is allowed without the WebUI login prompt. **Open UI** from another LAN machine uses the manager username and password (seeded into `qBittorrent.conf` before start). Restart qBittorrent once after upgrading if an older run already created a temporary WebUI password.
 
-Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Rebuild/recreate the image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`.
+Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Rebuild/recreate the image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`. Form login uses the manager username and password (YAML stores a SHA-256 of the password; type the same plaintext you used in the wizard).
+
+SABnzbd needs the non-free Debian `unrar` package (RAR 5). Recreate the appliance image if you still see **UNRAR version is 0.00**. Helpful warnings are off in the bootstrap `sabnzbd.ini`.
 
 ## 4. Shared local login
 
@@ -57,19 +59,23 @@ When you create the admin (and again on later successful logins or account chang
 - Bazarr
 - Jellyfin (a matching local Jellyfin user)
 - Seerr (local admin from the manager email when Seerr is chosen in the wizard)
+- Profilarr (first local user, when the register API is available)
 
 These remain separate accounts inside each product. They are created to **match** the manager credentials; signing into the manager does not SSO into those UIs.
 
-**Not shared:**
+**Not a second login (use these as intended):**
 
+- **Recyclarr** — CLI only (`daemon=False`). There is no Open UI and no username. It talks to Sonarr/Radarr with their API keys and a TRaSH Guides `recyclarr.yml` (WEB-1080p TV, anime remux, HD Bluray+WEB movies). Run **Start** to `recyclarr sync`.
+- **NeutArr** — LAN access bypass is on for RFC1918, so Open UI from your home network should not ask you to invent an account. It hunts missing/upgrade items through the *Arr APIs. Create a NeutArr user only if you expose it beyond the LAN.
+- **Profilarr** — `AUTH=local` skips login on the local network. Dictionarry still has its own first-user screen if you open it from a non-local address; use the manager username and password there. Styling needs the Vite `static` (or `client`) tree next to the binary after install. Instances are pre-filled for Sonarr/Radarr (and Lidarr when installed).
 - **Plex** — Plex account or claim token
-- Tools with no web login (Recyclarr, Flaresolverr, and similar)
+- **Flaresolverr** — no web login
 
 Open **Open UI** on each app the first time to confirm that product's own setup finished (especially Jellyfin and Plex).
 
 ## 5. VPN and remote access
 
-- Place a WireGuard or OpenVPN profile under the config VPN directory and enable VPN in the wizard, **Settings → VPN**, or environment. Only **qBittorrent** and **Prowlarr** are tunneled. Usenet clients stay on the normal network.
+- Upload or paste a WireGuard (`.conf`) or OpenVPN (`.ovpn`) profile in the wizard or **Settings → VPN**. It is written under `/config/vpn/` (`wg0.conf` or `client.ovpn`) with mode `600`. You can still point at an existing path. Only **qBittorrent** and **Prowlarr** are tunneled. Usenet clients stay on the normal network.
 - Optional [Cloudflare Tunnel](../deploy/CLOUDFLARE.md) can be toggled from **Settings → Remote access** or `AMM_CLOUDFLARE_TUNNEL_*`. `cloudflared` runs inside this appliance.
 
 ## 6. Backups and updates
@@ -92,7 +98,7 @@ The **Settings** nav item is the admin page for the appliance (separate from per
 | Storage | Architecture, CPU, memory, disk, filesystem format (read-only) |
 | Permissions | PUID / PGID — saving restarts running child processes |
 | Backups | Retention, backup now, restore, delete |
-| VPN | Enable, protocol, config path, kill switch |
+| VPN | Enable, protocol, upload/paste config, path, kill switch |
 | Remote access | Cloudflare Tunnel on/off, token (write-only), trusted proxy IPs |
 | GitHub | Optional token for rate limits (not shown again after save) |
 | Debug | Error ring + time-limited share URL (`/debug/{token}`) |

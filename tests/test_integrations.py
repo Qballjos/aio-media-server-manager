@@ -17,7 +17,7 @@ from core.integrations.hooks import (
 )
 from core.integrations.nzbget import NZBGetClient
 from core.integrations.prowlarr import ProwlarrClient
-from applications.qbittorrent.webui import ensure_webui_localhost_access
+from applications.qbittorrent.webui import ensure_webui_localhost_access, qbittorrent_pbkdf2
 from core.integrations.qbittorrent import QBittorrentClient
 from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient, write_bootstrap_ini
@@ -86,6 +86,7 @@ def test_sabnzbd_bootstrap_ini_includes_usenet(tmp_path: Path):
     assert "[[news.example.com]]" in text
     assert "connections = 20" in text
     assert "ssl = 1" in text
+    assert "helpful_warnings = 0" in text
     write_bootstrap_ini(path, port=1, complete_dir="x", incomplete_dir="y")
     assert "port = 8085" in path.read_text(encoding="utf-8")
 
@@ -116,6 +117,8 @@ def test_sabnzbd_post_install_seeds_ini_and_api_key(tmp_path: Path, monkeypatch)
     key = get_application_api_key("sabnzbd", app_config_dir=app.config_dir)
     assert key
     assert len(key) >= 32
+    mode = ini.stat().st_mode & 0o777
+    assert mode == 0o664
 
 
 @patch("requests.Session.post")
@@ -190,6 +193,23 @@ def test_qbittorrent_profile_bypasses_localhost_auth(tmp_path: Path):
     text = conf.read_text(encoding="utf-8")
     assert "WebUI\\LocalHostAuth=false" in text
     assert "127.0.0.0/8" in text
+
+
+def test_qbittorrent_profile_seeds_shared_webui_password(tmp_path: Path):
+    conf = ensure_webui_localhost_access(tmp_path, username="amm", password="SharedPass123!")
+    text = conf.read_text(encoding="utf-8")
+    assert "WebUI\\Username=amm" in text
+    assert "WebUI\\Password_PBKDF2=" in text
+    hashed = qbittorrent_pbkdf2("SharedPass123!", salt=b"0123456789abcdef")
+    assert hashed.startswith('"@ByteArray(')
+    first = next(line for line in text.splitlines() if line.startswith("WebUI\\Password_PBKDF2="))
+    ensure_webui_localhost_access(tmp_path, username="amm", password="OtherPass123!")
+    second = next(
+        line
+        for line in conf.read_text(encoding="utf-8").splitlines()
+        if line.startswith("WebUI\\Password_PBKDF2=")
+    )
+    assert first != second
 
 
 @patch("requests.get")
@@ -302,6 +322,21 @@ def test_bazarr_client(mock_post):
     client = BazarrClient(api_key="baz")
     assert client.pair_sonarr("http://127.0.0.1:8989", "sonarr") is True
     assert client.pair_radarr("http://127.0.0.1:7878", "radarr") is True
+
+
+@patch("requests.post")
+def test_bazarr_set_ui_auth_sends_plaintext_and_hashes_yaml(mock_post, tmp_path: Path):
+    from core.integrations.local_auth import sha256_hex
+
+    mock_post.return_value = MagicMock(status_code=201)
+    client = BazarrClient(api_key="baz")
+    assert client.set_ui_auth("amm", "SharedPass123!", tmp_path) is True
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload["auth"]["username"] == "amm"
+    assert payload["auth"]["password"] == "SharedPass123!"
+    yaml_text = (tmp_path / "config" / "config.yaml").read_text(encoding="utf-8")
+    assert "type: form" in yaml_text
+    assert sha256_hex("SharedPass123!") in yaml_text
 
 
 def test_optimization_hooks(tmp_path: Path):

@@ -53,8 +53,10 @@ def apply_shared_local_logins(
     steps: list[dict[str, Any]] = []
 
     if installed("qbittorrent"):
+        from applications.qbittorrent.webui import ensure_webui_localhost_access
         from core.integrations.qbittorrent import QBittorrentClient
 
+        ensure_webui_localhost_access(config_dir_for("qbittorrent"), username=username, password=password)
         client = QBittorrentClient(port=port_for("qbittorrent", 8081))
         logged_in = client.login()
         ok = logged_in and client.set_webui_login(username, password)
@@ -97,7 +99,71 @@ def apply_shared_local_logins(
         client = JellyfinClient(port=port_for("jellyfin", 8096), api_key=api_key_for("jellyfin"))
         steps.append(_step("jellyfin", "set_shared_login", client.ensure_local_admin(username, password), username))
 
+    if installed("profilarr"):
+        steps.append(
+            _step(
+                "profilarr",
+                "set_shared_login",
+                set_profilarr_login(port_for("profilarr", 6868), username, password),
+                username,
+            )
+        )
+
+    if installed("neutarr"):
+        steps.append(
+            _step(
+                "neutarr",
+                "set_shared_login",
+                set_neutarr_login(config_dir_for("neutarr"), username, password),
+                username,
+            )
+        )
+
     return steps
+
+
+def set_profilarr_login(port: int, username: str, password: str) -> bool:
+    """Create Profilarr's first local user so Open UI matches the manager login."""
+    payloads = (
+        {"username": username, "password": password},
+        {"user": username, "password": password},
+        {"email": username, "password": password},
+    )
+    paths = (
+        "/api/v1/auth/register",
+        "/api/v1/auth/setup",
+        "/api/v1/auth/signup",
+        "/api/auth/register",
+    )
+    for path in paths:
+        for body in payloads:
+            try:
+                resp = requests.post(f"http://127.0.0.1:{port}{path}", json=body, timeout=5.0)
+                if resp.status_code in (200, 201, 204, 409):
+                    return True
+            except Exception as exc:
+                logger.debug("Profilarr login seed %s failed: %s", path, exc)
+    return False
+
+
+def set_neutarr_login(config_dir: Path, username: str, password: str) -> bool:
+    """Keep NeutArr LAN bypass and record the manager identity for the first-run UI."""
+    root = Path(config_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    general = root / "general.json"
+    try:
+        data = json.loads(general.read_text(encoding="utf-8")) if general.is_file() else {}
+    except json.JSONDecodeError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data["local_access_bypass"] = True
+    data.setdefault(
+        "local_bypass_cidrs",
+        ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+    )
+    general.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return True
 
 
 def sha256_hex(password: str) -> str:

@@ -33,6 +33,10 @@ def test_redact_log_line():
     assert "super_duper_secret_xyz123" not in redacted3
     assert "[REDACTED_SECRET]" in redacted3
 
+    secret_store.save_secret("preferred_download_client", "sabnzbd")
+    path_line = "Cannot write to INI file /config/sabnzbd/sabnzbd.ini"
+    assert redact_log_line(path_line) == path_line
+
 
 def test_log_websocket_accepts_access_cookie(monkeypatch):
     from types import SimpleNamespace

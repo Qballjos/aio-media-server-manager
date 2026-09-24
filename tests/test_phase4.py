@@ -156,3 +156,13 @@ def test_grimmory_runner_starts_mariadb_as_root(catalog: ApplicationCatalog):
     assert "command -v java" in script
     assert "--enable-preview" in script
     assert "if ! _mariadb_up" in script
+
+
+def test_profilarr_serves_from_install_dir_with_lan_auth(tmp_path: Path):
+    from applications.extended import ProfilarrApp
+
+    app = ProfilarrApp(base_config_dir=tmp_path / "config", base_install_dir=tmp_path / "apps")
+    env = app.extra_env()
+    assert env["AUTH"] == "local"
+    assert env["APP_BASE_PATH"] == str(app.config_dir)
+    assert app.working_directory() == app.install_dir

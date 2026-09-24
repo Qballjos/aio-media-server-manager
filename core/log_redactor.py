@@ -26,6 +26,10 @@ _SENSITIVE_PATTERNS = [
     (re.compile(r"\b[a-f0-9]{32}\b"), "[REDACTED_KEY]"),
 ]
 
+# Do not treat hostnames, usernames, or catalog names as credentials.
+_STORED_SECRET_KEY = re.compile(r"(password|passwd|secret|token|api_key|apikey|_key$|claim)", re.IGNORECASE)
+_MIN_STORED_SECRET_LEN = 8
+
 
 def redact_log_line(line: str, custom_secrets: Optional[list[str]] = None) -> str:
     """
@@ -36,11 +40,15 @@ def redact_log_line(line: str, custom_secrets: Optional[list[str]] = None) -> st
 
     result = line
 
-    # 1. Redact specific secrets currently in SecretStore if available
+    # 1. Redact credential values currently in SecretStore if available
     try:
         stored_secrets = secret_store.list_secrets(mask=False)
-        for secret_val in stored_secrets.values():
-            if secret_val and len(secret_val) >= 4 and secret_val in result:
+        for secret_name, secret_val in stored_secrets.items():
+            if not secret_val or len(secret_val) < _MIN_STORED_SECRET_LEN:
+                continue
+            if not _STORED_SECRET_KEY.search(secret_name):
+                continue
+            if secret_val in result:
                 result = result.replace(secret_val, "[REDACTED_SECRET]")
     except Exception:
         pass

@@ -52,10 +52,13 @@ class BazarrClient:
     def set_ui_auth(self, username: str, password: str, config_dir) -> bool:
         from pathlib import Path
 
-        from core.integrations.local_auth import patch_bazarr_auth_yaml, sha256_hex
+        from core.integrations.local_auth import patch_bazarr_auth_yaml
 
-        hashed = sha256_hex(password)
-        payload = {"auth": {"type": "form", "username": username, "password": hashed}}
+        yaml_ok = False
+        root = Path(config_dir)
+        for yaml_path in (root / "config" / "config.yaml", root / "config.yaml"):
+            yaml_ok = patch_bazarr_auth_yaml(yaml_path, username, password) or yaml_ok
+        payload = {"auth": {"type": "form", "username": username, "password": password}}
         endpoints = (f"{self.base_url}/system/settings", f"{self.base_url}/settings")
         for endpoint in endpoints:
             try:
@@ -64,4 +67,4 @@ class BazarrClient:
                     return True
             except Exception as exc:
                 logger.debug("Bazarr set_ui_auth via %s failed: %s", endpoint, exc)
-        return patch_bazarr_auth_yaml(Path(config_dir) / "config" / "config.yaml", username, password)
+        return yaml_ok

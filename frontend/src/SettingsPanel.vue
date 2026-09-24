@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import VpnConfigFields from './VpnConfigFields.vue'
 
 const props = defineProps({
   apiRequest: { type: Function, required: true },
@@ -32,6 +33,7 @@ const form = ref({
   vpn_provider: 'privadovpn',
   vpn_protocol: 'wireguard',
   vpn_config_path: '',
+  vpn_config_text: '',
   cloudflare_tunnel_enabled: false,
   cloudflare_tunnel_token: '',
   trusted_proxies: '',
@@ -95,6 +97,7 @@ function applySettingsPayload(data) {
   form.value.vpn_provider = vpn.provider || 'privadovpn'
   form.value.vpn_protocol = vpn.protocol || 'wireguard'
   form.value.vpn_config_path = vpn.config_path || ''
+  form.value.vpn_config_text = ''
   const tunnel = data.cloudflare_tunnel || {}
   tunnelLive.value = tunnel
   form.value.cloudflare_tunnel_enabled = !!tunnel.enabled
@@ -163,6 +166,18 @@ async function patchSettings(payload) {
   } finally {
     saving.value = false
   }
+}
+
+async function saveVpn() {
+  const payload = {
+    vpn_enabled: form.value.vpn_enabled,
+    vpn_enforce: form.value.vpn_enforce,
+    vpn_provider: form.value.vpn_provider,
+    vpn_protocol: form.value.vpn_protocol,
+    vpn_config_path: form.value.vpn_config_path
+  }
+  if (form.value.vpn_config_text) payload.vpn_config_text = form.value.vpn_config_text
+  await patchSettings(payload)
 }
 
 async function saveAccount() {
@@ -631,13 +646,7 @@ onMounted(loadAll)
           <p>Torrent traffic only. Usenet always bypasses the tunnel.</p>
         </div>
         <p class="share-meta">Tunnel {{ vpnLive.tunnel_up ? 'up' : 'down' }} · config {{ vpnLive.config_present ? 'present' : 'missing' }}</p>
-        <form class="form-stack" @submit.prevent="patchSettings({
-          vpn_enabled: form.vpn_enabled,
-          vpn_enforce: form.vpn_enforce,
-          vpn_provider: form.vpn_provider,
-          vpn_protocol: form.vpn_protocol,
-          vpn_config_path: form.vpn_config_path
-        })">
+        <form class="form-stack" @submit.prevent="saveVpn">
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
               <strong>Enable VPN</strong>
@@ -661,15 +670,12 @@ onMounted(loadAll)
               <option v-for="p in (vpnLive.supported_providers || ['privadovpn','custom'])" :key="p" :value="p">{{ p }}</option>
             </select>
           </label>
-          <label class="ui-field">Protocol
-            <select v-model="form.vpn_protocol" class="ui-input">
-              <option value="wireguard">WireGuard</option>
-              <option value="openvpn">OpenVPN</option>
-            </select>
-          </label>
-          <label class="ui-field">Config path
-            <input v-model="form.vpn_config_path" class="ui-input font-mono" />
-          </label>
+          <VpnConfigFields
+            v-model:protocol="form.vpn_protocol"
+            v-model:path="form.vpn_config_path"
+            v-model:text="form.vpn_config_text"
+            :has-config="!!vpnLive.config_present"
+          />
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save VPN</button>
         </form>
       </div>

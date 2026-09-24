@@ -222,6 +222,13 @@ class WizardEngine:
                 "vpn_config_path": selections.get("vpn_config_path", ""),
                 "vpn_protocol": selections.get("vpn_protocol", "wireguard"),
                 "vpn_enforce": bool(selections.get("vpn_enforce", False)),
+                "has_vpn_config": bool(
+                    selections.get("has_vpn_config")
+                    or (
+                        selections.get("vpn_config_path")
+                        and Path(str(selections.get("vpn_config_path"))).is_file()
+                    )
+                ),
             }
 
         if step_id == 7:
@@ -284,8 +291,12 @@ class WizardEngine:
             summary = dict(selections)
             summary.pop("qbittorrent_password", None)
             summary.pop("usenet_password", None)
-            summary["has_usenet_account"] = bool(
-                selections.get("usenet_host") or selections.get("usenet_username")
+            summary["has_vpn_config"] = bool(
+                selections.get("has_vpn_config")
+                or (
+                    selections.get("vpn_config_path")
+                    and Path(str(selections.get("vpn_config_path"))).is_file()
+                )
             )
             return {
                 "step": 11,
@@ -348,6 +359,17 @@ class WizardEngine:
                 selections["vpn_protocol"] = data["vpn_protocol"]
             if "vpn_enforce" in data:
                 selections["vpn_enforce"] = bool(data["vpn_enforce"])
+            if data.get("vpn_config_text") and selections.get("vpn_provider") not in (None, "", "none"):
+                from core.vpn import save_vpn_config_text
+
+                dest = save_vpn_config_text(
+                    self._settings,
+                    str(data.get("vpn_config_text") or ""),
+                    protocol=str(selections.get("vpn_protocol") or "wireguard"),
+                    path=str(selections.get("vpn_config_path") or ""),
+                )
+                selections["vpn_config_path"] = str(dest)
+                selections["has_vpn_config"] = True
         elif step_id == 7:
             selections["arr_apps"] = data.get("arr_apps", selections.get("arr_apps", []))
         elif step_id == 8:

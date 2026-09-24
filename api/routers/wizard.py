@@ -37,7 +37,10 @@ async def submit_wizard_step(step_id: int, request: Request) -> dict[str, Any]:
             data = {}
     except Exception:
         data = {}
-    return await asyncio.to_thread(wizard_engine.update_step_selections, step_id, data)
+    try:
+        return await asyncio.to_thread(wizard_engine.update_step_selections, step_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
 
 @router.post("/skip", summary="Skip remaining wizard steps and open the dashboard")

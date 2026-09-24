@@ -250,7 +250,21 @@ class BazarrApp(SimpleApplication):
         return result
 
     def start_args(self) -> list[str]:
+        self._seed_auth()
         return ["--no-update", "--config", str(self.config_dir), "--port", str(self.port)]
+
+    def post_install(self) -> None:
+        self._seed_auth()
+
+    def _seed_auth(self) -> None:
+        from core.integrations.local_auth import patch_bazarr_auth_yaml
+        from core.shared_credentials import shared_admin_credentials
+
+        creds = shared_admin_credentials()
+        if not creds:
+            return
+        username, password = creds
+        patch_bazarr_auth_yaml(self.config_dir / "config" / "config.yaml", username, password)
 
 
 class RecyclarrApp(SimpleApplication):
@@ -302,13 +316,16 @@ class ProfilarrApp(SimpleApplication):
             "PORT": str(self.port),
             "HOST": "0.0.0.0",
             "TZ": "Etc/UTC",
-            "AUTH": "on",
+            "AUTH": "local",
             "APP_BASE_PATH": str(self.config_dir),
             "DENO_DIR": str(self.install_dir / "deno-cache"),
         }
         if sqlite:
             env["DENO_SQLITE_PATH"] = sqlite
         return env
+
+    def working_directory(self) -> Path | None:
+        return self.install_dir
 
     def install(self) -> InstallResult:
         installer = AppInstaller()
@@ -318,7 +335,8 @@ class ProfilarrApp(SimpleApplication):
             "deno.jsonc",
         )
         deno = _ensure_deno(self.install_dir / "bin")
-        env = {**os.environ, **self.extra_env()}
+        build_dir = self.install_dir / "dist" / "build"
+        env = {**os.environ, **self.extra_env(), "APP_BASE_PATH": "dist/build"}
         subprocess.run(
             [str(deno), "ci"],
             cwd=self.install_dir,
@@ -377,6 +395,17 @@ class ProfilarrApp(SimpleApplication):
                     f'exec "{deno}" task preview "$@"',
                 ],
             )
+        static_src = build_dir / "static"
+        if not static_src.is_dir() and (build_dir / "client").is_dir():
+            static_src = build_dir / "client"
+        static_dest = self.install_dir / "static"
+        if static_src.is_dir():
+            if static_dest.exists():
+                shutil.rmtree(static_dest)
+            shutil.copytree(static_src, static_dest)
+        server_js = build_dir / "server.js"
+        if server_js.is_file():
+            shutil.copy2(server_js, self.install_dir / "server.js")
         self.post_install()
         return result
 

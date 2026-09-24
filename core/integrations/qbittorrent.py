@@ -30,7 +30,7 @@ def qbittorrent_credentials() -> tuple[str, str]:
 
 
 class QBittorrentClient:
-    def __init__(self, host: str = "127.0.0.1", port: int = 8085, username: str | None = None, password: str | None = None):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8081, username: str | None = None, password: str | None = None):
         stored_user, stored_pass = qbittorrent_credentials()
         self.base_url = f"http://{host}:{port}/api/v2"
         self.username = username if username is not None else stored_user
@@ -102,7 +102,14 @@ class QBittorrentClient:
     def set_webui_login(self, username: str, password: str) -> bool:
         """Set the WebUI username and password to the shared manager login."""
         try:
-            payload = json.dumps({"web_ui_username": username, "web_ui_password": password})
+            payload = json.dumps(
+                {
+                    "web_ui_username": username,
+                    "web_ui_password": password,
+                    "username": username,
+                    "password": password,
+                }
+            )
             resp = self.session.post(
                 f"{self.base_url}/app/setPreferences",
                 data={"json": payload},

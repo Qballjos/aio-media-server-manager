@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { appIconSrc } from './appIcons.js'
+import VpnConfigFields from './VpnConfigFields.vue'
 
 const props = defineProps({
   apiRequest: { type: Function, required: true }
@@ -135,6 +136,8 @@ async function loadStep(id) {
       selections.vpn_config_path = data.vpn_config_path || ''
       selections.vpn_protocol = data.vpn_protocol || 'wireguard'
       selections.vpn_enforce = !!data.vpn_enforce
+      selections.has_vpn_config = !!data.has_vpn_config
+      selections.vpn_config_text = ''
     } else if (id === 7) {
       selections.arr_apps = [...(data.selected || [])]
     } else if (id === 8) {
@@ -174,7 +177,8 @@ function bodyForStep(id) {
       vpn_provider: selections.vpn_provider,
       vpn_config_path: selections.vpn_config_path,
       vpn_protocol: selections.vpn_protocol,
-      vpn_enforce: selections.vpn_enforce
+      vpn_enforce: !!selections.vpn_enforce,
+      ...(selections.vpn_config_text ? { vpn_config_text: selections.vpn_config_text } : {})
     }
   }
   if (id === 7) return { arr_apps: selections.arr_apps }
@@ -193,7 +197,10 @@ async function next() {
         method: 'POST',
         body: JSON.stringify(bodyForStep(step.value))
       })
-      if (!res.ok) throw new Error('Could not save this step')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not save this step')
+      }
     }
     const idx = FLOW.indexOf(step.value)
     if (idx < FLOW.length - 1) {
@@ -461,17 +468,12 @@ onMounted(async () => {
             </label>
           </div>
           <template v-if="showVpnFields">
-            <label class="ui-field">
-              <span>VPN config path</span>
-              <input v-model="selections.vpn_config_path" class="ui-input font-mono" placeholder="/config/vpn/wg0.conf" />
-            </label>
-            <label class="ui-field">
-              <span>Protocol</span>
-              <select v-model="selections.vpn_protocol" class="ui-input">
-                <option value="wireguard">WireGuard</option>
-                <option value="openvpn">OpenVPN</option>
-              </select>
-            </label>
+            <VpnConfigFields
+              v-model:protocol="selections.vpn_protocol"
+              v-model:path="selections.vpn_config_path"
+              v-model:text="selections.vpn_config_text"
+              :has-config="!!selections.has_vpn_config"
+            />
             <label class="wizard-option" :class="{ selected: selections.vpn_enforce }">
               <input type="checkbox" v-model="selections.vpn_enforce" />
               Enforce kill switch for tunneled apps
@@ -567,7 +569,7 @@ onMounted(async () => {
             <div><dt>Usenet</dt><dd>{{ summary.usenet_host || (summary.has_usenet_account ? 'configured' : '—') }}</dd></div>
             <div><dt>Media</dt><dd>{{ (summary.media_servers || []).join(', ') || '—' }}</dd></div>
             <div><dt>Requests</dt><dd>{{ summary.request_system || '—' }}</dd></div>
-            <div><dt>VPN</dt><dd>{{ summary.vpn_provider || 'none' }}</dd></div>
+            <div><dt>VPN</dt><dd>{{ summary.vpn_provider || 'none' }}{{ summary.has_vpn_config ? ' · config saved' : '' }}</dd></div>
             <div><dt>Recommended</dt><dd>{{ (summary.recommended_preview || []).join(', ') || 'none' }}</dd></div>
           </dl>
         </template>

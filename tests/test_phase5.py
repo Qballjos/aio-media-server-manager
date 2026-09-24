@@ -11,7 +11,7 @@ from applications.qbittorrent import QBittorrentApp
 from core.metrics import collect_metrics
 from core.settings import Settings
 from core.transcoding import probe_transcoding
-from core.vpn import TORRENT_NETNS, VPN_TUNNELED_APPS, VpnIsolationError, VpnManager
+from core.vpn import TORRENT_NETNS, VPN_TUNNELED_APPS, VpnIsolationError, VpnManager, save_vpn_config_text
 
 
 def test_metrics_shape():
@@ -87,6 +87,22 @@ def test_vpn_kill_switch_blocks_tunneled_apps(tmp_path: Path, monkeypatch):
         except VpnIsolationError:
             pass
     mgr.assert_can_start_tunneled_app("sabnzbd")
+
+
+def test_save_vpn_config_text_writes_default_path(tmp_path: Path):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+    )
+    dest = save_vpn_config_text(
+        cfg,
+        "client\ndev tun\nremote vpn.example 1194\n",
+        protocol="openvpn",
+    )
+    assert dest == cfg.config_dir / "vpn" / "client.ovpn"
+    assert dest.is_file()
+    assert "remote vpn.example" in dest.read_text(encoding="utf-8")
 
 
 def test_qbittorrent_start_command_not_netns_on_non_linux(tmp_path: Path):

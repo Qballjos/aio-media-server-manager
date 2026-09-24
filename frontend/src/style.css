@@ -648,7 +648,8 @@ html {
 .ui-input,
 .wizard-input,
 .input-control,
-select.ui-input {
+select.ui-input,
+textarea.ui-input {
   width: 100%;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -662,6 +663,12 @@ select.ui-input {
   appearance: none;
   color-scheme: dark;
   transition: all 0.2s;
+}
+
+textarea.ui-input {
+  min-height: 8rem;
+  resize: vertical;
+  line-height: 1.45;
 }
 
 .ui-input:focus,

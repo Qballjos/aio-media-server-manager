@@ -42,7 +42,13 @@ RUN printf '%s\n' \
     && chmod +x /usr/local/bin/python3.13
 
 # Servarr/.NET self-contained builds need ICU, OpenSSL, and SQLite from the OS.
-RUN apt-get update \
+# Official `unrar` (RAR 5+) lives in Debian non-free; unrar-free reports version 0.00 to SABnzbd.
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources; \
+    else \
+        echo "deb http://deb.debian.org/debian bookworm non-free non-free-firmware" > /etc/apt/sources.list.d/non-free.list; \
+    fi \
+    && apt-get update \
     && ICU_PKG=$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -1) \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -65,7 +71,7 @@ RUN apt-get update \
         chromium \
         xvfb \
         mariadb-server \
-        unrar-free \
+        unrar \
         par2 \
         p7zip-full \
         git \

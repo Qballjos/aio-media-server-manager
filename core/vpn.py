@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 PROVIDERS = ("privadovpn", "mullvad", "protonvpn", "airvpn", "ivpn", "custom")
 TORRENT_NETNS = "amm-torrent"
 VPN_TUNNELED_APPS = frozenset({"qbittorrent", "prowlarr"})
+MAX_VPN_CONFIG_BYTES = 256 * 1024
 _VETH_HOST = "amm-veth-h"
 _VETH_NS = "amm-veth-n"
 _NS_HOST_IP = "10.200.200.1"
@@ -32,6 +33,51 @@ _DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696}
 
 class VpnIsolationError(RuntimeError):
     """Raised when a tunneled app would leak traffic off the VPN."""
+
+
+def default_vpn_config_filename(protocol: str) -> str:
+    return "client.ovpn" if str(protocol).lower() == "openvpn" else "wg0.conf"
+
+
+def vpn_config_destination(app_settings: Settings, *, protocol: str | None = None, path: str | None = None) -> Path:
+    requested = (path or "").strip()
+    if requested:
+        return Path(requested).expanduser()
+    proto = (protocol or app_settings.vpn_protocol or "wireguard").strip().lower()
+    return Path(app_settings.config_dir) / "vpn" / default_vpn_config_filename(proto)
+
+
+def save_vpn_config_text(
+    app_settings: Settings,
+    text: str,
+    *,
+    protocol: str | None = None,
+    path: str | None = None,
+) -> Path:
+    """Write an uploaded or pasted WireGuard/OpenVPN profile and point settings at it."""
+    raw = (text or "").replace("\x00", "").strip()
+    if not raw:
+        raise ValueError("VPN config is empty.")
+    encoded = raw.encode("utf-8")
+    if len(encoded) > MAX_VPN_CONFIG_BYTES:
+        raise ValueError("VPN config is too large (256 KB maximum).")
+    proto = (protocol or app_settings.vpn_protocol or "wireguard").strip().lower()
+    if proto not in {"wireguard", "openvpn"}:
+        raise ValueError("vpn_protocol must be wireguard or openvpn.")
+    lowered = raw.lower()
+    if proto == "wireguard" and "[interface]" not in lowered:
+        raise ValueError("That does not look like a WireGuard config ([Interface] is missing).")
+    if proto == "openvpn" and not any(token in lowered for token in ("remote ", "dev tun", "dev tap", "client")):
+        raise ValueError("That does not look like an OpenVPN profile.")
+    dest = vpn_config_destination(app_settings, protocol=proto, path=path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(raw if raw.endswith("\n") else raw + "\n", encoding="utf-8")
+    try:
+        dest.chmod(0o600)
+    except OSError:
+        pass
+    app_settings.vpn_config_path = dest
+    return dest
 
 
 class VpnManager:

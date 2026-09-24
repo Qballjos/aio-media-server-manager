@@ -11,6 +11,8 @@ from api.routers import settings as settings_api
 from core.auth import auth_manager
 from core.settings import Settings
 from core import settings as settings_mod
+from core.vpn import VpnManager
+from core import vpn as vpn_mod
 
 
 def _client(tmp_path: Path, monkeypatch) -> tuple[TestClient, Settings]:
@@ -24,6 +26,9 @@ def _client(tmp_path: Path, monkeypatch) -> tuple[TestClient, Settings]:
     monkeypatch.setattr(auth_manager, "_settings", test_settings)
     monkeypatch.setattr(settings_api, "settings", test_settings)
     monkeypatch.setattr(settings_mod, "settings", test_settings)
+    mgr = VpnManager(test_settings)
+    monkeypatch.setattr(settings_api, "vpn_manager", mgr)
+    monkeypatch.setattr(vpn_mod, "vpn_manager", mgr)
     auth_manager._rate._hits.clear()
     return TestClient(create_app()), test_settings
 
@@ -98,3 +103,26 @@ def test_settings_rejects_anonymous(tmp_path: Path, monkeypatch):
     _auth_headers(client)
     client.cookies.clear()
     assert client.get("/api/settings").status_code == 401
+
+
+def test_settings_saves_pasted_vpn_config(tmp_path: Path, monkeypatch):
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    profile = "[Interface]\nPrivateKey = dGVzdA==\nAddress = 10.8.0.2/32\n\n[Peer]\nPublicKey = dGVzdA==\n"
+    res = client.patch(
+        "/api/settings",
+        json={"vpn_protocol": "wireguard", "vpn_config_text": profile, "vpn_enabled": False},
+        headers=headers,
+    )
+    assert res.status_code == 200
+    dest = cfg.config_dir / "vpn" / "wg0.conf"
+    assert dest.is_file()
+    assert "[Interface]" in dest.read_text(encoding="utf-8")
+    assert dest.stat().st_mode & 0o777 == 0o600
+    assert res.json()["vpn"]["config_present"] is True
+    bad = client.patch(
+        "/api/settings",
+        json={"vpn_protocol": "wireguard", "vpn_config_text": "not-a-tunnel"},
+        headers=headers,
+    )
+    assert bad.status_code == 422

@@ -1,8 +1,15 @@
 from pathlib import Path
+import json
 from unittest.mock import MagicMock, patch
 
 from core.crypto import SecretStore
-from core.integrations.local_auth import patch_bazarr_auth_yaml, set_servarr_forms_auth, sha256_hex
+from core.integrations.local_auth import (
+    patch_bazarr_auth_yaml,
+    set_neutarr_login,
+    set_profilarr_login,
+    set_servarr_forms_auth,
+    sha256_hex,
+)
 from core.shared_credentials import save_shared_admin_credentials, shared_admin_credentials
 
 
@@ -34,3 +41,17 @@ def test_patch_bazarr_auth_yaml(tmp_path: Path):
     assert "type: form" in text
     assert "amm" in text
     assert sha256_hex("SharedPass123!") in text
+
+
+@patch("core.integrations.local_auth.requests.post")
+def test_set_profilarr_login_accepts_register(mock_post):
+    mock_post.return_value = MagicMock(status_code=201)
+    assert set_profilarr_login(6868, "amm", "SharedPass123!") is True
+    assert mock_post.call_args.kwargs["json"]["password"] == "SharedPass123!"
+
+
+def test_set_neutarr_login_enables_lan_bypass(tmp_path: Path):
+    assert set_neutarr_login(tmp_path, "amm", "SharedPass123!") is True
+    data = json.loads((tmp_path / "general.json").read_text(encoding="utf-8"))
+    assert data["local_access_bypass"] is True
+    assert "192.168.0.0/16" in data["local_bypass_cidrs"]
