@@ -553,6 +553,17 @@ function formatBytes(n) {
   return `${x >= 10 ? x.toFixed(0) : x.toFixed(1)} ${units[i]}`
 }
 
+function formatCpu(value) {
+  if (value == null || Number.isNaN(Number(value))) return '—'
+  return `${Number(value).toFixed(1)}%`
+}
+
+function formatMemShare(value) {
+  if (value == null || Number.isNaN(Number(value))) return '—'
+  const n = Number(value)
+  return `${n < 10 ? n.toFixed(1) : Math.round(n)}%`
+}
+
 function recordHealthSample() {
   const metrics = systemInfo.value?.metrics
   if (!metrics) return
@@ -589,6 +600,16 @@ function chartPath(values) {
 const cpuChart = computed(() => chartPath(healthHistory.value.map(s => s.cpu)))
 const memChart = computed(() => chartPath(healthHistory.value.map(s => s.mem)))
 const diskChart = computed(() => chartPath(healthHistory.value.map(s => s.disk)))
+
+const healthProcesses = computed(() => {
+  const rows = systemInfo.value?.metrics?.processes
+  if (!Array.isArray(rows)) return []
+  const labels = new Map(combinedServices.value.map((s) => [s.name, s.displayName]))
+  return rows.map((row) => ({
+    ...row,
+    displayName: labels.get(row.name) || row.name
+  }))
+})
 
 const healthTone = computed(() => {
   const cpu = Number(cpuPercent.value) || 0
@@ -1785,6 +1806,37 @@ onUnmounted(() => {
               <path :d="diskChart.line" class="health-line disk"></path>
             </svg>
           </article>
+          <article class="health-apps-card">
+            <div class="health-chart-head">
+              <span>Applications</span>
+              <strong class="font-mono">{{ healthProcesses.length }}</strong>
+            </div>
+            <p class="health-chart-meta">CPU and RAM include child processes for each supervised app.</p>
+            <p v-if="!healthProcesses.length" class="health-chart-meta">No supervised processes yet. Start apps from Catalog.</p>
+            <div v-else class="health-apps-table-wrap">
+              <table class="health-apps-table">
+                <thead>
+                  <tr>
+                    <th>App</th>
+                    <th>CPU</th>
+                    <th>RAM</th>
+                    <th class="hide-narrow">Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in healthProcesses" :key="row.name">
+                    <td>
+                      <span class="health-app-name">{{ row.displayName }}</span>
+                      <span class="health-app-state">{{ row.state || 'stopped' }}</span>
+                    </td>
+                    <td class="font-mono">{{ formatCpu(row.cpu_percent) }}</td>
+                    <td class="font-mono">{{ row.memory_rss != null ? formatBytes(row.memory_rss) : '—' }}</td>
+                    <td class="font-mono hide-narrow">{{ formatMemShare(row.memory_percent) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
         </div>
       </div>
     </div>
@@ -2813,7 +2865,7 @@ onUnmounted(() => {
 }
 
 .health-modal {
-  width: min(720px, 100%);
+  width: min(860px, 100%);
   max-height: min(90dvh, 900px);
   overflow: auto;
 }
@@ -2882,6 +2934,58 @@ onUnmounted(() => {
 .health-line.mem { stroke: #c084fc; }
 .health-fill.disk { fill: #fbbf24; }
 .health-line.disk { stroke: #fbbf24; }
+
+.health-apps-card {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 0.85rem 0.9rem 0.7rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.health-apps-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.35rem;
+}
+
+.health-apps-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.health-apps-table th,
+.health-apps-table td {
+  text-align: left;
+  padding: 0.45rem 0.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: top;
+}
+
+.health-apps-table th {
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.health-apps-table td:nth-child(n + 2) {
+  white-space: nowrap;
+}
+
+.health-app-name {
+  display: block;
+  color: #f8fafc;
+}
+
+.health-app-state {
+  display: block;
+  color: #64748b;
+  font-size: 0.72rem;
+  text-transform: lowercase;
+}
 
 .app-settings-form {
   display: flex;

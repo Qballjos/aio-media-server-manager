@@ -48,7 +48,7 @@ The dashboard lists the **17** catalog applications (installed vs available coun
 - Sort by **popularity** or **A–Z**
 - **Search** by name
 - **?** opens that application's official wiki or documentation
-- **Health** (header) shows CPU, RAM, and disk graphs
+- **Health** (header) opens host CPU/RAM/disk graphs plus per-application CPU and memory (including child processes)
 - **Download & Install** fetches the upstream binary and starts the process when it is a daemon
 - Installed apps: **Start** or **Stop**, **Open UI**, and **More** (Restart, Logs, Settings, Update, Uninstall).
 - Catalog **Settings** on a card changes the listen **port** (persisted, running apps are restarted) and **start with the manager**. Config/install paths are shown read-only. Bind mounts still change in compose, not here.

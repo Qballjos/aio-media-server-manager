@@ -21,6 +21,44 @@ def test_metrics_shape():
     assert "disk" in data
     assert "network" in data
     assert isinstance(data["cpu_per_core"], list)
+    assert isinstance(data["processes"], list)
+
+
+def test_process_metrics_include_cpu_and_memory(monkeypatch):
+    from core import metrics as metrics_mod
+
+    metrics_mod._proc_cache.clear()
+    supervisor = type("Supervisor", (), {})()
+    supervisor.list_processes = lambda: [{"name": "sonarr", "state": "running", "pid": 4242}]
+    monkeypatch.setattr(metrics_mod.ProcessSupervisor, "get", staticmethod(lambda: supervisor))
+
+    class FakeMem:
+        rss = 50 * 1024 * 1024
+
+    class FakeProc:
+        pid = 4242
+
+        def is_running(self):
+            return True
+
+        def cpu_percent(self, interval=None):
+            return 12.5
+
+        def memory_info(self):
+            return FakeMem()
+
+        def memory_percent(self):
+            return 3.2
+
+        def children(self, recursive=False):
+            return []
+
+    monkeypatch.setattr(metrics_mod.psutil, "Process", lambda pid: FakeProc())
+    rows = metrics_mod._process_metrics()
+    assert rows[0]["name"] == "sonarr"
+    assert rows[0]["cpu_percent"] == 12.5
+    assert rows[0]["memory_rss"] == 50 * 1024 * 1024
+    assert rows[0]["memory_percent"] == 3.2
 
 
 def test_transcoding_probe_does_not_require_gpu():
