@@ -54,20 +54,100 @@ def test_credentials_discovery(tmp_path: Path):
 
 @patch("requests.get")
 def test_sabnzbd_client(mock_get):
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.content = b'{"categories": ["default"]}'
-    mock_resp.json.return_value = {"categories": ["default"], "status": True}
-    mock_get.return_value = mock_resp
+    cats = ["default"]
+    servers: list[dict] = []
 
+    def fake_get(url, params=None, timeout=5.0):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mode = (params or {}).get("mode")
+        payload: dict = {"status": True}
+        if mode == "get_cats":
+            payload = {"categories": list(cats), "status": True}
+        elif mode == "get_config" and (params or {}).get("section") == "servers":
+            payload = {"config": {"servers": list(servers)}, "status": True}
+        elif mode == "set_config" and (params or {}).get("section") == "categories":
+            cats.append(str((params or {}).get("name") or ""))
+            payload = {"status": True, "categories": list(cats)}
+        elif mode == "set_config" and (params or {}).get("section") == "servers":
+            servers.append(
+                {
+                    "name": (params or {}).get("name"),
+                    "host": (params or {}).get("host"),
+                    "username": (params or {}).get("username"),
+                }
+            )
+            payload = {"status": True, "config": {"servers": list(servers)}}
+        elif mode == "del_config":
+            ident = str((params or {}).get("keyword") or "").lower()
+            servers[:] = [row for row in servers if str(row.get("name") or "").lower() != ident]
+        mock_resp.content = b"{}"
+        mock_resp.json.return_value = payload
+        return mock_resp
+
+    mock_get.side_effect = fake_get
     client = SABnzbdClient(api_key="sab_key_123")
-    cats = client.get_categories()
-    assert "default" in cats
-
-    mock_resp.json.return_value = {"status": True}
-    ok = client.add_category("sonarr", "tv")
-    assert ok is True
+    assert "default" in client.get_categories()
+    assert client.add_category("sonarr", "tv") is True
+    assert "sonarr" in cats
+    cat_call = next(
+        call.kwargs["params"]
+        for call in mock_get.call_args_list
+        if call.kwargs["params"].get("mode") == "set_config" and call.kwargs["params"].get("section") == "categories"
+    )
+    assert cat_call["name"] == "sonarr"
+    assert cat_call["dir"] == "tv"
+    mock_get.reset_mock()
     assert client.add_news_server(host="news.example.com", username="nzb-user", password="secret") is True
+    server_calls = [
+        call.kwargs["params"]
+        for call in mock_get.call_args_list
+        if call.kwargs["params"].get("mode") == "set_config" and call.kwargs["params"].get("section") == "servers"
+    ]
+    assert len(server_calls) == 1
+    saved = server_calls[0]
+    assert "keyword" not in saved
+    assert saved["name"] == "news.example.com"
+    assert saved["host"] == "news.example.com"
+    assert saved["username"] == "nzb-user"
+    assert saved["password"] == "secret"
+    assert saved["ssl"] == "1"
+    assert saved["enable"] == "1"
+    assert not any(call.kwargs["params"].get("mode") == "addserver" for call in mock_get.call_args_list)
+
+
+@patch("requests.get")
+def test_sabnzbd_news_server_skips_existing_and_drops_junk_rows(mock_get):
+    servers = [
+        {"name": "host", "host": "news.example.com"},
+        {"name": "ssl", "host": ""},
+        {"name": "news.example.com", "host": "news.example.com"},
+    ]
+
+    def fake_get(url, params=None, timeout=5.0):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mode = (params or {}).get("mode")
+        if mode == "get_config":
+            payload = {"config": {"servers": list(servers)}, "status": True}
+        elif mode == "del_config":
+            ident = str((params or {}).get("keyword") or "").lower()
+            servers[:] = [row for row in servers if str(row.get("name") or "").lower() != ident]
+            payload = {"status": True}
+        else:
+            payload = {"status": True}
+        mock_resp.content = b"{}"
+        mock_resp.json.return_value = payload
+        return mock_resp
+
+    mock_get.side_effect = fake_get
+    client = SABnzbdClient(api_key="k")
+    assert client.add_news_server(host="news.example.com", username="u", password="p") is True
+    names = {row["name"] for row in servers}
+    assert names == {"news.example.com"}
+    assert not any(
+        call.kwargs["params"].get("mode") == "set_config" for call in mock_get.call_args_list
+    )
 
 
 def test_sabnzbd_bootstrap_ini_includes_usenet(tmp_path: Path):
@@ -92,6 +172,9 @@ def test_sabnzbd_bootstrap_ini_includes_usenet(tmp_path: Path):
     text = written.read_text(encoding="utf-8")
     assert "port = 8085" in text
     assert "api_key = aabbccddeeff00112233445566778899" in text
+    assert "[[sonarr]]" in text
+    assert "dir = tv" in text
+    assert "[[radarr]]" in text
     assert "[[news.example.com]]" in text
     assert "connections = 20" in text
     assert "ssl = 1" in text
@@ -471,7 +554,7 @@ def test_optimization_hooks(tmp_path: Path):
     assert "trash_id: 72dae194fc92bf828f32cde7744e51a1" in rec_text
     assert "trash_id: d1d67249d3890e49bc12e275d989a7e9" in rec_text
     assert "reset_unmatched_scores" in rec_text
-    assert "custom_format_groups:" in rec_text
+    assert "custom_format_groups:" not in rec_text
     assert "plex-tv" in rec_text
     pro = write_profilarr_config(
         tmp_path / "profilarr",

@@ -263,6 +263,10 @@ class IntegrationEngine:
         shared = shared_admin_credentials()
         sab_user = sab_ini.get("username") or (shared[0] if shared else "")
         sab_pass = sab_ini.get("password") or (shared[1] if shared else "")
+        sab_live = SABnzbdClient(port=sab_port, api_key=sab_key) if sab_key else None
+        if sab_live:
+            for category in DOWNLOAD_CATEGORIES:
+                sab_live.add_category(category.name, dir_path=category.library)
         downloader_register = self._downloaders_for_arr(sab_key=sab_key)
 
         roots = arr_root_folders(layout)
@@ -274,7 +278,7 @@ class IntegrationEngine:
                 add_sab=lambda: sonarr_client.add_sabnzbd_client(
                     port=sab_port,
                     api_key=sab_key or "",
-                    category="sonarr",
+                    category=_arr_sab_category(sab_live, "sonarr"),
                     username=sab_user,
                     password=sab_pass,
                 ),
@@ -303,7 +307,7 @@ class IntegrationEngine:
                 add_sab=lambda: radarr_client.add_sabnzbd_client(
                     port=sab_port,
                     api_key=sab_key or "",
-                    category="radarr",
+                    category=_arr_sab_category(sab_live, "radarr"),
                     username=sab_user,
                     password=sab_pass,
                 ),
@@ -346,6 +350,7 @@ class IntegrationEngine:
                 qb_username=qb_user,
                 qb_password=qb_pass,
                 category="lidarr",
+                sab_category=_arr_sab_category(sab_live, "lidarr"),
                 register=downloader_register,
             )
             steps.append(_step("lidarr", "wire_clients_and_storage", lidarr_ok, str(layout.music)))
@@ -505,6 +510,13 @@ class IntegrationEngine:
         return {"timestamp": time.time(), "status": "completed", "steps": steps, "layout": layout.as_dict()}
 
 
+def _arr_sab_category(client: SABnzbdClient | None, name: str) -> str:
+    """Use the named SABnzbd category only when *Arr can see it; otherwise Default."""
+    if client is not None and client.has_category(name):
+        return name
+    return ""
+
+
 def _register_download_clients(
     register: list[str],
     *,
@@ -531,6 +543,7 @@ def _wire_arr_app(
     nzb_port: int,
     qb_port: int,
     category: str,
+    sab_category: str | None = None,
     sab_username: str = "",
     sab_password: str = "",
     qb_username: str = "admin",
@@ -545,7 +558,7 @@ def _wire_arr_app(
         add_sab=lambda: client.add_sabnzbd_client(
             port=sab_port,
             api_key=sab_key,
-            category=category,
+            category=sab_category if sab_category is not None else category,
             username=sab_username,
             password=sab_password,
         ),

@@ -62,34 +62,6 @@ PROFILE_OPTIONS = (
     },
 )
 
-_SONARR_HD_CF = """    custom_format_groups:
-      add:
-        - trash_id: 158188097a58d7687dee647e04af0da3  # [Optional] Golden Rule HD
-        - trash_id: 74aff4168620ed49dcc67e92b2c2a5b4  # [Optional] Language Profiles
-        - trash_id: 85fae4a2294965b75710ef2989c850eb  # [Streaming Services] HD/UHD boost
-        - trash_id: 59c3af66780d08332fdc64e68297098f  # [Unwanted] Unwanted Formats
-"""
-
-_SONARR_UHD_CF = """    custom_format_groups:
-      add:
-        - trash_id: e3f37512790f00d0e89e54fe5e790d1c  # [Optional] Golden Rule UHD
-        - trash_id: 74aff4168620ed49dcc67e92b2c2a5b4  # [Optional] Language Profiles
-        - trash_id: 85fae4a2294965b75710ef2989c850eb  # [Streaming Services] HD/UHD boost
-        - trash_id: 59c3af66780d08332fdc64e68297098f  # [Unwanted] Unwanted Formats
-"""
-
-_RADARR_HD_CF = """    custom_format_groups:
-      add:
-        - trash_id: f8bf8eab4617f12dfdbd16303d8da245  # [Optional] Golden Rule HD
-        - trash_id: a3ac6af01d78e4f21fcb75f601ac96df  # [Unwanted] Unwanted Formats
-"""
-
-_RADARR_UHD_CF = """    custom_format_groups:
-      add:
-        - trash_id: ff204bbcecdd487d1cefcefdbf0c278d  # [Optional] Golden Rule UHD
-        - trash_id: a3ac6af01d78e4f21fcb75f601ac96df  # [Unwanted] Unwanted Formats
-"""
-
 
 def default_prefs() -> dict[str, Any]:
     flags = {item["id"]: item["default"] for item in PROFILE_OPTIONS}
@@ -104,6 +76,21 @@ def prefs_path(config_dir: Path) -> Path:
 
 def yaml_path(config_dir: Path) -> Path:
     return Path(config_dir) / YAML_NAME
+
+
+def _recyclarr_log_files(config_dir: Path) -> str:
+    root = Path(config_dir) / "logs"
+    if not root.is_dir():
+        return ""
+    chunks: list[str] = []
+    for path in sorted(root.glob("*.log"))[-3:]:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")[-2500:]
+        except OSError:
+            continue
+        if text.strip():
+            chunks.append(f"--- {path.name} ---\n{text.strip()}")
+    return "\n".join(chunks)
 
 
 def load_prefs(config_dir: Path) -> dict[str, Any]:
@@ -230,13 +217,17 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
         radarr_key=get_application_api_key("radarr") or "",
         force=False,
     )
+    yaml_file = yaml_path(plugin.config_dir)
     try:
-        cmd = plugin.start_command()
+        cmd = list(plugin.start_command())
     except FileNotFoundError:
         return _fail_sync(plugin.config_dir, "Recyclarr binary is missing.")
+    if "--config" not in cmd and "-c" not in cmd:
+        cmd.extend(["--config", str(yaml_file)])
     env = {**os.environ, **plugin.extra_env()}
     env.pop("RECYCLARR_APP_DATA", None)
     env["RECYCLARR_CONFIG_DIR"] = str(plugin.config_dir)
+    env.setdefault("HOME", str(plugin.config_dir))
     try:
         completed = subprocess.run(
             cmd,
@@ -252,12 +243,24 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
     except subprocess.TimeoutExpired:
         return _fail_sync(plugin.config_dir, "Recyclarr sync timed out.")
     log = ((completed.stdout or "") + "\n" + (completed.stderr or "")).strip()
+    extra = _recyclarr_log_files(plugin.config_dir)
+    if extra:
+        log = f"{log}\n{extra}".strip()
     ok = completed.returncode == 0
+    lowered = log.lower()
+    if ok and "initializing provider" in lowered and not any(
+        token in lowered for token in ("processing", "created", "updated", "completed", "no changes", "already up")
+    ):
+        ok = False
+        detail = "Recyclarr loaded TRaSH providers but did not sync any Sonarr/Radarr instances."
+    else:
+        detail = "Sync finished." if ok else f"Recyclarr exited {completed.returncode}."
     result = {
         "ok": ok,
-        "detail": "Sync finished." if ok else f"Recyclarr exited {completed.returncode}.",
+        "detail": detail,
         "log": log[-8000:],
         "returncode": completed.returncode,
+        "config": str(yaml_file),
     }
     _store_last_sync(plugin.config_dir, result)
     return result
@@ -357,7 +360,6 @@ def _instance(
     qdef: str,
     trash_id: str,
     comment: str,
-    cf_groups: str,
     naming: str,
 ) -> str:
     return (
@@ -371,7 +373,6 @@ def _instance(
         f"      - trash_id: {trash_id}  # {comment}\n"
         "        reset_unmatched_scores:\n"
         "          enabled: true\n"
-        f"{cf_groups}"
         f"{naming}"
     )
 
@@ -395,7 +396,6 @@ def _render_yaml(
                 qdef="series",
                 trash_id=_SONARR_WEB_1080P,
                 comment="WEB-1080p",
-                cf_groups=_SONARR_HD_CF,
                 naming=_naming_block("sonarr", naming),
             )
         )
@@ -408,7 +408,6 @@ def _render_yaml(
                 qdef="series",
                 trash_id=_SONARR_WEB_2160P,
                 comment="WEB-2160p",
-                cf_groups=_SONARR_UHD_CF,
                 naming=_naming_block("sonarr", naming),
             )
         )
@@ -421,7 +420,6 @@ def _render_yaml(
                 qdef="anime",
                 trash_id=_SONARR_ANIME_REMUX_1080P,
                 comment="[Anime] Remux-1080p",
-                cf_groups="",
                 naming=_naming_block("sonarr", naming),
             )
         )
@@ -435,7 +433,6 @@ def _render_yaml(
                 qdef="movie",
                 trash_id=_RADARR_HD_BLURAY_WEB,
                 comment="HD Bluray + WEB",
-                cf_groups=_RADARR_HD_CF,
                 naming=_naming_block("radarr", naming),
             )
         )
@@ -448,7 +445,6 @@ def _render_yaml(
                 qdef="movie",
                 trash_id=_RADARR_UHD_BLURAY_WEB,
                 comment="UHD Bluray + WEB",
-                cf_groups=_RADARR_UHD_CF,
                 naming=_naming_block("radarr", naming),
             )
         )
@@ -456,7 +452,7 @@ def _render_yaml(
         "# yaml-language-server: $schema=https://schemas.recyclarr.dev/v8/config-schema.json",
         f"# {MANAGED_MARK} — official Recyclarr v8 / TRaSH Guides templates.",
         "# HD profiles are on by default. Enable 4K from Catalog → Recyclarr → Settings.",
-        "# Edit custom_format_groups here, or reset from Settings to restore TRaSH defaults.",
+        "# Guide-backed quality profiles pull custom formats from TRaSH Guides.",
         "# https://recyclarr.dev/wiki/guide-configs/",
         "",
     ]

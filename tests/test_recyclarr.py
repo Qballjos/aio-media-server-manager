@@ -59,10 +59,11 @@ def test_default_yaml_matches_trash_hd_templates(tmp_path: Path):
     assert "hd-bluray-web:" in text
     assert "web-2160p:" not in text
     assert "uhd-bluray-web:" not in text
-    assert "158188097a58d7687dee647e04af0da3" in text
-    assert "f8bf8eab4617f12dfdbd16303d8da245" in text
+    assert "72dae194fc92bf828f32cde7744e51a1" in text
+    assert "d1d67249d3890e49bc12e275d989a7e9" in text
     assert "delete_old_custom_formats: true" in text
     assert "replace_existing_custom_formats" not in text
+    assert "custom_format_groups:" not in text
     prefs = load_prefs(tmp_path / "recyclarr")
     assert prefs["sonarr_web_1080p"] is True
     assert prefs["radarr_uhd"] is False
@@ -84,8 +85,8 @@ def test_uhd_opt_in_and_jellyfin_naming(tmp_path: Path):
     text = path.read_text(encoding="utf-8")
     assert "web-2160p:" in text
     assert "uhd-bluray-web:" in text
-    assert "e3f37512790f00d0e89e54fe5e790d1c" in text
-    assert "ff204bbcecdd487d1cefcefdbf0c278d" in text
+    assert "d1498e7d189fbe6c7110ceaabb7473e6" in text
+    assert "64fb5f9858489bdac2af690e27c8f42f" in text
     assert "jellyfin-tv" in text
     assert "jellyfin-tmdb" in text
 
@@ -165,6 +166,8 @@ def test_recyclarr_sync_runs_once(tmp_path: Path, monkeypatch):
     assert mock_run.called
     argv = mock_run.call_args.args[0]
     assert "sync" in argv
+    assert "--config" in argv
+    assert argv[argv.index("--config") + 1].endswith("recyclarr.yml")
     assert "--app-data" not in argv
     env = mock_run.call_args.kwargs["env"]
     assert env["RECYCLARR_CONFIG_DIR"] == str(plugin.config_dir)

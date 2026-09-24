@@ -16,6 +16,10 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+_JUNK_SERVER_NAMES = frozenset(
+    {"host", "port", "username", "password", "connections", "ssl", "enable", "displayname", "name"}
+)
+
 _INI_KEY = re.compile(r"(?im)^api_key\s*=\s*[\"']?([0-9a-zA-Z]{16,})[\"']?")
 _INI_USER = re.compile(r"(?im)^username\s*=\s*[\"']?([^\"'\n#]*?)[\"']?\s*$")
 _INI_PASS = re.compile(r"(?im)^password\s*=\s*[\"']?([^\"'\n#]*?)[\"']?\s*$")
@@ -68,20 +72,38 @@ class SABnzbdClient:
     def get_categories(self) -> list[str]:
         """Fetch list of existing category names."""
         data = self._request("get_cats")
-        return data.get("categories", [])
+        raw = data.get("categories", [])
+        if isinstance(raw, dict):
+            raw = raw.get("categories") or raw.get("value") or []
+        if not isinstance(raw, list):
+            return []
+        return [str(item).strip() for item in raw if str(item).strip()]
+
+    def has_category(self, name: str) -> bool:
+        want = (name or "").strip().lower()
+        if not want:
+            return False
+        return want in {item.lower() for item in self.get_categories() if item not in {"*", ""}}
 
     def add_category(self, name: str, dir_path: str = "") -> bool:
-        """Create or update category if missing."""
-        cats = self.get_categories()
-        if name in cats:
-            logger.info("SABnzbd category '%s' already exists.", name)
+        """Create or update a category (SABnzbd 5: set_config on the categories section)."""
+        want = (name or "").strip().lower()
+        if not want:
+            return False
+        if self.has_category(want):
+            logger.info("SABnzbd category '%s' already exists.", want)
             return True
-
-        res = self._request("addcategory", {"name": name, "dir": dir_path})
-        success = bool(res.get("status", False))
-        if success:
-            logger.info("Added SABnzbd category '%s' -> '%s'", name, dir_path)
-        return success
+        params = {"section": "categories", "name": want, "dir": dir_path or ""}
+        res = self._request("set_config", params)
+        if self.has_category(want):
+            logger.info("Added SABnzbd category '%s' -> '%s'", want, dir_path)
+            return True
+        logger.warning(
+            "SABnzbd category '%s' was not created (%s).",
+            want,
+            res.get("error") or res.get("status"),
+        )
+        return False
 
     def set_folders(self, complete_dir: str, incomplete_dir: str) -> bool:
         """Point SABnzbd at the appliance complete and incomplete directories."""
@@ -111,40 +133,66 @@ class SABnzbdClient:
         connections: int = 8,
         displayname: str = "",
     ) -> bool:
-        """Add or update a Usenet news server in SABnzbd."""
+        """Add or update a single Usenet server (one set_config, never per-field rows)."""
         host = (host or "").strip()
         if not host:
             return False
         name = (displayname or host).strip()
-        fields = {
-            "host": host,
-            "port": str(int(port) or 563),
-            "username": username or "",
-            "password": password or "",
-            "connections": str(max(1, int(connections) or 8)),
-            "ssl": "1" if ssl else "0",
-            "enable": "1",
-            "displayname": name,
-        }
-        added = self._request("addserver", {"name": name, **fields})
-        if bool(added.get("status", False)):
-            logger.info("Added SABnzbd Usenet server '%s'.", name)
+        self._remove_accidental_servers()
+        if self._has_news_server(host):
+            logger.info("SABnzbd already has Usenet server for '%s'.", host)
             return True
-        # SABnzbd 5 prefers set_config on the servers section.
-        created = self._request(
+        # Do not pass `keyword` — SABnzbd treats it as the server identity.
+        res = self._request(
             "set_config",
-            {"section": "servers", "keyword": "host", "value": host, "name": name},
+            {
+                "section": "servers",
+                "name": name,
+                "host": host,
+                "port": str(int(port) or 563),
+                "username": username or "",
+                "password": password or "",
+                "connections": str(max(1, int(connections) or 8)),
+                "ssl": "1" if ssl else "0",
+                "enable": "1",
+                "displayname": name,
+            },
         )
-        ok = bool(created.get("status", False)) or bool(added.get("status", False))
-        for keyword, value in fields.items():
-            res = self._request(
-                "set_config",
-                {"section": "servers", "keyword": keyword, "value": value, "name": name},
-            )
-            ok = bool(res.get("status", False)) or ok
+        ok = bool(res.get("status", False)) or self._has_news_server(host)
         if ok:
             logger.info("Configured SABnzbd Usenet server '%s'.", name)
+        else:
+            logger.warning("SABnzbd Usenet server '%s' was not saved (%s).", name, res.get("error") or res)
         return ok
+
+    def list_servers(self) -> list[dict[str, Any]]:
+        data = self._request("get_config", {"section": "servers"})
+        rows = data.get("config")
+        if isinstance(rows, dict):
+            rows = rows.get("servers")
+        if rows is None:
+            rows = data.get("servers")
+        if not isinstance(rows, list):
+            return []
+        return [item for item in rows if isinstance(item, dict)]
+
+    def _has_news_server(self, host: str) -> bool:
+        want = host.strip().lower()
+        for item in self.list_servers():
+            if str(item.get("host") or "").strip().lower() == want:
+                return True
+            if str(item.get("name") or "").strip().lower() == want:
+                return True
+        return False
+
+    def _remove_accidental_servers(self) -> None:
+        """Drop servers created by the old per-keyword set_config loop (named host, port, ssl, …)."""
+        for item in self.list_servers():
+            ident = str(item.get("name") or item.get("host") or "").strip().lower()
+            if ident not in _JUNK_SERVER_NAMES:
+                continue
+            self._request("del_config", {"section": "servers", "keyword": ident})
+            logger.info("Removed extra SABnzbd server entry '%s'.", ident)
 
 
 def _ini_value(value: object) -> str:
@@ -190,6 +238,32 @@ def write_bootstrap_ini(
         lines.append(f"username = {_ini_value(username)}")
     if password:
         lines.append(f"password = {_ini_value(password)}")
+    lines.extend(
+        [
+            "",
+            "[categories]",
+            "[[sonarr]]",
+            "order = 0",
+            "pp = 3",
+            "priority = 0",
+            "dir = tv",
+            "[[radarr]]",
+            "order = 1",
+            "pp = 3",
+            "priority = 0",
+            "dir = movies",
+            "[[anime]]",
+            "order = 2",
+            "pp = 3",
+            "priority = 0",
+            "dir = anime",
+            "[[lidarr]]",
+            "order = 3",
+            "pp = 3",
+            "priority = 0",
+            "dir = music",
+        ]
+    )
     server = usenet or {}
     host = str(server.get("host") or "").strip()
     if host:
