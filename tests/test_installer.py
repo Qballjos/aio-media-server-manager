@@ -353,6 +353,29 @@ def test_bazarr_start_uses_python_not_raw_script(tmp_path: Path):
     assert str(app.port) in cmd
 
 
+def test_sabnzbd_start_uses_venv_runner(tmp_path: Path, monkeypatch):
+    from applications.sabnzbd import SabnzbdApp
+
+    install_root = tmp_path / "apps"
+    app_dir = install_root / "sabnzbd"
+    app_dir.mkdir(parents=True)
+    (app_dir / "SABnzbd.py").write_text("print('ok')\n", encoding="utf-8")
+    venv_python = app_dir / "venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    venv_python.chmod(0o755)
+
+    app = SabnzbdApp(base_config_dir=tmp_path / "config", base_install_dir=install_root)
+    monkeypatch.setattr(app, "_ensure_runtime", lambda: venv_python)
+    cmd = app.start_command()
+    runner = app_dir / "run-sabnzbd"
+    assert runner.is_file()
+    assert str(venv_python) in runner.read_text(encoding="utf-8")
+    assert cmd[0] == str(runner)
+    assert f"0.0.0.0:{app.port}" in cmd
+    assert str(app.config_dir / "sabnzbd.ini") in cmd
+
+
 def test_child_python_prefers_env_override(tmp_path: Path, monkeypatch):
     from applications.install_helpers import child_python
 

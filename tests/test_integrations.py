@@ -20,7 +20,7 @@ from core.integrations.prowlarr import ProwlarrClient
 from applications.qbittorrent.webui import ensure_webui_localhost_access
 from core.integrations.qbittorrent import QBittorrentClient
 from core.integrations.radarr import RadarrClient
-from core.integrations.sabnzbd import SABnzbdClient
+from core.integrations.sabnzbd import SABnzbdClient, write_bootstrap_ini
 from core.integrations.seerr import SeerrClient
 from core.integrations.sonarr import SonarrClient
 from core.integrations.engine import WIRE_AFTER_INSTALL, _register_download_clients
@@ -59,6 +59,63 @@ def test_sabnzbd_client(mock_get):
     ok = client.add_category("sonarr", "tv")
     assert ok is True
     assert client.add_news_server(host="news.example.com", username="nzb-user", password="secret") is True
+
+
+def test_sabnzbd_bootstrap_ini_includes_usenet(tmp_path: Path):
+    path = tmp_path / "sabnzbd.ini"
+    written = write_bootstrap_ini(
+        path,
+        port=8085,
+        complete_dir="/data/downloads/complete",
+        incomplete_dir="/data/downloads/incomplete",
+        username="admin",
+        password="space pass",
+        usenet={
+            "host": "news.example.com",
+            "port": 563,
+            "ssl": True,
+            "username": "nzb-user",
+            "password": "p#secret",
+            "connections": 20,
+        },
+        api_key="aabbccddeeff00112233445566778899",
+    )
+    text = written.read_text(encoding="utf-8")
+    assert "port = 8085" in text
+    assert "api_key = aabbccddeeff00112233445566778899" in text
+    assert "[[news.example.com]]" in text
+    assert "connections = 20" in text
+    assert "ssl = 1" in text
+    write_bootstrap_ini(path, port=1, complete_dir="x", incomplete_dir="y")
+    assert "port = 8085" in path.read_text(encoding="utf-8")
+
+
+def test_sabnzbd_post_install_seeds_ini_and_api_key(tmp_path: Path, monkeypatch):
+    from applications.sabnzbd import SabnzbdApp
+    from core.integrations.credentials import get_application_api_key
+
+    monkeypatch.setattr(
+        "core.integrations.usenet.load_usenet_server",
+        lambda: {
+            "host": "news.example.com",
+            "port": 563,
+            "ssl": True,
+            "username": "nzb-user",
+            "password": "nzb-secret",
+            "connections": 12,
+        },
+    )
+    monkeypatch.setattr("core.shared_credentials.shared_admin_credentials", lambda: ("admin", "shared-pass"))
+    app = SabnzbdApp(base_config_dir=tmp_path / "config", base_install_dir=tmp_path / "apps")
+    app.post_install()
+    ini = app.config_dir / "sabnzbd.ini"
+    text = ini.read_text(encoding="utf-8")
+    assert "news.example.com" in text
+    assert "connections = 12" in text
+    assert "username = admin" in text
+    key = get_application_api_key("sabnzbd", app_config_dir=app.config_dir)
+    assert key
+    assert len(key) >= 32
 
 
 @patch("requests.Session.post")

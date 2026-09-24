@@ -85,3 +85,10 @@ def test_jellyfin_start_passes_webdir(tmp_path: Path):
     assert "--webdir" in cmd
     assert str(web) in cmd
     assert "--datadir" in cmd
+    assert "--http-port" not in cmd
+    network = app.config_dir / "network.xml"
+    assert network.is_file()
+    xml = network.read_text(encoding="utf-8")
+    assert f"<InternalHttpPort>{app.port}</InternalHttpPort>" in xml
+    app.apply_listen_port(18096)
+    assert "<InternalHttpPort>18096</InternalHttpPort>" in network.read_text(encoding="utf-8")

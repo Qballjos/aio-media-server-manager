@@ -68,6 +68,7 @@ RUN apt-get update \
         unrar-free \
         par2 \
         p7zip-full \
+        git \
         build-essential \
         python3-dev \
         ${ICU_PKG} \

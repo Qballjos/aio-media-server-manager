@@ -77,7 +77,59 @@ class JellyfinApp(BaseApplication):
             "JELLYFIN_CACHE_DIR": str(cache),
         }
 
+    def apply_listen_port(self, port: int) -> None:
+        super().apply_listen_port(port)
+        self._write_http_port(port)
+
+    def post_install(self) -> None:
+        self._write_http_port(self.port)
+
+    def _write_http_port(self, port: int | None = None) -> Path:
+        """Jellyfin 12 dropped --http-port; listen port lives in network.xml."""
+        listen = int(port if port is not None else self.port)
+        path = self.config_dir / "network.xml"
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        if path.is_file():
+            text = path.read_text(encoding="utf-8")
+            updated = False
+            for tag in ("InternalHttpPort", "PublicHttpPort", "HttpServerPortNumber"):
+                next_text, count = re.subn(
+                    rf"(<{tag}>)(\s*)\d+(\s*)(</{tag}>)",
+                    rf"\g<1>\g<2>{listen}\g<3>\g<4>",
+                    text,
+                    flags=re.IGNORECASE,
+                )
+                if count:
+                    text = next_text
+                    updated = True
+            if not re.search(r"<InternalHttpPort>", text, re.IGNORECASE):
+                text = re.sub(
+                    r"</NetworkConfiguration>",
+                    (
+                        f"  <InternalHttpPort>{listen}</InternalHttpPort>\n"
+                        f"  <PublicHttpPort>{listen}</PublicHttpPort>\n"
+                        "</NetworkConfiguration>"
+                    ),
+                    text,
+                    count=1,
+                    flags=re.IGNORECASE,
+                )
+                updated = True
+            if updated:
+                path.write_text(text, encoding="utf-8")
+            return path
+        path.write_text(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            "<NetworkConfiguration>\n"
+            f"  <InternalHttpPort>{listen}</InternalHttpPort>\n"
+            f"  <PublicHttpPort>{listen}</PublicHttpPort>\n"
+            "</NetworkConfiguration>\n",
+            encoding="utf-8",
+        )
+        return path
+
     def build_start_command(self, executable: Path) -> list[str]:
+        self._write_http_port(self.port)
         cmd = [
             str(executable),
             "--datadir",
@@ -88,8 +140,6 @@ class JellyfinApp(BaseApplication):
             str(settings.config_dir / "logs" / "jellyfin"),
             "--cachedir",
             str(settings.cache_dir / "jellyfin"),
-            "--http-port",
-            str(self.port),
         ]
         webdir = self._webdir()
         if webdir is not None:
@@ -105,12 +155,14 @@ class JellyfinApp(BaseApplication):
         response.raise_for_status()
         filename, version = pick_jellyfin_archive(response.text, repo_arch)
         url = f"{listing_url}{filename}"
-        return installer.install_from_url(
+        result = installer.install_from_url(
             url=url,
             app_name=self.name,
             executable_name=self.executable_name,
             version=version,
         )
+        self.post_install()
+        return result
 
     def _webdir(self) -> Path | None:
         direct = self.install_dir / "jellyfin-web"
