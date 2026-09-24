@@ -1,0 +1,425 @@
+<script setup>
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { appIconSrc } from './appIcons.js'
+
+const props = defineProps({
+  apiRequest: { type: Function, required: true },
+})
+const emit = defineEmits(['manage'])
+
+const snapshot = ref({
+  apps: [],
+  calendar: [],
+  downloads: [],
+  recent: [],
+  seerr: { available: false, url: null },
+})
+const loading = ref(true)
+const query = ref('')
+const results = ref([])
+const searching = ref(false)
+const searchSeerr = ref(false)
+const notice = ref('')
+const requestBusy = ref('')
+let poll = null
+let searchTimer = null
+
+const hasWidgets = computed(
+  () =>
+    snapshot.value.calendar.length ||
+    snapshot.value.downloads.length ||
+    snapshot.value.recent.length,
+)
+
+async function loadSnapshot() {
+  try {
+    const res = await props.apiRequest('/api/homepage')
+    if (res.ok) snapshot.value = await res.json()
+  } catch (_) {
+    /* keep last snapshot */
+  } finally {
+    loading.value = false
+  }
+}
+
+async function runSearch() {
+  const q = query.value.trim()
+  if (q.length < 2) {
+    results.value = []
+    searchSeerr.value = false
+    return
+  }
+  searching.value = true
+  try {
+    const res = await props.apiRequest(`/api/homepage/search?q=${encodeURIComponent(q)}`)
+    if (res.ok) {
+      const data = await res.json()
+      results.value = data.results || []
+      searchSeerr.value = !!data.seerr
+    }
+  } catch (_) {
+    results.value = []
+  } finally {
+    searching.value = false
+  }
+}
+
+function onQueryInput() {
+  notice.value = ''
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(runSearch, 280)
+}
+
+async function requestTitle(item) {
+  if (!item?.can_request) return
+  const key = `${item.mediaType}-${item.mediaId}`
+  requestBusy.value = key
+  notice.value = ''
+  try {
+    const res = await props.apiRequest('/api/homepage/request', {
+      method: 'POST',
+      body: JSON.stringify({
+        mediaType: item.mediaType,
+        mediaId: item.mediaId,
+        seasons: item.mediaType === 'tv' ? 'all' : undefined,
+      }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      notice.value = data.detail || 'Request submitted.'
+    } else {
+      notice.value = data.detail || 'Request failed.'
+    }
+  } catch (err) {
+    notice.value = err.message || 'Request failed.'
+  } finally {
+    requestBusy.value = ''
+  }
+}
+
+function formatWhen(value) {
+  if (!value) return ''
+  const text = String(value)
+  if (/^\d+$/.test(text) && text.length >= 9) {
+    return new Date(Number(text) * 1000).toLocaleString()
+  }
+  const dt = new Date(text)
+  if (!Number.isNaN(dt.getTime())) return dt.toLocaleString()
+  return text.replace('T', ' ').slice(0, 16)
+}
+
+onMounted(() => {
+  loadSnapshot()
+  poll = setInterval(loadSnapshot, 15000)
+})
+onUnmounted(() => {
+  if (poll) clearInterval(poll)
+  clearTimeout(searchTimer)
+})
+</script>
+
+<template>
+  <section class="home-shell">
+    <div class="home-hero glass-card">
+      <div>
+        <p class="home-kicker">Household</p>
+        <h2>Watch and request</h2>
+        <p class="home-lead">
+          Open installed apps and see what’s airing, downloading, or newly added. Process
+          controls stay on Catalog.
+        </p>
+      </div>
+      <button type="button" class="ui-btn ui-btn-ghost" @click="emit('manage')">Open Catalog</button>
+    </div>
+
+    <p v-if="loading" class="home-muted">Loading homepage…</p>
+
+    <div v-else-if="!snapshot.apps.length" class="home-empty glass-card">
+      <h3>Nothing to launch yet</h3>
+      <p>Finish the wizard or install apps from Catalog. This page only lists installed services.</p>
+      <button type="button" class="ui-btn ui-btn-primary" @click="emit('manage')">Go to Catalog</button>
+    </div>
+
+    <template v-else>
+      <div class="home-launcher">
+        <a
+          v-for="app in snapshot.apps"
+          :key="app.name"
+          class="home-app"
+          :class="{ 'is-down': !app.running }"
+          :href="app.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          :title="app.running ? app.display_name : `${app.display_name} is stopped`"
+        >
+          <img
+            v-if="appIconSrc(app.name)"
+            :src="appIconSrc(app.name)"
+            :alt="app.display_name"
+            class="home-app-icon"
+          />
+          <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
+          <span class="home-app-name">{{ app.display_name }}</span>
+          <span class="home-app-state">{{ app.running ? 'Open' : 'Stopped' }}</span>
+        </a>
+      </div>
+
+      <form class="home-search glass-card" @submit.prevent="runSearch">
+        <label class="home-search-label" for="home-search">Search</label>
+        <div class="home-search-row">
+          <input
+            id="home-search"
+            v-model="query"
+            class="ui-input"
+            type="search"
+            autocomplete="off"
+            :placeholder="snapshot.seerr.available ? 'Search movies and TV to request' : 'Search Sonarr and Radarr'"
+            @input="onQueryInput"
+          />
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="searching">Search</button>
+        </div>
+        <p v-if="notice" class="home-notice">{{ notice }}</p>
+        <p v-else-if="!snapshot.seerr.available" class="home-muted">
+          Install and start Seerr to request titles from this page.
+        </p>
+        <ul v-if="results.length" class="home-results">
+          <li v-for="item in results" :key="`${item.source}-${item.mediaType}-${item.mediaId}`" class="home-result">
+            <img v-if="item.poster" :src="item.poster" alt="" class="home-poster" />
+            <div class="home-result-body">
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.mediaType }} {{ String(item.year || '').slice(0, 4) }}</span>
+            </div>
+            <button
+              v-if="item.can_request && searchSeerr"
+              type="button"
+              class="ui-btn ui-btn-primary"
+              :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
+              @click="requestTitle(item)"
+            >
+              Request
+            </button>
+          </li>
+        </ul>
+      </form>
+
+      <div v-if="hasWidgets" class="home-widgets">
+        <article v-if="snapshot.calendar.length" class="home-widget glass-card">
+          <h3>Coming up</h3>
+          <ul>
+            <li v-for="(item, idx) in snapshot.calendar" :key="idx">
+              <span class="home-when">{{ formatWhen(item.when) }}</span>
+              <strong>{{ item.title }}</strong>
+              <span class="home-muted">{{ item.detail }}</span>
+            </li>
+          </ul>
+        </article>
+        <article v-if="snapshot.downloads.length" class="home-widget glass-card">
+          <h3>Downloading</h3>
+          <ul>
+            <li v-for="(item, idx) in snapshot.downloads" :key="idx">
+              <strong>{{ item.title }}</strong>
+              <span class="home-muted">{{ item.source }} · {{ item.status }} · {{ item.progress }}%</span>
+              <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
+            </li>
+          </ul>
+        </article>
+        <article v-if="snapshot.recent.length" class="home-widget glass-card">
+          <h3>Recently added</h3>
+          <ul>
+            <li v-for="(item, idx) in snapshot.recent" :key="idx">
+              <strong>{{ item.title }}</strong>
+              <span class="home-muted">{{ item.source }} · {{ item.detail }}</span>
+            </li>
+          </ul>
+        </article>
+      </div>
+      <p v-else class="home-muted">
+        Calendar, downloads, and recently added appear after Sonarr, Radarr, download clients, Jellyfin, or Plex are running.
+      </p>
+    </template>
+  </section>
+</template>
+
+<style scoped>
+.home-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  min-width: 0;
+}
+.home-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1.25rem 1.4rem;
+}
+.home-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-info);
+  margin-bottom: 0.35rem;
+}
+.home-hero h2 {
+  font-size: 1.45rem;
+  margin-bottom: 0.35rem;
+}
+.home-lead,
+.home-muted {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+.home-empty {
+  padding: 1.5rem;
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+.home-launcher {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.75rem;
+}
+.home-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.85rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.home-app:hover {
+  border-color: var(--border-hover);
+}
+.home-app.is-down {
+  opacity: 0.55;
+}
+.home-app-icon,
+.home-app-fallback {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.65rem;
+  object-fit: contain;
+}
+.home-app-fallback {
+  display: grid;
+  place-items: center;
+  background: var(--bg-surface-elevated);
+  font-weight: 600;
+}
+.home-app-name {
+  font-size: 0.82rem;
+  text-align: center;
+  line-height: 1.2;
+}
+.home-app-state {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+.home-search {
+  padding: 1rem 1.2rem;
+  display: grid;
+  gap: 0.65rem;
+}
+.home-search-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.home-search-row {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+.home-search-row .ui-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.home-notice {
+  color: var(--color-info);
+  font-size: 0.9rem;
+}
+.home-results {
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+.home-result {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.home-poster {
+  width: 2.5rem;
+  height: 3.6rem;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.home-result-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+}
+.home-result-body span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.home-widgets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+.home-widget {
+  padding: 1rem 1.15rem;
+  min-width: 0;
+}
+.home-widget h3 {
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+}
+.home-widget ul {
+  list-style: none;
+  display: grid;
+  gap: 0.7rem;
+}
+.home-widget li {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.home-widget strong {
+  overflow-wrap: anywhere;
+}
+.home-when {
+  font-size: 0.75rem;
+  color: var(--color-info);
+  font-family: var(--font-mono);
+}
+.home-bar {
+  display: block;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+.home-bar span {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+}
+@media (max-width: 720px) {
+  .home-hero {
+    flex-direction: column;
+  }
+}
+</style>

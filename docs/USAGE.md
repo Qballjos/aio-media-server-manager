@@ -26,9 +26,21 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 
 **Finish** persists settings and queues catalog installs. Wiring (indexers, download clients, libraries, Seerr) runs **after each app is installed and answers its health check**, not during the Finish request. Apps that are not installed or not running are skipped so *Arr is not pointed at a dead downloader.
 
-**Skip** opens the dashboard without installing anything. You can install applications later from the catalog.
+**Skip** opens the household homepage without installing anything. You can install applications later from **Catalog**.
 
-## 3. Catalog dashboard
+## 3. Household homepage
+
+After the wizard, **Home** is the front page for watching and requesting. It reuses the manager login (no extra household accounts). There are no start/stop/install controls here.
+
+- **Launcher** lists installed apps that have a WebUI. Recyclarr is omitted (CLI only). Stopped apps still appear dimmed.
+- **Coming up** uses Sonarr and Radarr calendars when those processes are running.
+- **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
+- **Recently added** uses Jellyfin and/or Plex.
+- **Search** talks to Seerr when it is running (Request button). Without Seerr, it falls back to Sonarr/Radarr lookup only.
+
+Missing apps hide their widgets. **Catalog** is still the admin dashboard for install, process controls, logs, and Auto-Wire.
+
+## 4. Catalog dashboard
 
 The dashboard lists the **17** catalog applications (installed vs available counts are separate).
 
@@ -50,7 +62,7 @@ Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14
 
 SABnzbd needs the non-free Debian `unrar` package (RAR 5). Recreate the appliance image if you still see **UNRAR version is 0.00**. Helpful warnings are off in the bootstrap `sabnzbd.ini`.
 
-## 4. Shared local login
+## 5. Shared local login
 
 When you create the admin (and again on later successful logins or account changes), the manager stores the username, password, and email in the encrypted secret store and applies them to applications that support a **local user**:
 
@@ -73,12 +85,12 @@ These remain separate accounts inside each product. They are created to **match*
 
 Open **Open UI** on each app the first time to confirm that product's own setup finished (especially Jellyfin and Plex).
 
-## 5. VPN and remote access
+## 6. VPN and remote access
 
 - Upload or paste a WireGuard (`.conf`) or OpenVPN (`.ovpn`) profile in the wizard or **Settings → VPN**. It is written under `/config/vpn/` (`wg0.conf` or `client.ovpn`) with mode `600`. You can still point at an existing path. Only **qBittorrent** and **Prowlarr** are tunneled. Usenet clients stay on the normal network.
 - Optional [Cloudflare Tunnel](../deploy/CLOUDFLARE.md) can be toggled from **Settings → Remote access** or `AMM_CLOUDFLARE_TUNNEL_*`. `cloudflared` runs inside this appliance.
 
-## 6. Backups and updates
+## 7. Backups and updates
 
 **Settings → Backups** lists configuration archives (config, secrets, databases — never media). You can set retention, backup now, restore, or delete.
 
@@ -86,7 +98,7 @@ Open **Open UI** on each app the first time to confirm that product's own setup 
 
 **Settings → Updates** schedules GitHub checks (off / daily / weekly / monthly) and optionally applies them (off = notify only, same as check, or a separate cadence). Time of day uses the host timezone from **Settings → General**. The job skips apps that are not installed or in a crash loop, respects `GITHUB_TOKEN` / Settings → GitHub, and pauses while the wizard is open or an install is running. Last check / last apply timestamps appear on the dashboard and in Settings.
 
-## 7. Settings
+## 8. Settings
 
 The **Settings** nav item is the admin page for the appliance (separate from per-app catalog cards). Bind mounts and the manager listen address stay in compose/env.
 

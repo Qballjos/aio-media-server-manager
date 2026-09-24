@@ -17,6 +17,7 @@ from api.routers import backups as backups_router
 from api.routers import catalog as catalog_router
 from api.routers import diagnostics as diagnostics_router
 from api.routers import health as health_router
+from api.routers import homepage as homepage_router
 from api.routers import integrations as integrations_router
 from api.routers import logs as logs_router
 from api.routers import settings as settings_router
@@ -38,6 +39,7 @@ individual Docker containers for each application.
 ### Quick links
 - **[Health](/health)** — Service health check
 - **[Auth](/api/auth/status)** — Session status and setup
+- **[Homepage](/api/homepage)** — Household launcher and widgets
 - **[Catalog](/api/catalog)** — Available applications and ports
 - **[Applications](/api/applications)** — Process status and lifecycle
 - **[System info](/api/system/info)** — Paths, permissions, system status
@@ -131,6 +133,7 @@ def create_app() -> FastAPI:
     # Routers
     # ------------------------------------------------------------------
     app.include_router(health_router.router)
+    app.include_router(homepage_router.router)
     app.include_router(auth_router.router)
     app.include_router(catalog_router.router)
     app.include_router(applications_router.router)

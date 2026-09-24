@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { appIconSrc } from './appIcons.js'
 import WizardPanel from './WizardPanel.vue'
 import SettingsPanel from './SettingsPanel.vue'
+import HomepagePanel from './HomepagePanel.vue'
 
 // --- State Variables ---
 const authStatus = ref({
@@ -39,7 +40,7 @@ const actionLoading = ref({}) // map appName -> action ("start", "stop", etc.)
 const iconFailed = ref({})
 const wizardCompleted = ref(true)
 const wizardStatusLoaded = ref(false)
-const currentView = ref('dashboard')
+const currentView = ref('home')
 
 // Toast messages
 const toasts = ref([])
@@ -277,7 +278,7 @@ async function handleLogout() {
   localStorage.removeItem('amm_token')
   authStatus.value.authenticated = false
   authStatus.value.username = null
-  currentView.value = 'dashboard'
+  currentView.value = 'home'
   showToast('Logged out successfully.', 'info')
 }
 
@@ -338,7 +339,7 @@ async function fetchWizardStatus() {
 
 async function onWizardDone() {
     wizardCompleted.value = true
-    currentView.value = 'dashboard'
+    currentView.value = 'home'
     showToast('Setup wizard finished. Catalog installs may continue in the background.', 'success')
   await refreshDashboard()
 }
@@ -1020,15 +1021,33 @@ onUnmounted(() => {
         </div>
         <button
           v-if="authStatus.authenticated && wizardCompleted"
-          @click="currentView = currentView === 'settings' ? 'dashboard' : 'settings'"
+          @click="currentView = 'home'"
+          class="metric-pill metric-pill-action"
+          :class="{ 'is-active': currentView === 'home' }"
+          title="Household homepage"
+        >
+          Home
+        </button>
+        <button
+          v-if="authStatus.authenticated && wizardCompleted"
+          @click="currentView = 'catalog'"
+          class="metric-pill metric-pill-action"
+          :class="{ 'is-active': currentView === 'catalog' }"
+          title="Install and manage applications"
+        >
+          Catalog
+        </button>
+        <button
+          v-if="authStatus.authenticated && wizardCompleted"
+          @click="currentView = 'settings'"
           class="metric-pill metric-pill-action"
           :class="{ 'is-active': currentView === 'settings' }"
           title="Settings and debug share link"
         >
-          {{ currentView === 'settings' ? 'Dashboard' : 'Settings' }}
+          Settings
         </button>
         <button
-          v-if="authStatus.authenticated"
+          v-if="authStatus.authenticated && currentView === 'catalog'"
           @click="runAutomatedWiring"
           class="metric-pill metric-pill-action"
           :disabled="wiringRunning"
@@ -1201,6 +1220,11 @@ onUnmounted(() => {
           :system-info="systemInfo"
           :host-arch="hostArch"
           @session="onSettingsSession"
+        />
+        <HomepagePanel
+          v-else-if="currentView === 'home'"
+          :api-request="apiRequest"
+          @manage="currentView = 'catalog'"
         />
         <template v-else>
         <!-- Metric Cards -->
