@@ -42,6 +42,15 @@ def test_credentials_discovery(tmp_path: Path):
     set_application_api_key("radarr", "fedcba9876543210fedcba9876543210")
     assert get_application_api_key("radarr") == "fedcba9876543210fedcba9876543210"
 
+    sab_dir = tmp_path / "sabnzbd"
+    sab_dir.mkdir()
+    set_application_api_key("sabnzbd", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    (sab_dir / "sabnzbd.ini").write_text(
+        '[misc]\napi_key = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"\nusername = amm\n',
+        encoding="utf-8",
+    )
+    assert get_application_api_key("sabnzbd", app_config_dir=sab_dir) == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
 
 @patch("requests.get")
 def test_sabnzbd_client(mock_get):
@@ -233,6 +242,49 @@ def test_sonarr_adds_download_client_with_force_save(mock_post, mock_get):
     assert mock_post.call_args.kwargs["json"]["protocol"] == "torrent"
 
 
+@patch("requests.get")
+@patch("requests.post")
+def test_sonarr_adds_sabnzbd_from_pascal_schema(mock_post, mock_get):
+    def fake_get(url, *args, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        if url.endswith("/downloadclient/schema"):
+            resp.json.return_value = [
+                {
+                    "implementation": "Sabnzbd",
+                    "protocol": "usenet",
+                    "priority": 1,
+                    "fields": [
+                        {"name": "Host", "value": "localhost"},
+                        {"name": "Port", "value": 8080},
+                        {"name": "ApiKey", "value": ""},
+                        {"name": "Username", "value": ""},
+                        {"name": "Password", "value": ""},
+                        {"name": "TvCategory", "value": "tv"},
+                    ],
+                }
+            ]
+        else:
+            resp.json.return_value = []
+        return resp
+
+    mock_get.side_effect = fake_get
+    mock_post.return_value.status_code = 201
+    assert (
+        SonarrClient(api_key="k").add_sabnzbd_client(
+            port=8085, api_key="sabkeysabkeysabkeysabkeysabkey12", category="sonarr", username="amm", password="pw"
+        )
+        is True
+    )
+    fields = {item["name"]: item.get("value") for item in mock_post.call_args.kwargs["json"]["fields"]}
+    assert fields["Host"] == "127.0.0.1"
+    assert fields["Port"] == 8085
+    assert fields["ApiKey"] == "sabkeysabkeysabkeysabkeysabkey12"
+    assert fields["TvCategory"] == "sonarr"
+    assert fields["Username"] == "amm"
+    assert mock_post.call_args.kwargs["json"]["protocol"] == "usenet"
+
+
 def test_qbittorrent_profile_bypasses_localhost_auth(tmp_path: Path):
     conf = ensure_webui_localhost_access(tmp_path)
     text = conf.read_text(encoding="utf-8")
@@ -242,6 +294,19 @@ def test_qbittorrent_profile_bypasses_localhost_auth(tmp_path: Path):
     nested = tmp_path / "qBittorrent" / "config" / "qBittorrent.conf"
     assert nested.is_file()
     assert "10.200.200.0/24" in nested.read_text(encoding="utf-8")
+
+
+def test_qbittorrent_conf_enables_vuetorrent(tmp_path: Path):
+    ui = tmp_path / "vuetorrent"
+    ui.mkdir()
+    (ui / "index.html").write_text("<html></html>", encoding="utf-8")
+    conf = ensure_webui_localhost_access(tmp_path, alternative_ui_root=ui)
+    text = conf.read_text(encoding="utf-8")
+    assert "WebUI\\AlternativeUIEnabled=true" in text
+    assert f"WebUI\\RootFolder={ui}" in text
+    conf = ensure_webui_localhost_access(tmp_path, alternative_ui_root=None)
+    text = conf.read_text(encoding="utf-8")
+    assert "WebUI\\AlternativeUIEnabled=false" in text
 
 
 def test_qbittorrent_profile_seeds_shared_webui_password(tmp_path: Path):

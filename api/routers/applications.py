@@ -7,6 +7,7 @@ managed applications.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -16,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
 from applications.catalog import ApplicationCatalog, refresh_live_catalogs
-from core.app_prefs import AppPrefsError, autostart_for, update_app_prefs
+from core.app_prefs import AppPrefsError, autostart_for, set_app_option, update_app_prefs
 from core.auth import auth_manager
 from core.settings import settings
 from core.supervisor import ProcessSupervisor
@@ -35,6 +36,7 @@ updater = ApplicationUpdater(app_settings=settings)
 class AppSettingsPatch(BaseModel):
     port: int | None = None
     autostart: bool | None = None
+    vuetorrent: bool | None = None
     restart: bool = True
 
 
@@ -245,7 +247,12 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
     if plugin.name == "recyclarr":
         notes.append(
             "Recyclarr is a one-shot CLI. Use Settings to pick TRaSH profiles, edit recyclarr.yml, "
-            "or restore defaults. Sync on the card (or Sync now) runs recyclarr sync against Sonarr/Radarr."
+            "or restore defaults. Sync on the card, Auto-Wire, or Sync now runs recyclarr sync against Sonarr/Radarr."
+        )
+    elif plugin.name == "qbittorrent":
+        notes.append(
+            "VueTorrent is an optional alternative WebUI. Turning it on downloads the latest zip "
+            "from GitHub and restarts qBittorrent. The WebAPI stays the same for *Arr."
         )
     elif plugin.manifest.daemon:
         notes.append(
@@ -254,7 +261,7 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         )
     else:
         notes.append("This is a CLI/sync tool, not a background WebUI service.")
-    return {
+    payload = {
         "name": plugin.name,
         "display_name": plugin.manifest.display_name,
         "port": plugin.port,
@@ -271,6 +278,21 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         "vpn_tunneled": plugin.name in VPN_TUNNELED_APPS,
         "notes": notes,
     }
+    if plugin.name == "qbittorrent":
+        from applications.qbittorrent.vuetorrent import (
+            VUETORRENT_HELP,
+            installed_meta,
+            ui_ready,
+            vuetorrent_dir,
+            vuetorrent_enabled,
+        )
+
+        payload["vuetorrent"] = vuetorrent_enabled()
+        payload["vuetorrent_installed"] = ui_ready(plugin.config_dir)
+        payload["vuetorrent_version"] = installed_meta(plugin.config_dir).get("version")
+        payload["vuetorrent_path"] = str(vuetorrent_dir(plugin.config_dir))
+        payload["vuetorrent_help"] = VUETORRENT_HELP
+    return payload
 
 
 @router.get("/{name}/settings", summary="Read per-application settings")
@@ -294,18 +316,19 @@ async def patch_application_settings(
         plugin = catalog.get(name)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if body.port is None and body.autostart is None:
+    if body.port is None and body.autostart is None and body.vuetorrent is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No settings to change.")
 
     taken = {item.name: item.port for item in catalog.all_plugins()}
     try:
-        update_app_prefs(
-            name,
-            port=body.port,
-            autostart=body.autostart,
-            reserved_ports={settings.api_port},
-            taken_by=taken,
-        )
+        if body.port is not None or body.autostart is not None:
+            update_app_prefs(
+                name,
+                port=body.port,
+                autostart=body.autostart,
+                reserved_ports={settings.api_port},
+                taken_by=taken,
+            )
     except AppPrefsError as err:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
 
@@ -314,10 +337,43 @@ async def patch_application_settings(
     if body.port is not None:
         plugin.apply_listen_port(body.port)
 
+    vuetorrent_changed = False
+    if body.vuetorrent is not None:
+        if plugin.name != "qbittorrent":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="VueTorrent is only available for qBittorrent.",
+            )
+        from applications.qbittorrent.vuetorrent import alternative_ui_root, install_vuetorrent, ui_ready
+        from applications.qbittorrent.webui import ensure_webui_localhost_access
+        from core.integrations.qbittorrent import target_webui_credentials
+
+        try:
+            if body.vuetorrent and not ui_ready(plugin.config_dir):
+                await asyncio.to_thread(install_vuetorrent, plugin.config_dir)
+            set_app_option("qbittorrent", "vuetorrent", bool(body.vuetorrent))
+            username, password = target_webui_credentials()
+            ensure_webui_localhost_access(
+                plugin.config_dir,
+                username=username,
+                password=password,
+                alternative_ui_root=alternative_ui_root(plugin.config_dir),
+            )
+            vuetorrent_changed = True
+        except Exception as exc:
+            logger.warning("VueTorrent install/apply failed: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not apply VueTorrent: {exc}",
+            ) from exc
+
     restarted = False
     supervisor = ProcessSupervisor.get()
     running = supervisor.status(name).value == "running"
-    if body.port is not None and body.restart and running and plugin.manifest.daemon:
+    should_restart = body.restart and running and plugin.manifest.daemon and (
+        body.port is not None or vuetorrent_changed
+    )
+    if should_restart:
         await supervisor.stop(name)
         await supervisor.start(
             name=name,

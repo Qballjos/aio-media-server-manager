@@ -10,6 +10,31 @@ import requests
 logger = logging.getLogger(__name__)
 
 _PROTOCOL = {"Sabnzbd": "usenet", "Nzbget": "usenet", "QBittorrent": "torrent"}
+_CATEGORY_FIELDS = frozenset({"tvcategory", "moviecategory", "musiccategory", "category"})
+
+
+def sabnzbd_download_client_fields(
+    *,
+    host: str,
+    port: int,
+    api_key: str,
+    category: str,
+    username: str = "",
+    password: str = "",
+) -> list[dict[str, Any]]:
+    return [
+        {"name": "host", "value": host},
+        {"name": "port", "value": int(port) or 8085},
+        {"name": "apiKey", "value": api_key},
+        {"name": "username", "value": username},
+        {"name": "password", "value": password},
+        {"name": "useSsl", "value": False},
+        {"name": "urlBase", "value": ""},
+        {"name": "tvCategory", "value": category},
+        {"name": "movieCategory", "value": category},
+        {"name": "musicCategory", "value": category},
+        {"name": "category", "value": category},
+    ]
 
 
 def post_servarr_download_client(
@@ -95,7 +120,8 @@ def _schema_template(base_url: str, headers: dict[str, str], implementation: str
         if not isinstance(rows, list):
             return None
         for row in rows:
-            if isinstance(row, dict) and row.get("implementation") == implementation:
+            impl = str(row.get("implementation") or "")
+            if isinstance(row, dict) and impl.lower() == implementation.lower():
                 return row
     except Exception as exc:
         logger.debug("download client schema error: %s", exc)
@@ -103,7 +129,8 @@ def _schema_template(base_url: str, headers: dict[str, str], implementation: str
 
 
 def _overlay_fields(schema_fields: list[Any], overrides: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    values = {item.get("name"): item.get("value") for item in overrides if item.get("name")}
+    values = {str(item.get("name") or "").lower(): item.get("value") for item in overrides if item.get("name")}
+    category = next((values[name] for name in ("tvcategory", "moviecategory", "musiccategory", "category") if name in values), None)
     merged: list[dict[str, Any]] = []
     seen: set[str] = set()
     for field in schema_fields:
@@ -111,14 +138,19 @@ def _overlay_fields(schema_fields: list[Any], overrides: list[dict[str, Any]]) -
             continue
         item = dict(field)
         field_name = str(item.get("name") or "")
-        if field_name in values:
-            item["value"] = values[field_name]
-            seen.add(field_name)
+        lname = field_name.lower()
+        if lname in values:
+            item["value"] = values[lname]
+            seen.add(lname)
+        elif category is not None and lname in _CATEGORY_FIELDS:
+            item["value"] = category
+            seen.add(lname)
         merged.append(item)
     for item in overrides:
-        field_name = str(item.get("name") or "")
-        if field_name and field_name not in seen:
+        lname = str(item.get("name") or "").lower()
+        if lname and lname not in seen:
             merged.append(dict(item))
+            seen.add(lname)
     return merged
 
 
@@ -187,6 +219,8 @@ class ArrAppClient:
         port: int = 8085,
         api_key: str = "",
         category: str = "",
+        username: str = "",
+        password: str = "",
     ) -> bool:
         if any(item.get("implementation") == "Sabnzbd" for item in self.get_download_clients()):
             return True
@@ -194,13 +228,14 @@ class ArrAppClient:
             "SABnzbd (AMM)",
             "Sabnzbd",
             "SabnzbdSettings",
-            [
-                {"name": "host", "value": host},
-                {"name": "port", "value": port},
-                {"name": "apiKey", "value": api_key},
-                {"name": self.category_field, "value": category},
-                {"name": "useSsl", "value": False},
-            ],
+            sabnzbd_download_client_fields(
+                host=host,
+                port=port,
+                api_key=api_key,
+                category=category,
+                username=username,
+                password=password,
+            ),
         )
 
     def add_nzbget_client(

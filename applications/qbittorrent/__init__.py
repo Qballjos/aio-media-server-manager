@@ -44,7 +44,14 @@ class QBittorrentApp(BaseApplication):
                 username, password = "", ""
         except Exception:
             username, password = "", ""
-        ensure_webui_localhost_access(self.config_dir, username=username, password=password)
+        from applications.qbittorrent.vuetorrent import alternative_ui_root
+
+        ensure_webui_localhost_access(
+            self.config_dir,
+            username=username,
+            password=password,
+            alternative_ui_root=alternative_ui_root(self.config_dir),
+        )
         cmd = [
             str(executable),
             f"--webui-port={self.port}",

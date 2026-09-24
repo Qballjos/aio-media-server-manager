@@ -61,6 +61,7 @@ const settingsApp = ref(null)
 const settingsForm = ref({
   port: 0,
   autostart: true,
+  vuetorrent: false,
   recyclarrYaml: '',
   recyclarrOriginalYaml: '',
   recyclarrNaming: 'plex',
@@ -934,7 +935,15 @@ async function openAppSettings(service) {
       return
     }
     settingsMeta.value = data
-    settingsForm.value = { port: data.port, autostart: data.autostart, recyclarrYaml: '', recyclarrOriginalYaml: '', recyclarrNaming: 'plex', recyclarrPrefs: {} }
+    settingsForm.value = {
+      port: data.port,
+      autostart: data.autostart,
+      vuetorrent: !!data.vuetorrent,
+      recyclarrYaml: '',
+      recyclarrOriginalYaml: '',
+      recyclarrNaming: 'plex',
+      recyclarrPrefs: {}
+    }
     recyclarrMeta.value = null
     if (service.name === 'recyclarr') {
       const rec = await apiRequest('/api/recyclarr')
@@ -1004,13 +1013,17 @@ async function saveAppSettings() {
       closeAppSettings()
       return
     }
+    const payload = {
+      port: Number(settingsForm.value.port),
+      autostart: settingsForm.value.autostart,
+      restart: true
+    }
+    if (settingsApp.value.name === 'qbittorrent') {
+      payload.vuetorrent = !!settingsForm.value.vuetorrent
+    }
     const res = await apiRequest(`/api/applications/${settingsApp.value.name}/settings`, {
       method: 'PATCH',
-      body: JSON.stringify({
-        port: Number(settingsForm.value.port),
-        autostart: settingsForm.value.autostart,
-        restart: true
-      })
+      body: JSON.stringify(payload)
     })
     const data = await res.json()
     if (!res.ok) {
@@ -2045,6 +2058,28 @@ onUnmounted(() => {
               role="switch"
               :aria-checked="settingsForm.autostart ? 'true' : 'false'"
               @click="settingsForm.autostart = !settingsForm.autostart"
+            >
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
+          <div v-if="settingsApp.name === 'qbittorrent'" class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong>VueTorrent WebUI</strong>
+              <span>
+                Use
+                <a href="https://github.com/VueTorrent/VueTorrent" target="_blank" rel="noopener noreferrer">VueTorrent</a>
+                instead of the stock qBittorrent WebUI. *Arr still uses the same WebAPI.
+              </span>
+              <span v-if="settingsMeta.vuetorrent_version" class="settings-hint">
+                Installed {{ settingsMeta.vuetorrent_version }}
+              </span>
+            </div>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="settingsForm.vuetorrent ? 'true' : 'false'"
+              @click="settingsForm.vuetorrent = !settingsForm.vuetorrent"
             >
               <span class="ui-switch-thumb"></span>
             </button>

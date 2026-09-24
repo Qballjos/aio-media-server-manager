@@ -287,10 +287,11 @@ class RecyclarrApp(SimpleApplication):
     )
 
     def start_args(self) -> list[str]:
-        return ["sync", "--app-data", str(self.config_dir)]
+        # Recyclarr 8 removed --app-data; config dir is RECYCLARR_CONFIG_DIR.
+        return ["sync"]
 
     def extra_env(self) -> dict[str, str]:
-        return {"RECYCLARR_APP_DATA": str(self.config_dir)}
+        return {"RECYCLARR_CONFIG_DIR": str(self.config_dir)}
 
     def post_install(self) -> None:
         from applications.catalog import ApplicationCatalog

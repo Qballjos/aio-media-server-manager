@@ -11,7 +11,7 @@ import logging
 from typing import Any, Optional
 import requests
 
-from core.integrations.arr_app import post_servarr_download_client
+from core.integrations.arr_app import post_servarr_download_client, sabnzbd_download_client_fields
 
 logger = logging.getLogger(__name__)
 
@@ -66,32 +66,33 @@ class RadarrClient:
             logger.debug("Radarr get_download_clients error: %s", exc)
         return []
 
-    def add_sabnzbd_client(self, host: str = "127.0.0.1", port: int = 8080, api_key: str = "", category: str = "radarr") -> bool:
+    def add_sabnzbd_client(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8085,
+        api_key: str = "",
+        category: str = "radarr",
+        username: str = "",
+        password: str = "",
+    ) -> bool:
         clients = self.get_download_clients()
         if any(c.get("implementation") == "Sabnzbd" for c in clients):
             logger.info("Radarr SABnzbd download client already exists.")
             return True
-
-        payload = {
-            "enable": True,
-            "name": "SABnzbd (AMM)",
-            "implementation": "Sabnzbd",
-            "configContract": "SabnzbdSettings",
-            "fields": [
-                {"name": "host", "value": host},
-                {"name": "port", "value": port},
-                {"name": "apiKey", "value": api_key},
-                {"name": "movieCategory", "value": category},
-                {"name": "useSsl", "value": False},
-            ],
-        }
         return post_servarr_download_client(
             self.base_url,
             self._headers(),
-            name=str(payload["name"]),
+            name="SABnzbd (AMM)",
             implementation="Sabnzbd",
             config_contract="SabnzbdSettings",
-            fields=list(payload["fields"]),
+            fields=sabnzbd_download_client_fields(
+                host=host,
+                port=port,
+                api_key=api_key,
+                category=category,
+                username=username,
+                password=password,
+            ),
             label="Radarr",
         )
 

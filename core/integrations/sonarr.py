@@ -11,7 +11,7 @@ import logging
 from typing import Any, Optional
 import requests
 
-from core.integrations.arr_app import post_servarr_download_client
+from core.integrations.arr_app import post_servarr_download_client, sabnzbd_download_client_fields
 
 logger = logging.getLogger(__name__)
 
@@ -66,26 +66,35 @@ class SonarrClient:
             logger.debug("Sonarr get_download_clients error: %s", exc)
         return []
 
-    def add_sabnzbd_client(self, host: str = "127.0.0.1", port: int = 8080, api_key: str = "", category: str = "sonarr") -> bool:
+    def add_sabnzbd_client(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8085,
+        api_key: str = "",
+        category: str = "sonarr",
+        username: str = "",
+        password: str = "",
+    ) -> bool:
         clients = self.get_download_clients()
         if any(c.get("implementation") == "Sabnzbd" for c in clients):
             logger.info("Sonarr SABnzbd download client already exists.")
             return True
-
-        payload = {
-            "enable": True,
-            "name": "SABnzbd (AMM)",
-            "implementation": "Sabnzbd",
-            "configContract": "SabnzbdSettings",
-            "fields": [
-                {"name": "host", "value": host},
-                {"name": "port", "value": port},
-                {"name": "apiKey", "value": api_key},
-                {"name": "tvCategory", "value": category},
-                {"name": "useSsl", "value": False},
-            ],
-        }
-        return self._post_download_client("SABnzbd", payload)
+        return self._post_download_client(
+            "SABnzbd",
+            {
+                "name": "SABnzbd (AMM)",
+                "implementation": "Sabnzbd",
+                "configContract": "SabnzbdSettings",
+                "fields": sabnzbd_download_client_fields(
+                    host=host,
+                    port=port,
+                    api_key=api_key,
+                    category=category,
+                    username=username,
+                    password=password,
+                ),
+            },
+        )
 
     def add_qbittorrent_client(self, host: str = "127.0.0.1", port: int = 8081, username: str = "admin", password: str = "adminadmin", category: str = "sonarr") -> bool:
         clients = self.get_download_clients()

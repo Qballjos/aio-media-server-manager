@@ -57,7 +57,7 @@ The dashboard lists the **17** catalog applications (installed vs available coun
 
 **Open UI** uses `http://<host>:<app-port>` (for example Sonarr `8989`). That only works if the appliance compose/template publishes those ports, or the container uses host networking. Recreate the container after pulling an image that added port mappings.
 
-qBittorrent on localhost is allowed without the WebUI login prompt. **Open UI** from another LAN machine uses the manager username and password (seeded into `qBittorrent.conf` before start). Restart qBittorrent once after upgrading if an older run already created a temporary WebUI password.
+qBittorrent on localhost is allowed without the WebUI login prompt. **Open UI** from another LAN machine uses the manager username and password (seeded into `qBittorrent.conf` before start). Restart qBittorrent once after upgrading if an older run already created a temporary WebUI password. **Catalog → qBittorrent → Settings** has a **VueTorrent WebUI** switch that downloads [VueTorrent](https://github.com/VueTorrent/VueTorrent) and uses it as the alternative WebUI (same port and WebAPI).
 
 Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Rebuild/recreate the image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`. Form login uses the manager username and password (YAML stores a SHA-256 of the password; type the same plaintext you used in the wizard).
 
@@ -78,7 +78,7 @@ These remain separate accounts inside each product. They are created to **match*
 
 **Not a second login (use these as intended):**
 
-- **Recyclarr** — CLI only (no Open UI, no login). It writes an official Recyclarr v8 / [TRaSH Guides](https://trash-guides.info/) `recyclarr.yml`: HD WEB-1080p, Anime Remux-1080p, and HD Bluray+WEB by default, with Golden Rule / Unwanted custom-format groups. 4K profiles are opt-in. Open **Catalog → Recyclarr → Settings** to toggle profiles, change Plex/Jellyfin naming, edit YAML, or restore defaults. **Sync** (not Start) runs `recyclarr sync` once. Custom YAML is kept until you restore defaults.
+- **Recyclarr** — CLI only (no Open UI, no login, no background process). Auto-Wire and **Sync** on the catalog card run `recyclarr sync` once with `RECYCLARR_CONFIG_DIR` (Recyclarr 8 dropped `--app-data`). It writes an official Recyclarr v8 / [TRaSH Guides](https://trash-guides.info/) `recyclarr.yml`: HD WEB-1080p, Anime Remux-1080p, and HD Bluray+WEB by default, with Golden Rule / Unwanted custom-format groups. 4K profiles are opt-in. Open **Catalog → Recyclarr → Settings** to toggle profiles, change Plex/Jellyfin naming, edit YAML, or restore defaults. Custom YAML is kept until you restore defaults.
 - **NeutArr** — LAN access bypass is on for RFC1918, so Open UI from your home network should not ask you to invent an account. It hunts missing/upgrade items through the *Arr APIs. Create a NeutArr user only if you expose it beyond the LAN.
 - **Profilarr** — `AUTH=local` skips login on the local network. Dictionarry still has its own first-user screen if you open it from a non-local address; use the manager username and password there. Styling needs the Vite `static` (or `client`) tree next to the binary after install. Instances are pre-filled for Sonarr/Radarr (and Lidarr when installed).
 - **Plex** — Plex account or claim token

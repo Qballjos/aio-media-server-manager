@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 PREFS_NAME = "amm-prefs.json"
 YAML_NAME = "recyclarr.yml"
+LAST_SYNC_NAME = "last-sync.json"
 MANAGED_MARK = "AMM Recyclarr managed"
 
 # Official Recyclarr config-templates / TRaSH guide-backed profile IDs.
@@ -216,10 +218,10 @@ def apply_prefs_and_render(prefs: dict[str, Any], *, force: bool = True) -> dict
 def run_sync(timeout: float = 180.0) -> dict[str, Any]:
     catalog = ApplicationCatalog()
     if not catalog.has("recyclarr"):
-        return {"ok": False, "detail": "Recyclarr is not in the catalog.", "log": ""}
+        return _fail_sync(None, "Recyclarr is not in the catalog.")
     plugin = catalog.get("recyclarr")
     if not plugin.is_installed():
-        return {"ok": False, "detail": "Install Recyclarr first.", "log": ""}
+        return _fail_sync(plugin.config_dir, "Install Recyclarr first.")
     write_recyclarr_config(
         plugin.config_dir,
         sonarr_url=f"http://127.0.0.1:{catalog.get('sonarr').port if catalog.has('sonarr') else 8989}",
@@ -228,8 +230,13 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
         radarr_key=get_application_api_key("radarr") or "",
         force=False,
     )
-    cmd = plugin.start_command()
+    try:
+        cmd = plugin.start_command()
+    except FileNotFoundError:
+        return _fail_sync(plugin.config_dir, "Recyclarr binary is missing.")
     env = {**os.environ, **plugin.extra_env()}
+    env.pop("RECYCLARR_APP_DATA", None)
+    env["RECYCLARR_CONFIG_DIR"] = str(plugin.config_dir)
     try:
         completed = subprocess.run(
             cmd,
@@ -241,17 +248,63 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
             check=False,
         )
     except FileNotFoundError:
-        return {"ok": False, "detail": "Recyclarr binary is missing.", "log": ""}
+        return _fail_sync(plugin.config_dir, "Recyclarr binary is missing.")
     except subprocess.TimeoutExpired:
-        return {"ok": False, "detail": "Recyclarr sync timed out.", "log": ""}
+        return _fail_sync(plugin.config_dir, "Recyclarr sync timed out.")
     log = ((completed.stdout or "") + "\n" + (completed.stderr or "")).strip()
     ok = completed.returncode == 0
-    return {
+    result = {
         "ok": ok,
         "detail": "Sync finished." if ok else f"Recyclarr exited {completed.returncode}.",
         "log": log[-8000:],
         "returncode": completed.returncode,
     }
+    _store_last_sync(plugin.config_dir, result)
+    return result
+
+
+def _fail_sync(config_dir: Path | None, detail: str) -> dict[str, Any]:
+    result = {"ok": False, "detail": detail, "log": "", "returncode": None}
+    if config_dir is not None:
+        _store_last_sync(config_dir, result)
+    return result
+
+
+def last_sync_payload(config_dir: Path | None = None) -> dict[str, Any] | None:
+    if config_dir is None:
+        catalog = ApplicationCatalog()
+        plugin = catalog.get("recyclarr") if catalog.has("recyclarr") else None
+        config_dir = plugin.config_dir if plugin else settings.config_dir / "recyclarr"
+    path = Path(config_dir) / LAST_SYNC_NAME
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _store_last_sync(config_dir: Path, result: dict[str, Any]) -> None:
+    path = Path(config_dir) / LAST_SYNC_NAME
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "at": datetime.now(timezone.utc).isoformat(),
+                    "ok": bool(result.get("ok")),
+                    "detail": result.get("detail"),
+                    "returncode": result.get("returncode"),
+                    "log": result.get("log") or "",
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        logger.debug("Could not write Recyclarr last-sync file: %s", exc)
 
 
 def _is_foreign(path: Path) -> bool:
@@ -312,7 +365,6 @@ def _instance(
         f"    base_url: {url}\n"
         f"    api_key: {key}\n"
         "    delete_old_custom_formats: true\n"
-        "    replace_existing_custom_formats: true\n"
         "    quality_definition:\n"
         f"      type: {qdef}\n"
         "    quality_profiles:\n"

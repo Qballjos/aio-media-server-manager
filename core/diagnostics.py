@@ -193,7 +193,31 @@ class DiagnosticsStore:
             "storage": settings.as_serialisable_dict(),
             "library": LibraryLayout.from_settings(settings).as_dict(),
             "errors": self.recent_errors(100),
+            "recyclarr": self._recyclarr_debug(),
         }
+
+    def _recyclarr_debug(self) -> dict[str, Any]:
+        try:
+            from applications.catalog import ApplicationCatalog
+            from core.recyclarr import last_sync_payload, yaml_path
+
+            catalog = ApplicationCatalog(app_settings=settings)
+            plugin = catalog.get("recyclarr") if catalog.has("recyclarr") else None
+            config_dir = plugin.config_dir if plugin else settings.config_dir / "recyclarr"
+            env = plugin.extra_env() if plugin else {}
+            args = plugin.start_args() if plugin else []
+            last = last_sync_payload(config_dir)
+            return {
+                "installed": bool(plugin and plugin.is_installed()),
+                "daemon": bool(plugin.manifest.daemon) if plugin else False,
+                "config_dir": str(config_dir),
+                "yaml_exists": yaml_path(config_dir).is_file(),
+                "start_args": args,
+                "config_env": env.get("RECYCLARR_CONFIG_DIR"),
+                "last_sync": last,
+            }
+        except Exception as exc:
+            return {"error": str(exc)}
 
     def render_html(self, report: dict[str, Any]) -> str:
         counts = report.get("catalog", {}).get("counts", {})
@@ -223,6 +247,22 @@ class DiagnosticsStore:
             f"<td>{html.escape(str(proc.get('pid') or ''))}</td></tr>"
             for proc in processes
         )
+        rec = report.get("recyclarr") or {}
+        last = rec.get("last_sync") or {}
+        rec_block = (
+            f"installed={rec.get('installed')} daemon={rec.get('daemon')} yaml={rec.get('yaml_exists')}\n"
+            f"args={rec.get('start_args')} CONFIG_DIR={rec.get('config_env')}\n"
+            f"path={rec.get('config_dir')}\n"
+        )
+        if rec.get("error"):
+            rec_block += f"error={rec.get('error')}\n"
+        if last:
+            rec_block += (
+                f"last_sync ok={last.get('ok')} at={last.get('at')} {last.get('detail')}\n"
+                f"{redact_log_line(str(last.get('log') or ''))}"
+            )
+        else:
+            rec_block += "No last-sync.json (sync has not been run yet).\n"
         log_blocks = []
         for name, lines in (report.get("process_logs") or {}).items():
             if not lines:
@@ -254,6 +294,8 @@ class DiagnosticsStore:
   <table><thead><tr><th>name</th><th>installed</th><th>version</th></tr></thead><tbody>{app_rows}</tbody></table>
   <h2>Processes</h2>
   <table><thead><tr><th>name</th><th>state</th><th>pid</th></tr></thead><tbody>{proc_rows}</tbody></table>
+  <h2>Recyclarr</h2>
+  {_pre(rec_block)}
   <h2>Recent process logs</h2>
   {''.join(log_blocks) or '<p class="muted">No process logs.</p>'}
   <h2>Storage</h2>

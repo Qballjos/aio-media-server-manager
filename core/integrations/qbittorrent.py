@@ -15,9 +15,19 @@ import requests
 
 from core.crypto import secret_store
 from core.shared_credentials import shared_admin_credentials
+from applications.qbittorrent.vuetorrent import alternative_ui_root
 from applications.qbittorrent.webui import ensure_webui_localhost_access
 
 logger = logging.getLogger(__name__)
+
+
+def _persist_webui(config_dir, username: str, password: str) -> None:
+    ensure_webui_localhost_access(
+        config_dir,
+        username=username,
+        password=password,
+        alternative_ui_root=alternative_ui_root(config_dir),
+    )
 
 
 def target_webui_credentials() -> tuple[str, str]:
@@ -205,13 +215,13 @@ def apply_qbittorrent_webui_login(config_dir, port: int, *, restart_if_needed: b
 
     client = QBittorrentClient(port=port, username=username, password=password)
     if (client.login() or client.app_accessible()) and client.set_webui_login(username, password):
-        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        _persist_webui(config_dir, username=username, password=password)
         return True
     if not restart_if_needed:
-        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        _persist_webui(config_dir, username=username, password=password)
         return False
     if not _rewrite_login_and_restart(config_dir, username, password):
-        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        _persist_webui(config_dir, username=username, password=password)
         return False
     time.sleep(2)
     verify = QBittorrentClient(port=port, username=username, password=password)
@@ -228,7 +238,7 @@ def _rewrite_login_and_restart(config_dir, username: str, password: str) -> bool
 
     catalog = ApplicationCatalog()
     if not catalog.has("qbittorrent"):
-        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        _persist_webui(config_dir, username=username, password=password)
         return False
     plugin = catalog.get("qbittorrent")
     supervisor = ProcessSupervisor.get()
@@ -236,7 +246,7 @@ def _rewrite_login_and_restart(config_dir, username: str, password: str) -> bool
     async def _cycle() -> None:
         if supervisor.status("qbittorrent").value == "running":
             await supervisor.stop("qbittorrent")
-        ensure_webui_localhost_access(plugin.config_dir, username=username, password=password)
+        _persist_webui(plugin.config_dir, username=username, password=password)
         await supervisor.start(
             name="qbittorrent",
             cmd=plugin.start_command(),
@@ -250,5 +260,5 @@ def _rewrite_login_and_restart(config_dir, username: str, password: str) -> bool
         return True
     except Exception as exc:
         logger.warning("Could not restart qBittorrent after writing WebUI login: %s", exc)
-        ensure_webui_localhost_access(config_dir, username=username, password=password)
+        _persist_webui(config_dir, username=username, password=password)
         return False

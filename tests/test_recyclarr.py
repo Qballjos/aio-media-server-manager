@@ -62,6 +62,7 @@ def test_default_yaml_matches_trash_hd_templates(tmp_path: Path):
     assert "158188097a58d7687dee647e04af0da3" in text
     assert "f8bf8eab4617f12dfdbd16303d8da245" in text
     assert "delete_old_custom_formats: true" in text
+    assert "replace_existing_custom_formats" not in text
     prefs = load_prefs(tmp_path / "recyclarr")
     assert prefs["sonarr_web_1080p"] is True
     assert prefs["radarr_uhd"] is False
@@ -162,4 +163,10 @@ def test_recyclarr_sync_runs_once(tmp_path: Path, monkeypatch):
     assert res.status_code == 200
     assert res.json()["ok"] is True
     assert mock_run.called
-    assert "sync" in mock_run.call_args.args[0]
+    argv = mock_run.call_args.args[0]
+    assert "sync" in argv
+    assert "--app-data" not in argv
+    env = mock_run.call_args.kwargs["env"]
+    assert env["RECYCLARR_CONFIG_DIR"] == str(plugin.config_dir)
+    assert "RECYCLARR_APP_DATA" not in env
+    assert (plugin.config_dir / "last-sync.json").is_file()

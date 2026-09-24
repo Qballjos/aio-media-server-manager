@@ -38,15 +38,27 @@ def ensure_webui_localhost_access(
     *,
     username: str = "",
     password: str = "",
+    alternative_ui_root: Path | None = None,
 ) -> Path:
     """Let *Arr and AMM talk to the WebUI, and persist LAN login when credentials exist."""
     written = None
     for conf in qbit_conf_paths(profile_dir):
-        written = _write_webui_conf(conf, username=username, password=password)
+        written = _write_webui_conf(
+            conf,
+            username=username,
+            password=password,
+            alternative_ui_root=alternative_ui_root,
+        )
     return written or qbit_conf_paths(profile_dir)[0]
 
 
-def _write_webui_conf(conf: Path, *, username: str, password: str) -> Path:
+def _write_webui_conf(
+    conf: Path,
+    *,
+    username: str,
+    password: str,
+    alternative_ui_root: Path | None = None,
+) -> Path:
     conf.parent.mkdir(parents=True, exist_ok=True)
     text = conf.read_text(encoding="utf-8") if conf.is_file() else ""
     lines = text.splitlines()
@@ -56,6 +68,11 @@ def _write_webui_conf(conf: Path, *, username: str, password: str) -> Path:
     if user and secret:
         extras["WebUI\\Username"] = user
         extras["WebUI\\Password_PBKDF2"] = qbittorrent_pbkdf2(secret)
+    if alternative_ui_root is not None:
+        extras["WebUI\\AlternativeUIEnabled"] = "true"
+        extras["WebUI\\RootFolder"] = str(Path(alternative_ui_root))
+    else:
+        extras["WebUI\\AlternativeUIEnabled"] = "false"
     found = {key: False for key in extras}
     rewritten: list[str] = []
     for line in lines:

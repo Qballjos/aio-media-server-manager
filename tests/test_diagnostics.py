@@ -66,6 +66,8 @@ def test_debug_share_url_is_token_gated(tmp_path: Path, monkeypatch):
     body = as_json.json()
     assert body["catalog"]["counts"]["catalog"] >= 7
     assert any("example failure" in item["message"] for item in body["errors"])
+    assert "recyclarr" in body
+    assert body["recyclarr"].get("daemon") is False
 
     revoked = client.delete("/api/diagnostics/share")
     assert revoked.status_code == 200

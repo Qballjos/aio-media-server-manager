@@ -8,6 +8,7 @@ to ensure completed Usenet downloads are placed into expected folders.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -15,9 +16,37 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+_INI_KEY = re.compile(r"(?im)^api_key\s*=\s*[\"']?([0-9a-zA-Z]{16,})[\"']?")
+_INI_USER = re.compile(r"(?im)^username\s*=\s*[\"']?([^\"'\n#]*?)[\"']?\s*$")
+_INI_PASS = re.compile(r"(?im)^password\s*=\s*[\"']?([^\"'\n#]*?)[\"']?\s*$")
+
+
+def read_sabnzbd_ini(config_dir: Path | None) -> dict[str, str]:
+    """Read API key and login from sabnzbd.ini (quoted or plain)."""
+    result = {"api_key": "", "username": "", "password": ""}
+    if not config_dir:
+        return result
+    path = Path(config_dir) / "sabnzbd.ini"
+    if not path.is_file():
+        return result
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return result
+    key = _INI_KEY.search(text)
+    if key:
+        result["api_key"] = key.group(1).strip()
+    user = _INI_USER.search(text)
+    if user:
+        result["username"] = user.group(1).strip()
+    password = _INI_PASS.search(text)
+    if password:
+        result["password"] = password.group(1).strip()
+    return result
+
 
 class SABnzbdClient:
-    def __init__(self, host: str = "127.0.0.1", port: int = 8080, api_key: Optional[str] = None):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8085, api_key: Optional[str] = None):
         self.base_url = f"http://{host}:{port}/api"
         self.api_key = api_key
 
@@ -154,7 +183,7 @@ def write_bootstrap_ini(
         f"download_dir = {_ini_value(incomplete_dir)}",
         f"api_key = {key}",
         f"nzb_key = {secrets.token_hex(16)}",
-        "host_whitelist = localhost,127.0.0.1",
+        "host_whitelist = localhost,127.0.0.1,::1",
         "local_ranges = 127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
     ]
     if username:

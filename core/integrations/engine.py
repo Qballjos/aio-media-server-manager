@@ -21,6 +21,7 @@ from core.integrations.hooks import (
     write_profilarr_config,
     write_recyclarr_config,
 )
+from core.recyclarr import run_sync
 from core.integrations.jellyfin import JellyfinClient
 from core.integrations.local_auth import apply_shared_local_logins
 from core.integrations.nzbget import NZBGetClient, nzbget_credentials
@@ -28,7 +29,7 @@ from core.integrations.plex import PlexClient
 from core.integrations.prowlarr import ProwlarrClient
 from core.integrations.qbittorrent import QBittorrentClient, apply_qbittorrent_webui_login, qbittorrent_credentials
 from core.integrations.radarr import RadarrClient
-from core.integrations.sabnzbd import SABnzbdClient
+from core.integrations.sabnzbd import SABnzbdClient, read_sabnzbd_ini
 from core.integrations.seerr import SeerrClient
 from core.integrations.sonarr import SonarrClient
 from core.integrations.usenet import load_usenet_server
@@ -194,7 +195,8 @@ class IntegrationEngine:
         seerr_port = self._port("seerr", 5055)
         bazarr_port = self._port("bazarr", 6767)
 
-        sab_key = get_application_api_key("sabnzbd")
+        sab_cfg = self._catalog.get("sabnzbd").config_dir if self._catalog.has("sabnzbd") else self._settings.config_dir / "sabnzbd"
+        sab_key = get_application_api_key("sabnzbd", sab_cfg)
         sonarr_key = get_application_api_key("sonarr")
         radarr_key = get_application_api_key("radarr")
         lidarr_key = get_application_api_key("lidarr")
@@ -250,11 +252,17 @@ class IntegrationEngine:
                 )
             )
 
-        sab_key = get_application_api_key("sabnzbd") or sab_key
+        sab_plugin = self._catalog.get("sabnzbd") if self._catalog.has("sabnzbd") else None
+        sab_cfg = sab_plugin.config_dir if sab_plugin else self._settings.config_dir / "sabnzbd"
+        sab_ini = read_sabnzbd_ini(sab_cfg)
+        sab_key = get_application_api_key("sabnzbd", sab_cfg) or sab_ini.get("api_key") or sab_key
         sonarr_key = get_application_api_key("sonarr") or sonarr_key
         radarr_key = get_application_api_key("radarr") or radarr_key
         lidarr_key = get_application_api_key("lidarr") or lidarr_key
         qb_user, qb_pass = qbittorrent_credentials()
+        shared = shared_admin_credentials()
+        sab_user = sab_ini.get("username") or (shared[0] if shared else "")
+        sab_pass = sab_ini.get("password") or (shared[1] if shared else "")
         downloader_register = self._downloaders_for_arr(sab_key=sab_key)
 
         roots = arr_root_folders(layout)
@@ -264,7 +272,11 @@ class IntegrationEngine:
             sonarr_dl = _register_download_clients(
                 downloader_register,
                 add_sab=lambda: sonarr_client.add_sabnzbd_client(
-                    port=sab_port, api_key=sab_key or "", category="sonarr"
+                    port=sab_port,
+                    api_key=sab_key or "",
+                    category="sonarr",
+                    username=sab_user,
+                    password=sab_pass,
                 ),
                 add_nzb=lambda: sonarr_client.add_nzbget_client(
                     port=nzb_port, username=nzb_user, password=nzb_pass, category="sonarr"
@@ -289,7 +301,11 @@ class IntegrationEngine:
             radarr_dl = _register_download_clients(
                 downloader_register,
                 add_sab=lambda: radarr_client.add_sabnzbd_client(
-                    port=sab_port, api_key=sab_key or "", category="radarr"
+                    port=sab_port,
+                    api_key=sab_key or "",
+                    category="radarr",
+                    username=sab_user,
+                    password=sab_pass,
                 ),
                 add_nzb=lambda: radarr_client.add_nzbget_client(
                     port=nzb_port, username=nzb_user, password=nzb_pass, category="radarr"
@@ -321,6 +337,8 @@ class IntegrationEngine:
                 roots["lidarr"],
                 sab_port=sab_port,
                 sab_key=sab_key or "",
+                sab_username=sab_user,
+                sab_password=sab_pass,
                 nzb_port=nzb_port,
                 nzb_username=nzb_user,
                 nzb_password=nzb_pass,
@@ -426,6 +444,16 @@ class IntegrationEngine:
                 radarr_key=radarr_key or "",
             )
             steps.append(_step("recyclarr", "write_trash_config", True, str(rec_path)))
+            rec_plugin = self._catalog.get("recyclarr") if self._catalog.has("recyclarr") else None
+            if rec_plugin and rec_plugin.is_installed():
+                result = run_sync()
+                log_tail = (result.get("log") or "").strip().splitlines()
+                detail = result.get("detail") or ""
+                if log_tail:
+                    detail = f"{detail} {log_tail[-1]}".strip()
+                steps.append(_step("recyclarr", "sync_trash", bool(result.get("ok")), detail[:300]))
+            else:
+                steps.append(_step("recyclarr", "sync_trash", True, "not installed"))
         except Exception as exc:
             steps.append(_step("recyclarr", "write_trash_config", False, str(exc)))
 
@@ -503,6 +531,8 @@ def _wire_arr_app(
     nzb_port: int,
     qb_port: int,
     category: str,
+    sab_username: str = "",
+    sab_password: str = "",
     qb_username: str = "admin",
     qb_password: str = "adminadmin",
     nzb_username: str = "nzbget",
@@ -512,7 +542,13 @@ def _wire_arr_app(
     root_ok = all(client.add_root_folder(str(path)) for path in roots)
     dl_ok = _register_download_clients(
         register or [],
-        add_sab=lambda: client.add_sabnzbd_client(port=sab_port, api_key=sab_key, category=category),
+        add_sab=lambda: client.add_sabnzbd_client(
+            port=sab_port,
+            api_key=sab_key,
+            category=category,
+            username=sab_username,
+            password=sab_password,
+        ),
         add_nzb=lambda: client.add_nzbget_client(
             port=nzb_port, username=nzb_username, password=nzb_password, category=category
         ),
