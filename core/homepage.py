@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from calendar import monthrange
 from datetime import date, timedelta
 from typing import Any, Optional
 import requests
@@ -20,11 +21,20 @@ _TIMEOUT = 4.0
 _LAUNCHER_SKIP = frozenset({"recyclarr"})
 
 
+def month_calendar_span(today: date | None = None) -> tuple[date, date]:
+    """Monday–Sunday grid covering the current month (including leading/trailing days)."""
+    today = today or date.today()
+    first = today.replace(day=1)
+    start = first - timedelta(days=first.weekday())
+    last = today.replace(day=monthrange(today.year, today.month)[1])
+    end = last + timedelta(days=(6 - last.weekday()))
+    return start, end
+
+
 def homepage_snapshot(host: str) -> dict[str, Any]:
     catalog = ApplicationCatalog()
     running = _running_names()
-    start = date.today()
-    end = start + timedelta(days=14)
+    start, end = month_calendar_span()
     notes: list[dict[str, Any]] = []
 
     apps = _launcher_apps(catalog, running, host)
@@ -58,7 +68,7 @@ def homepage_snapshot(host: str) -> dict[str, Any]:
 
     return {
         "apps": apps,
-        "calendar": calendar[:40],
+        "calendar": calendar[:250],
         "downloads": downloads[:40],
         "recent": recent[:24],
         "seerr": {
@@ -281,7 +291,7 @@ def _collect_sonarr_calendar(
         "sonarr",
         _parse_sonarr_calendar(data),
         error or (None if isinstance(data, list) else "unexpected calendar payload"),
-        "calendar is empty for the next 14 days",
+        "calendar is empty this month",
     )
 
 
@@ -331,7 +341,7 @@ def _collect_radarr_calendar(
         "radarr",
         _parse_radarr_calendar(data),
         error or (None if isinstance(data, list) else "unexpected calendar payload"),
-        "calendar is empty for the next 14 days",
+        "calendar is empty this month",
     )
 
 

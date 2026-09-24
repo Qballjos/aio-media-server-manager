@@ -33,7 +33,7 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 After the wizard, **Home** is the front page for watching and requesting. It reuses the manager login (no extra household accounts). There are no start/stop/install controls here.
 
 - **Launcher** lists installed apps that have a WebUI. Recyclarr is omitted (CLI only). Stopped apps still appear dimmed.
-- **Coming up** uses Sonarr and Radarr calendars when those processes are running.
+- **Coming up** is a real calendar of Sonarr/Radarr airings: a full month on wide screens, the current week on phones.
 - **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
 - **Recently added** uses Jellyfin and/or Plex. AMM tries the manager login first. You can also paste a Jellyfin API key under **Settings → Integrations** (or Catalog → Jellyfin → Settings). Create the key in Jellyfin Dashboard → API Keys.
 - **Search** talks to Seerr when it is running (Request button). AMM reads `apiKey` from Seerr’s `settings.json` after Seerr’s first setup. Without Seerr, search falls back to Sonarr/Radarr lookup only.

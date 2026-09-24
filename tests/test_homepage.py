@@ -5,11 +5,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from datetime import date
+
 from fastapi.testclient import TestClient
 
 from api.app import create_app
 from core.auth import auth_manager
-from core.homepage import homepage_request, homepage_search, homepage_snapshot
+from core.homepage import homepage_request, homepage_search, homepage_snapshot, month_calendar_span
 from core.settings import Settings
 
 
@@ -40,6 +42,14 @@ class FakeCatalog:
 
     def get(self, name: str):
         return self._plugins[name]
+
+
+def test_month_calendar_span_is_monday_to_sunday():
+    start, end = month_calendar_span(date(2026, 9, 24))
+    assert start == date(2026, 8, 31)
+    assert start.weekday() == 0
+    assert end == date(2026, 10, 4)
+    assert end.weekday() == 6
 
 
 def test_homepage_hides_uninstalled_and_cli_apps(tmp_path):

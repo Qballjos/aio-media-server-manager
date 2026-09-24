@@ -132,16 +132,78 @@ async function requestTitle(item) {
   }
 }
 
-function formatWhen(value) {
-  if (!value) return ''
+function parseWhen(value) {
+  if (!value) return null
   const text = String(value)
   if (/^\d+$/.test(text) && text.length >= 9) {
-    return new Date(Number(text) * 1000).toLocaleString()
+    const dt = new Date(Number(text) * 1000)
+    return Number.isNaN(dt.getTime()) ? null : dt
   }
   const dt = new Date(text)
-  if (!Number.isNaN(dt.getTime())) return dt.toLocaleString()
-  return text.replace('T', ' ').slice(0, 16)
+  return Number.isNaN(dt.getTime()) ? null : dt
 }
+
+function formatEventTime(value) {
+  const dt = parseWhen(value)
+  if (!dt) return ''
+  return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function dayKey(dt) {
+  const y = dt.getFullYear()
+  const m = String(dt.getMonth() + 1).padStart(2, '0')
+  const d = String(dt.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+const calendarMonthLabel = computed(() =>
+  new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+)
+
+const calendarWeeks = computed(() => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const first = new Date(year, month, 1)
+  const start = new Date(first)
+  start.setDate(first.getDate() - ((first.getDay() + 6) % 7))
+  const last = new Date(year, month + 1, 0)
+  const end = new Date(last)
+  end.setDate(last.getDate() + ((7 - last.getDay()) % 7))
+
+  const byDay = {}
+  for (const item of snapshot.value.calendar || []) {
+    const dt = parseWhen(item.when)
+    if (!dt) continue
+    const key = dayKey(dt)
+    if (!byDay[key]) byDay[key] = []
+    byDay[key].push(item)
+  }
+
+  const todayKey = dayKey(now)
+  const weeks = []
+  const cursor = new Date(start)
+  while (cursor <= end) {
+    const days = []
+    let isCurrent = false
+    for (let i = 0; i < 7; i += 1) {
+      const key = dayKey(cursor)
+      if (key === todayKey) isCurrent = true
+      days.push({
+        key,
+        date: cursor.getDate(),
+        inMonth: cursor.getMonth() === month,
+        isToday: key === todayKey,
+        events: byDay[key] || [],
+      })
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    weeks.push({ key: days[0].key, isCurrent, days })
+  }
+  return weeks
+})
 
 onMounted(() => {
   try {
@@ -255,16 +317,42 @@ onUnmounted(() => {
       </form>
 
       <div v-if="showWidgets" class="home-widgets">
-        <article v-if="snapshot.calendar.length || widgetDebug" class="home-widget glass-card">
-          <h3>Coming up</h3>
-          <ul v-if="snapshot.calendar.length">
-            <li v-for="(item, idx) in snapshot.calendar" :key="idx">
-              <span class="home-when">{{ formatWhen(item.when) }}</span>
-              <strong>{{ item.title }}</strong>
-              <span class="home-muted">{{ item.detail }}</span>
-            </li>
-          </ul>
-          <p v-else class="home-muted">Nothing on the calendar.</p>
+        <article v-if="snapshot.calendar.length || widgetDebug" class="home-widget glass-card home-widget-calendar">
+          <div class="cal-head">
+            <h3>Coming up</h3>
+            <p class="cal-range cal-range-month">{{ calendarMonthLabel }}</p>
+            <p class="cal-range cal-range-week">This week</p>
+          </div>
+          <div class="cal" role="grid" aria-label="Upcoming releases calendar">
+            <div class="cal-weekdays">
+              <span v-for="label in weekdayLabels" :key="label">{{ label }}</span>
+            </div>
+            <div class="cal-weeks">
+              <div
+                v-for="week in calendarWeeks"
+                :key="week.key"
+                class="cal-week"
+                :class="{ 'is-current': week.isCurrent }"
+              >
+                <div
+                  v-for="day in week.days"
+                  :key="day.key"
+                  class="cal-day"
+                  :class="{ 'is-today': day.isToday, 'is-outside': !day.inMonth }"
+                >
+                  <span class="cal-num">{{ day.date }}</span>
+                  <ul v-if="day.events.length" class="cal-events">
+                    <li v-for="(item, idx) in day.events" :key="idx" class="cal-event" :data-kind="item.kind || item.source">
+                      <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                      <strong>{{ item.title }}</strong>
+                      <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p v-if="!snapshot.calendar.length" class="home-muted">Nothing on the calendar.</p>
           <ul v-if="widgetDebug && notesFor('calendar').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('calendar')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -477,6 +565,112 @@ onUnmounted(() => {
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: 1rem;
 }
+.home-widget-calendar {
+  grid-column: 1 / -1;
+}
+.cal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.cal-head h3 {
+  margin-bottom: 0;
+}
+.cal-range {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+.cal-range-week {
+  display: none;
+}
+.cal {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.cal-weekdays,
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.28rem;
+}
+.cal-weekdays span {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: center;
+}
+.cal-weeks {
+  display: grid;
+  gap: 0.28rem;
+}
+.cal-day {
+  min-width: 0;
+  min-height: 7.25rem;
+  padding: 0.4rem 0.4rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.55rem;
+  background: var(--bg-surface-elevated, var(--bg-card));
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  overflow: auto;
+}
+.cal-day.is-outside {
+  opacity: 0.45;
+}
+.cal-day.is-today {
+  border-color: var(--color-info);
+  box-shadow: inset 0 0 0 1px var(--color-info);
+}
+.cal-num {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.cal-day.is-today .cal-num {
+  color: var(--color-info);
+}
+.cal-events {
+  list-style: none;
+  display: grid;
+  gap: 0.28rem;
+  margin: 0;
+  padding: 0;
+}
+.home-widget-calendar .cal-events {
+  gap: 0.28rem;
+}
+.home-widget-calendar .cal-events li {
+  display: grid;
+  gap: 0.05rem;
+  padding: 0.28rem 0.35rem;
+  border-radius: 0.35rem;
+  background: var(--bg-input);
+  min-width: 0;
+}
+.cal-event-time {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: var(--color-info);
+}
+.cal-event strong {
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+.cal-event-detail {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.cal-event[data-kind='movie'] {
+  background: color-mix(in srgb, var(--color-primary) 16%, var(--bg-input));
+}
 .home-widget {
   padding: 1rem 1.15rem;
   min-width: 0;
@@ -553,6 +747,20 @@ onUnmounted(() => {
 @media (max-width: 720px) {
   .home-hero {
     flex-direction: column;
+  }
+}
+@media (max-width: 800px) {
+  .cal-range-month {
+    display: none;
+  }
+  .cal-range-week {
+    display: block;
+  }
+  .cal-week:not(.is-current) {
+    display: none;
+  }
+  .cal-week.is-current .cal-day {
+    min-height: 9.5rem;
   }
 }
 </style>
