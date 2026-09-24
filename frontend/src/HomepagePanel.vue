@@ -7,14 +7,20 @@ const props = defineProps({
 })
 const emit = defineEmits(['manage'])
 
-const snapshot = ref({
+const DEBUG_KEY = 'amm-homepage-widget-debug'
+const emptySnapshot = () => ({
   apps: [],
   calendar: [],
   downloads: [],
   recent: [],
   seerr: { available: false, url: null },
+  widgets: [],
 })
+
+const snapshot = ref(emptySnapshot())
 const loading = ref(true)
+const snapshotError = ref('')
+const widgetDebug = ref(false)
 const query = ref('')
 const results = ref([])
 const searching = ref(false)
@@ -30,13 +36,42 @@ const hasWidgets = computed(
     snapshot.value.downloads.length ||
     snapshot.value.recent.length,
 )
+const showWidgets = computed(() => hasWidgets.value || widgetDebug.value)
+const widgetNotes = computed(() => snapshot.value.widgets || [])
+
+function notesFor(widget) {
+  return widgetNotes.value.filter((item) => item.widget === widget)
+}
+
+function toggleWidgetDebug() {
+  widgetDebug.value = !widgetDebug.value
+  try {
+    localStorage.setItem(DEBUG_KEY, widgetDebug.value ? '1' : '0')
+  } catch (_) {
+    /* ignore */
+  }
+}
 
 async function loadSnapshot() {
   try {
     const res = await props.apiRequest('/api/homepage')
-    if (res.ok) snapshot.value = await res.json()
-  } catch (_) {
-    /* keep last snapshot */
+    if (res.ok) {
+      const data = await res.json()
+      snapshot.value = {
+        ...emptySnapshot(),
+        ...data,
+        calendar: data.calendar || [],
+        downloads: data.downloads || [],
+        recent: data.recent || [],
+        widgets: data.widgets || [],
+        seerr: data.seerr || { available: false, url: null },
+      }
+      snapshotError.value = ''
+    } else {
+      snapshotError.value = `Homepage API HTTP ${res.status}`
+    }
+  } catch (err) {
+    snapshotError.value = err?.message || 'Homepage snapshot failed'
   } finally {
     loading.value = false
   }
@@ -109,6 +144,12 @@ function formatWhen(value) {
 }
 
 onMounted(() => {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    widgetDebug.value = params.get('debug') === '1' || localStorage.getItem(DEBUG_KEY) === '1'
+  } catch (_) {
+    widgetDebug.value = false
+  }
   loadSnapshot()
   poll = setInterval(loadSnapshot, 15000)
 })
@@ -129,18 +170,29 @@ onUnmounted(() => {
           controls stay on Catalog.
         </p>
       </div>
-      <button type="button" class="ui-btn ui-btn-ghost" @click="emit('manage')">Open Catalog</button>
+      <div class="home-hero-actions">
+        <button
+          type="button"
+          class="ui-btn ui-btn-ghost"
+          :class="{ 'is-on': widgetDebug }"
+          @click="toggleWidgetDebug"
+        >
+          {{ widgetDebug ? 'Hide widget debug' : 'Widget debug' }}
+        </button>
+        <button type="button" class="ui-btn ui-btn-ghost" @click="emit('manage')">Open Catalog</button>
+      </div>
     </div>
 
     <p v-if="loading" class="home-muted">Loading homepage…</p>
+    <p v-if="snapshotError" class="home-notice">{{ snapshotError }}</p>
 
-    <div v-else-if="!snapshot.apps.length" class="home-empty glass-card">
+    <div v-if="!loading && !snapshot.apps.length" class="home-empty glass-card">
       <h3>Nothing to launch yet</h3>
       <p>Finish the wizard or install apps from Catalog. This page only lists installed services.</p>
       <button type="button" class="ui-btn ui-btn-primary" @click="emit('manage')">Go to Catalog</button>
     </div>
 
-    <template v-else>
+    <template v-else-if="!loading">
       <div class="home-launcher">
         <a
           v-for="app in snapshot.apps"
@@ -202,41 +254,77 @@ onUnmounted(() => {
         </ul>
       </form>
 
-      <div v-if="hasWidgets" class="home-widgets">
-        <article v-if="snapshot.calendar.length" class="home-widget glass-card">
+      <div v-if="showWidgets" class="home-widgets">
+        <article v-if="snapshot.calendar.length || widgetDebug" class="home-widget glass-card">
           <h3>Coming up</h3>
-          <ul>
+          <ul v-if="snapshot.calendar.length">
             <li v-for="(item, idx) in snapshot.calendar" :key="idx">
               <span class="home-when">{{ formatWhen(item.when) }}</span>
               <strong>{{ item.title }}</strong>
               <span class="home-muted">{{ item.detail }}</span>
             </li>
           </ul>
+          <p v-else class="home-muted">Nothing on the calendar.</p>
+          <ul v-if="widgetDebug && notesFor('calendar').length" class="home-debug">
+            <li v-for="(note, idx) in notesFor('calendar')" :key="idx">
+              <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
+              <span>{{ note.source }} — {{ note.detail }}</span>
+            </li>
+          </ul>
         </article>
-        <article v-if="snapshot.downloads.length" class="home-widget glass-card">
+        <article v-if="snapshot.downloads.length || widgetDebug" class="home-widget glass-card">
           <h3>Downloading</h3>
-          <ul>
+          <ul v-if="snapshot.downloads.length">
             <li v-for="(item, idx) in snapshot.downloads" :key="idx">
               <strong>{{ item.title }}</strong>
               <span class="home-muted">{{ item.source }} · {{ item.status }} · {{ item.progress }}%</span>
               <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
             </li>
           </ul>
+          <p v-else class="home-muted">No active downloads.</p>
+          <ul v-if="widgetDebug && notesFor('downloads').length" class="home-debug">
+            <li v-for="(note, idx) in notesFor('downloads')" :key="idx">
+              <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
+              <span>{{ note.source }} — {{ note.detail }}</span>
+            </li>
+          </ul>
         </article>
-        <article v-if="snapshot.recent.length" class="home-widget glass-card">
+        <article v-if="snapshot.recent.length || widgetDebug" class="home-widget glass-card">
           <h3>Recently added</h3>
-          <ul>
+          <ul v-if="snapshot.recent.length">
             <li v-for="(item, idx) in snapshot.recent" :key="idx">
               <strong>{{ item.title }}</strong>
               <span class="home-muted">{{ item.source }} · {{ item.detail }}</span>
+            </li>
+          </ul>
+          <p v-else class="home-muted">Nothing recently added.</p>
+          <ul v-if="widgetDebug && notesFor('recent').length" class="home-debug">
+            <li v-for="(note, idx) in notesFor('recent')" :key="idx">
+              <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
+              <span>{{ note.source }} — {{ note.detail }}</span>
             </li>
           </ul>
         </article>
       </div>
       <p v-else class="home-muted">
         Calendar, downloads, and recently added appear after Sonarr, Radarr, download clients, Jellyfin, or Plex are running.
+        Turn on Widget debug to see why a source is skipped or failing.
       </p>
     </template>
+    <article v-if="!loading && widgetDebug" class="home-widget glass-card home-debug-panel">
+      <h3>Widget debug</h3>
+      <p class="home-muted">
+        Per-source status for this homepage. API keys are never shown. Add
+        <code>?debug=1</code> to the URL to keep this on.
+      </p>
+      <ul v-if="widgetNotes.length" class="home-debug">
+        <li v-for="(note, idx) in widgetNotes" :key="idx">
+          <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
+          <span>{{ note.widget }} / {{ note.source }} — {{ note.detail }}</span>
+        </li>
+      </ul>
+      <p v-else class="home-muted">No widget sources reported yet. Reload the homepage.</p>
+    </article>
   </section>
 </template>
 
@@ -254,6 +342,16 @@ onUnmounted(() => {
   gap: 1rem;
   align-items: flex-start;
   padding: 1.25rem 1.4rem;
+}
+.home-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+.home-hero-actions .is-on {
+  border-color: var(--color-info);
+  color: var(--color-info);
 }
 .home-kicker {
   font-size: 0.72rem;
@@ -416,6 +514,41 @@ onUnmounted(() => {
   display: block;
   height: 100%;
   background: var(--color-primary);
+}
+.home-debug-panel {
+  padding: 1rem 1.15rem;
+}
+.home-debug {
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+.home-debug li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.home-debug-state {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--bg-input);
+}
+.home-debug-state[data-state='ok'] {
+  color: var(--color-success, #3dd68c);
+}
+.home-debug-state[data-state='error'] {
+  color: var(--color-danger, #ff6b6b);
+}
+.home-debug-state[data-state='empty'] {
+  color: var(--color-warning, #e6b84d);
 }
 @media (max-width: 720px) {
   .home-hero {

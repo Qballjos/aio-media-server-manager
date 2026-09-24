@@ -65,6 +65,12 @@ def test_homepage_hides_uninstalled_and_cli_apps(tmp_path):
     assert snap["downloads"] == []
     assert snap["recent"] == []
     assert snap["seerr"]["available"] is False
+    notes = {(item["widget"], item["source"], item["state"]): item["detail"] for item in snap["widgets"]}
+    assert notes[("calendar", "sonarr", "error")] == "running but no API key yet"
+    assert notes[("calendar", "radarr", "skipped")] == "not installed"
+    assert notes[("downloads", "sabnzbd", "skipped")] == "not installed"
+    assert notes[("recent", "jellyfin", "skipped")] == "not installed"
+    assert notes[("search", "seerr", "skipped")] == "not installed"
 
 
 def test_homepage_calendar_from_sonarr(tmp_path):
@@ -74,23 +80,58 @@ def test_homepage_calendar_from_sonarr(tmp_path):
         patch("core.homepage._running_names", return_value={"sonarr"}),
         patch("core.homepage.get_application_api_key", return_value="k"),
         patch(
-            "core.homepage._get_json",
-            return_value=[
-                {
-                    "title": "Pilot",
-                    "seasonNumber": 1,
-                    "episodeNumber": 2,
-                    "airDateUtc": "2026-09-24T20:00:00Z",
-                    "hasFile": False,
-                    "series": {"title": "Example Show"},
-                }
-            ],
+            "core.homepage._fetch_json",
+            return_value=(
+                [
+                    {
+                        "title": "Pilot",
+                        "seasonNumber": 1,
+                        "episodeNumber": 2,
+                        "airDateUtc": "2026-09-24T20:00:00Z",
+                        "hasFile": False,
+                        "series": {"title": "Example Show"},
+                    }
+                ],
+                None,
+            ),
         ),
     ):
         snap = homepage_snapshot("host.local")
     assert snap["calendar"][0]["title"] == "Example Show"
     assert "S01E02" in snap["calendar"][0]["detail"]
     assert snap["calendar"][0]["source"] == "sonarr"
+    sonarr_note = next(item for item in snap["widgets"] if item["source"] == "sonarr")
+    assert sonarr_note["state"] == "ok"
+    assert sonarr_note["count"] == 1
+
+
+def test_homepage_widget_debug_http_error(tmp_path):
+    catalog = FakeCatalog([_plugin("sonarr", 8989, tmp_path), _plugin("radarr", 7878, tmp_path)])
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"sonarr", "radarr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", return_value=(None, "HTTP 401")),
+    ):
+        snap = homepage_snapshot("host.local")
+    assert snap["calendar"] == []
+    notes = {item["source"]: item for item in snap["widgets"] if item["widget"] == "calendar"}
+    assert notes["sonarr"]["state"] == "error"
+    assert notes["sonarr"]["detail"] == "HTTP 401"
+    assert notes["radarr"]["detail"] == "HTTP 401"
+
+
+def test_homepage_widget_debug_stopped_source(tmp_path):
+    catalog = FakeCatalog([_plugin("jellyfin", 8096, tmp_path)])
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value=set()),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+    ):
+        snap = homepage_snapshot("host.local")
+    jelly = next(item for item in snap["widgets"] if item["source"] == "jellyfin")
+    assert jelly["state"] == "skipped"
+    assert jelly["detail"] == "stopped"
 
 
 def test_homepage_search_requires_two_characters():

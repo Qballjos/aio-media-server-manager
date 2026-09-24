@@ -25,41 +25,47 @@ def homepage_snapshot(host: str) -> dict[str, Any]:
     running = _running_names()
     start = date.today()
     end = start + timedelta(days=14)
+    notes: list[dict[str, Any]] = []
 
     apps = _launcher_apps(catalog, running, host)
-    names = {item["name"] for item in apps}
 
     calendar: list[dict[str, Any]] = []
-    if "sonarr" in names and "sonarr" in running:
-        calendar.extend(_sonarr_calendar(catalog, start, end))
-    if "radarr" in names and "radarr" in running:
-        calendar.extend(_radarr_calendar(catalog, start, end))
+    calendar.extend(_collect_sonarr_calendar(catalog, running, start, end, notes))
+    calendar.extend(_collect_radarr_calendar(catalog, running, start, end, notes))
     calendar.sort(key=lambda item: (item.get("when") or "", item.get("title") or ""))
 
     downloads: list[dict[str, Any]] = []
-    if "sabnzbd" in names and "sabnzbd" in running:
-        downloads.extend(_sabnzbd_queue(catalog))
-    if "nzbget" in names and "nzbget" in running:
-        downloads.extend(_nzbget_queue(catalog))
-    if "qbittorrent" in names and "qbittorrent" in running:
-        downloads.extend(_qbittorrent_queue(catalog))
+    downloads.extend(_collect_sabnzbd_queue(catalog, running, notes))
+    downloads.extend(_collect_nzbget_queue(catalog, running, notes))
+    downloads.extend(_collect_qbittorrent_queue(catalog, running, notes))
 
     recent: list[dict[str, Any]] = []
-    if "jellyfin" in names and "jellyfin" in running:
-        recent.extend(_jellyfin_recent(catalog))
-    if "plex" in names and "plex" in running:
-        recent.extend(_plex_recent(catalog))
+    recent.extend(_collect_jellyfin_recent(catalog, running, notes))
+    recent.extend(_collect_plex_recent(catalog, running, notes))
 
-    seerr = "seerr" in names
+    seerr = catalog.has("seerr") and catalog.get("seerr").is_installed()
+    seerr_running = seerr and "seerr" in running
+    if not seerr:
+        _note(notes, "search", "seerr", "skipped", "not installed")
+    elif not seerr_running:
+        _note(notes, "search", "seerr", "skipped", "stopped")
+    else:
+        key = get_application_api_key("seerr", catalog.get("seerr").config_dir)
+        if key:
+            _note(notes, "search", "seerr", "ok", "ready for search and requests")
+        else:
+            _note(notes, "search", "seerr", "error", "running but no API key yet")
+
     return {
         "apps": apps,
         "calendar": calendar[:40],
         "downloads": downloads[:40],
         "recent": recent[:24],
         "seerr": {
-            "available": seerr and "seerr" in running,
+            "available": bool(seerr_running),
             "url": _web_url(host, _port(catalog, "seerr", 5055)) if seerr else None,
         },
+        "widgets": notes,
     }
 
 
@@ -167,19 +173,99 @@ def _arr_headers(name: str, config_dir) -> dict[str, str]:
     return headers
 
 
+def _note(
+    notes: list[dict[str, Any]],
+    widget: str,
+    source: str,
+    state: str,
+    detail: str,
+    *,
+    count: int = 0,
+) -> None:
+    notes.append(
+        {
+            "widget": widget,
+            "source": source,
+            "state": state,
+            "detail": detail,
+            "count": count,
+        }
+    )
+
+
+def _source_ready(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    name: str,
+    widget: str,
+    notes: list[dict[str, Any]],
+    *,
+    need_key: bool = False,
+) -> bool:
+    if not catalog.has(name) or not catalog.get(name).is_installed():
+        _note(notes, widget, name, "skipped", "not installed")
+        return False
+    if name not in running:
+        _note(notes, widget, name, "skipped", "stopped")
+        return False
+    if need_key and not get_application_api_key(name, catalog.get(name).config_dir):
+        _note(notes, widget, name, "error", "running but no API key yet")
+        return False
+    return True
+
+
 def _get_json(url: str, *, headers: Optional[dict[str, str]] = None, params: Optional[dict[str, Any]] = None) -> Any:
+    data, _error = _fetch_json(url, headers=headers, params=params)
+    return data
+
+
+def _fetch_json(
+    url: str,
+    *,
+    headers: Optional[dict[str, str]] = None,
+    params: Optional[dict[str, Any]] = None,
+) -> tuple[Any, str | None]:
     try:
         resp = requests.get(url, headers=headers or {}, params=params, timeout=_TIMEOUT)
         if resp.status_code == 200:
-            return resp.json()
+            return resp.json(), None
+        return None, f"HTTP {resp.status_code}"
+    except requests.Timeout:
+        return None, "timed out after 4s"
     except Exception as exc:
         logger.debug("Homepage GET %s failed: %s", url, exc)
-    return None
+        return None, str(exc)[:180]
 
 
-def _sonarr_calendar(catalog: ApplicationCatalog, start: date, end: date) -> list[dict[str, Any]]:
+def _finish_source(
+    notes: list[dict[str, Any]],
+    widget: str,
+    source: str,
+    items: list[dict[str, Any]],
+    error: str | None,
+    empty_detail: str,
+) -> list[dict[str, Any]]:
+    if error:
+        _note(notes, widget, source, "error", error)
+        return []
+    if not items:
+        _note(notes, widget, source, "empty", empty_detail)
+        return []
+    _note(notes, widget, source, "ok", f"{len(items)} item(s)", count=len(items))
+    return items
+
+
+def _collect_sonarr_calendar(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    start: date,
+    end: date,
+    notes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not _source_ready(catalog, running, "sonarr", "calendar", notes, need_key=True):
+        return []
     plugin = catalog.get("sonarr")
-    data = _get_json(
+    data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/api/v3/calendar",
         headers=_arr_headers("sonarr", plugin.config_dir),
         params={
@@ -189,6 +275,17 @@ def _sonarr_calendar(catalog: ApplicationCatalog, start: date, end: date) -> lis
             "includeSeries": "true",
         },
     )
+    return _finish_source(
+        notes,
+        "calendar",
+        "sonarr",
+        _parse_sonarr_calendar(data),
+        error or (None if isinstance(data, list) else "unexpected calendar payload"),
+        "calendar is empty for the next 14 days",
+    )
+
+
+def _parse_sonarr_calendar(data: Any) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     if not isinstance(data, list):
         return items
@@ -213,13 +310,32 @@ def _sonarr_calendar(catalog: ApplicationCatalog, start: date, end: date) -> lis
     return items
 
 
-def _radarr_calendar(catalog: ApplicationCatalog, start: date, end: date) -> list[dict[str, Any]]:
+def _collect_radarr_calendar(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    start: date,
+    end: date,
+    notes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not _source_ready(catalog, running, "radarr", "calendar", notes, need_key=True):
+        return []
     plugin = catalog.get("radarr")
-    data = _get_json(
+    data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/api/v3/calendar",
         headers=_arr_headers("radarr", plugin.config_dir),
         params={"start": start.isoformat(), "end": end.isoformat(), "unmonitored": "false"},
     )
+    return _finish_source(
+        notes,
+        "calendar",
+        "radarr",
+        _parse_radarr_calendar(data),
+        error or (None if isinstance(data, list) else "unexpected calendar payload"),
+        "calendar is empty for the next 14 days",
+    )
+
+
+def _parse_radarr_calendar(data: Any) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     if not isinstance(data, list):
         return items
@@ -240,96 +356,135 @@ def _radarr_calendar(catalog: ApplicationCatalog, start: date, end: date) -> lis
     return items
 
 
-def _sabnzbd_queue(catalog: ApplicationCatalog) -> list[dict[str, Any]]:
+def _collect_sabnzbd_queue(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    notes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not _source_ready(catalog, running, "sabnzbd", "downloads", notes, need_key=True):
+        return []
     plugin = catalog.get("sabnzbd")
     key = get_application_api_key("sabnzbd", plugin.config_dir) or ""
-    data = _get_json(
+    data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/api",
         params={"mode": "queue", "output": "json", "apikey": key},
     )
     queue = data.get("queue") if isinstance(data, dict) else None
     slots = queue.get("slots") if isinstance(queue, dict) else None
     items: list[dict[str, Any]] = []
-    if not isinstance(slots, list):
-        return items
-    for row in slots:
-        if not isinstance(row, dict):
-            continue
-        items.append(
-            {
-                "source": "sabnzbd",
-                "title": row.get("filename") or row.get("name") or "Download",
-                "status": row.get("status") or "",
-                "progress": _pct(row.get("percentage")),
-            }
-        )
-    return items
+    if isinstance(slots, list):
+        for row in slots:
+            if not isinstance(row, dict):
+                continue
+            items.append(
+                {
+                    "source": "sabnzbd",
+                    "title": row.get("filename") or row.get("name") or "Download",
+                    "status": row.get("status") or "",
+                    "progress": _pct(row.get("percentage")),
+                }
+            )
+    payload_error = None if isinstance(data, dict) else "unexpected queue payload"
+    return _finish_source(
+        notes,
+        "downloads",
+        "sabnzbd",
+        items,
+        error or payload_error,
+        "queue is empty",
+    )
 
 
-def _nzbget_queue(catalog: ApplicationCatalog) -> list[dict[str, Any]]:
+def _collect_nzbget_queue(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    notes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not _source_ready(catalog, running, "nzbget", "downloads", notes):
+        return []
     plugin = catalog.get("nzbget")
-    client = NZBGetClient(port=plugin.port)
-    groups = client._call("listgroups") or []
+    try:
+        groups = NZBGetClient(port=plugin.port)._call("listgroups")
+        error = None
+    except Exception as exc:
+        logger.debug("NZBGet queue failed: %s", exc)
+        groups = None
+        error = str(exc)[:180]
     items: list[dict[str, Any]] = []
-    if not isinstance(groups, list):
-        return items
-    for row in groups:
-        if not isinstance(row, dict):
-            continue
-        remaining = float(row.get("RemainingSizeMB") or 0)
-        total = float(row.get("FileSizeMB") or 0) or 1.0
-        items.append(
-            {
-                "source": "nzbget",
-                "title": row.get("NZBName") or "Download",
-                "status": row.get("Status") or "",
-                "progress": max(0, min(100, int(round(100 * (1.0 - remaining / total))))),
-            }
-        )
-    return items
+    if isinstance(groups, list):
+        for row in groups:
+            if not isinstance(row, dict):
+                continue
+            remaining = float(row.get("RemainingSizeMB") or 0)
+            total = float(row.get("FileSizeMB") or 0) or 1.0
+            items.append(
+                {
+                    "source": "nzbget",
+                    "title": row.get("NZBName") or "Download",
+                    "status": row.get("Status") or "",
+                    "progress": max(0, min(100, int(round(100 * (1.0 - remaining / total))))),
+                }
+            )
+    elif groups is None and not error:
+        error = "could not read NZBGet queue"
+    return _finish_source(notes, "downloads", "nzbget", items, error, "queue is empty")
 
 
-def _qbittorrent_queue(catalog: ApplicationCatalog) -> list[dict[str, Any]]:
+def _collect_qbittorrent_queue(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    notes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not _source_ready(catalog, running, "qbittorrent", "downloads", notes):
+        return []
     plugin = catalog.get("qbittorrent")
     client = QBittorrentClient(port=plugin.port)
     if not client.login():
-        return []
+        return _finish_source(notes, "downloads", "qbittorrent", [], "WebUI login failed", "queue is empty")
     try:
         resp = client.session.get(f"{client.base_url}/torrents/info", timeout=_TIMEOUT)
         if resp.status_code != 200:
-            return []
+            return _finish_source(
+                notes, "downloads", "qbittorrent", [], f"HTTP {resp.status_code}", "queue is empty"
+            )
         rows = resp.json()
     except Exception as exc:
         logger.debug("qBittorrent torrents failed: %s", exc)
-        return []
+        return _finish_source(notes, "downloads", "qbittorrent", [], str(exc)[:180], "queue is empty")
     items: list[dict[str, Any]] = []
-    if not isinstance(rows, list):
-        return items
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        state = str(row.get("state") or "")
-        if state in {"pausedUP", "stalledUP", "uploading", "queuedUP"} and float(row.get("progress") or 0) >= 1:
-            continue
-        items.append(
-            {
-                "source": "qbittorrent",
-                "title": row.get("name") or "Torrent",
-                "status": state,
-                "progress": int(round(float(row.get("progress") or 0) * 100)),
-            }
-        )
-    return items
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            state = str(row.get("state") or "")
+            if state in {"pausedUP", "stalledUP", "uploading", "queuedUP"} and float(row.get("progress") or 0) >= 1:
+                continue
+            items.append(
+                {
+                    "source": "qbittorrent",
+                    "title": row.get("name") or "Torrent",
+                    "status": state,
+                    "progress": int(round(float(row.get("progress") or 0) * 100)),
+                }
+            )
+    error = None if isinstance(rows, list) else "unexpected torrents payload"
+    return _finish_source(notes, "downloads", "qbittorrent", items, error, "no active torrents")
 
 
-def _jellyfin_recent(catalog: ApplicationCatalog) -> list[dict[str, Any]]:
+def _collect_jellyfin_recent(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    notes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not _source_ready(catalog, running, "jellyfin", "recent", notes, need_key=True):
+        return []
     plugin = catalog.get("jellyfin")
     key = get_application_api_key("jellyfin", plugin.config_dir)
     headers = {"Content-Type": "application/json"}
     if key:
         headers["X-Emby-Token"] = key
         headers["X-MediaBrowser-Token"] = key
-    data = _get_json(
+    data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/Items",
         headers=headers,
         params={
@@ -343,23 +498,36 @@ def _jellyfin_recent(catalog: ApplicationCatalog) -> list[dict[str, Any]]:
     )
     rows = data.get("Items") if isinstance(data, dict) else None
     items: list[dict[str, Any]] = []
-    if not isinstance(rows, list):
-        return items
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        items.append(
-            {
-                "source": "jellyfin",
-                "title": row.get("Name") or "Item",
-                "detail": row.get("Type") or "",
-                "when": str(row.get("DateCreated") or "")[:16],
-            }
-        )
-    return items
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            items.append(
+                {
+                    "source": "jellyfin",
+                    "title": row.get("Name") or "Item",
+                    "detail": row.get("Type") or "",
+                    "when": str(row.get("DateCreated") or "")[:16],
+                }
+            )
+    payload_error = None if isinstance(data, dict) else "unexpected items payload"
+    return _finish_source(
+        notes,
+        "recent",
+        "jellyfin",
+        items,
+        error or payload_error,
+        "library returned no recently added items",
+    )
 
 
-def _plex_recent(catalog: ApplicationCatalog) -> list[dict[str, Any]]:
+def _collect_plex_recent(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    notes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not _source_ready(catalog, running, "plex", "recent", notes):
+        return []
     plugin = catalog.get("plex")
     client = PlexClient(port=plugin.port, config_dir=plugin.config_dir)
     try:
@@ -369,28 +537,35 @@ def _plex_recent(catalog: ApplicationCatalog) -> list[dict[str, Any]]:
             timeout=_TIMEOUT,
         )
         if resp.status_code != 200:
-            return []
+            return _finish_source(notes, "recent", "plex", [], f"HTTP {resp.status_code}", "")
         payload = resp.json()
     except Exception as exc:
         logger.debug("Plex recently added failed: %s", exc)
-        return []
+        return _finish_source(notes, "recent", "plex", [], str(exc)[:180], "")
     container = payload.get("MediaContainer") if isinstance(payload, dict) else None
     rows = container.get("Metadata") if isinstance(container, dict) else None
     items: list[dict[str, Any]] = []
-    if not isinstance(rows, list):
-        return items
-    for row in rows[:16]:
-        if not isinstance(row, dict):
-            continue
-        items.append(
-            {
-                "source": "plex",
-                "title": row.get("title") or row.get("parentTitle") or "Item",
-                "detail": row.get("type") or "",
-                "when": str(row.get("addedAt") or row.get("originallyAvailableAt") or ""),
-            }
-        )
-    return items
+    if isinstance(rows, list):
+        for row in rows[:16]:
+            if not isinstance(row, dict):
+                continue
+            items.append(
+                {
+                    "source": "plex",
+                    "title": row.get("title") or row.get("parentTitle") or "Item",
+                    "detail": row.get("type") or "",
+                    "when": str(row.get("addedAt") or row.get("originallyAvailableAt") or ""),
+                }
+            )
+    error = None if isinstance(payload, dict) else "unexpected recently added payload"
+    return _finish_source(
+        notes,
+        "recent",
+        "plex",
+        items,
+        error,
+        "library returned no recently added items",
+    )
 
 
 def _seerr_search(catalog: ApplicationCatalog, term: str) -> list[dict[str, Any]]:

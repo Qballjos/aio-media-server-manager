@@ -37,8 +37,9 @@ After the wizard, **Home** is the front page for watching and requesting. It reu
 - **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
 - **Recently added** uses Jellyfin and/or Plex.
 - **Search** talks to Seerr when it is running (Request button). Without Seerr, it falls back to Sonarr/Radarr lookup only.
+- **Widget debug** on Home (or `?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
 
-Missing apps hide their widgets. **Catalog** is still the admin dashboard for install, process controls, logs, and Auto-Wire.
+Empty widgets stay hidden until debug is on. **Catalog** is still the admin dashboard for install, process controls, logs, and Auto-Wire.
 
 ## 4. Catalog dashboard
 
