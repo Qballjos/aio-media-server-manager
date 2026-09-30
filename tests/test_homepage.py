@@ -16,6 +16,8 @@ from core.auth import auth_manager
 from core.homepage import (
     calendar_fetch_span,
     clear_homepage_snapshot_cache,
+    collapse_full_seasons,
+    homepage_downloads,
     homepage_request,
     homepage_search,
     homepage_snapshot,
@@ -148,6 +150,7 @@ def test_homepage_hides_uninstalled_and_cli_apps(tmp_path):
     assert names == ["sonarr"]
     assert snap["apps"][0]["url"] == "http://192.168.2.10:8989"
     assert snap["apps"][0]["running"] is True
+    assert snap["apps"][0]["sick"] is False
     assert snap["apps"][0]["category"] == "automation"
     assert snap["calendar"] == []
     assert snap["downloads"] == []
@@ -180,6 +183,71 @@ def test_homepage_launcher_groups_by_category(tmp_path):
         snap = homepage_snapshot("nas.local")
     assert [item["name"] for item in snap["apps"]] == ["jellyfin", "seerr", "sonarr"]
     assert [item["category"] for item in snap["apps"]] == ["media", "requests", "automation"]
+
+
+def test_homepage_launcher_marks_crash_loop_sick(tmp_path):
+    catalog = FakeCatalog(
+        [
+            _plugin("sonarr", 8989, tmp_path),
+            _plugin("radarr", 7878, tmp_path),
+        ]
+    )
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"radarr"}),
+        patch(
+            "core.homepage._process_states",
+            return_value={
+                "sonarr": {"name": "sonarr", "state": "crash_loop", "is_crash_loop": True},
+                "radarr": {"name": "radarr", "state": "running", "is_crash_loop": False},
+            },
+        ),
+        patch("core.homepage.get_application_api_key", return_value=None),
+        patch("core.homepage._fetch_json", return_value=(None, "skipped")),
+    ):
+        snap = homepage_snapshot("nas.local")
+    by_name = {item["name"]: item for item in snap["apps"]}
+    assert by_name["sonarr"]["running"] is False
+    assert by_name["sonarr"]["sick"] is True
+    assert by_name["radarr"]["running"] is True
+    assert by_name["radarr"]["sick"] is False
+
+
+def test_homepage_downloads_include_speed(tmp_path):
+    catalog = FakeCatalog([_plugin("sabnzbd", 8085, tmp_path, category="downloading")])
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"sabnzbd"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch(
+            "core.homepage._fetch_json",
+            return_value=(
+                {
+                    "queue": {
+                        "kbpersec": "1500.0",
+                        "slots": [
+                            {
+                                "filename": "Show.nzb",
+                                "status": "Downloading",
+                                "percentage": "42.2",
+                                "kbpersec": "1500.0",
+                                "timeleft": "0:12:04",
+                            }
+                        ],
+                    }
+                },
+                None,
+            ),
+        ),
+    ):
+        data = homepage_downloads()
+        snap = homepage_snapshot("nas.local")
+    item = data["downloads"][0]
+    assert item["title"] == "Show.nzb"
+    assert item["progress"] == 42
+    assert item["speed_bps"] == 1_500_000
+    assert item["eta"] == "0:12:04"
+    assert snap["downloads"][0]["speed_bps"] == 1_500_000
 
 
 def test_homepage_calendar_from_sonarr(tmp_path):
@@ -235,6 +303,84 @@ def test_homepage_jellyfin_recent_has_poster_proxy(tmp_path):
     assert snap["recent"][0]["title"] == "Dune"
     assert snap["recent"][0]["poster"].startswith("/api/homepage/art?source=jellyfin")
     assert "abc" in snap["recent"][0]["poster"]
+
+
+def _episode(series: str, season: int, episode: int, when: str, **extra):
+    item = {
+        "source": "jellyfin",
+        "title": series,
+        "detail": f"S{season:02d}E{episode:02d}",
+        "when": when,
+        "poster": "/p",
+        "url": f"http://nas/web/#/details?id=e{episode}",
+        "_kind": "episode",
+        "_series_id": series,
+        "_season": season,
+        "_episode": episode,
+        "_season_id": "season-1",
+    }
+    item.update(extra)
+    return item
+
+
+def test_collapse_full_season_hides_member_episodes():
+    when = "2026-09-30T20:00:00"
+    rows = [_episode("Severance", 1, n, when) for n in range(1, 5)]
+    rows.append(
+        {
+            "source": "jellyfin",
+            "title": "Dune",
+            "detail": "2021",
+            "when": "2026-09-29T12:00:00",
+            "poster": "/dune",
+            "url": "http://nas/web/#/details?id=dune",
+            "_kind": "movie",
+        }
+    )
+    out = collapse_full_seasons(rows)
+    assert [item["title"] for item in out] == ["Severance", "Dune"]
+    assert out[0]["detail"] == "Season 01"
+    assert out[0]["url"].endswith("id=season-1")
+
+
+def test_collapse_keeps_single_and_partial_season_episodes():
+    rows = [
+        _episode("Show", 1, 4, "2026-09-30T20:00:00"),
+        _episode("Show", 1, 5, "2026-09-30T20:01:00"),
+        _episode("Other", 2, 1, "2026-09-29T18:00:00"),
+        _episode("Show", 1, 6, "2026-09-20T10:00:00"),
+    ]
+    out = collapse_full_seasons(rows)
+    details = [item["detail"] for item in out]
+    assert details == ["S01E05", "S01E04", "S02E01", "S01E06"]
+
+
+def test_homepage_jellyfin_full_season_is_one_tile(tmp_path):
+    catalog = FakeCatalog([_plugin("jellyfin", 8096, tmp_path)])
+    items = [
+        {
+            "Id": f"e{n}",
+            "Type": "Episode",
+            "Name": f"Episode {n}",
+            "SeriesName": "Severance",
+            "SeriesId": "show1",
+            "ParentId": "s1",
+            "ParentIndexNumber": 1,
+            "IndexNumber": n,
+            "DateCreated": "2026-09-30T20:00:00",
+        }
+        for n in range(1, 5)
+    ]
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"jellyfin"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", return_value=({"Items": items}, None)),
+    ):
+        snap = homepage_snapshot("nas.local")
+    assert len(snap["recent"]) == 1
+    assert snap["recent"][0]["title"] == "Severance"
+    assert snap["recent"][0]["detail"] == "Season 01"
 
 
 def test_homepage_seerr_requests_row(tmp_path):

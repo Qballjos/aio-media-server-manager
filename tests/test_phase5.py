@@ -11,7 +11,15 @@ from applications.qbittorrent import QBittorrentApp
 from core.metrics import collect_metrics
 from core.settings import Settings
 from core.transcoding import probe_transcoding
-from core.vpn import TORRENT_NETNS, VPN_TUNNELED_APPS, VpnIsolationError, VpnManager, save_vpn_config_text
+from core.vpn import (
+    TORRENT_NETNS,
+    VPN_TUNNELED_APPS,
+    VpnIsolationError,
+    VpnManager,
+    parse_vpn_dns_servers,
+    save_vpn_config_text,
+    vpn_start_failure_detail,
+)
 
 
 def test_metrics_shape():
@@ -173,6 +181,18 @@ def test_save_vpn_config_text_writes_default_path(tmp_path: Path):
     assert dest == cfg.config_dir / "vpn" / "client.ovpn"
     assert dest.is_file()
     assert "remote vpn.example" in dest.read_text(encoding="utf-8")
+
+
+def test_parse_vpn_dns_from_wireguard_and_openvpn():
+    assert parse_vpn_dns_servers("DNS = 10.2.0.1, 10.2.0.2\n") == ["10.2.0.1", "10.2.0.2"]
+    assert parse_vpn_dns_servers("dhcp-option DNS 103.86.96.100\n") == ["103.86.96.100"]
+    assert parse_vpn_dns_servers("[Interface]\nPrivateKey = x\n") == []
+
+
+def test_vpn_start_failure_explains_missing_wireguard_go():
+    text = vpn_start_failure_detail(127, "", "")
+    assert "wireguard-go" in text
+    assert "OpenVPN" in text
 
 
 def test_flaresolverr_start_command_wraps_on_linux(tmp_path: Path, monkeypatch):

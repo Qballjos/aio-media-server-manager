@@ -29,6 +29,7 @@ _VETH_NS = "amm-veth-n"
 _NS_HOST_IP = "10.200.200.1"
 _NS_PEER_IP = "10.200.200.2"
 _DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191}
+_FALLBACK_DNS = ("1.1.1.1", "9.9.9.9")
 
 
 class VpnIsolationError(RuntimeError):
@@ -78,6 +79,59 @@ def save_vpn_config_text(
         pass
     app_settings.vpn_config_path = dest
     return dest
+
+
+def parse_vpn_dns_servers(text: str) -> list[str]:
+    """Read DNS servers from a WireGuard or OpenVPN profile."""
+    servers: list[str] = []
+    seen: set[str] = set()
+    for raw in (text or "").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        lower = line.lower()
+        values = ""
+        if lower.startswith("dns"):
+            _, _, values = line.partition("=")
+            if not values:
+                _, _, values = line.partition(" ")
+        elif "dhcp-option" in lower and "dns" in lower:
+            values = line.split("DNS", 1)[-1] if "DNS" in line else line.split("dns", 1)[-1]
+        else:
+            continue
+        for token in values.replace(";", ",").split(","):
+            host = token.strip().split("%", 1)[0]
+            if host.count(":") == 1 and host.rsplit(":", 1)[-1].isdigit():
+                host = host.rsplit(":", 1)[0]
+            if _is_dns_address(host) and host not in seen:
+                seen.add(host)
+                servers.append(host)
+    return servers
+
+
+def _is_dns_address(value: str) -> bool:
+    host = (value or "").strip()
+    if not host or host.startswith("-"):
+        return False
+    if host.count(".") == 3:
+        parts = host.split(".")
+        try:
+            return all(0 <= int(part) <= 255 for part in parts)
+        except ValueError:
+            return False
+    return ":" in host
+
+
+def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
+    detail = (stderr or stdout or "").strip()
+    if returncode == 127 or "command not found" in detail.lower():
+        hint = (
+            "WireGuard kernel module is not available and wg-quick could not run "
+            "wireguard-go. Recreate the container from a current image, load WireGuard "
+            "on the NAS, or switch the profile to OpenVPN."
+        )
+        return f"{hint} {detail}".strip()[:2000]
+    return (detail or f"wg-quick/openvpn exited {returncode}")[:2000]
 
 
 class VpnManager:
@@ -177,12 +231,21 @@ class VpnManager:
         if not inner:
             return {"status": "error", "detail": f"{proto} tools are not installed on this host."}
         cmd = self.wrap_isolated_command(inner) if self._is_linux() else inner
+        env = os.environ.copy()
+        env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        wg_go = shutil.which("wireguard-go")
+        if wg_go:
+            env["WG_QUICK_USERSPACE_IMPLEMENTATION"] = wg_go
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=30)
+            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60, env=env)
             if self._is_linux():
                 self._forward_local_ports()
             return {"status": "started", **self.status()}
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        except subprocess.CalledProcessError as exc:
+            detail = vpn_start_failure_detail(exc.returncode, exc.stderr or "", exc.stdout or "")
+            logger.warning("VPN start failed: %s", detail)
+            return {"status": "error", "detail": detail, **self.status()}
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
             logger.warning("VPN start failed: %s", exc)
             return {"status": "error", "detail": str(exc), **self.status()}
 
@@ -221,8 +284,26 @@ class VpnManager:
         self._ip(["netns", "exec", TORRENT_NETNS, "ip", "addr", "add", f"{_NS_PEER_IP}/24", "dev", _VETH_NS])
         self._ip(["netns", "exec", TORRENT_NETNS, "ip", "link", "set", _VETH_NS, "up"])
         self._ip(["netns", "exec", TORRENT_NETNS, "ip", "link", "set", "lo", "up"])
+        self._write_netns_resolv()
         # No default route via the veth: the only WAN path is the VPN interface.
         return None
+
+    def _write_netns_resolv(self) -> None:
+        """Docker's 127.0.0.11 resolver is not reachable from amm-torrent."""
+        servers = []
+        try:
+            if self.config_path.is_file():
+                servers = parse_vpn_dns_servers(self.config_path.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            servers = []
+        if not servers:
+            servers = list(_FALLBACK_DNS)
+        path = Path(f"/etc/netns/{TORRENT_NETNS}/resolv.conf")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("".join(f"nameserver {item}\n" for item in servers), encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Could not write %s: %s", path, exc)
 
     def _webui_ports(self) -> dict[str, int]:
         ports = dict(_DEFAULT_PORTS)

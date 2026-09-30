@@ -17,6 +17,16 @@ FROM eclipse-temurin:25-jre-noble AS jre
 
 FROM python:3.13-slim-bookworm AS py313
 
+# Userspace WireGuard for NAS kernels that have no wireguard module (typical on Synology).
+# wg-quick falls back to this binary when `ip link add type wireguard` fails (exit 127 otherwise).
+FROM --platform=$BUILDPLATFORM golang:1.23-bookworm AS wggo
+ARG TARGETOS
+ARG TARGETARCH
+WORKDIR /src
+RUN git clone --depth 1 --branch 0.0.20230223 https://github.com/WireGuard/wireguard-go.git . \
+    && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+        go build -trimpath -ldflags="-s -w" -o /wireguard-go .
+
 FROM python:3.14-slim-bookworm
 ARG TARGETARCH
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -30,12 +40,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     AMM_API_PORT=8080 \
     JAVA_HOME=/opt/java \
     AMM_CHILD_PYTHON=/usr/local/bin/python3.13 \
-    PATH="/opt/java/bin:${PATH}"
+    PATH="/opt/java/bin:${PATH}" \
+    WG_QUICK_USERSPACE_IMPLEMENTATION=/usr/bin/wireguard-go
 
 COPY --from=jre /opt/java/openjdk /opt/java
 COPY --from=py313 /usr/local /opt/python3.13
 COPY --from=nodebin /usr/local/bin/node /usr/local/bin/node
 COPY --from=nodebin /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=wggo /wireguard-go /usr/bin/wireguard-go
 
 RUN printf '%s\n' \
         '#!/bin/sh' \
@@ -55,7 +67,7 @@ RUN printf '%s\n' \
 #   Grimmory: JRE 25 (copied from jre), mariadb-server
 #   Flaresolverr (x86_64 / amd64 image only): chromium, xvfb, fonts-liberation
 #   Recyclarr: git (clones TRaSH Guides on sync)
-#   VPN: iproute2, openvpn, wireguard-tools
+#   VPN: iproute2, openvpn, wireguard-tools, wireguard-go (userspace fallback)
 # Catalog app installs use GitHub zipballs/releases; Recyclarr still shells out to git.
 # Official `unrar` lives in Debian non-free; unrar-free reports version 0.00 to SABnzbd.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
@@ -99,7 +111,8 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
     && ln -sf /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
-    && corepack enable
+    && corepack enable \
+    && chmod +x /usr/bin/wireguard-go
 
 RUN set -eux; \
     case "${TARGETARCH:-amd64}" in \

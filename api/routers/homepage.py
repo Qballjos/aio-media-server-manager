@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
-from core.homepage import homepage_art, homepage_request, homepage_search, homepage_snapshot
+from core.homepage import homepage_art, homepage_downloads, homepage_request, homepage_search, homepage_snapshot
 
 router = APIRouter(prefix="/api/homepage", tags=["Homepage"])
 
@@ -29,6 +29,12 @@ async def get_homepage(request: Request, refresh: bool = False) -> dict[str, Any
     _ensure_authenticated(request)
     host = request.url.hostname or "127.0.0.1"
     return homepage_snapshot(host, force=refresh)
+
+
+@router.get("/downloads", summary="Live download queues")
+async def get_homepage_downloads(request: Request) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    return homepage_downloads()
 
 
 @router.get("/art", summary="Poster image for Home rails")

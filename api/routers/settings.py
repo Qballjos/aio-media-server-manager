@@ -251,8 +251,13 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         raise HTTPException(status_code=500, detail=f"Could not save settings: {exc}") from exc
 
     if body.vpn_enabled is True:
-        vpn_manager.start()
-        notes.append("VPN start attempted.")
+        result = vpn_manager.start()
+        if result.get("status") == "error":
+            notes.append(f"VPN start failed: {result.get('detail') or 'unknown error'}")
+        elif result.get("tunnel_up"):
+            notes.append("VPN started.")
+        else:
+            notes.append("VPN start ran but the tunnel is still down. Check Settings → Network.")
     elif body.vpn_enabled is False:
         vpn_manager.stop()
         notes.append("VPN stopped.")

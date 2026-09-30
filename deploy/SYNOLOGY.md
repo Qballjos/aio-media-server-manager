@@ -90,7 +90,7 @@ sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
 # scp wg0.conf into that directory
 ```
 
-Set `AMM_VPN_ENABLED=true` in the project compose (and `AMM_VPN_ENFORCE=true` if torrents must not run without a tunnel), then start the project again.
+Set `AMM_VPN_ENABLED=true` in the project compose (and `AMM_VPN_ENFORCE=true` if torrents must not run without a tunnel), then start the project again. Synology’s kernel often has no WireGuard module; the appliance image includes **wireguard-go** as a fallback. Recreate the container after pulling a current image, then save VPN in **Settings → Network**. OpenVPN works without that module if `/dev/net/tun` is present (privileged mode).
 
 ## Cloudflare Tunnel
 

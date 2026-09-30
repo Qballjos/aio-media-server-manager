@@ -109,6 +109,32 @@ def homepage_snapshot(host: str, *, force: bool = False) -> dict[str, Any]:
         return _build_and_store(ident)
 
 
+def homepage_downloads() -> dict[str, Any]:
+    """Live download queues and speeds — not served from the Home snapshot cache."""
+    catalog = ApplicationCatalog()
+    running = _running_names()
+    items, notes = _collect_download_queues(catalog, running)
+    return {"downloads": items[:40], "widgets": notes}
+
+
+def _collect_download_queues(
+    catalog: ApplicationCatalog,
+    running: set[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    sab_notes: list[dict[str, Any]] = []
+    nzb_notes: list[dict[str, Any]] = []
+    qbit_notes: list[dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        fut_sab = pool.submit(_collect_sabnzbd_queue, catalog, running, sab_notes)
+        fut_nzb = pool.submit(_collect_nzbget_queue, catalog, running, nzb_notes)
+        fut_qbit = pool.submit(_collect_qbittorrent_queue, catalog, running, qbit_notes)
+        items.extend(fut_sab.result())
+        items.extend(fut_nzb.result())
+        items.extend(fut_qbit.result())
+    return items, sab_notes + nzb_notes + qbit_notes
+
+
 def _lock_for(host: str) -> threading.Lock:
     with _cache_guard:
         lock = _host_build_locks.get(host)
@@ -175,9 +201,6 @@ def _build_homepage_snapshot(host: str) -> dict[str, Any]:
 
     sonarr_notes: list[dict[str, Any]] = []
     radarr_notes: list[dict[str, Any]] = []
-    sab_notes: list[dict[str, Any]] = []
-    nzb_notes: list[dict[str, Any]] = []
-    qbit_notes: list[dict[str, Any]] = []
     jelly_notes: list[dict[str, Any]] = []
     plex_notes: list[dict[str, Any]] = []
     seerr_notes: list[dict[str, Any]] = []
@@ -185,17 +208,14 @@ def _build_homepage_snapshot(host: str) -> dict[str, Any]:
     with ThreadPoolExecutor(max_workers=8) as pool:
         fut_sonarr = pool.submit(_collect_sonarr_calendar, catalog, running, start, end, sonarr_notes)
         fut_radarr = pool.submit(_collect_radarr_calendar, catalog, running, start, end, radarr_notes)
-        fut_sab = pool.submit(_collect_sabnzbd_queue, catalog, running, sab_notes)
-        fut_nzb = pool.submit(_collect_nzbget_queue, catalog, running, nzb_notes)
-        fut_qbit = pool.submit(_collect_qbittorrent_queue, catalog, running, qbit_notes)
+        fut_downloads = pool.submit(_collect_download_queues, catalog, running)
         fut_jelly = pool.submit(_collect_jellyfin_recent, catalog, running, jelly_notes, host)
         fut_plex = pool.submit(_collect_plex_recent, catalog, running, plex_notes, host)
         fut_seerr = pool.submit(_collect_seerr_requests, catalog, running, seerr_notes, host)
         calendar.extend(fut_sonarr.result())
         calendar.extend(fut_radarr.result())
-        downloads.extend(fut_sab.result())
-        downloads.extend(fut_nzb.result())
-        downloads.extend(fut_qbit.result())
+        dl_items, dl_notes = fut_downloads.result()
+        downloads.extend(dl_items)
         recent.extend(fut_jelly.result())
         recent.extend(fut_plex.result())
         requests_row.extend(fut_seerr.result())
@@ -204,9 +224,7 @@ def _build_homepage_snapshot(host: str) -> dict[str, Any]:
     recent.sort(key=_when_sort_key, reverse=True)
     notes.extend(sonarr_notes)
     notes.extend(radarr_notes)
-    notes.extend(sab_notes)
-    notes.extend(nzb_notes)
-    notes.extend(qbit_notes)
+    notes.extend(dl_notes)
     notes.extend(jelly_notes)
     notes.extend(plex_notes)
     notes.extend(seerr_notes)
@@ -303,6 +321,9 @@ def homepage_request(payload: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "detail": "Could not reach Seerr."}
 
 
+_SICK_STATES = frozenset({"crash_loop", "failed"})
+
+
 def _running_names() -> set[str]:
     try:
         supervisor = ProcessSupervisor.get()
@@ -311,13 +332,30 @@ def _running_names() -> set[str]:
         return set()
 
 
-def _launcher_apps(catalog: ApplicationCatalog, running: set[str], host: str) -> list[dict[str, Any]]:
+def _process_states() -> dict[str, dict[str, Any]]:
+    try:
+        supervisor = ProcessSupervisor.get()
+        return {item["name"]: item for item in supervisor.list_processes()}
+    except Exception:
+        return {}
+
+
+def _launcher_apps(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    host: str,
+    processes: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    states = processes if processes is not None else _process_states()
     apps: list[dict[str, Any]] = []
     for plugin in catalog.all_plugins():
         if plugin.name in _LAUNCHER_SKIP or not plugin.manifest.daemon:
             continue
         if not plugin.is_installed():
             continue
+        proc = states.get(plugin.name) or {}
+        state = str(proc.get("state") or ("running" if plugin.name in running else "stopped"))
+        sick = bool(proc.get("is_crash_loop")) or state in _SICK_STATES
         apps.append(
             {
                 "name": plugin.name,
@@ -325,6 +363,7 @@ def _launcher_apps(catalog: ApplicationCatalog, running: set[str], host: str) ->
                 "category": plugin.manifest.category.value,
                 "port": plugin.port,
                 "running": plugin.name in running,
+                "sick": sick,
                 "url": _web_url(host, plugin.port),
             }
         )
@@ -623,17 +662,24 @@ def _collect_sabnzbd_queue(
     )
     queue = data.get("queue") if isinstance(data, dict) else None
     slots = queue.get("slots") if isinstance(queue, dict) else None
+    overall = _speed_bps(queue.get("kbpersec") if isinstance(queue, dict) else None, unit="kb")
     items: list[dict[str, Any]] = []
     if isinstance(slots, list):
         for row in slots:
             if not isinstance(row, dict):
                 continue
+            status = str(row.get("status") or "")
+            speed = _speed_bps(row.get("kbpersec"), unit="kb")
+            if speed <= 0 and status.lower() in {"downloading", "grabbing", "fetching"}:
+                speed = overall
             items.append(
                 {
                     "source": "sabnzbd",
                     "title": row.get("filename") or row.get("name") or "Download",
-                    "status": row.get("status") or "",
+                    "status": status,
                     "progress": _pct(row.get("percentage")),
+                    "speed_bps": speed,
+                    "eta": str(row.get("timeleft") or "").strip(),
                 }
             )
     payload_error = None if isinstance(data, dict) else "unexpected queue payload"
@@ -655,13 +701,22 @@ def _collect_nzbget_queue(
     if not _source_ready(catalog, running, "nzbget", "downloads", notes):
         return []
     plugin = catalog.get("nzbget")
+    client = NZBGetClient(port=plugin.port)
     try:
-        groups = NZBGetClient(port=plugin.port)._call("listgroups")
+        groups = client._call("listgroups")
         error = None
     except Exception as exc:
         logger.debug("NZBGet queue failed: %s", exc)
         groups = None
         error = str(exc)[:180]
+    overall = 0
+    if groups:
+        try:
+            status_row = client._call("status")
+        except Exception:
+            status_row = None
+        if isinstance(status_row, dict):
+            overall = _speed_bps(status_row.get("DownloadRate"))
     items: list[dict[str, Any]] = []
     if isinstance(groups, list):
         for row in groups:
@@ -669,12 +724,16 @@ def _collect_nzbget_queue(
                 continue
             remaining = float(row.get("RemainingSizeMB") or 0)
             total = float(row.get("FileSizeMB") or 0) or 1.0
+            status = str(row.get("Status") or "")
+            speed = overall if "DOWNLOAD" in status.upper() else 0
             items.append(
                 {
                     "source": "nzbget",
                     "title": row.get("NZBName") or "Download",
-                    "status": row.get("Status") or "",
+                    "status": status,
                     "progress": max(0, min(100, int(round(100 * (1.0 - remaining / total))))),
+                    "speed_bps": speed,
+                    "eta": "",
                 }
             )
     elif groups is None and not error:
@@ -717,10 +776,133 @@ def _collect_qbittorrent_queue(
                     "title": row.get("name") or "Torrent",
                     "status": state,
                     "progress": int(round(float(row.get("progress") or 0) * 100)),
+                    "speed_bps": _speed_bps(row.get("dlspeed")),
+                    "eta": _eta_from_seconds(row.get("eta")),
                 }
             )
     error = None if isinstance(rows, list) else "unexpected torrents payload"
     return _finish_source(notes, "downloads", "qbittorrent", items, error, "no active torrents")
+
+
+_RECENT_FIELDS = ("source", "title", "detail", "when", "poster", "url")
+_SEASON_ADD_WINDOW = 7200.0
+
+
+def _as_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _season_label(season: int | None) -> str:
+    if season is None:
+        return "Season"
+    return f"Season {int(season):02d}"
+
+
+def _public_recent(item: dict[str, Any]) -> dict[str, Any]:
+    return {key: item.get(key) or "" for key in _RECENT_FIELDS}
+
+
+def _season_group_key(item: dict[str, Any]) -> tuple[str, str, int | None]:
+    series_id = str(item.get("_series_id") or item.get("title") or "")
+    return (str(item.get("source") or ""), series_id, item.get("_season"))
+
+
+def _cluster_recent_by_when(items: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    ordered = sorted(items, key=_when_sort_key)
+    clusters: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    last_ts = 0.0
+    for item in ordered:
+        ts = _when_sort_key(item)
+        if current and abs(ts - last_ts) > _SEASON_ADD_WINDOW:
+            clusters.append(current)
+            current = []
+        current.append(item)
+        last_ts = ts
+    if current:
+        clusters.append(current)
+    return clusters
+
+
+def _episode_numbers(items: list[dict[str, Any]]) -> list[int]:
+    nums = sorted({num for item in items if (num := _as_int(item.get("_episode"))) is not None})
+    return nums
+
+
+def _is_full_season_add(items: list[dict[str, Any]]) -> bool:
+    nums = _episode_numbers(items)
+    if len(nums) < 2:
+        return False
+    child = next((count for item in items if (count := _as_int(item.get("_child_count"))) is not None), None)
+    contiguous = nums == list(range(nums[0], nums[-1] + 1))
+    starts_at_one = nums[0] == 1
+    unique = len(nums)
+    if child is not None and child >= 2 and unique >= child and starts_at_one:
+        return True
+    if starts_at_one and contiguous and unique >= 3:
+        return True
+    return False
+
+
+def _season_tile_from_episodes(items: list[dict[str, Any]]) -> dict[str, Any]:
+    newest = max(items, key=_when_sort_key)
+    season_id = next((str(item.get("_season_id") or "") for item in items if item.get("_season_id")), "")
+    url = newest.get("url") or ""
+    if season_id and newest.get("source") == "jellyfin" and "/details?id=" in url:
+        url = url.rsplit("id=", 1)[0] + f"id={quote(season_id, safe='')}"
+    elif season_id and newest.get("source") == "plex" and "/metadata/" in url:
+        url = url.rsplit("/metadata/", 1)[0] + f"/metadata/{quote(season_id, safe='')}"
+    return {
+        "source": newest.get("source") or "",
+        "title": newest.get("title") or "Series",
+        "detail": _season_label(newest.get("_season")),
+        "when": newest.get("when") or "",
+        "poster": newest.get("poster") or "",
+        "url": url,
+    }
+
+
+def collapse_full_seasons(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Show one season tile when a whole season landed together; keep lone episodes."""
+    native_seasons: dict[tuple[str, str, int | None], dict[str, Any]] = {}
+    episodes: dict[tuple[str, str, int | None], list[dict[str, Any]]] = {}
+    other: list[dict[str, Any]] = []
+    for item in items:
+        kind = item.get("_kind")
+        if kind == "season":
+            native_seasons[_season_group_key(item)] = item
+            continue
+        if kind == "episode" and item.get("_season") is not None:
+            episodes.setdefault(_season_group_key(item), []).append(item)
+            continue
+        other.append(item)
+
+    collapsed: list[dict[str, Any]] = []
+    used_native: set[tuple[str, str, int | None]] = set()
+    for key, group in episodes.items():
+        leftover: list[dict[str, Any]] = []
+        for cluster in _cluster_recent_by_when(group):
+            if _is_full_season_add(cluster):
+                native = native_seasons.get(key)
+                collapsed.append(_public_recent(native) if native else _season_tile_from_episodes(cluster))
+                used_native.add(key)
+            else:
+                leftover.extend(cluster)
+        other.extend(leftover)
+
+    for key, native in native_seasons.items():
+        if key not in used_native and key not in episodes:
+            collapsed.append(_public_recent(native))
+
+    public = [_public_recent(item) for item in other]
+    public.extend(collapsed)
+    public.sort(key=_when_sort_key, reverse=True)
+    return public
 
 
 def _collect_jellyfin_recent(
@@ -740,9 +922,9 @@ def _collect_jellyfin_recent(
             "Recursive": "true",
             "SortBy": "DateCreated",
             "SortOrder": "Descending",
-            "IncludeItemTypes": "Movie,Episode",
-            "Limit": "20",
-            "Fields": "DateCreated,PrimaryImageAspectRatio,SeriesName",
+            "IncludeItemTypes": "Movie,Episode,Season",
+            "Limit": "50",
+            "Fields": "DateCreated,PrimaryImageAspectRatio,SeriesName,ChildCount,RecursiveItemCount,IndexNumber,ParentIndexNumber",
         },
     )
     rows = data.get("Items") if isinstance(data, dict) else None
@@ -753,30 +935,61 @@ def _collect_jellyfin_recent(
                 continue
             kind = str(row.get("Type") or "")
             item_id = str(row.get("Id") or "")
-            poster_id = str(row.get("SeriesId") or item_id) if kind == "Episode" else item_id
-            if kind == "Episode":
-                season = row.get("ParentIndexNumber")
-                episode = row.get("IndexNumber")
-                ep = (
-                    f"S{int(season):02d}E{int(episode):02d}"
-                    if season is not None and episode is not None
-                    else ""
+            series_id = str(row.get("SeriesId") or "")
+            if kind == "Season":
+                season = _as_int(row.get("IndexNumber"))
+                poster_id = series_id or item_id
+                items.append(
+                    {
+                        "source": "jellyfin",
+                        "title": row.get("SeriesName") or row.get("Name") or "Series",
+                        "detail": _season_label(season),
+                        "when": str(row.get("DateCreated") or "")[:16],
+                        "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
+                        "url": f"{_web_url(host, plugin.port)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
+                        "_kind": "season",
+                        "_series_id": series_id,
+                        "_season": season,
+                        "_season_id": item_id,
+                        "_child_count": _as_int(row.get("ChildCount") or row.get("RecursiveItemCount")),
+                    }
                 )
-                title = row.get("SeriesName") or row.get("Name") or "Episode"
-                detail = " ".join(part for part in (ep, row.get("Name") or "") if part)
-            else:
-                title = row.get("Name") or "Movie"
-                detail = str(row.get("ProductionYear") or "Movie")
+                continue
+            if kind == "Episode":
+                season = _as_int(row.get("ParentIndexNumber"))
+                episode = _as_int(row.get("IndexNumber"))
+                ep = f"S{season:02d}E{episode:02d}" if season is not None and episode is not None else ""
+                poster_id = series_id or item_id
+                items.append(
+                    {
+                        "source": "jellyfin",
+                        "title": row.get("SeriesName") or row.get("Name") or "Episode",
+                        "detail": " ".join(part for part in (ep, row.get("Name") or "") if part),
+                        "when": str(row.get("DateCreated") or "")[:16],
+                        "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
+                        "url": f"{_web_url(host, plugin.port)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
+                        "_kind": "episode",
+                        "_series_id": series_id,
+                        "_season": season,
+                        "_episode": episode,
+                        "_season_id": str(row.get("ParentId") or ""),
+                        "_child_count": _as_int(row.get("ChildCount")),
+                    }
+                )
+                continue
+            poster_id = item_id
             items.append(
                 {
                     "source": "jellyfin",
-                    "title": title,
-                    "detail": detail,
+                    "title": row.get("Name") or "Movie",
+                    "detail": str(row.get("ProductionYear") or "Movie"),
                     "when": str(row.get("DateCreated") or "")[:16],
                     "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
                     "url": f"{_web_url(host, plugin.port)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
+                    "_kind": "movie",
                 }
             )
+    items = collapse_full_seasons(items)[:20]
     payload_error = None if isinstance(data, dict) else "unexpected items payload"
     if error in ("HTTP 401", "HTTP 403"):
         error = f"{error} — Jellyfin rejected the API key; paste a new one in Settings → Homepage"
@@ -816,35 +1029,67 @@ def _collect_plex_recent(
     rows = container.get("Metadata") if isinstance(container, dict) else None
     items: list[dict[str, Any]] = []
     if isinstance(rows, list):
-        for row in rows[:20]:
+        for row in rows[:50]:
             if not isinstance(row, dict):
                 continue
             kind = str(row.get("type") or "")
-            rating_key = str(row.get("grandparentRatingKey") or row.get("ratingKey") or "")
-            if kind == "episode":
-                title = row.get("grandparentTitle") or row.get("title") or "Episode"
-                season = row.get("parentIndex")
-                episode = row.get("index")
-                ep = (
-                    f"S{int(season):02d}E{int(episode):02d}"
-                    if season is not None and episode is not None
-                    else ""
-                )
-                detail = " ".join(part for part in (ep, row.get("title") or "") if part)
-            else:
-                title = row.get("title") or "Item"
-                detail = str(row.get("year") or kind)
             item_key = str(row.get("ratingKey") or "")
+            if kind == "season":
+                series_id = str(row.get("parentRatingKey") or "")
+                season = _as_int(row.get("index"))
+                poster_id = series_id or item_key
+                items.append(
+                    {
+                        "source": "plex",
+                        "title": row.get("parentTitle") or row.get("title") or "Series",
+                        "detail": _season_label(season),
+                        "when": str(row.get("addedAt") or row.get("originallyAvailableAt") or ""),
+                        "poster": f"/api/homepage/art?source=plex&item_id={quote(poster_id, safe='')}" if poster_id else "",
+                        "url": f"{_web_url(host, plugin.port)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
+                        "_kind": "season",
+                        "_series_id": series_id,
+                        "_season": season,
+                        "_season_id": item_key,
+                        "_child_count": _as_int(row.get("leafCount")),
+                    }
+                )
+                continue
+            if kind == "episode":
+                series_id = str(row.get("grandparentRatingKey") or "")
+                season = _as_int(row.get("parentIndex"))
+                episode = _as_int(row.get("index"))
+                ep = f"S{season:02d}E{episode:02d}" if season is not None and episode is not None else ""
+                poster_id = series_id or item_key
+                items.append(
+                    {
+                        "source": "plex",
+                        "title": row.get("grandparentTitle") or row.get("title") or "Episode",
+                        "detail": " ".join(part for part in (ep, row.get("title") or "") if part),
+                        "when": str(row.get("addedAt") or row.get("originallyAvailableAt") or ""),
+                        "poster": f"/api/homepage/art?source=plex&item_id={quote(poster_id, safe='')}" if poster_id else "",
+                        "url": f"{_web_url(host, plugin.port)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
+                        "_kind": "episode",
+                        "_series_id": series_id,
+                        "_season": season,
+                        "_episode": episode,
+                        "_season_id": str(row.get("parentRatingKey") or ""),
+                        "_child_count": _as_int(row.get("parentLeafCount") or row.get("leafCount")),
+                    }
+                )
+                continue
+            poster_id = str(row.get("grandparentRatingKey") or item_key)
             items.append(
                 {
                     "source": "plex",
-                    "title": title,
-                    "detail": detail,
+                    "title": row.get("title") or "Item",
+                    "detail": str(row.get("year") or kind),
                     "when": str(row.get("addedAt") or row.get("originallyAvailableAt") or ""),
-                    "poster": f"/api/homepage/art?source=plex&item_id={quote(rating_key, safe='')}" if rating_key else "",
+                    "poster": f"/api/homepage/art?source=plex&item_id={quote(poster_id, safe='')}" if poster_id else "",
                     "url": f"{_web_url(host, plugin.port)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
+                    "_kind": "movie" if kind == "movie" else kind or "movie",
                 }
             )
+    items = collapse_full_seasons(items)[:20]
     error = None if isinstance(payload, dict) else "unexpected recently added payload"
     return _finish_source(
         notes,
@@ -1114,3 +1359,31 @@ def _pct(value: Any) -> int:
         return max(0, min(100, int(round(float(value)))))
     except (TypeError, ValueError):
         return 0
+
+
+def _speed_bps(value: Any, *, unit: str = "bytes") -> int:
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return 0
+    if amount <= 0:
+        return 0
+    if unit == "kb":
+        amount *= 1000
+    return int(round(amount))
+
+
+def _eta_from_seconds(value: Any) -> str:
+    try:
+        secs = int(value)
+    except (TypeError, ValueError):
+        return ""
+    if secs < 0 or secs > 7 * 24 * 3600:
+        return ""
+    hours, rem = divmod(secs, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m {seconds:02d}s"
+    return f"{seconds}s"

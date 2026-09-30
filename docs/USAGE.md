@@ -42,11 +42,11 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 
 After the wizard, **Home** is the front page for watching and requesting (`#/home`). It reuses the manager login. There are no start/stop/install controls here.
 
-- **Launcher** lists installed apps that have a WebUI, grouped by category. Recyclarr and Flaresolverr are omitted (no household UI). Stopped apps still appear dimmed.
-- **Recently added** is a horizontal poster rail from Jellyfin and/or Plex.
+- **Launcher** lists installed apps that have a WebUI, grouped by category. Recyclarr and Flaresolverr are omitted (no household UI). Stopped apps still appear dimmed. A crash loop or failed process gets a red border and an Unhealthy label.
+- **Recently added** is a horizontal poster rail from Jellyfin and/or Plex. A whole season added together shows as one season tile instead of every episode.
 - **Requests** is the same kind of rail from Seerr (who asked, with artwork).
-- **Coming up** is a Sonarr/Radarr calendar: week columns by default (time, title, SxxExx), with month/day/list views, previous/next, and a TV/movies/not-downloaded filter. Green marks files that are already on disk.
-- **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
+- **Coming up** is a Sonarr/Radarr calendar (time, title, SxxExx) with month/week/day/list views, previous/next, and a TV/movies/not-downloaded filter. The default view follows the screen: list on phones, week on laptops, month on large displays. Green marks files that are already on disk.
+- **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues and shows progress plus speed. It polls every 3 seconds, separately from the rest of Home.
 - Jellyfin recently-added art uses the shared local login or a key from **Settings → Homepage**. Create the key in Jellyfin Dashboard → API Keys. Plex uses the local token when present.
 - **Search** talks to Seerr when it is running. Each result shows whether it is **Available**, **Partly available**, **Requested**, or **Not in library**, with a **Get it now** button that sends a Seerr request. The manager reads `apiKey` from Seerr’s `settings.json`; if that fails, paste the key from Seerr Settings → General under **Settings → Homepage** (or Catalog → Seerr → Settings). If Seerr is missing or rejects the key, search falls back to Sonarr/Radarr lookup and shows the Seerr error above the results.
 - **Widget debug** in **Settings → Homepage** (or `#/home?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
@@ -70,7 +70,7 @@ The catalog lists up to **17** applications at `#/catalog` (installed vs availab
 - Catalog **Settings** on a card changes the listen **port** (persisted; running apps are restarted) and **start with the manager**. Config/install paths are shown read-only. Bind mounts still change in compose, not here
 - Cards show **Update available** when a scheduled or manual check found a newer GitHub release. Manual **Update** still uses snapshot → install → health check → rollback
 
-Process status on Catalog refreshes about every 5 seconds while that page is open. Catalog metadata, update, and backup summaries refresh about every 30 seconds. Home widgets poll every 15 seconds; the manager keeps the last snapshot in memory for about 30 seconds and refreshes it in the background so the page does not wait on Sonarr, Radarr, Jellyfin, Plex, Seerr, and download clients each time. Background polls pause when the browser tab is hidden and catch up when you return. **Sync Status** still reloads everything at once.
+Process status on Catalog refreshes about every 5 seconds while that page is open. Catalog metadata, update, and backup summaries refresh about every 30 seconds. Home widgets poll every 15 seconds; the manager keeps the last snapshot in memory for about 30 seconds and refreshes it in the background so the page does not wait on Sonarr, Radarr, Jellyfin, Plex, and Seerr each time. **Downloading** is live (about every 3 seconds) and is not served from that cache. Background polls pause when the browser tab is hidden and catch up when you return. **Sync Status** still reloads everything at once.
 
 **Open UI** uses `http://<host>:<app-port>` (for example Sonarr `8989`). That only works if the appliance compose/template publishes those ports, or the container uses host networking. Recreate the container after pulling an image that added port mappings. Recyclarr has no WebUI.
 
@@ -113,7 +113,7 @@ Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `rec
 
 ## 6. VPN and remote access
 
-- Upload or paste a WireGuard (`.conf`) or OpenVPN (`.ovpn`) profile in the wizard or **Settings → Network**. It is written under `/config/vpn/` (`wg0.conf` or `client.ovpn`) with mode `600`. You can still point at an existing path. **qBittorrent**, **Prowlarr**, and **Flaresolverr** are tunneled. Usenet clients stay on the normal network.
+- Upload or paste a WireGuard (`.conf`) or OpenVPN (`.ovpn`) profile in the wizard or **Settings → Network**. It is written under `/config/vpn/` (`wg0.conf` or `client.ovpn`) with mode `600`. You can still point at an existing path. **qBittorrent**, **Prowlarr**, and **Flaresolverr** are tunneled. Usenet clients stay on the normal network. DNS for those apps is `/etc/netns/amm-torrent/resolv.conf` (from the profile’s `DNS` line, otherwise `1.1.1.1`). Docker’s `127.0.0.11` resolver is not used inside the tunnel. On NAS kernels without a WireGuard module (common on Synology), `wg-quick` uses **wireguard-go** in userspace. OpenVPN needs `/dev/net/tun` (privileged compose already provides it).
 - Optional [Cloudflare Tunnel](../deploy/CLOUDFLARE.md) can be toggled from **Settings → Network** or `AMM_CLOUDFLARE_TUNNEL_*`. `cloudflared` runs inside this appliance.
 
 ## 7. Backups and updates

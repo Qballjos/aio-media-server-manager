@@ -30,7 +30,9 @@ const searchError = ref('')
 const searchedFor = ref('')
 const notice = ref('')
 const requestBusy = ref('')
+const downloadsFresh = ref(false)
 let poll = null
+let downloadsPoll = null
 let searchTimer = null
 
 const hasMediaServer = computed(() =>
@@ -101,10 +103,10 @@ async function loadSnapshot(force = false) {
         ...emptySnapshot(),
         ...data,
         calendar: data.calendar || [],
-        downloads: data.downloads || [],
+        downloads: downloadsFresh.value ? snapshot.value.downloads : data.downloads || [],
         recent: data.recent || [],
         requests: data.requests || [],
-        widgets: data.widgets || [],
+        widgets: mergeWidgetNotes(data.widgets || []),
         seerr: data.seerr || { available: false, url: null },
       }
       snapshotError.value = ''
@@ -116,6 +118,41 @@ async function loadSnapshot(force = false) {
   } finally {
     loading.value = false
   }
+  if (force) loadDownloads()
+}
+
+function mergeWidgetNotes(incoming) {
+  if (!downloadsFresh.value) return incoming
+  return [
+    ...incoming.filter((note) => note.widget !== 'downloads'),
+    ...(snapshot.value.widgets || []).filter((note) => note.widget === 'downloads'),
+  ]
+}
+
+async function loadDownloads() {
+  try {
+    const res = await apiRequest('/api/homepage/downloads')
+    if (!res.ok) return
+    const data = await readJson(res)
+    snapshot.value.downloads = data.downloads || []
+    downloadsFresh.value = true
+    if (Array.isArray(data.widgets) && data.widgets.length) {
+      snapshot.value.widgets = [
+        ...(snapshot.value.widgets || []).filter((note) => note.widget !== 'downloads'),
+        ...data.widgets,
+      ]
+    }
+  } catch (_) {
+    /* keep last queue */
+  }
+}
+
+function formatSpeed(bps) {
+  const n = Number(bps)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  if (n >= 1000000) return `${(n / 1000000).toFixed(n >= 10000000 ? 0 : 1)} MB/s`
+  if (n >= 1000) return `${Math.round(n / 1000)} KB/s`
+  return `${Math.round(n)} B/s`
 }
 
 async function runSearch() {
@@ -221,10 +258,35 @@ function dayKey(dt) {
 }
 
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const calView = ref('week')
+const calViewPicked = ref(false)
+const calView = ref(defaultCalView())
 const calFilter = ref('all')
 const recentRail = ref(null)
 const requestsRail = ref(null)
+
+function defaultCalView() {
+  const width = typeof window === 'undefined' ? 1024 : window.innerWidth
+  if (width < 768) return 'list'
+  if (width < 1440) return 'week'
+  return 'month'
+}
+
+function setCalView(view) {
+  calViewPicked.value = true
+  calView.value = view
+}
+
+function syncCalViewToViewport() {
+  if (calViewPicked.value) return
+  const next = defaultCalView()
+  if (calView.value !== next) calView.value = next
+}
+
+function launcherTitle(app) {
+  if (app.sick) return `${app.display_name} is unhealthy`
+  if (!app.running) return `${app.display_name} is stopped`
+  return app.display_name
+}
 
 function startOfWeek(value) {
   const dt = new Date(value)
@@ -400,8 +462,12 @@ onMounted(() => {
   } catch (_) {
     widgetDebug.value = debugFlagFromRoute() || readHomepageWidgetDebug()
   }
+  syncCalViewToViewport()
+  window.addEventListener('resize', syncCalViewToViewport)
   loadSnapshot()
+  loadDownloads()
   poll = startGuardedInterval(loadSnapshot, 15000)
+  downloadsPoll = startGuardedInterval(loadDownloads, 3000)
 })
 watch(
   () => route.query.debug,
@@ -418,7 +484,9 @@ watch(calView, (view) => {
   }
 })
 onUnmounted(() => {
+  window.removeEventListener('resize', syncCalViewToViewport)
   if (poll) poll()
+  if (downloadsPoll) downloadsPoll()
   clearTimeout(searchTimer)
 })
 </script>
@@ -443,11 +511,11 @@ onUnmounted(() => {
               v-for="app in group.apps"
               :key="app.name"
               class="home-app"
-              :class="{ 'is-down': !app.running }"
+              :class="{ 'is-down': !app.running && !app.sick, 'is-sick': app.sick }"
               :href="app.url"
               target="_blank"
               rel="noopener noreferrer"
-              :title="app.running ? app.display_name : `${app.display_name} is stopped`"
+              :title="launcherTitle(app)"
             >
               <img
                 v-if="appIconSrc(app.name)"
@@ -457,7 +525,8 @@ onUnmounted(() => {
               />
               <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
               <span class="home-app-name">{{ app.display_name }}</span>
-              <span class="home-app-state">{{ app.running ? 'Open UI' : 'Stopped' }}</span>
+              <span v-if="app.sick" class="home-app-state">Unhealthy</span>
+              <span v-else-if="!app.running" class="home-app-state">Stopped</span>
             </a>
           </div>
         </section>
@@ -587,10 +656,10 @@ onUnmounted(() => {
                 <option value="missing">Not downloaded</option>
               </select>
               <div class="cal-views">
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'month' }" @click="calView = 'month'">Month</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'week' }" @click="calView = 'week'">Week</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'day' }" @click="calView = 'day'">Day</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'list' }" @click="calView = 'list'">List</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'month' }" @click="setCalView('month')">Month</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'week' }" @click="setCalView('week')">Week</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'day' }" @click="setCalView('day')">Day</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'list' }" @click="setCalView('list')">List</button>
               </div>
             </div>
           </div>
@@ -655,7 +724,11 @@ onUnmounted(() => {
           <ul v-if="snapshot.downloads.length">
             <li v-for="(item, idx) in snapshot.downloads" :key="idx">
               <strong>{{ item.title }}</strong>
-              <span class="home-muted">{{ item.source }} · {{ item.status }} · {{ item.progress }}%</span>
+              <span class="home-muted">
+                {{ item.source }} · {{ item.status }} · {{ item.progress }}%
+                <span v-if="formatSpeed(item.speed_bps)" class="home-speed"> · {{ formatSpeed(item.speed_bps) }}</span>
+                <span v-if="item.eta"> · {{ item.eta }}</span>
+              </span>
               <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
             </li>
           </ul>
@@ -754,6 +827,14 @@ onUnmounted(() => {
 }
 .home-app.is-down {
   opacity: 0.55;
+}
+.home-app.is-sick,
+.home-app.is-sick:hover {
+  border-color: rgba(239, 68, 68, 0.85);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
+}
+.home-app.is-sick .home-app-state {
+  color: #f87171;
 }
 .home-app-icon,
 .home-app-fallback {
@@ -1100,6 +1181,10 @@ onUnmounted(() => {
   border-radius: 99px;
   background: var(--bg-input);
   overflow: hidden;
+}
+.home-speed {
+  color: var(--color-info);
+  font-variant-numeric: tabular-nums;
 }
 .home-bar span {
   display: block;
