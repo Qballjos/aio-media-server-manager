@@ -1,9 +1,10 @@
-# Overlay for testing a git checkout inside the Linux appliance image.
-# Catalog installs need Linux (glibc, Chromium, ICU). Do not run those on macOS/Windows hosts.
+# Overlay for testing a git checkout as the Linux appliance.
+# Catalog installs need Linux (glibc, Chromium, ICU). Do not run those
+# on macOS or Windows hosts.
 #
 #   ./scripts/test-env.sh up
 #
-# Data stays in .docker-test/ (gitignored). Manager UI: http://127.0.0.1:8080
+# Data stays in .docker-test/ (gitignored). UI: http://127.0.0.1:8080
 
 name: amm-test
 

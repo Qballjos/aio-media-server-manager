@@ -4,7 +4,7 @@ labels: ["bug"]
 body:
   - type: markdown
     attributes:
-      value: Thanks for the report. Do not include passwords, API keys, or VPN configs.
+      value: Thank you for the report. Do not include passwords, API keys, or VPN configuration.
   - type: textarea
     id: what-happened
     attributes:

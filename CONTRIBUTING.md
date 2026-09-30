@@ -4,7 +4,7 @@ Thank you for contributing to AIO Media Server Manager.
 
 ## Run the appliance (default)
 
-Docker is the default way to test wizard, catalog installs, Open UI, and Auto-Wire. The image is Linux (`linux/amd64` or `linux/arm64`). macOS/Windows hosts only provide Docker Desktop; they are not a native install target.
+Docker is the default way to test the wizard, catalog installs, Open UI, and Auto-Wire. The image is Linux (`linux/amd64` or `linux/arm64`). macOS and Windows hosts only provide Docker Desktop; they are not a native install target.
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git
@@ -12,7 +12,7 @@ cd aio-media-server-manager
 ./scripts/test-env.sh up
 ```
 
-Open **http://127.0.0.1:8080**. Volumes live in `.docker-test/`. Logs: `./scripts/test-env.sh logs`. Stop: `./scripts/test-env.sh down`.
+Open **http://127.0.0.1:8080**. Volumes live in `.docker-test/` (gitignored). Logs: `./scripts/test-env.sh logs`. Stop: `./scripts/test-env.sh down`. Stopping does not delete `.docker-test/`; remove that directory to wipe test data.
 
 Optional live dashboard (proxies `/api` and `/health` to the container on port 8080):
 
@@ -20,7 +20,7 @@ Optional live dashboard (proxies `/api` and `/health` to the container on port 8
 cd frontend && npm ci && npm run dev
 ```
 
-Then use **http://127.0.0.1:5173**, not the host `poetry run` API.
+Then use **http://127.0.0.1:5173**, not a host `poetry run` API.
 
 If you need Intel/AMD transcoding on a Linux host that has `/dev/dri`, add `compose.gpu.yml` to a production compose command (see [deploy/DOCKER.md](deploy/DOCKER.md)). The test script does not map `/dev/dri`.
 
@@ -38,13 +38,13 @@ cd frontend && npm run build
 
 Optional: `pre-commit install` for Ruff and basic file checks on commit.
 
-Do not use `poetry run python main.py` on macOS/Windows to exercise catalog installs. That path is for native Linux / LXC only ([deploy/LINUX.md](deploy/LINUX.md)).
+Do not use `poetry run python main.py` on macOS or Windows to exercise catalog installs. That path is for native Linux / LXC only ([deploy/LINUX.md](deploy/LINUX.md)).
 
 ## Project rules
 
 - One manager, many **managed processes**. Do not add per-application Docker Compose services.
 - No Debrid functionality (Real-Debrid, Zurg, Riven, mounts, caches).
-- The catalog stays **17 applications**. VueTorrent is a qBittorrent WebUI option, not a catalog app.
+- The catalog stays **17 applications**. VueTorrent is a qBittorrent WebUI option, not a catalog app. Hide an entry from the catalog and wizard when the host architecture is unsupported; do not install a default “wrong-arch” build.
 - Application-specific behaviour lives in `applications/` plugins, not in `core/`.
 - Do not log or return secrets in API responses.
 - Never delete media libraries in uninstall or backup paths.

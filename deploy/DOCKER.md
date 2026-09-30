@@ -2,8 +2,8 @@
 
 Primary deployment. One container runs the manager and every supervised application.
 
-Image: `ghcr.io/qballjos/aio-media-server-manager:latest`  
-Architectures: `linux/amd64`, `linux/arm64`
+**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
+**Architectures:** `linux/amd64`, `linux/arm64`
 
 ## Create folders over SSH
 

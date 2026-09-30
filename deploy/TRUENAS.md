@@ -54,7 +54,7 @@ Keep downloads and media as **directories on one dataset**. Two ZFS datasets can
 6. Privileged / `NET_ADMIN` if you enable qBittorrent VPN.
 7. GPU: pass `/dev/dri` (Intel/AMD) or NVIDIA runtime when transcoding.
 
-The manager UI is `http://<truenas-ip>:8080`. Recreate the custom app after an image update so new published ports apply.
+The manager UI is `http://<truenas-ip>:8080`. Recreate the custom app after an image update so newly published ports apply.
 
 ## Updates
 

@@ -1,7 +1,7 @@
 [project]
 name = "aio-media-manager"
 version = "0.1.0"
-description = "All-in-One Media Server Manager — a self-hosted supervisor for the *Arr ecosystem and media servers."
+description = "All-in-One Media Server Manager — a self-hosted supervisor for the *Arr stack and media servers."
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 authors = []

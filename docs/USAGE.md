@@ -1,6 +1,6 @@
 # Usage
 
-This guide covers what you do after the appliance is running. Installation and host paths are in [INSTALL.md](INSTALL.md). To try a git checkout, use `./scripts/test-env.sh up` (Linux container), not a native macOS/Windows process.
+This guide covers what you do after the appliance is running. Installation and host paths are in [INSTALL.md](INSTALL.md). To try a git checkout, use `./scripts/test-env.sh up` (Linux container), not a native macOS or Windows process.
 
 ## 1. Create the administrator
 
@@ -10,7 +10,7 @@ Password rules: at least 8 characters, at most 72 bytes (bcrypt limit). You can 
 
 ## 2. First-run wizard
 
-After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now**. Skip is a short save; the dashboard opens even if the API is busy with an install.
+After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now**. Skip is a short save; Home opens even if the API is busy with an install.
 
 | Step | You choose |
 |------|------------|
@@ -21,10 +21,10 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 | 5 | *Arr apps: Prowlarr, Sonarr, Radarr, Lidarr |
 | 6 | Media servers: Jellyfin and/or Plex (optional Plex claim token) |
 | 7 | Requests (Seerr) |
-| 8 | Recommended tools (Bazarr and Flaresolverr on by default; Recyclarr, Profilarr, NeutArr, Grimmory, Shelfmark optional) |
+| 8 | Recommended tools (Bazarr on by default; Flaresolverr on x86_64 by default; Recyclarr, Profilarr, NeutArr, Grimmory, Shelfmark optional) |
 | 9 | Review, then save and install |
 
-**Finish** persists settings and queues catalog installs. Wiring (indexers, download clients, libraries, Seerr, Recyclarr sync) runs **after each app is installed and answers its health check**, not during the Finish request. Apps that are not installed or not running are skipped so *Arr is not pointed at a dead downloader. You can run the same wiring later with **Auto-Wire** on the catalog.
+**Finish** persists settings and queues catalog installs. Wiring (indexers, download clients, libraries, Seerr, Recyclarr sync) runs **after each app is installed and answers its health check**, not during the Finish request. Apps that are not installed or not running are skipped so *Arr is not pointed at a dead downloader. You can run the same wiring later with **Auto-Wire** on Catalog. The wizard and catalog omit applications the host architecture cannot run.
 
 **Skip** opens the Home Dashboard without installing anything. You can install applications later from **Catalog**.
 
@@ -35,30 +35,30 @@ After the wizard, **Home** is the front page for watching and requesting (`#/hom
 - **Launcher** lists installed apps that have a WebUI. Recyclarr is omitted (CLI only). Stopped apps still appear dimmed.
 - **Coming up** is a real calendar of Sonarr/Radarr airings: a full month on wide screens, the current week on phones.
 - **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
-- **Recently added** uses Jellyfin and/or Plex. AMM tries the manager login first. You can also paste a Jellyfin API key under **Settings → Integrations** (or Catalog → Jellyfin → Settings). Create the key in Jellyfin Dashboard → API Keys.
-- **Search** talks to Seerr when it is running. Each result shows whether it is **Available**, **Partly available**, **Requested** or **Not in library**, with a **Get it now** button that sends a Seerr request. AMM reads `apiKey` from Seerr’s `settings.json`; if that fails, paste the key from Seerr Settings → General under **Settings → Integrations** (or Catalog → Seerr → Settings). If Seerr is missing or rejects the key, search falls back to Sonarr/Radarr lookup and shows the Seerr error above the results.
+- **Recently added** uses Jellyfin and/or Plex. The manager tries the shared local login first. You can also paste a Jellyfin API key under **Settings → Integrations** (or Catalog → Jellyfin → Settings). Create the key in Jellyfin Dashboard → API Keys.
+- **Search** talks to Seerr when it is running. Each result shows whether it is **Available**, **Partly available**, **Requested**, or **Not in library**, with a **Get it now** button that sends a Seerr request. The manager reads `apiKey` from Seerr’s `settings.json`; if that fails, paste the key from Seerr Settings → General under **Settings → Integrations** (or Catalog → Seerr → Settings). If Seerr is missing or rejects the key, search falls back to Sonarr/Radarr lookup and shows the Seerr error above the results.
 - **Widget debug** in **Settings → Debug** (or `#/home?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
 
 Empty widgets stay hidden until debug is on. **Catalog** is still the admin dashboard for install, process controls, logs, and Auto-Wire.
 
 The dashboard uses hash URLs so you can bookmark or refresh without losing your place: `#/home`, `#/catalog`, `#/settings/backups`. A link such as `#/catalog?q=sonarr&status=active&cat=automation&sort=az` restores search, status/category filters, and sort. After login the hash is kept, so a shared Settings or Catalog link still opens the right screen. Log and backup downloads use the same signed-in session as the rest of the UI.
 
-## 4. Catalog dashboard
+## 4. Catalog
 
-The dashboard lists the **17** catalog applications (installed vs available counts are separate) at `#/catalog`.
+The catalog lists up to **17** applications at `#/catalog` (installed vs available counts are separate). Entries that do not support the host CPU architecture are hidden — for example Flaresolverr on ARM64.
 
 - Filter by **status** and **category**
 - Sort by **popularity** or **A–Z**
 - **Search** by name
-
-Catalog process status refreshes about every 5 seconds while that page is open. Catalog metadata, update, and backup summaries refresh about every 30 seconds there. Home widgets refresh every 15 seconds. Background polls pause when the browser tab is hidden, and catch up when you come back. **Sync Status** still reloads everything at once.
 - **?** opens that application's official wiki or documentation
 - **Health** (header) opens host CPU/RAM/disk graphs plus per-application CPU and memory (including child processes)
 - **Download & Install** fetches the upstream binary and starts the process when it is a daemon
-- Installed apps: **Start** or **Stop**, **Open UI**, and **More** (Restart, Logs, Settings, Update, Uninstall).
-- **Auto-Wire** (header) re-runs integration after apps are healthy: download clients in Sonarr/Radarr (qBittorrent and SABnzbd when installed), Prowlarr, Seerr, Bazarr, and a Recyclarr `sync` when Recyclarr is installed.
-- Catalog **Settings** on a card changes the listen **port** (persisted, running apps are restarted) and **start with the manager**. Config/install paths are shown read-only. Bind mounts still change in compose, not here.
-- Cards show **Update available** when a scheduled or manual check found a newer GitHub release. Manual **Update** still uses snapshot → install → health check → rollback.
+- Installed apps: **Start** or **Stop**, **Open UI**, and **More** (Restart, Logs, Settings, Update, Uninstall)
+- **Auto-Wire** (header) re-runs integration after apps are healthy: download clients in Sonarr/Radarr (qBittorrent and SABnzbd when installed), Prowlarr, Seerr, Bazarr, and a Recyclarr `sync` when Recyclarr is installed
+- Catalog **Settings** on a card changes the listen **port** (persisted; running apps are restarted) and **start with the manager**. Config/install paths are shown read-only. Bind mounts still change in compose, not here
+- Cards show **Update available** when a scheduled or manual check found a newer GitHub release. Manual **Update** still uses snapshot → install → health check → rollback
+
+Process status on Catalog refreshes about every 5 seconds while that page is open. Catalog metadata, update, and backup summaries refresh about every 30 seconds. Home widgets refresh every 15 seconds. Background polls pause when the browser tab is hidden and catch up when you return. **Sync Status** still reloads everything at once.
 
 **Open UI** uses `http://<host>:<app-port>` (for example Sonarr `8989`). That only works if the appliance compose/template publishes those ports, or the container uses host networking. Recreate the container after pulling an image that added port mappings. Recyclarr has no WebUI.
 
@@ -66,7 +66,7 @@ qBittorrent on localhost is allowed without the WebUI login prompt. **Open UI** 
 
 **VueTorrent:** Catalog → qBittorrent → Settings → **VueTorrent WebUI** downloads the latest [VueTorrent](https://github.com/VueTorrent/VueTorrent) zip and sets qBittorrent’s alternative WebUI folder (quoted absolute path, readable by PUID/PGID). Same listen port (`8081` by default) and the same WebAPI, so *Arr download clients keep working. Turn the switch off to return to the stock WebUI; the files stay on disk so you can enable it again without another download. If Open UI fails after enabling, turn VueTorrent off, save (qBittorrent restarts on the stock UI), then enable it again.
 
-Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Rebuild/recreate the image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`. Form login uses the manager username and password (YAML stores a SHA-256 of the password; type the same plaintext you used in the wizard).
+Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Recreate the container from a current image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`. Form login uses the manager username and password (Bazarr stores an MD5 hex of the password in YAML; type the same plaintext you used in the wizard).
 
 SABnzbd needs the non-free Debian `unrar` package (RAR 5). Recreate the appliance image if you still see **UNRAR version is 0.00**. Helpful warnings are off in the bootstrap `sabnzbd.ini`.
 
@@ -117,7 +117,7 @@ Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `rec
 
 **Catalog Update** on a card always runs stop → snapshot → install → health check → rollback. The last three pre-update snapshots per app are kept under `/backups/app-snapshots/<app>/`.
 
-**Settings → Updates** schedules GitHub checks (off / daily / weekly / monthly) and optionally applies them (off = notify only, same as check, or a separate cadence). Time of day uses the host timezone from **Settings → General**. The job skips apps that are not installed or in a crash loop, respects `GITHUB_TOKEN` / Settings → GitHub, and pauses while the wizard is open or an install is running. Last check / last apply timestamps appear on the dashboard and in Settings.
+**Settings → Updates** schedules GitHub checks (off / daily / weekly / monthly) and optionally applies them (off = notify only, same as check, or a separate cadence). Time of day uses the host timezone from **Settings → General**. The job skips apps that are not installed or in a crash loop, respects `GITHUB_TOKEN` / Settings → GitHub, and pauses while the wizard is open or an install is running. Last check / last apply timestamps appear on Catalog and in Settings.
 
 ## 8. Settings
 
@@ -134,7 +134,8 @@ The **Settings** nav item is the admin page for the appliance (separate from per
 | VPN | Enable, protocol, upload/paste config, path, kill switch |
 | Remote access | Cloudflare Tunnel on/off, token (write-only), trusted proxy IPs |
 | GitHub | Optional token for rate limits (not shown again after save) |
-| Debug | Error ring + time-limited share URL (`/debug/{token}`) |
+| Integrations | Optional pasted API keys for Jellyfin and Seerr (homepage widgets) |
+| Debug | Homepage widget diagnostics, error ring, and time-limited share URL (`/debug/{token}`) |
 
 Do not leave debug sharing on after you finish a support conversation.
 

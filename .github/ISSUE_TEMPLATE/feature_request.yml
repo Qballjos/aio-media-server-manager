@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a new capability that fits the architecture
+description: Propose a capability that fits the one-appliance architecture
 labels: ["enhancement"]
 body:
   - type: textarea

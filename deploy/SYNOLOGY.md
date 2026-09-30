@@ -62,7 +62,7 @@ After that, Container Manager still lists it if the project path matches.
 
 ## Hardware transcoding
 
-If `/dev/dri` exists, add this block under `aio-media-manager` in the project compose file, then rebuild/start the project:
+If `/dev/dri` exists, add this block under `aio-media-manager` in the project compose file, then recreate and start the project:
 
 ```yaml
     devices:

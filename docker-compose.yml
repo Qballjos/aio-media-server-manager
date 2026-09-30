@@ -1,4 +1,4 @@
-# One AIO container only — not a per-application compose stack.
+# One AIO container only — not a per-application Compose stack.
 # Pull the published image, or pass --build to build locally from this repo.
 # Local checkout testing (Linux binaries, isolated volumes): ./scripts/test-env.sh up
 # Optional iGPU: docker compose -f docker-compose.yml -f compose.gpu.yml up -d

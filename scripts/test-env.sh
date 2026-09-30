@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Run this checkout as the Linux appliance (catalog installs, wizard, Open UI).
+# Usage: $0 up | down | logs | ps
+# Data: .docker-test/ (not deleted on down).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

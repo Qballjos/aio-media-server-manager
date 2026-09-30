@@ -30,7 +30,7 @@ sudo chown -R "$PUID:$PGID" /path/to/config /path/to/data /path/to/backups
 id   # use this if you do not yet know PUID/PGID
 ```
 
-Mount `/path/to/backups` at `/backups` for configuration backups. Ideally it sits on a different disk or share than `config`. Without that mount, backups fall back to `/config/backups`.
+Mount `/path/to/backups` at `/backups` for configuration archives. Ideally it sits on a different disk or share than `config`. Without that mount, backups fall back to `/config/backups`.
 
 The appliance then creates library layout inside those mounts, for example:
 
@@ -42,14 +42,16 @@ Those paths are wired into Sonarr, Radarr, Lidarr, download clients, Jellyfin, a
 
 ## Requirements
 
-- Disk for **config**, **downloads**, **media**, and **backups** (small; config only)
+- **Config** — small; manager and application settings
+- **Downloads and media** — sized for your library; keep them as siblings on one filesystem for hardlinks
+- **Backups** — configuration archives (not media); map `/backups` if possible
 - Media-user UID/GID (`id`) mapped as `PUID` / `PGID`
 - Optional: `/dev/dri` or NVIDIA devices for hardware transcoding
 - Optional: `NET_ADMIN` (or a privileged container) plus a WireGuard or OpenVPN profile if torrent traffic should use a VPN
 
 ## Ports
 
-The manager UI listens on **8080**. Child applications bind in the same container. Compose, the Synology project file, Unraid XML, and the Docker run example publish their WebUI ports on the host so **Open UI** on the dashboard works (`http://<host>:8989` for Sonarr, and so on). Host networking is an alternative if you prefer not to map each port. An older compose file that only mapped `8080` will leave child UIs unreachable until you copy the current `ports:` list and recreate.
+The manager UI listens on **8080**. Child applications bind in the same container. Compose, the Synology project file, Unraid XML, and the Docker run example publish their WebUI ports on the host so **Open UI** on the catalog works (`http://<host>:8989` for Sonarr, and so on). Host networking is an alternative if you prefer not to map each port. An older compose file that only mapped `8080` will leave child UIs unreachable until you copy the current `ports:` list and recreate.
 
 | Application | Default port |
 |-------------|--------------|
@@ -58,7 +60,7 @@ The manager UI listens on **8080**. Child applications bind in the same containe
 | Shelfmark | 8084 |
 | SABnzbd | 8085 |
 | Jellyfin | 8096 |
-| Flaresolverr | 8191 |
+| Flaresolverr | 8191 (x86_64 only; omitted on ARM64) |
 | Bazarr | 6767 |
 | NZBGet | 6789 |
 | Profilarr | 6868 |
@@ -100,6 +102,6 @@ cd aio-media-server-manager
 ./scripts/test-env.sh up
 ```
 
-Open `http://127.0.0.1:8080`. Stop with `./scripts/test-env.sh down`. Details: [Contributing](../CONTRIBUTING.md).
+Open `http://127.0.0.1:8080`. Stop with `./scripts/test-env.sh down`. Test data stays in `.docker-test/` until you delete that directory. Details: [Contributing](../CONTRIBUTING.md).
 
 Native Linux / LXC without Docker is documented in [deploy/LINUX.md](../deploy/LINUX.md).
