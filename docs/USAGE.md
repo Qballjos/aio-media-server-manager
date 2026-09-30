@@ -8,6 +8,16 @@ The first visit to `http://<host>:8080` requires a local admin account: **userna
 
 Password rules: at least 8 characters, at most 72 bytes (bcrypt limit). You can change username, email, and password later under **Settings → Account** (current password required).
 
+## Install on a phone or tablet
+
+The manager is a **progressive web app**. After you sign in, you can pin it like a native app:
+
+- **iPhone / iPad:** Safari → Share → **Add to Home Screen**.
+- **Android (Chrome):** menu → **Install app**. Chromium shows an **Install** control in the header when the browser allows it. HTTPS is required for that prompt (Cloudflare Tunnel or a reverse proxy). On `http://nas-ip:8080` use the browser menu if Install appears.
+- **Settings → Account** repeats these steps.
+
+The home-screen icon is named **AIO Media** and opens Home / Catalog / Settings without the browser chrome.
+
 ## 2. First-run wizard
 
 After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now**. Skip is a short save; Home opens even if the API is busy with an install.
@@ -32,10 +42,12 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 
 After the wizard, **Home** is the front page for watching and requesting (`#/home`). It reuses the manager login. There are no start/stop/install controls here.
 
-- **Launcher** lists installed apps that have a WebUI. Recyclarr is omitted (CLI only). Stopped apps still appear dimmed.
-- **Coming up** is a real calendar of Sonarr/Radarr airings: a full month on wide screens, the current week on phones.
+- **Launcher** lists installed apps that have a WebUI, grouped by category. Recyclarr and Flaresolverr are omitted (no household UI). Stopped apps still appear dimmed.
+- **Recently added** is a horizontal poster rail from Jellyfin and/or Plex.
+- **Requests** is the same kind of rail from Seerr (who asked, with artwork).
+- **Coming up** is a Sonarr/Radarr calendar: week columns by default (time, title, SxxExx), with month/day/list views, previous/next, and a TV/movies/not-downloaded filter. Green marks files that are already on disk.
 - **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
-- **Recently added** uses Jellyfin and/or Plex. The manager tries the shared local login first. You can also paste a Jellyfin API key under **Settings → Homepage** (or Catalog → Jellyfin → Settings). Create the key in Jellyfin Dashboard → API Keys.
+- Jellyfin recently-added art uses the shared local login or a key from **Settings → Homepage**. Create the key in Jellyfin Dashboard → API Keys. Plex uses the local token when present.
 - **Search** talks to Seerr when it is running. Each result shows whether it is **Available**, **Partly available**, **Requested**, or **Not in library**, with a **Get it now** button that sends a Seerr request. The manager reads `apiKey` from Seerr’s `settings.json`; if that fails, paste the key from Seerr Settings → General under **Settings → Homepage** (or Catalog → Seerr → Settings). If Seerr is missing or rejects the key, search falls back to Sonarr/Radarr lookup and shows the Seerr error above the results.
 - **Widget debug** in **Settings → Homepage** (or `#/home?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
 
@@ -58,7 +70,7 @@ The catalog lists up to **17** applications at `#/catalog` (installed vs availab
 - Catalog **Settings** on a card changes the listen **port** (persisted; running apps are restarted) and **start with the manager**. Config/install paths are shown read-only. Bind mounts still change in compose, not here
 - Cards show **Update available** when a scheduled or manual check found a newer GitHub release. Manual **Update** still uses snapshot → install → health check → rollback
 
-Process status on Catalog refreshes about every 5 seconds while that page is open. Catalog metadata, update, and backup summaries refresh about every 30 seconds. Home widgets refresh every 15 seconds. Background polls pause when the browser tab is hidden and catch up when you return. **Sync Status** still reloads everything at once.
+Process status on Catalog refreshes about every 5 seconds while that page is open. Catalog metadata, update, and backup summaries refresh about every 30 seconds. Home widgets poll every 15 seconds; the manager keeps the last snapshot in memory for about 30 seconds and refreshes it in the background so the page does not wait on Sonarr, Radarr, Jellyfin, Plex, Seerr, and download clients each time. Background polls pause when the browser tab is hidden and catch up when you return. **Sync Status** still reloads everything at once.
 
 **Open UI** uses `http://<host>:<app-port>` (for example Sonarr `8989`). That only works if the appliance compose/template publishes those ports, or the container uses host networking. Recreate the container after pulling an image that added port mappings. Recyclarr has no WebUI.
 

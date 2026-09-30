@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import logging
+import threading
+import time
 from calendar import monthrange
-from datetime import date, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 from urllib.parse import quote
 
@@ -21,7 +25,31 @@ from core.supervisor import ProcessSupervisor
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 4.0
-_LAUNCHER_SKIP = frozenset({"recyclarr"})
+_CACHE_TTL = 30.0
+_LAUNCHER_SKIP = frozenset({"recyclarr", "flaresolverr"})
+_LAUNCHER_CATEGORY_ORDER = (
+    "media",
+    "requests",
+    "automation",
+    "indexers",
+    "downloading",
+    "subtitles",
+    "optimization",
+    "maintenance",
+)
+
+_cache_guard = threading.Lock()
+_snapshots: dict[str, "_SnapshotEntry"] = {}
+_host_build_locks: dict[str, threading.Lock] = {}
+
+
+class _SnapshotEntry:
+    __slots__ = ("snapshot", "built_at", "refreshing")
+
+    def __init__(self, snapshot: dict[str, Any], built_at: float) -> None:
+        self.snapshot = snapshot
+        self.built_at = built_at
+        self.refreshing = False
 
 
 def month_calendar_span(today: date | None = None) -> tuple[date, date]:
@@ -34,27 +62,154 @@ def month_calendar_span(today: date | None = None) -> tuple[date, date]:
     return start, end
 
 
-def homepage_snapshot(host: str) -> dict[str, Any]:
+def _shift_month(value: date, delta: int) -> date:
+    month = value.month - 1 + delta
+    year = value.year + month // 12
+    month = month % 12 + 1
+    return date(year, month, 1)
+
+
+def calendar_fetch_span(today: date | None = None) -> tuple[date, date]:
+    """Previous month through next month, Monday–Sunday, so week/month paging has events."""
+    today = today or date.today()
+    first = _shift_month(today, -1)
+    start = first - timedelta(days=first.weekday())
+    last = _shift_month(today, 2) - timedelta(days=1)
+    end = last + timedelta(days=(6 - last.weekday()))
+    return start, end
+
+
+def clear_homepage_snapshot_cache() -> None:
+    """Drop cached Home widgets (tests, and after a Seerr request)."""
+    with _cache_guard:
+        _snapshots.clear()
+
+
+def homepage_snapshot(host: str, *, force: bool = False) -> dict[str, Any]:
+    ident = (host or "127.0.0.1").strip() or "127.0.0.1"
+    if force:
+        with _lock_for(ident):
+            return _build_and_store(ident)
+
+    cached = _cached_copy(ident)
+    if cached is not None:
+        snap, age = cached
+        if age < _CACHE_TTL:
+            return snap
+        _schedule_refresh(ident)
+        return snap
+
+    with _lock_for(ident):
+        cached = _cached_copy(ident)
+        if cached is not None:
+            snap, age = cached
+            if age >= _CACHE_TTL:
+                _schedule_refresh(ident)
+            return snap
+        return _build_and_store(ident)
+
+
+def _lock_for(host: str) -> threading.Lock:
+    with _cache_guard:
+        lock = _host_build_locks.get(host)
+        if lock is None:
+            lock = threading.Lock()
+            _host_build_locks[host] = lock
+        return lock
+
+
+def _cached_copy(host: str) -> tuple[dict[str, Any], float] | None:
+    with _cache_guard:
+        entry = _snapshots.get(host)
+        if entry is None:
+            return None
+        age = time.monotonic() - entry.built_at
+        return copy.deepcopy(entry.snapshot), age
+
+
+def _schedule_refresh(host: str) -> None:
+    with _cache_guard:
+        entry = _snapshots.get(host)
+        if entry is None or entry.refreshing:
+            return
+        entry.refreshing = True
+    threading.Thread(
+        target=_refresh_snapshot,
+        args=(host,),
+        name=f"homepage-refresh-{host}",
+        daemon=True,
+    ).start()
+
+
+def _refresh_snapshot(host: str) -> None:
+    try:
+        with _lock_for(host):
+            _build_and_store(host)
+    except Exception as exc:
+        logger.debug("Homepage background refresh failed: %s", exc)
+        with _cache_guard:
+            entry = _snapshots.get(host)
+            if entry is not None:
+                entry.refreshing = False
+
+
+def _build_and_store(host: str) -> dict[str, Any]:
+    snapshot = _build_homepage_snapshot(host)
+    with _cache_guard:
+        _snapshots[host] = _SnapshotEntry(snapshot, time.monotonic())
+    return copy.deepcopy(snapshot)
+
+
+def _build_homepage_snapshot(host: str) -> dict[str, Any]:
     catalog = ApplicationCatalog()
     running = _running_names()
-    start, end = month_calendar_span()
+    start, end = calendar_fetch_span()
     notes: list[dict[str, Any]] = []
 
     apps = _launcher_apps(catalog, running, host)
 
     calendar: list[dict[str, Any]] = []
-    calendar.extend(_collect_sonarr_calendar(catalog, running, start, end, notes))
-    calendar.extend(_collect_radarr_calendar(catalog, running, start, end, notes))
-    calendar.sort(key=lambda item: (item.get("when") or "", item.get("title") or ""))
-
     downloads: list[dict[str, Any]] = []
-    downloads.extend(_collect_sabnzbd_queue(catalog, running, notes))
-    downloads.extend(_collect_nzbget_queue(catalog, running, notes))
-    downloads.extend(_collect_qbittorrent_queue(catalog, running, notes))
-
     recent: list[dict[str, Any]] = []
-    recent.extend(_collect_jellyfin_recent(catalog, running, notes))
-    recent.extend(_collect_plex_recent(catalog, running, notes))
+    requests_row: list[dict[str, Any]] = []
+
+    sonarr_notes: list[dict[str, Any]] = []
+    radarr_notes: list[dict[str, Any]] = []
+    sab_notes: list[dict[str, Any]] = []
+    nzb_notes: list[dict[str, Any]] = []
+    qbit_notes: list[dict[str, Any]] = []
+    jelly_notes: list[dict[str, Any]] = []
+    plex_notes: list[dict[str, Any]] = []
+    seerr_notes: list[dict[str, Any]] = []
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        fut_sonarr = pool.submit(_collect_sonarr_calendar, catalog, running, start, end, sonarr_notes)
+        fut_radarr = pool.submit(_collect_radarr_calendar, catalog, running, start, end, radarr_notes)
+        fut_sab = pool.submit(_collect_sabnzbd_queue, catalog, running, sab_notes)
+        fut_nzb = pool.submit(_collect_nzbget_queue, catalog, running, nzb_notes)
+        fut_qbit = pool.submit(_collect_qbittorrent_queue, catalog, running, qbit_notes)
+        fut_jelly = pool.submit(_collect_jellyfin_recent, catalog, running, jelly_notes, host)
+        fut_plex = pool.submit(_collect_plex_recent, catalog, running, plex_notes, host)
+        fut_seerr = pool.submit(_collect_seerr_requests, catalog, running, seerr_notes, host)
+        calendar.extend(fut_sonarr.result())
+        calendar.extend(fut_radarr.result())
+        downloads.extend(fut_sab.result())
+        downloads.extend(fut_nzb.result())
+        downloads.extend(fut_qbit.result())
+        recent.extend(fut_jelly.result())
+        recent.extend(fut_plex.result())
+        requests_row.extend(fut_seerr.result())
+
+    calendar.sort(key=lambda item: (item.get("when") or "", item.get("title") or ""))
+    recent.sort(key=_when_sort_key, reverse=True)
+    notes.extend(sonarr_notes)
+    notes.extend(radarr_notes)
+    notes.extend(sab_notes)
+    notes.extend(nzb_notes)
+    notes.extend(qbit_notes)
+    notes.extend(jelly_notes)
+    notes.extend(plex_notes)
+    notes.extend(seerr_notes)
 
     seerr = catalog.has("seerr") and catalog.get("seerr").is_installed()
     seerr_running = seerr and "seerr" in running
@@ -71,9 +226,10 @@ def homepage_snapshot(host: str) -> dict[str, Any]:
 
     return {
         "apps": apps,
-        "calendar": calendar[:250],
+        "calendar": calendar[:400],
         "downloads": downloads[:40],
         "recent": recent[:24],
+        "requests": requests_row[:16],
         "seerr": {
             "available": bool(seerr_running),
             "url": _web_url(host, _port(catalog, "seerr", 5055)) if seerr else None,
@@ -139,6 +295,7 @@ def homepage_request(payload: dict[str, Any]) -> dict[str, Any]:
             timeout=_TIMEOUT,
         )
         if resp.status_code in (200, 201):
+            clear_homepage_snapshot_cache()
             return {"ok": True, "detail": "Request submitted."}
         return {"ok": False, "detail": f"Seerr returned HTTP {resp.status_code}."}
     except Exception as exc:
@@ -171,7 +328,13 @@ def _launcher_apps(catalog: ApplicationCatalog, running: set[str], host: str) ->
                 "url": _web_url(host, plugin.port),
             }
         )
-    apps.sort(key=lambda item: item["display_name"].lower())
+    order = {name: index for index, name in enumerate(_LAUNCHER_CATEGORY_ORDER)}
+    apps.sort(
+        key=lambda item: (
+            order.get(item["category"], len(order)),
+            item["display_name"].lower(),
+        )
+    )
     return apps
 
 
@@ -235,6 +398,28 @@ def _source_ready(
     return True
 
 
+def _iso_when(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return text
+
+
+def _when_sort_key(item: dict[str, Any]) -> float:
+    text = str(item.get("when") or "").strip()
+    if not text:
+        return 0.0
+    if text.isdigit() and len(text) >= 9:
+        try:
+            return float(text)
+        except ValueError:
+            return 0.0
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
+
+
 def _get_json(url: str, *, headers: Optional[dict[str, str]] = None, params: Optional[dict[str, Any]] = None) -> Any:
     data, _error = _fetch_json(url, headers=headers, params=params)
     return data
@@ -245,17 +430,63 @@ def _fetch_json(
     *,
     headers: Optional[dict[str, str]] = None,
     params: Optional[dict[str, Any]] = None,
+    timeout: float | None = None,
 ) -> tuple[Any, str | None]:
     try:
-        resp = requests.get(url, headers=headers or {}, params=params, timeout=_TIMEOUT)
+        resp = requests.get(url, headers=headers or {}, params=params, timeout=timeout or _TIMEOUT)
         if resp.status_code == 200:
             return resp.json(), None
         return None, f"HTTP {resp.status_code}"
     except requests.Timeout:
-        return None, "timed out after 4s"
+        return None, f"timed out after {int(timeout or _TIMEOUT)}s"
     except Exception as exc:
         logger.debug("Homepage GET %s failed: %s", url, exc)
         return None, str(exc)[:180]
+
+
+def _fetch_bytes(
+    url: str,
+    *,
+    headers: Optional[dict[str, str]] = None,
+    params: Optional[dict[str, Any]] = None,
+) -> tuple[bytes | None, str, str | None]:
+    try:
+        resp = requests.get(url, headers=headers or {}, params=params, timeout=_TIMEOUT)
+        if resp.status_code != 200 or not resp.content:
+            return None, "", f"HTTP {resp.status_code}"
+        ctype = (resp.headers.get("Content-Type") or "image/jpeg").split(";")[0].strip()
+        return resp.content, ctype or "image/jpeg", None
+    except Exception as exc:
+        logger.debug("Homepage image GET %s failed: %s", url, exc)
+        return None, "", str(exc)[:180]
+
+
+def homepage_art(source: str, item_id: str) -> tuple[bytes | None, str]:
+    """Artwork for Home poster rails. Authenticated via the manager session."""
+    catalog = ApplicationCatalog()
+    running = _running_names()
+    ident = (item_id or "").strip()
+    if not ident:
+        return None, ""
+    if source == "jellyfin" and catalog.has("jellyfin") and "jellyfin" in running:
+        plugin = catalog.get("jellyfin")
+        key = get_application_api_key("jellyfin", plugin.config_dir)
+        body, ctype, _err = _fetch_bytes(
+            f"http://127.0.0.1:{plugin.port}/Items/{quote(ident, safe='')}/Images/Primary",
+            headers=jellyfin_auth_headers(key),
+            params={"fillWidth": "240", "fillHeight": "360", "quality": "80"},
+        )
+        return body, ctype
+    if source == "plex" and catalog.has("plex") and "plex" in running:
+        plugin = catalog.get("plex")
+        client = PlexClient(port=plugin.port, config_dir=plugin.config_dir)
+        body, ctype, _err = _fetch_bytes(
+            f"{client.base_url}/library/metadata/{quote(ident, safe='')}/thumb",
+            headers=client._headers(),
+            params={"width": "240", "height": "360"},
+        )
+        return body, ctype
+    return None, ""
 
 
 def _finish_source(
@@ -302,7 +533,7 @@ def _collect_sonarr_calendar(
         "sonarr",
         _parse_sonarr_calendar(data),
         error or (None if isinstance(data, list) else "unexpected calendar payload"),
-        "calendar is empty this month",
+        "calendar is empty in this window",
     )
 
 
@@ -324,7 +555,7 @@ def _parse_sonarr_calendar(data: Any) -> list[dict[str, Any]]:
                 "kind": "episode",
                 "title": title,
                 "detail": " ".join(part for part in (ep, row.get("title") or "") if part),
-                "when": str(row.get("airDateUtc") or row.get("airDate") or "")[:16],
+                "when": _iso_when(row.get("airDateUtc") or row.get("airDate")),
                 "has_file": bool(row.get("hasFile")),
             }
         )
@@ -352,7 +583,7 @@ def _collect_radarr_calendar(
         "radarr",
         _parse_radarr_calendar(data),
         error or (None if isinstance(data, list) else "unexpected calendar payload"),
-        "calendar is empty this month",
+        "calendar is empty in this window",
     )
 
 
@@ -370,7 +601,7 @@ def _parse_radarr_calendar(data: Any) -> list[dict[str, Any]]:
                 "kind": "movie",
                 "title": row.get("title") or "Movie",
                 "detail": str(row.get("year") or ""),
-                "when": str(when)[:16],
+                "when": _iso_when(when),
                 "has_file": bool(row.get("hasFile")),
             }
         )
@@ -496,6 +727,7 @@ def _collect_jellyfin_recent(
     catalog: ApplicationCatalog,
     running: set[str],
     notes: list[dict[str, Any]],
+    host: str,
 ) -> list[dict[str, Any]]:
     if not _source_ready(catalog, running, "jellyfin", "recent", notes, need_key=True):
         return []
@@ -508,9 +740,9 @@ def _collect_jellyfin_recent(
             "Recursive": "true",
             "SortBy": "DateCreated",
             "SortOrder": "Descending",
-            "IncludeItemTypes": "Movie,Episode,Series",
-            "Limit": "16",
-            "Fields": "DateCreated",
+            "IncludeItemTypes": "Movie,Episode",
+            "Limit": "20",
+            "Fields": "DateCreated,PrimaryImageAspectRatio,SeriesName",
         },
     )
     rows = data.get("Items") if isinstance(data, dict) else None
@@ -519,17 +751,35 @@ def _collect_jellyfin_recent(
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            kind = str(row.get("Type") or "")
+            item_id = str(row.get("Id") or "")
+            poster_id = str(row.get("SeriesId") or item_id) if kind == "Episode" else item_id
+            if kind == "Episode":
+                season = row.get("ParentIndexNumber")
+                episode = row.get("IndexNumber")
+                ep = (
+                    f"S{int(season):02d}E{int(episode):02d}"
+                    if season is not None and episode is not None
+                    else ""
+                )
+                title = row.get("SeriesName") or row.get("Name") or "Episode"
+                detail = " ".join(part for part in (ep, row.get("Name") or "") if part)
+            else:
+                title = row.get("Name") or "Movie"
+                detail = str(row.get("ProductionYear") or "Movie")
             items.append(
                 {
                     "source": "jellyfin",
-                    "title": row.get("Name") or "Item",
-                    "detail": row.get("Type") or "",
+                    "title": title,
+                    "detail": detail,
                     "when": str(row.get("DateCreated") or "")[:16],
+                    "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
+                    "url": f"{_web_url(host, plugin.port)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
                 }
             )
     payload_error = None if isinstance(data, dict) else "unexpected items payload"
     if error in ("HTTP 401", "HTTP 403"):
-        error = f"{error} — Jellyfin rejected the API key; paste a new one in Settings → Integrations"
+        error = f"{error} — Jellyfin rejected the API key; paste a new one in Settings → Homepage"
     return _finish_source(
         notes,
         "recent",
@@ -544,6 +794,7 @@ def _collect_plex_recent(
     catalog: ApplicationCatalog,
     running: set[str],
     notes: list[dict[str, Any]],
+    host: str,
 ) -> list[dict[str, Any]]:
     if not _source_ready(catalog, running, "plex", "recent", notes):
         return []
@@ -565,15 +816,33 @@ def _collect_plex_recent(
     rows = container.get("Metadata") if isinstance(container, dict) else None
     items: list[dict[str, Any]] = []
     if isinstance(rows, list):
-        for row in rows[:16]:
+        for row in rows[:20]:
             if not isinstance(row, dict):
                 continue
+            kind = str(row.get("type") or "")
+            rating_key = str(row.get("grandparentRatingKey") or row.get("ratingKey") or "")
+            if kind == "episode":
+                title = row.get("grandparentTitle") or row.get("title") or "Episode"
+                season = row.get("parentIndex")
+                episode = row.get("index")
+                ep = (
+                    f"S{int(season):02d}E{int(episode):02d}"
+                    if season is not None and episode is not None
+                    else ""
+                )
+                detail = " ".join(part for part in (ep, row.get("title") or "") if part)
+            else:
+                title = row.get("title") or "Item"
+                detail = str(row.get("year") or kind)
+            item_key = str(row.get("ratingKey") or "")
             items.append(
                 {
                     "source": "plex",
-                    "title": row.get("title") or row.get("parentTitle") or "Item",
-                    "detail": row.get("type") or "",
+                    "title": title,
+                    "detail": detail,
                     "when": str(row.get("addedAt") or row.get("originallyAvailableAt") or ""),
+                    "poster": f"/api/homepage/art?source=plex&item_id={quote(rating_key, safe='')}" if rating_key else "",
+                    "url": f"{_web_url(host, plugin.port)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
                 }
             )
     error = None if isinstance(payload, dict) else "unexpected recently added payload"
@@ -585,6 +854,127 @@ def _collect_plex_recent(
         error,
         "library returned no recently added items",
     )
+
+
+def _collect_seerr_requests(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    notes: list[dict[str, Any]],
+    host: str,
+) -> list[dict[str, Any]]:
+    if not _source_ready(catalog, running, "seerr", "requests", notes, need_key=True):
+        return []
+    plugin = catalog.get("seerr")
+    key = get_application_api_key("seerr", plugin.config_dir) or ""
+    headers = {"Content-Type": "application/json", "X-Api-Key": key}
+    data, error = _fetch_json(
+        f"http://127.0.0.1:{plugin.port}/api/v1/request",
+        headers=headers,
+        params={"take": "16", "skip": "0", "filter": "all", "sort": "added"},
+    )
+    rows = data.get("results") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return _finish_source(
+            notes,
+            "requests",
+            "seerr",
+            [],
+            error or (None if isinstance(data, dict) else "unexpected request payload"),
+            "no requests yet",
+        )
+    items = _seerr_request_cards(plugin, headers, rows[:16], host)
+    return _finish_source(
+        notes,
+        "requests",
+        "seerr",
+        items,
+        error,
+        "no requests yet",
+    )
+
+
+def _seerr_request_cards(
+    plugin: Any,
+    headers: dict[str, str],
+    rows: list[Any],
+    host: str,
+) -> list[dict[str, Any]]:
+    jobs: list[tuple[dict[str, Any], str, int]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        media = row.get("media") if isinstance(row.get("media"), dict) else {}
+        media_type = str(media.get("mediaType") or row.get("type") or "movie").lower()
+        if media_type in {"tv", "series", "tvshow"}:
+            media_type = "tv"
+        else:
+            media_type = "movie"
+        try:
+            tmdb_id = int(media.get("tmdbId") or 0)
+        except (TypeError, ValueError):
+            tmdb_id = 0
+        if tmdb_id:
+            jobs.append((row, media_type, tmdb_id))
+
+    details: dict[tuple[str, int], dict[str, Any]] = {}
+    if jobs:
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futs = {
+                pool.submit(_seerr_media_details, plugin, headers, media_type, tmdb_id): (media_type, tmdb_id)
+                for _row, media_type, tmdb_id in jobs
+            }
+            for fut in as_completed(futs):
+                key = futs[fut]
+                try:
+                    details[key] = fut.result() or {}
+                except Exception:
+                    details[key] = {}
+
+    items: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+    for row, media_type, tmdb_id in jobs:
+        ident = (media_type, tmdb_id)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        info = details.get(ident) or {}
+        who = row.get("requestedBy") if isinstance(row.get("requestedBy"), dict) else {}
+        requester = who.get("displayName") or who.get("username") or ""
+        title = info.get("title") or f"{media_type} {tmdb_id}"
+        path = f"tv/{tmdb_id}" if media_type == "tv" else f"movie/{tmdb_id}"
+        items.append(
+            {
+                "source": "seerr",
+                "title": title,
+                "detail": requester,
+                "poster": info.get("poster") or "",
+                "url": f"{_web_url(host, plugin.port)}/{path}",
+                "mediaType": media_type,
+                "mediaId": tmdb_id,
+            }
+        )
+    return items
+
+
+def _seerr_media_details(
+    plugin: Any,
+    headers: dict[str, str],
+    media_type: str,
+    tmdb_id: int,
+) -> dict[str, Any]:
+    kind = "tv" if media_type == "tv" else "movie"
+    data, _error = _fetch_json(
+        f"http://127.0.0.1:{plugin.port}/api/v1/{kind}/{tmdb_id}",
+        headers=headers,
+        timeout=2.0,
+    )
+    if not isinstance(data, dict):
+        return {}
+    poster = data.get("posterPath") or ""
+    return {
+        "title": data.get("title") or data.get("name") or "",
+        "poster": f"https://image.tmdb.org/t/p/w185{poster}" if poster else "",
+    }
 
 
 _SEERR_MEDIA_STATUS = {2: "requested", 3: "requested", 4: "partial", 5: "available"}

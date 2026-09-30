@@ -13,6 +13,7 @@ const emptySnapshot = () => ({
   calendar: [],
   downloads: [],
   recent: [],
+  requests: [],
   seerr: { available: false, url: null },
   widgets: [],
 })
@@ -32,14 +33,55 @@ const requestBusy = ref('')
 let poll = null
 let searchTimer = null
 
+const hasMediaServer = computed(() =>
+  (snapshot.value.apps || []).some((app) => app.name === 'jellyfin' || app.name === 'plex'),
+)
+const hasCalendarSource = computed(() =>
+  (snapshot.value.apps || []).some((app) => app.name === 'sonarr' || app.name === 'radarr'),
+)
 const hasWidgets = computed(
   () =>
     snapshot.value.calendar.length ||
     snapshot.value.downloads.length ||
-    snapshot.value.recent.length,
+    snapshot.value.recent.length ||
+    snapshot.value.requests.length ||
+    hasMediaServer.value ||
+    hasCalendarSource.value ||
+    snapshot.value.seerr.available,
 )
 const showWidgets = computed(() => hasWidgets.value || widgetDebug.value)
 const widgetNotes = computed(() => snapshot.value.widgets || [])
+const CATEGORY_LABELS = {
+  media: 'Media',
+  requests: 'Requests',
+  automation: 'Automation',
+  indexers: 'Indexers',
+  downloading: 'Downloading',
+  subtitles: 'Subtitles',
+  optimization: 'Optimization',
+  maintenance: 'Maintenance',
+}
+const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS)
+
+const launcherGroups = computed(() => {
+  const groups = new Map()
+  for (const app of snapshot.value.apps || []) {
+    const id = app.category || 'other'
+    if (!groups.has(id)) {
+      groups.set(id, {
+        id,
+        label: CATEGORY_LABELS[id] || id,
+        apps: [],
+      })
+    }
+    groups.get(id).apps.push(app)
+  }
+  return [...groups.values()].sort((a, b) => {
+    const ai = CATEGORY_ORDER.indexOf(a.id)
+    const bi = CATEGORY_ORDER.indexOf(b.id)
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+  })
+})
 
 function notesFor(widget) {
   return widgetNotes.value.filter((item) => item.widget === widget)
@@ -50,9 +92,9 @@ function debugFlagFromRoute() {
   return raw === '1' || raw === 'true'
 }
 
-async function loadSnapshot() {
+async function loadSnapshot(force = false) {
   try {
-    const res = await apiRequest('/api/homepage')
+    const res = await apiRequest(force ? '/api/homepage?refresh=1' : '/api/homepage')
     if (res.ok) {
       const data = await readJson(res)
       snapshot.value = {
@@ -61,6 +103,7 @@ async function loadSnapshot() {
         calendar: data.calendar || [],
         downloads: data.downloads || [],
         recent: data.recent || [],
+        requests: data.requests || [],
         widgets: data.widgets || [],
         seerr: data.seerr || { available: false, url: null },
       }
@@ -142,6 +185,7 @@ async function requestTitle(item) {
       notice.value = data.detail || 'Request submitted.'
       item.status = 'requested'
       item.can_request = false
+      loadSnapshot(true)
     } else {
       notice.value = apiError(data, 'Request failed.')
     }
@@ -177,53 +221,176 @@ function dayKey(dt) {
 }
 
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const calView = ref('week')
+const calFilter = ref('all')
+const recentRail = ref(null)
+const requestsRail = ref(null)
 
-const calendarMonthLabel = computed(() =>
-  new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+function startOfWeek(value) {
+  const dt = new Date(value)
+  dt.setHours(0, 0, 0, 0)
+  dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7))
+  return dt
+}
+
+const calCursor = ref(startOfWeek(new Date()))
+
+function scrollRail(which, direction) {
+  const node = which === 'requests' ? requestsRail.value : recentRail.value
+  if (!node) return
+  const step = Math.max(node.clientWidth * 0.72, 232)
+  node.scrollBy({ left: direction * step, behavior: 'smooth' })
+}
+
+function addDays(value, amount) {
+  const dt = new Date(value)
+  dt.setDate(dt.getDate() + amount)
+  return dt
+}
+
+function eventKind(item) {
+  return item?.kind || item?.source || ''
+}
+
+function matchesCalFilter(item) {
+  if (calFilter.value === 'tv') return eventKind(item) === 'episode' || item?.source === 'sonarr'
+  if (calFilter.value === 'movies') return eventKind(item) === 'movie' || item?.source === 'radarr'
+  if (calFilter.value === 'missing') return !item?.has_file
+  return true
+}
+
+const filteredCalendar = computed(() =>
+  (snapshot.value.calendar || []).filter(matchesCalFilter),
 )
 
-const calendarWeeks = computed(() => {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth()
-  const first = new Date(year, month, 1)
-  const start = new Date(first)
-  start.setDate(first.getDate() - ((first.getDay() + 6) % 7))
-  const last = new Date(year, month + 1, 0)
-  const end = new Date(last)
-  end.setDate(last.getDate() + ((7 - last.getDay()) % 7))
+const calendarRangeLabel = computed(() => {
+  if (calView.value === 'month') {
+    return calCursor.value.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  }
+  if (calView.value === 'day' || calView.value === 'list') {
+    return calCursor.value.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })
+  }
+  const start = startOfWeek(calCursor.value)
+  const end = addDays(start, 6)
+  const opts = { day: 'numeric', month: 'short' }
+  return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, { ...opts, year: 'numeric' })}`
+})
 
+const calendarDays = computed(() => {
   const byDay = {}
-  for (const item of snapshot.value.calendar || []) {
+  for (const item of filteredCalendar.value) {
     const dt = parseWhen(item.when)
     if (!dt) continue
     const key = dayKey(dt)
     if (!byDay[key]) byDay[key] = []
     byDay[key].push(item)
   }
-
-  const todayKey = dayKey(now)
-  const weeks = []
-  const cursor = new Date(start)
-  while (cursor <= end) {
+  for (const key of Object.keys(byDay)) {
+    byDay[key].sort((a, b) => (parseWhen(a.when)?.getTime() || 0) - (parseWhen(b.when)?.getTime() || 0))
+  }
+  const todayKey = dayKey(new Date())
+  if (calView.value === 'day' || calView.value === 'list') {
+    const key = dayKey(calCursor.value)
+    return [
+      {
+        key,
+        date: calCursor.value.getDate(),
+        month: calCursor.value.getMonth() + 1,
+        weekday: weekdayLabels[(calCursor.value.getDay() + 6) % 7],
+        inMonth: true,
+        isToday: key === todayKey,
+        events: byDay[key] || [],
+      },
+    ]
+  }
+  if (calView.value === 'week') {
+    const start = startOfWeek(calCursor.value)
     const days = []
-    let isCurrent = false
     for (let i = 0; i < 7; i += 1) {
+      const cursor = addDays(start, i)
       const key = dayKey(cursor)
-      if (key === todayKey) isCurrent = true
       days.push({
         key,
         date: cursor.getDate(),
-        inMonth: cursor.getMonth() === month,
+        month: cursor.getMonth() + 1,
+        weekday: weekdayLabels[i],
+        inMonth: true,
         isToday: key === todayKey,
         events: byDay[key] || [],
       })
-      cursor.setDate(cursor.getDate() + 1)
     }
-    weeks.push({ key: days[0].key, isCurrent, days })
+    return days
+  }
+  const year = calCursor.value.getFullYear()
+  const month = calCursor.value.getMonth()
+  const first = new Date(year, month, 1)
+  const start = startOfWeek(first)
+  const last = new Date(year, month + 1, 0)
+  const end = addDays(startOfWeek(last), 6)
+  const days = []
+  const cursor = new Date(start)
+  while (cursor <= end) {
+    const key = dayKey(cursor)
+    days.push({
+      key,
+      date: cursor.getDate(),
+      month: cursor.getMonth() + 1,
+      weekday: weekdayLabels[(cursor.getDay() + 6) % 7],
+      inMonth: cursor.getMonth() === month,
+      isToday: key === todayKey,
+      events: byDay[key] || [],
+    })
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return days
+})
+
+const calendarWeeks = computed(() => {
+  const days = calendarDays.value
+  if (calView.value !== 'month') return [{ key: days[0]?.key || 'week', isCurrent: true, days }]
+  const weeks = []
+  for (let i = 0; i < days.length; i += 7) {
+    const slice = days.slice(i, i + 7)
+    weeks.push({
+      key: slice[0]?.key || String(i),
+      isCurrent: slice.some((day) => day.isToday),
+      days: slice,
+    })
   }
   return weeks
 })
+
+const calendarList = computed(() => {
+  const start = calView.value === 'list' ? startOfWeek(calCursor.value) : calCursor.value
+  const end = calView.value === 'list' ? addDays(start, 7) : addDays(calCursor.value, 1)
+  return filteredCalendar.value
+    .map((item) => ({ item, dt: parseWhen(item.when) }))
+    .filter((row) => row.dt && row.dt >= start && row.dt < end)
+    .sort((a, b) => a.dt - b.dt)
+})
+
+function shiftCalendar(direction) {
+  if (calView.value === 'month') {
+    calCursor.value = new Date(calCursor.value.getFullYear(), calCursor.value.getMonth() + direction, 1)
+    return
+  }
+  const step = calView.value === 'day' ? 1 : 7
+  calCursor.value = addDays(calView.value === 'week' ? startOfWeek(calCursor.value) : calCursor.value, direction * step)
+}
+
+function goToday() {
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  if (calView.value === 'month') {
+    calCursor.value = new Date(now.getFullYear(), now.getMonth(), 1)
+    return
+  }
+  if (calView.value === 'week' || calView.value === 'list') {
+    calCursor.value = startOfWeek(now)
+    return
+  }
+  calCursor.value = now
+}
 
 onMounted(() => {
   try {
@@ -245,6 +412,11 @@ watch(
     }
   }
 )
+watch(calView, (view) => {
+  if (view === 'week' || view === 'list') {
+    calCursor.value = startOfWeek(calCursor.value)
+  }
+})
 onUnmounted(() => {
   if (poll) poll()
   clearTimeout(searchTimer)
@@ -253,48 +425,42 @@ onUnmounted(() => {
 
 <template>
   <section class="home-shell">
-    <div class="home-hero glass-card">
-      <div>
-        <p class="home-kicker">Home</p>
-        <h2>Watch and request</h2>
-        <p class="home-lead">
-          Open installed apps and see what’s airing, downloading, or newly added. Process
-          controls stay on Catalog.
-        </p>
-      </div>
-    </div>
-
     <p v-if="loading" class="home-muted">Loading Home…</p>
     <p v-if="snapshotError" class="home-notice">{{ snapshotError }}</p>
 
     <div v-if="!loading && !snapshot.apps.length" class="home-empty glass-card">
       <h3>Nothing to launch yet</h3>
-      <p>Finish setup or install apps from Catalog. This page only lists installed applications.</p>
+      <p>Finish setup or install apps from Catalog. This page only lists installed applications with a WebUI.</p>
       <button type="button" class="ui-btn ui-btn-primary" @click="emit('manage')">Go to Catalog</button>
     </div>
 
     <template v-else-if="!loading">
-      <div class="home-launcher">
-        <a
-          v-for="app in snapshot.apps"
-          :key="app.name"
-          class="home-app"
-          :class="{ 'is-down': !app.running }"
-          :href="app.url"
-          target="_blank"
-          rel="noopener noreferrer"
-          :title="app.running ? app.display_name : `${app.display_name} is stopped`"
-        >
-          <img
-            v-if="appIconSrc(app.name)"
-            :src="appIconSrc(app.name)"
-            :alt="app.display_name"
-            class="home-app-icon"
-          />
-          <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
-          <span class="home-app-name">{{ app.display_name }}</span>
-          <span class="home-app-state">{{ app.running ? 'Open UI' : 'Stopped' }}</span>
-        </a>
+      <div class="home-launcher-groups">
+        <section v-for="group in launcherGroups" :key="group.id" class="home-launcher-group">
+          <h3 class="home-launcher-label">{{ group.label }}</h3>
+          <div class="home-launcher">
+            <a
+              v-for="app in group.apps"
+              :key="app.name"
+              class="home-app"
+              :class="{ 'is-down': !app.running }"
+              :href="app.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              :title="app.running ? app.display_name : `${app.display_name} is stopped`"
+            >
+              <img
+                v-if="appIconSrc(app.name)"
+                :src="appIconSrc(app.name)"
+                :alt="app.display_name"
+                class="home-app-icon"
+              />
+              <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
+              <span class="home-app-name">{{ app.display_name }}</span>
+              <span class="home-app-state">{{ app.running ? 'Open UI' : 'Stopped' }}</span>
+            </a>
+          </div>
+        </section>
       </div>
 
       <form class="home-search glass-card" @submit.prevent="runSearch">
@@ -342,22 +508,115 @@ onUnmounted(() => {
       </form>
 
       <div v-if="showWidgets" class="home-widgets">
-        <article v-if="snapshot.calendar.length || widgetDebug" class="home-widget glass-card home-widget-calendar">
-          <div class="cal-head">
-            <h3>Coming up</h3>
-            <p class="cal-range cal-range-month">{{ calendarMonthLabel }}</p>
-            <p class="cal-range cal-range-week">This week</p>
+        <article v-if="snapshot.recent.length || hasMediaServer || widgetDebug" class="home-widget glass-card home-widget-rail">
+          <div class="home-rail-head">
+            <h3>Recently added</h3>
+            <div v-if="snapshot.recent.length" class="home-rail-nav">
+              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous recently added" @click="scrollRail('recent', -1)">‹</button>
+              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next recently added" @click="scrollRail('recent', 1)">›</button>
+            </div>
           </div>
-          <div class="cal" role="grid" aria-label="Upcoming releases calendar">
-            <div class="cal-weekdays">
+          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail">
+            <a
+              v-for="(item, idx) in snapshot.recent"
+              :key="idx"
+              class="home-tile"
+              :href="item.url || undefined"
+              :target="item.url ? '_blank' : undefined"
+              rel="noopener noreferrer"
+            >
+              <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+              <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+              <span class="home-tile-title">{{ item.title }}</span>
+              <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
+            </a>
+          </div>
+          <p v-else class="home-muted">Nothing recently added.</p>
+          <ul v-if="widgetDebug && notesFor('recent').length" class="home-debug">
+            <li v-for="(note, idx) in notesFor('recent')" :key="idx">
+              <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
+              <span>{{ note.source }} — {{ note.detail }}</span>
+            </li>
+          </ul>
+        </article>
+        <article v-if="snapshot.requests.length || snapshot.seerr.available || widgetDebug" class="home-widget glass-card home-widget-rail">
+          <div class="home-rail-head">
+            <h3>Requests</h3>
+            <div v-if="snapshot.requests.length" class="home-rail-nav">
+              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
+              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
+            </div>
+          </div>
+          <div v-if="snapshot.requests.length" ref="requestsRail" class="home-rail">
+            <a
+              v-for="(item, idx) in snapshot.requests"
+              :key="idx"
+              class="home-tile"
+              :href="item.url || snapshot.seerr.url || undefined"
+              :target="item.url || snapshot.seerr.url ? '_blank' : undefined"
+              rel="noopener noreferrer"
+            >
+              <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+              <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+              <span class="home-tile-title">{{ item.title }}</span>
+              <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
+            </a>
+          </div>
+          <p v-else class="home-muted">No Seerr requests yet. Search above to request a title.</p>
+          <ul v-if="widgetDebug && notesFor('requests').length" class="home-debug">
+            <li v-for="(note, idx) in notesFor('requests')" :key="idx">
+              <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
+              <span>{{ note.source }} — {{ note.detail }}</span>
+            </li>
+          </ul>
+        </article>
+        <article v-if="snapshot.calendar.length || hasCalendarSource || widgetDebug" class="home-widget glass-card home-widget-calendar">
+          <div class="cal-head">
+            <div class="cal-nav">
+              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" aria-label="Previous">‹</button>
+              <h3>{{ calendarRangeLabel }}</h3>
+              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" aria-label="Next">›</button>
+              <button type="button" class="ui-btn ui-btn-ghost" @click="goToday">Today</button>
+            </div>
+            <div class="cal-tools">
+              <button type="button" class="ui-btn ui-btn-ghost" @click="loadSnapshot(true)">Refresh</button>
+              <select v-model="calFilter" class="ui-input cal-select" aria-label="Filter calendar">
+                <option value="all">All</option>
+                <option value="tv">TV</option>
+                <option value="movies">Movies</option>
+                <option value="missing">Not downloaded</option>
+              </select>
+              <div class="cal-views">
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'month' }" @click="calView = 'month'">Month</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'week' }" @click="calView = 'week'">Week</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'day' }" @click="calView = 'day'">Day</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'list' }" @click="calView = 'list'">List</button>
+              </div>
+            </div>
+          </div>
+          <div v-if="calView === 'list'" class="cal-list">
+            <p v-if="!calendarList.length" class="home-muted">Nothing in this range.</p>
+            <ul v-else>
+              <li v-for="(row, idx) in calendarList" :key="idx" class="cal-event" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file }">
+                <span class="cal-event-time">{{ formatEventTime(row.item.when) }}</span>
+                <strong>{{ row.item.title }}</strong>
+                <span v-if="row.item.detail" class="cal-event-detail">{{ row.item.detail }}</span>
+              </li>
+            </ul>
+          </div>
+          <div v-else class="cal" :class="'cal-mode-' + calView" role="grid" aria-label="Upcoming releases calendar">
+            <div v-if="calView === 'week'" class="cal-weekdays">
+              <span v-for="day in calendarDays" :key="day.key">{{ day.weekday }} {{ day.date }}-{{ day.month }}</span>
+            </div>
+            <div v-else-if="calView === 'month'" class="cal-weekdays">
               <span v-for="label in weekdayLabels" :key="label">{{ label }}</span>
             </div>
-            <div class="cal-weeks">
+            <div class="cal-weeks" :class="{ 'is-week': calView === 'week', 'is-day': calView === 'day' }">
               <div
                 v-for="week in calendarWeeks"
                 :key="week.key"
                 class="cal-week"
-                :class="{ 'is-current': week.isCurrent }"
+                :class="{ 'is-current': week.isCurrent, 'is-single': calView !== 'month' }"
               >
                 <div
                   v-for="day in week.days"
@@ -365,9 +624,15 @@ onUnmounted(() => {
                   class="cal-day"
                   :class="{ 'is-today': day.isToday, 'is-outside': !day.inMonth }"
                 >
-                  <span class="cal-num">{{ day.date }}</span>
+                  <span class="cal-num">{{ calView === 'week' ? day.weekday + ' ' + day.date : day.date }}</span>
                   <ul v-if="day.events.length" class="cal-events">
-                    <li v-for="(item, idx) in day.events" :key="idx" class="cal-event" :data-kind="item.kind || item.source">
+                    <li
+                      v-for="(item, idx) in day.events"
+                      :key="idx"
+                      class="cal-event"
+                      :data-kind="eventKind(item)"
+                      :class="{ 'is-have': item.has_file }"
+                    >
                       <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
                       <strong>{{ item.title }}</strong>
                       <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
@@ -377,7 +642,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <p v-if="!snapshot.calendar.length" class="home-muted">Nothing on the calendar.</p>
+          <p v-if="!snapshot.calendar.length && widgetDebug" class="home-muted">Nothing on the calendar.</p>
           <ul v-if="widgetDebug && notesFor('calendar').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('calendar')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -402,25 +667,9 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="snapshot.recent.length || widgetDebug" class="home-widget glass-card">
-          <h3>Recently added</h3>
-          <ul v-if="snapshot.recent.length">
-            <li v-for="(item, idx) in snapshot.recent" :key="idx">
-              <strong>{{ item.title }}</strong>
-              <span class="home-muted">{{ item.source }} · {{ item.detail }}</span>
-            </li>
-          </ul>
-          <p v-else class="home-muted">Nothing recently added.</p>
-          <ul v-if="widgetDebug && notesFor('recent').length" class="home-debug">
-            <li v-for="(note, idx) in notesFor('recent')" :key="idx">
-              <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
-              <span>{{ note.source }} — {{ note.detail }}</span>
-            </li>
-          </ul>
-        </article>
       </div>
       <p v-else class="home-muted">
-        Calendar, downloads, and recently added appear after Sonarr, Radarr, download clients, Jellyfin, or Plex are running.
+        Calendar, downloads, recently added, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.
         Turn on Widget debug in Settings → Homepage to see why a source is skipped or failing.
       </p>
     </template>
@@ -449,21 +698,6 @@ onUnmounted(() => {
   width: 100%;
   min-width: 0;
 }
-.home-hero {
-  padding: 1.25rem 1.4rem;
-}
-.home-kicker {
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-info);
-  margin-bottom: 0.35rem;
-}
-.home-hero h2 {
-  font-size: 1.45rem;
-  margin-bottom: 0.35rem;
-}
-.home-lead,
 .home-muted {
   color: var(--text-muted);
   font-size: 0.92rem;
@@ -473,6 +707,17 @@ onUnmounted(() => {
   display: grid;
   gap: 0.75rem;
   justify-items: start;
+}
+.home-launcher-groups {
+  display: grid;
+  gap: 1.15rem;
+}
+.home-launcher-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0 0 0.55rem;
 }
 .home-launcher {
   display: grid;
@@ -596,30 +841,104 @@ onUnmounted(() => {
 }
 .home-widgets {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
+.home-widget-rail,
 .home-widget-calendar {
   grid-column: 1 / -1;
+}
+.home-rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.home-rail-head h3 {
+  margin: 0;
+}
+.home-rail-nav {
+  display: flex;
+  gap: 0.3rem;
+}
+.home-rail {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+  scroll-snap-type: x proximity;
+}
+.home-tile {
+  flex: 0 0 7.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+.home-tile-poster,
+.home-tile-fallback {
+  width: 7.25rem;
+  height: 10.6rem;
+  border-radius: 0.45rem;
+  object-fit: cover;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+}
+.home-tile-fallback {
+  display: grid;
+  place-items: center;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.home-tile-title,
+.home-tile-meta {
+  font-size: 0.78rem;
+  line-height: 1.25;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.home-tile-meta {
+  color: var(--text-muted);
+  -webkit-line-clamp: 1;
+  font-size: 0.72rem;
 }
 .cal-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.35rem 1rem;
+  gap: 0.65rem 1rem;
   margin-bottom: 0.75rem;
 }
 .cal-head h3 {
-  margin-bottom: 0;
-}
-.cal-range {
   margin: 0;
-  font-size: 0.88rem;
-  color: var(--text-muted);
+  font-size: 1rem;
 }
-.cal-range-week {
-  display: none;
+.cal-nav,
+.cal-tools,
+.cal-views {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.cal-nav-btn {
+  min-width: 2.1rem;
+  padding-inline: 0.45rem;
+}
+.cal-select {
+  width: auto;
+  min-width: 9rem;
+}
+.cal-views .ui-btn.is-active {
+  border-color: var(--color-info);
+  color: var(--text-main);
 }
 .cal {
   display: grid;
@@ -631,6 +950,24 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.28rem;
+}
+.cal-mode-week {
+  overflow-x: auto;
+}
+.cal-mode-week .cal-weekdays,
+.cal-mode-week .cal-week {
+  min-width: 56rem;
+}
+.cal-weeks.is-week .cal-week,
+.cal-weeks.is-day .cal-week {
+  overflow-x: visible;
+}
+.cal-weeks.is-week .cal-week {
+  min-width: 56rem;
+}
+.cal-weeks.is-day .cal-week {
+  grid-template-columns: 1fr;
+  min-width: 0;
 }
 .cal-weekdays span {
   font-size: 0.72rem;
@@ -655,6 +992,12 @@ onUnmounted(() => {
   gap: 0.3rem;
   overflow: auto;
 }
+.cal-weeks.is-week .cal-day {
+  min-height: 18rem;
+}
+.cal-weeks.is-week .cal-num {
+  display: none;
+}
 .cal-day.is-outside {
   opacity: 0.45;
 }
@@ -670,28 +1013,33 @@ onUnmounted(() => {
 .cal-day.is-today .cal-num {
   color: var(--color-info);
 }
-.cal-events {
+.cal-events,
+.cal-list ul {
   list-style: none;
   display: grid;
   gap: 0.28rem;
   margin: 0;
   padding: 0;
 }
-.home-widget-calendar .cal-events {
-  gap: 0.28rem;
-}
-.home-widget-calendar .cal-events li {
+.cal-event {
   display: grid;
   gap: 0.05rem;
   padding: 0.28rem 0.35rem;
   border-radius: 0.35rem;
   background: var(--bg-input);
   min-width: 0;
+  border-left: 3px solid var(--color-warning, #f59e0b);
+}
+.cal-event.is-have {
+  border-left-color: var(--color-success, #10b981);
 }
 .cal-event-time {
   font-size: 0.68rem;
   font-family: var(--font-mono);
-  color: var(--color-info);
+  color: var(--color-warning, #f59e0b);
+}
+.cal-event.is-have .cal-event-time {
+  color: var(--color-success, #10b981);
 }
 .cal-event strong {
   font-size: 0.78rem;
@@ -717,6 +1065,9 @@ onUnmounted(() => {
   list-style: none;
   display: grid;
   gap: 0.7rem;
+}
+.home-widget-calendar ul {
+  gap: 0.28rem;
 }
 .home-widget li {
   display: grid;
@@ -778,18 +1129,7 @@ onUnmounted(() => {
 .home-debug-state[data-state='empty'] {
   color: var(--color-warning, #e6b84d);
 }
-@media (max-width: 800px) {
-  .cal-range-month {
-    display: none;
-  }
-  .cal-range-week {
-    display: block;
-  }
-  .cal-week:not(.is-current) {
-    display: none;
-  }
-  .cal-week.is-current .cal-day {
-    min-height: 9.5rem;
-  }
+.home-widget-rail h3 {
+  margin-bottom: 0;
 }
 </style>

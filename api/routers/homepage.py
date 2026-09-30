@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
-from core.homepage import homepage_request, homepage_search, homepage_snapshot
+from core.homepage import homepage_art, homepage_request, homepage_search, homepage_snapshot
 
 router = APIRouter(prefix="/api/homepage", tags=["Homepage"])
 
@@ -25,10 +25,19 @@ def _ensure_authenticated(request: Request) -> None:
 
 
 @router.get("", summary="Household homepage snapshot")
-async def get_homepage(request: Request) -> dict[str, Any]:
+async def get_homepage(request: Request, refresh: bool = False) -> dict[str, Any]:
     _ensure_authenticated(request)
     host = request.url.hostname or "127.0.0.1"
-    return homepage_snapshot(host)
+    return homepage_snapshot(host, force=refresh)
+
+
+@router.get("/art", summary="Poster image for Home rails")
+async def homepage_artwork(request: Request, source: str = "", item_id: str = "") -> Response:
+    _ensure_authenticated(request)
+    body, content_type = homepage_art(source, item_id)
+    if not body:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artwork not found")
+    return Response(content=body, media_type=content_type or "image/jpeg")
 
 
 @router.get("/search", summary="Search library and Seerr")

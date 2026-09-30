@@ -6,16 +6,25 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from datetime import date
+import threading
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.app import create_app
 from core.auth import auth_manager
-from core.homepage import homepage_request, homepage_search, homepage_snapshot, month_calendar_span
+from core.homepage import (
+    calendar_fetch_span,
+    clear_homepage_snapshot_cache,
+    homepage_request,
+    homepage_search,
+    homepage_snapshot,
+    month_calendar_span,
+)
 from core.settings import Settings
 
 
-def _plugin(name: str, port: int, config_dir, *, daemon: bool = True, installed: bool = True, display: str | None = None):
+def _plugin(name: str, port: int, config_dir, *, daemon: bool = True, installed: bool = True, display: str | None = None, category: str = "automation"):
     plugin = SimpleNamespace(
         name=name,
         port=port,
@@ -23,7 +32,7 @@ def _plugin(name: str, port: int, config_dir, *, daemon: bool = True, installed:
         manifest=SimpleNamespace(
             display_name=display or name.title(),
             daemon=daemon,
-            category=SimpleNamespace(value="automation"),
+            category=SimpleNamespace(value=category),
         ),
     )
     plugin.is_installed = lambda: installed
@@ -44,6 +53,22 @@ class FakeCatalog:
         return self._plugins[name]
 
 
+@pytest.fixture(autouse=True)
+def _clear_homepage_cache():
+    clear_homepage_snapshot_cache()
+    yield
+    clear_homepage_snapshot_cache()
+
+
+def test_calendar_fetch_span_covers_adjacent_months():
+    start, end = calendar_fetch_span(date(2026, 9, 30))
+    assert start == date(2026, 7, 27)
+    assert start.weekday() == 0
+    assert end == date(2026, 11, 1)
+    assert end.weekday() == 6
+    assert start < date(2026, 8, 1) <= date(2026, 10, 31) < end
+
+
 def test_month_calendar_span_is_monday_to_sunday():
     start, end = month_calendar_span(date(2026, 9, 24))
     assert start == date(2026, 8, 31)
@@ -52,11 +77,63 @@ def test_month_calendar_span_is_monday_to_sunday():
     assert end.weekday() == 6
 
 
+def test_homepage_snapshot_reuses_memory_cache(tmp_path):
+    catalog = FakeCatalog([_plugin("sonarr", 8989, tmp_path)])
+    calls = {"n": 0}
+
+    def fake_fetch(*_args, **_kwargs):
+        calls["n"] += 1
+        return ([], None)
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"sonarr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        first = homepage_snapshot("nas.local")
+        second = homepage_snapshot("nas.local")
+        forced = homepage_snapshot("nas.local", force=True)
+        other_host = homepage_snapshot("other.local")
+    assert first["calendar"] == second["calendar"]
+    assert calls["n"] == 3
+    assert forced["apps"][0]["url"].startswith("http://nas.local:")
+    assert other_host["apps"][0]["url"].startswith("http://other.local:")
+
+
+def test_homepage_stale_snapshot_returns_immediately(tmp_path, monkeypatch):
+    catalog = FakeCatalog([_plugin("sonarr", 8989, tmp_path)])
+    monkeypatch.setattr("core.homepage._CACHE_TTL", 0.0)
+    started = []
+    real_thread = threading.Thread
+
+    def fake_thread(*args, **kwargs):
+        name = kwargs.get("name") or ""
+        if str(name).startswith("homepage-refresh-"):
+            started.append(kwargs.get("target"))
+            return SimpleNamespace(start=lambda: None)
+        return real_thread(*args, **kwargs)
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"sonarr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", return_value=([], None)),
+        patch("threading.Thread", side_effect=fake_thread),
+    ):
+        homepage_snapshot("nas.local")
+        homepage_snapshot("nas.local")
+    from core import homepage as homepage_mod
+
+    assert started == [homepage_mod._refresh_snapshot]
+
+
 def test_homepage_hides_uninstalled_and_cli_apps(tmp_path):
     catalog = FakeCatalog(
         [
             _plugin("sonarr", 8989, tmp_path),
             _plugin("recyclarr", 19001, tmp_path, daemon=False),
+            _plugin("flaresolverr", 8191, tmp_path, category="indexers"),
             _plugin("lidarr", 8686, tmp_path, installed=False),
         ]
     )
@@ -71,9 +148,11 @@ def test_homepage_hides_uninstalled_and_cli_apps(tmp_path):
     assert names == ["sonarr"]
     assert snap["apps"][0]["url"] == "http://192.168.2.10:8989"
     assert snap["apps"][0]["running"] is True
+    assert snap["apps"][0]["category"] == "automation"
     assert snap["calendar"] == []
     assert snap["downloads"] == []
     assert snap["recent"] == []
+    assert snap["requests"] == []
     assert snap["seerr"]["available"] is False
     notes = {(item["widget"], item["source"], item["state"]): item["detail"] for item in snap["widgets"]}
     assert notes[("calendar", "sonarr", "error")] == "running but no API key yet"
@@ -81,6 +160,26 @@ def test_homepage_hides_uninstalled_and_cli_apps(tmp_path):
     assert notes[("downloads", "sabnzbd", "skipped")] == "not installed"
     assert notes[("recent", "jellyfin", "skipped")] == "not installed"
     assert notes[("search", "seerr", "skipped")] == "not installed"
+
+
+def test_homepage_launcher_groups_by_category(tmp_path):
+    catalog = FakeCatalog(
+        [
+            _plugin("sonarr", 8989, tmp_path, category="automation"),
+            _plugin("jellyfin", 8096, tmp_path, category="media"),
+            _plugin("seerr", 5055, tmp_path, category="requests"),
+            _plugin("flaresolverr", 8191, tmp_path, category="indexers"),
+        ]
+    )
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"sonarr", "jellyfin", "seerr", "flaresolverr"}),
+        patch("core.homepage.get_application_api_key", return_value=None),
+        patch("core.homepage._fetch_json", return_value=(None, "skipped")),
+    ):
+        snap = homepage_snapshot("nas.local")
+    assert [item["name"] for item in snap["apps"]] == ["jellyfin", "seerr", "sonarr"]
+    assert [item["category"] for item in snap["apps"]] == ["media", "requests", "automation"]
 
 
 def test_homepage_calendar_from_sonarr(tmp_path):
@@ -109,10 +208,65 @@ def test_homepage_calendar_from_sonarr(tmp_path):
         snap = homepage_snapshot("host.local")
     assert snap["calendar"][0]["title"] == "Example Show"
     assert "S01E02" in snap["calendar"][0]["detail"]
+    assert "Pilot" in snap["calendar"][0]["detail"]
+    assert snap["calendar"][0]["has_file"] is False
+    assert snap["calendar"][0]["when"].startswith("2026-09-24T20:00:00")
     assert snap["calendar"][0]["source"] == "sonarr"
     sonarr_note = next(item for item in snap["widgets"] if item["source"] == "sonarr")
     assert sonarr_note["state"] == "ok"
     assert sonarr_note["count"] == 1
+
+
+def test_homepage_jellyfin_recent_has_poster_proxy(tmp_path):
+    catalog = FakeCatalog([_plugin("jellyfin", 8096, tmp_path)])
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"jellyfin"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch(
+            "core.homepage._fetch_json",
+            return_value=(
+                {"Items": [{"Id": "abc", "Name": "Dune", "Type": "Movie", "ProductionYear": 2021, "DateCreated": "2026-09-01"}]},
+                None,
+            ),
+        ),
+    ):
+        snap = homepage_snapshot("nas.local")
+    assert snap["recent"][0]["title"] == "Dune"
+    assert snap["recent"][0]["poster"].startswith("/api/homepage/art?source=jellyfin")
+    assert "abc" in snap["recent"][0]["poster"]
+
+
+def test_homepage_seerr_requests_row(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+
+    def fake_fetch(url, **_kwargs):
+        if "/request" in url:
+            return (
+                {
+                    "results": [
+                        {
+                            "media": {"tmdbId": 42, "mediaType": "movie"},
+                            "requestedBy": {"displayName": "Qballjos"},
+                        }
+                    ]
+                },
+                None,
+            )
+        if "/movie/42" in url:
+            return ({"title": "Dune", "posterPath": "/x.jpg"}, None)
+        return (None, "unexpected")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        snap = homepage_snapshot("nas.local")
+    assert snap["requests"][0]["title"] == "Dune"
+    assert snap["requests"][0]["detail"] == "Qballjos"
+    assert "image.tmdb.org" in snap["requests"][0]["poster"]
 
 
 def test_homepage_widget_debug_http_error(tmp_path):

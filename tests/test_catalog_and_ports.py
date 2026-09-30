@@ -282,3 +282,17 @@ def test_port_manager_registry_and_availability():
 
     pm.unregister("custom_app")
     assert "custom_app" not in pm.list_registry()
+
+
+def test_pwa_public_assets():
+    root = Path(__file__).resolve().parents[1] / "frontend" / "public"
+    assert (root / "manifest.json").is_file()
+    assert (root / "sw.js").is_file()
+    assert (root / "pwa-192.png").is_file()
+    assert (root / "pwa-512.png").is_file()
+    assert (root / "apple-touch-icon.png").is_file()
+    manifest = (root / "manifest.json").read_text(encoding="utf-8")
+    assert '"short_name": "AIO Media"' in manifest
+    assert '"display": "standalone"' in manifest
+    sw = (root / "sw.js").read_text(encoding="utf-8")
+    assert "addEventListener('fetch'" in sw

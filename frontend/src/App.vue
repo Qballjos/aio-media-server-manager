@@ -18,8 +18,10 @@ import {
   setUnauthorizedHandler,
 } from './api.js'
 import { useToasts } from './useToasts.js'
+import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInstall.js'
 
 const { toasts, showToast } = useToasts()
+const showPwaInstall = ref(false)
 
 const authStatus = ref({
   setup_required: false,
@@ -217,7 +219,20 @@ watch(currentView, (view) => {
   }
 })
 
+function refreshPwaInstall() {
+  showPwaInstall.value = canPromptInstall()
+}
+
+async function installPwa() {
+  const ok = await promptInstall()
+  if (ok) showToast('App installed on this device.', 'success')
+}
+
+let stopPwa = null
+
 onMounted(() => {
+  refreshPwaInstall()
+  stopPwa = subscribePwaInstall(refreshPwaInstall)
   stopClock = startGuardedInterval(() => {
     currentTime.value = new Date().toLocaleTimeString()
   }, 1000)
@@ -226,6 +241,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (stopPwa) stopPwa()
   if (stopClock) stopClock()
   if (stopLivePoll) stopLivePoll()
   if (stopSlowPoll) stopSlowPoll()
@@ -296,6 +312,15 @@ onUnmounted(() => {
         >
           <span v-if="wiringRunning" class="spinner spinner-sm"></span>
           <span v-else>⚡ <span class="hide-compact">Auto-Wire</span></span>
+        </button>
+        <button
+          v-if="showPwaInstall"
+          type="button"
+          class="metric-pill metric-pill-action"
+          title="Install this manager as an app"
+          @click="installPwa"
+        >
+          Install
         </button>
         <div v-if="authStatus.authenticated" class="user-pill">
           <span class="user-avatar">{{ authStatus.username?.[0]?.toUpperCase() || 'A' }}</span>

@@ -6,6 +6,13 @@ import { apiError, apiRequest, readJson } from './api.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug, writeHomepageWidgetDebug } from './homepageDebug.js'
 import VpnConfigFields from './VpnConfigFields.vue'
+import {
+  canPromptInstall,
+  isIosDevice,
+  isStandaloneDisplay,
+  promptInstall,
+  subscribePwaInstall,
+} from './pwaInstall.js'
 
 const props = defineProps({
   systemInfo: { type: Object, default: null },
@@ -66,6 +73,22 @@ const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
 const seerrConfigured = ref(false)
 const widgetDebug = ref(false)
+const pwaStandalone = ref(false)
+const pwaCanInstall = ref(false)
+const pwaIos = ref(false)
+let stopPwa = null
+
+function refreshPwaInstall() {
+  pwaStandalone.value = isStandaloneDisplay()
+  pwaCanInstall.value = canPromptInstall()
+  pwaIos.value = isIosDevice()
+}
+
+async function installPwaFromSettings() {
+  const ok = await promptInstall()
+  if (ok) notice.value = 'App installed on this device.'
+  refreshPwaInstall()
+}
 
 function toggleHomepageWidgetDebug() {
   widgetDebug.value = !widgetDebug.value
@@ -540,9 +563,14 @@ watch(section, () => {
 
 onMounted(() => {
   widgetDebug.value = readHomepageWidgetDebug()
+  refreshPwaInstall()
+  stopPwa = subscribePwaInstall(refreshPwaInstall)
   loadAll()
 })
-onBeforeUnmount(stopJobPoll)
+onBeforeUnmount(() => {
+  if (stopPwa) stopPwa()
+  stopJobPoll()
+})
 </script>
 
 <template>
@@ -591,6 +619,31 @@ onBeforeUnmount(stopJobPoll)
           </label>
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save account' }}</button>
         </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>Install on this device</h3>
+          <p>Add the manager to the home screen like a phone or tablet app.</p>
+        </div>
+        <p v-if="pwaStandalone" class="share-idle">This browser is already running as an installed app.</p>
+        <template v-else>
+          <button
+            v-if="pwaCanInstall"
+            type="button"
+            class="ui-btn ui-btn-primary"
+            @click="installPwaFromSettings"
+          >
+            Install app
+          </button>
+          <p v-else-if="pwaIos" class="share-idle">
+            iPhone/iPad: open this page in Safari, tap Share, then Add to Home Screen.
+          </p>
+          <p v-else class="share-idle">
+            Chrome or Edge: menu → Install app / Add to Home Screen.
+            Android’s install prompt needs HTTPS (Cloudflare Tunnel or a reverse proxy).
+            On a plain LAN HTTP URL, use the browser menu if Install is offered.
+          </p>
+        </template>
       </div>
     </template>
 
