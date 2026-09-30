@@ -21,6 +21,7 @@ FROM python:3.14-slim-bookworm
 ARG TARGETARCH
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
     POETRY_VIRTUALENVS_CREATE=false \
     AMM_CONFIG_DIR=/config \
     AMM_DOWNLOAD_DIR=/data/downloads \
@@ -43,8 +44,19 @@ RUN printf '%s\n' \
         > /usr/local/bin/python3.13 \
     && chmod +x /usr/local/bin/python3.13
 
-# Servarr/.NET self-contained builds need ICU, OpenSSL, and SQLite from the OS.
-# Official `unrar` (RAR 5+) lives in Debian non-free; unrar-free reports version 0.00 to SABnzbd.
+# Host packages vs catalog (both linux/amd64 and linux/arm64 unless noted):
+#   *Arr/.NET (Sonarr, Radarr, Lidarr, Prowlarr, Profilarr, NeutArr, Recyclarr):
+#     libicu*, libssl3, libgssapi-krb5-2, zlib1g, libsqlite3-0, sqlite3
+#   SABnzbd / NZBGet: unrar (non-free RAR 5), par2, p7zip-full, python3.13, build-essential
+#   Bazarr / Shelfmark / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,
+#     libncurses6, python3.13, python3-dev, build-essential
+#   Jellyfin / Plex: ffmpeg, libfontconfig1
+#   Seerr: Node 22 (copied from nodebin)
+#   Grimmory: JRE 25 (copied from jre), mariadb-server
+#   Flaresolverr (x86_64 / amd64 image only): chromium, xvfb, fonts-liberation
+#   VPN: iproute2, openvpn, wireguard-tools
+# git is omitted: catalog installs use GitHub zipballs/releases, not git clone.
+# Official `unrar` lives in Debian non-free; unrar-free reports version 0.00 to SABnzbd.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources; \
     else \
@@ -52,6 +64,10 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     fi \
     && apt-get update \
     && ICU_PKG=$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -1) \
+    && EXTRA="" \
+    && if [ "${TARGETARCH:-amd64}" = "amd64" ]; then \
+         EXTRA="fonts-liberation chromium xvfb"; \
+       fi \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -69,17 +85,14 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         libjpeg62-turbo \
         libncurses6 \
         libfontconfig1 \
-        fonts-liberation \
-        chromium \
-        xvfb \
         mariadb-server \
         unrar \
         par2 \
         p7zip-full \
-        git \
         build-essential \
         python3-dev \
         ${ICU_PKG} \
+        ${EXTRA} \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \

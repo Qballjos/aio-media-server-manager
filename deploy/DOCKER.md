@@ -5,6 +5,8 @@ Primary deployment. One container runs the manager and every supervised applicat
 **Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
 **Architectures:** `linux/amd64`, `linux/arm64`
 
+The ARM64 image omits Chromium/Xvfb (Flaresolverr is x86_64-only). Python 3.13, Node 22, JRE 25, MariaDB, and ffmpeg ship on both architectures.
+
 ## Create folders over SSH
 
 SSH into the machine that will run Docker:

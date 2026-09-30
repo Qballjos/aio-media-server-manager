@@ -4,6 +4,8 @@ tests/test_catalog_and_ports.py — Unit tests for ApplicationCatalog and PortMa
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from applications.catalog import ApplicationCatalog
@@ -145,6 +147,39 @@ def test_flaresolverr_hidden_on_arm64(tmp_path, monkeypatch):
     x64_catalog = ApplicationCatalog(app_settings=test_settings)
     assert x64_catalog.is_visible("flaresolverr")
     assert "flaresolverr" in {row["name"] for row in x64_catalog.entries()}
+
+
+def test_dockerfile_chromium_only_on_amd64():
+    """Flaresolverr is x86_64-only; Chromium must not land on linux/arm64."""
+    from applications.community import FlaresolverrApp
+
+    dockerfile = Path(__file__).resolve().parents[1] / "Dockerfile"
+    text = dockerfile.read_text(encoding="utf-8")
+    assert FlaresolverrApp.manifest.supported_architectures == ("x86_64",)
+    assert 'if [ "${TARGETARCH:-amd64}" = "amd64" ]' in text
+    assert "fonts-liberation chromium xvfb" in text
+    unconditional = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if "fonts-liberation chromium xvfb" in stripped:
+            continue
+        if any(pkg in stripped.split() for pkg in ("chromium", "xvfb", "fonts-liberation")):
+            unconditional.append(stripped)
+    assert unconditional == []
+
+
+def test_all_catalog_apps_declare_published_image_arches():
+    """Every catalog app must run on at least one published image arch (amd64/arm64)."""
+    catalog = ApplicationCatalog()
+    published = {"x86_64", "arm64"}
+    for plugin in catalog.all_plugins():
+        arches = set(plugin.manifest.supported_architectures)
+        assert arches & published, (
+            f"{plugin.manifest.name} supports {sorted(arches)}, "
+            "none of which match linux/amd64 or linux/arm64"
+        )
 
 
 def test_catalog_entries_include_popularity():

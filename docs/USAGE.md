@@ -45,7 +45,7 @@ The dashboard uses hash URLs so you can bookmark or refresh without losing your 
 
 ## 4. Catalog
 
-The catalog lists up to **17** applications at `#/catalog` (installed vs available counts are separate). Entries that do not support the host CPU architecture are hidden — for example Flaresolverr on ARM64.
+The catalog lists up to **17** applications at `#/catalog` (installed vs available counts are separate). Entries that do not support the host CPU architecture are hidden — for example Flaresolverr on ARM64, which also keeps Chromium out of the ARM64 image.
 
 - Filter by **status** and **category**
 - Sort by **popularity** or **A–Z**

@@ -5,6 +5,8 @@ AIO Media Server Manager is **one appliance**. The manager and every *Arr app, d
 **Published image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
 **Architectures:** `linux/amd64`, `linux/arm64`
 
+The ARM64 image does not install Chromium, Xvfb, or fonts-liberation. Flaresolverr is x86_64-only and is hidden on ARM hosts. Shared runtimes stay on both architectures: Python 3.13 (Bazarr / SABnzbd), Node 22 (Seerr), JRE 25 and MariaDB (Grimmory), ffmpeg (Jellyfin / Plex).
+
 ## Platform guides
 
 | Platform | Guide |

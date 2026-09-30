@@ -57,6 +57,21 @@ Open `http://<host>:8080`.
 
 If systemd-managed Python is 3.14+, install a 3.13 interpreter for Bazarr (`AMM_CHILD_PYTHON` pointing at `python3.13`) or Bazarr will fail on missing `PIL` / unsupported Python.
 
+## Host packages by application
+
+Install only what you will run. On ARM64, skip Chromium — Flaresolverr is x86_64-only and is hidden from the catalog.
+
+| Packages | Applications |
+|----------|----------------|
+| `ffmpeg`, `libfontconfig1` | Jellyfin, Plex |
+| `libicu*`, `libssl3`, `libsqlite3-0`, `sqlite3`, `libgssapi-krb5-2`, `zlib1g` | Sonarr, Radarr, Lidarr, Prowlarr, Profilarr, NeutArr, Recyclarr |
+| `unrar` (RAR 5+), `par2`, `p7zip-full` | SABnzbd, NZBGet |
+| Python 3.13, `libxml2`, `libxslt1.1`, `libjpeg62-turbo`, `python3-dev`, `build-essential` | Bazarr, SABnzbd, Shelfmark, NeutArr |
+| Node.js 22 | Seerr |
+| JRE 25, `mariadb-server` | Grimmory |
+| `chromium`, `xvfb`, `fonts-liberation` | Flaresolverr (x86_64 only) |
+| `iproute2`, `openvpn`, `wireguard-tools` | Optional VPN (qBittorrent, Prowlarr, Flaresolverr) |
+
 ## Service file
 
 [`aio-media-manager.service`](aio-media-manager.service) starts `/opt/aio-media-manager/.venv/bin/python main.py`. If Poetry placed the venv elsewhere, update `ExecStart` (`poetry env info -p`).
