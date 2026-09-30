@@ -163,15 +163,6 @@ jobs:
             $(printf '${{ env.IMAGE }}@sha256:%s ' *)
       - name: Inspect image
         run: docker buildx imagetools inspect ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
-      - name: Make GHCR package public
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api --method PUT \
-            -H "Accept: application/vnd.github+json" \
-            "/user/packages/container/aio-media-server-manager/visibility" \
-            -f visibility=public
 
   docker-pr:
     name: Docker build (PR)
