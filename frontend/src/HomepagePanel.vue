@@ -436,7 +436,7 @@ onUnmounted(() => {
 
     <template v-else-if="!loading">
       <div class="home-launcher-groups">
-        <section v-for="group in launcherGroups" :key="group.id" class="home-launcher-group">
+        <section v-for="group in launcherGroups" :key="group.id" class="home-launcher-group glass-card">
           <h3 class="home-launcher-label">{{ group.label }}</h3>
           <div class="home-launcher">
             <a
@@ -711,38 +711,40 @@ onUnmounted(() => {
 .home-launcher-groups {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.55rem 0.65rem;
+  align-items: stretch;
+  gap: 0.75rem;
 }
-.home-launcher-group,
-.home-launcher {
-  display: contents;
+.home-launcher-group.glass-card {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.7rem 0.8rem 0.8rem;
+  overflow: visible;
 }
 .home-launcher-label {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
-  margin: 0 0.15rem 0.85rem 0.1rem;
-  align-self: center;
-  flex: 0 0 auto;
+  margin: 0 0 0.5rem;
 }
-.home-launcher-group + .home-launcher-group .home-launcher-label {
-  margin-left: 0.35rem;
-  padding-left: 0.75rem;
-  border-left: 1px solid var(--border-subtle);
+.home-launcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.45rem;
 }
 .home-app {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.4rem;
-  width: 6.5rem;
-  flex: 0 0 6.5rem;
-  padding: 0.7rem 0.4rem;
-  border: 1px solid var(--border-subtle);
+  gap: 0.35rem;
+  width: 6.35rem;
+  flex: 0 0 6.35rem;
+  padding: 0.55rem 0.35rem;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: var(--bg-card);
+  background: transparent;
   color: inherit;
   text-decoration: none;
   min-width: 0;
