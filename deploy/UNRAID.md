@@ -10,17 +10,19 @@ Enable SSH (Settings → Management Access), then:
 ssh root@<unraid-ip>
 ```
 
+Downloads and media live on the **user share** `aio-media-manager` (visible in Shares / the file browser). Config stays in appdata.
+
 ```bash
 mkdir -p \
   /mnt/user/appdata/aio-media-manager/vpn \
   /mnt/user/backups/aio-media-manager \
-  /mnt/cache/data/downloads \
-  /mnt/cache/data/media
+  /mnt/user/aio-media-manager/downloads \
+  /mnt/user/aio-media-manager/media
 
 chown -R 99:100 \
   /mnt/user/appdata/aio-media-manager \
   /mnt/user/backups/aio-media-manager \
-  /mnt/cache/data
+  /mnt/user/aio-media-manager
 ```
 
 `/mnt/user/backups/aio-media-manager` receives the configuration backups. Use a share that lives on the array (not only the cache pool), so a cache failure does not take the backups with it.
@@ -29,13 +31,14 @@ TV, movies, anime, music, books, complete/incomplete downloads, torrent category
 
 `99:100` is Unraid `nobody`/`users` (PUID 99, PGID 100). If you use a custom share user, run `id thatuser` and `chown` to that UID:GID instead.
 
-For hardlinks, keep downloads and media as subfolders of **one** cache or disk path (not two `/mnt/user` FUSE shares), for example:
+For hardlinks, keep downloads and media as subfolders of **one** cache or disk path (not two `/mnt/user` FUSE shares), for example a cache-only share named `aio-media-manager`:
 
 ```bash
-mkdir -p /mnt/cache/appdata/aio-media-manager/vpn
-mkdir -p /mnt/cache/data/downloads /mnt/cache/data/media
-chown -R 99:100 /mnt/cache/appdata/aio-media-manager /mnt/cache/data
+mkdir -p /mnt/cache/aio-media-manager/downloads /mnt/cache/aio-media-manager/media
+chown -R 99:100 /mnt/cache/aio-media-manager
 ```
+
+Then bind `/data` to `/mnt/cache/aio-media-manager` (same share, disk path) instead of `/mnt/user/aio-media-manager`.
 
 ## Docker template
 
@@ -48,7 +51,7 @@ chown -R 99:100 /mnt/cache/appdata/aio-media-manager /mnt/cache/data
 7. Ports (TCP): publish **8080** for the manager and the child WebUIs you installed (Sonarr **8989**, Radarr **7878**, qBittorrent **8081**, SABnzbd **8085**, Jellyfin **8096**, Prowlarr **9696**, Seerr **5055**, Plex **32400**, …). Full list: [INSTALL.md](../docs/INSTALL.md#ports). Or use Network `host`.
 8. Paths (must match the SSH folders):
    - `/config` → `/mnt/user/appdata/aio-media-manager`
-   - `/data` → `/mnt/cache/data`
+   - `/data` → `/mnt/user/aio-media-manager`
    - `/backups` → `/mnt/user/backups/aio-media-manager`
 9. Variables: `PUID=99`, `PGID=100`, `TZ=<IANA timezone>`, `AMM_DOWNLOAD_DIR=/data/downloads`, `AMM_MEDIA_DIR=/data/media`. Optional: `GITHUB_TOKEN` for GitHub rate limits (or set it later in Settings → Updates).
 
@@ -58,7 +61,7 @@ Open `http://<unraid-ip>:8080` and run the wizard. After updating the image, rec
 
 ## FUSE / hardlinks
 
-Prefer `/mnt/cache/...` or a single disk path for downloads and media when you care about hardlinks. Mixing `/mnt/user` (FUSE) with a disk share can break atomic moves.
+Prefer `/mnt/cache/aio-media-manager` or a single disk path for downloads and media when you care about hardlinks. Mixing `/mnt/user` (FUSE) with a disk share can break atomic moves.
 
 ## Updates
 

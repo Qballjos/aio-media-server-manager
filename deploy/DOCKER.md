@@ -15,18 +15,20 @@ SSH into the machine that will run Docker:
 ssh user@host
 ```
 
-Create the bind-mount directories, then set ownership to the media user (`id` prints `PUID`/`PGID`):
+Create the bind-mount directories, then set ownership to the media user (`id` prints `PUID`/`PGID`). Downloads and media live in **your home** so the host file manager can see them:
 
 ```bash
 id
 export PUID="$(id -u)"
 export PGID="$(id -g)"
+export AMM_DATA_HOST="${HOME}/aio-media-manager"
 
-sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,data/downloads,data/media,backups}
-sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager
+mkdir -p "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media"
+sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,backups}
+sudo chown -R "${PUID}:${PGID}" "${AMM_DATA_HOST}" /opt/aio-media-manager
 ```
 
-Use other paths if you already have libraries (for example `/srv/data/media` and `/srv/data/downloads`). Keep downloads and media as subfolders of **one** host directory so hardlinks work. Two separate bind mounts, even on btrfs, often fail if they are different subvolumes.
+Use other paths if you already have libraries (for example `/srv/data/media` and `/srv/data/downloads`) by setting `AMM_DATA_HOST`. Keep downloads and media as subfolders of **one** host directory so hardlinks work. Two separate bind mounts, even on btrfs, often fail if they are different subvolumes.
 
 `backups` holds the configuration backups (mounted at `/backups`). Put it on a different disk or NAS share than `config` if you can, so a failed disk does not take both. Without a `/backups` mount the manager falls back to `/config/backups` and warns about it in Settings → Backups.
 
@@ -37,7 +39,7 @@ git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
 ```
 
-Point the volume paths in `docker-compose.yml` at the folders you created, and set `PUID`/`PGID` to the values from `id`. Set `TZ` to your IANA timezone (or change it later in Settings → System).
+Point the volume paths in `docker-compose.yml` at the folders you created (`AMM_DATA_HOST` defaults to `$HOME/aio-media-manager`), and set `PUID`/`PGID` to the values from `id`. Set `TZ` to your IANA timezone (or change it later in Settings → System). If you run `sudo docker compose`, set `AMM_DATA_HOST` explicitly so data does not land in `/root`.
 
 ```bash
 docker compose pull
@@ -56,7 +58,7 @@ To rebuild from this checkout instead of GHCR:
 docker compose up -d --build
 ```
 
-That still uses `./config` and `./data` next to the compose file. **For development testing** (isolated volumes, no `/dev/dri` required):
+That still uses `./config` next to the compose file and `$HOME/aio-media-manager` for downloads + media. **For development testing** (isolated volumes, no `/dev/dri` required):
 
 ```bash
 ./scripts/test-env.sh up
@@ -86,7 +88,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   -e PUID="${PUID}" -e PGID="${PGID}" \
   -e TZ=UTC \
   -v /opt/aio-media-manager/config:/config \
-  -v /opt/aio-media-manager/data:/data \
+  -v "${HOME}/aio-media-manager:/data" \
   -v /opt/aio-media-manager/backups:/backups \
   -e AMM_DOWNLOAD_DIR=/data/downloads \
   -e AMM_MEDIA_DIR=/data/media \

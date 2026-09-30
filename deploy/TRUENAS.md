@@ -12,17 +12,20 @@ Enable SSH (System → Services → SSH), then:
 ssh admin@<truenas-ip>
 ```
 
-Replace `tank` with your pool name. Create datasets, then the directories the container will mount:
+Replace `tank` with your pool name. Config stays on an apps dataset. **Downloads and media go in the login user's home** so the Files UI can browse them (`~/aio-media-manager`). Keep those two as directories on the **same** dataset so *Arr can hardlink.
 
 ```bash
 sudo zfs create -p tank/apps/aio-media-manager
-sudo zfs create -p tank/data
 sudo zfs create -p tank/backups/aio-media-manager
+
+LOGIN_USER="${SUDO_USER:-$(id -un)}"
+HOME_DIR="$(getent passwd "${LOGIN_USER}" | cut -d: -f6)"
+DATA="${HOME_DIR}/aio-media-manager"
 
 sudo mkdir -p \
   /mnt/tank/apps/aio-media-manager/vpn \
-  /mnt/tank/data/downloads \
-  /mnt/tank/data/media
+  "${DATA}/downloads" \
+  "${DATA}/media"
 ```
 
 `tank/backups/aio-media-manager` holds configuration backups. A separate dataset lets you snapshot or replicate it on its own schedule. Put it on another pool if you have one.
@@ -35,11 +38,11 @@ Set the owner to your media user (TrueNAS `apps` is often UID/GID `568`; confirm
 id apps
 sudo chown -R 568:568 \
   /mnt/tank/apps/aio-media-manager \
-  /mnt/tank/data \
+  "${DATA}" \
   /mnt/tank/backups/aio-media-manager
 ```
 
-Keep downloads and media as **directories on one dataset**. Two ZFS datasets cannot hardlink to each other.
+If user home is not enabled, create it under Credentials → Users, or set `DATA` to a folder you can see in **Files** (still one parent for `downloads` and `media`).
 
 ## Custom App
 
@@ -48,7 +51,7 @@ Keep downloads and media as **directories on one dataset**. Two ZFS datasets can
 3. Port forwarding: `8080` → `8080` plus the child WebUI ports from [INSTALL.md](../docs/INSTALL.md#ports) (or host network).
 4. Storage (paths from the SSH commands above):
    - `/mnt/tank/apps/aio-media-manager` → `/config`
-   - `/mnt/tank/data` → `/data`
+   - `$HOME/aio-media-manager` → `/data`
    - `/mnt/tank/backups/aio-media-manager` → `/backups`
 5. Environment: `PUID` / `PGID` = the UID/GID you used with `chown`, plus `TZ`, `AMM_DOWNLOAD_DIR=/data/downloads` and `AMM_MEDIA_DIR=/data/media`. Optional `GITHUB_TOKEN` for GitHub rate limits (or Settings → Updates after first-run).
 6. Privileged / `NET_ADMIN` if you enable qBittorrent VPN.

@@ -22,13 +22,14 @@ When the process is up, open `http://<host>:8080` and follow [Usage](USAGE.md). 
 
 ## Host directories
 
-SSH into the host and create the bind mounts. Keep **downloads and media in one host folder** (same filesystem, and on btrfs the same subvolume) so *Arr can hardlink instead of copy.
+SSH into the host and create the bind mounts. Keep **downloads and media in one folder under the login home** (same filesystem, and on btrfs the same subvolume) so *Arr can hardlink instead of copy and so the file manager can see the library.
 
 ```bash
 ssh user@host
 
-sudo mkdir -p /path/to/config /path/to/data/downloads /path/to/data/media /path/to/config/vpn /path/to/backups
-sudo chown -R "$PUID:$PGID" /path/to/config /path/to/data /path/to/backups
+mkdir -p "$HOME/aio-media-manager/downloads" "$HOME/aio-media-manager/media"
+sudo mkdir -p /path/to/config /path/to/config/vpn /path/to/backups
+sudo chown -R "$PUID:$PGID" "$HOME/aio-media-manager" /path/to/config /path/to/backups
 id   # use this if you do not yet know PUID/PGID
 ```
 
@@ -78,7 +79,7 @@ The manager UI listens on **8080**. Child applications bind in the same containe
 
 ## Environment
 
-Copy [`.env.example`](../.env.example) for a native install. Compose already sets `PUID` / `PGID`, `TZ`, and the `/data` paths. Values you change in **Settings** (timezone, log level, PUID, VPN, update schedules) persist in `/config/amm_config.json`. Environment variables still win when they are set in compose.
+Copy [`.env.example`](../.env.example) for a native install. Compose bind-mounts `$HOME/aio-media-manager` as `/data` and sets `PUID` / `PGID`, `TZ`, and the in-container `/data` paths. Values you change in **Settings** (timezone, log level, PUID, VPN, update schedules) persist in `/config/amm_config.json`. Environment variables still win when they are set in compose.
 
 | Variable | Purpose |
 |----------|---------|

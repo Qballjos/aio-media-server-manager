@@ -15,24 +15,23 @@ Use this when you want the appliance on Debian, Ubuntu, or a Proxmox LXC **witho
 ```bash
 ssh user@host
 
+LOGIN_USER="${SUDO_USER:-$(id -un)}"
+HOME_DIR="$(getent passwd "${LOGIN_USER}" | cut -d: -f6)"
+DATA="${HOME_DIR}/aio-media-manager"
+
 sudo useradd --system --create-home --home-dir /opt/aio-media-manager --shell /usr/sbin/nologin amm || true
 sudo mkdir -p \
   /opt/aio-media-manager \
   /var/lib/aio-media-manager/config \
   /var/lib/aio-media-manager/config/vpn \
-  /var/lib/aio-media-manager/data/downloads \
-  /var/lib/aio-media-manager/data/media \
-  /var/lib/aio-media-manager/backups
-sudo chown -R amm:amm /opt/aio-media-manager /var/lib/aio-media-manager
+  /var/lib/aio-media-manager/backups \
+  "${DATA}/downloads" \
+  "${DATA}/media"
+sudo chown -R amm:amm /opt/aio-media-manager /var/lib/aio-media-manager "${DATA}"
 id amm
 ```
 
-To use existing library paths, keep downloads and media as siblings on the same filesystem:
-
-```bash
-sudo mkdir -p /srv/data/downloads /srv/data/media
-sudo chown -R amm:amm /srv/data
-```
+Downloads and media stay in the **login user's home** (`~/aio-media-manager`) so the desktop file manager can see them. Config stays under `/var/lib`. To use existing library paths, keep downloads and media as siblings on the same filesystem and point `.env` at those directories.
 
 ## Install
 
@@ -40,15 +39,28 @@ sudo chown -R amm:amm /srv/data
 sudo -u amm git clone https://github.com/Qballjos/aio-media-server-manager.git /opt/aio-media-manager
 cd /opt/aio-media-manager
 sudo -u amm cp .env.example .env
+
+LOGIN_USER="${SUDO_USER:-$(id -un)}"
+HOME_DIR="$(getent passwd "${LOGIN_USER}" | cut -d: -f6)"
+DATA="${HOME_DIR}/aio-media-manager"
+sudo sed -i \
+  -e "s|^AMM_CONFIG_DIR=.*|AMM_CONFIG_DIR=/var/lib/aio-media-manager/config|" \
+  -e "s|^AMM_DOWNLOAD_DIR=.*|AMM_DOWNLOAD_DIR=${DATA}/downloads|" \
+  -e "s|^AMM_MEDIA_DIR=.*|AMM_MEDIA_DIR=${DATA}/media|" \
+  -e "s|^# AMM_BACKUP_DIR=.*|AMM_BACKUP_DIR=/var/lib/aio-media-manager/backups|" \
+  /opt/aio-media-manager/.env
 ```
 
-Point `AMM_CONFIG_DIR`, `AMM_DOWNLOAD_DIR`, `AMM_MEDIA_DIR`, and `AMM_BACKUP_DIR` in `.env` at the directories you created (the service file sets the same paths). Put `AMM_BACKUP_DIR` on another disk or mount if you can. Set `PUID`/`PGID` to `id amm` (or your media user). Set `TZ` (or `AMM_TIMEZONE`) to your IANA timezone. Optional `GITHUB_TOKEN` and update-schedule variables are documented in `.env.example`; you can also set them in **Settings** after first-run.
+Point `AMM_CONFIG_DIR`, `AMM_DOWNLOAD_DIR`, `AMM_MEDIA_DIR`, and `AMM_BACKUP_DIR` in `.env` at the directories you created (`~/aio-media-manager/downloads` and `~/aio-media-manager/media` by default). Put `AMM_BACKUP_DIR` on another disk or mount if you can. Set `PUID`/`PGID` to `id amm` (or your media user). Set `TZ` (or `AMM_TIMEZONE`) to your IANA timezone. Optional `GITHUB_TOKEN` and update-schedule variables are documented in `.env.example`; you can also set them in **Settings** after first-run.
 
 ```bash
 sudo -u amm poetry install --only main --no-interaction
 sudo -u amm bash -lc 'cd frontend && npm ci && npm run build'
 
 sudo cp deploy/aio-media-manager.service /etc/systemd/system/
+LOGIN_USER="${SUDO_USER:-$(id -un)}"
+HOME_DIR="$(getent passwd "${LOGIN_USER}" | cut -d: -f6)"
+sudo sed -i "s|/home/YOURUSER|${HOME_DIR}|g" /etc/systemd/system/aio-media-manager.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now aio-media-manager
 ```
@@ -74,9 +86,9 @@ Install only what you will run. On ARM64, skip Chromium — Flaresolverr is x86_
 
 ## Service file
 
-[`aio-media-manager.service`](aio-media-manager.service) starts `/opt/aio-media-manager/.venv/bin/python main.py`. If Poetry placed the venv elsewhere, update `ExecStart` (`poetry env info -p`).
+[`aio-media-manager.service`](aio-media-manager.service) starts `/opt/aio-media-manager/.venv/bin/python main.py`. If Poetry placed the venv elsewhere, update `ExecStart` (`poetry env info -p`). The unit’s download/media paths must match the login home (`sed` in the install steps above).
 
 ## LXC notes
 
 - Unprivileged containers cannot create VPN network namespaces; skip VPN or use a privileged CT.
-- Bind-mount media datasets into the CT; keep downloads and media on the same dataset for hardlinks.
+- Bind-mount media into the CT under the login home (`~/aio-media-manager`); keep downloads and media on the same dataset for hardlinks.

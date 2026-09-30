@@ -103,10 +103,11 @@ Each catalog card includes a help control that opens that project's official doc
 
 ## Install
 
-Create bind-mount directories on the host (downloads and media as children of **one** folder so hardlinks work), then run the published image.
+Create bind-mount directories on the host (downloads and media as children of **one** folder in your home so hardlinks work and the file manager can see them), then run the published image.
 
 ```bash
-sudo mkdir -p /opt/aio-media-manager/{config,data/downloads,data/media,backups}
+mkdir -p "$HOME/aio-media-manager/downloads" "$HOME/aio-media-manager/media"
+sudo mkdir -p /opt/aio-media-manager/{config,backups}
 docker pull ghcr.io/qballjos/aio-media-server-manager:latest
 docker compose up -d
 ```
