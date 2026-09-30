@@ -709,27 +709,37 @@ onUnmounted(() => {
   justify-items: start;
 }
 .home-launcher-groups {
-  display: grid;
-  gap: 1.15rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.55rem 0.65rem;
+}
+.home-launcher-group,
+.home-launcher {
+  display: contents;
 }
 .home-launcher-label {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
-  margin: 0 0 0.55rem;
+  margin: 0 0.15rem 0.85rem 0.1rem;
+  align-self: center;
+  flex: 0 0 auto;
 }
-.home-launcher {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
-  gap: 0.75rem;
+.home-launcher-group + .home-launcher-group .home-launcher-label {
+  margin-left: 0.35rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--border-subtle);
 }
 .home-app {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.85rem 0.5rem;
+  width: 6.5rem;
+  flex: 0 0 6.5rem;
+  padding: 0.7rem 0.4rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-card);
