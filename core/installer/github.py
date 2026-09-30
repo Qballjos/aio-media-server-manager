@@ -15,7 +15,13 @@ from typing import Any, Sequence
 
 import requests
 
-from core.installer.arch import PlatformArch, PlatformOS, score_asset_match
+from core.installer.arch import (
+    PlatformArch,
+    PlatformOS,
+    filename_has_cpu_arch,
+    is_arch_neutral_asset,
+    score_asset_match,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +167,12 @@ class GitHubReleaseClient:
         if not assets:
             raise ValueError(f"Release '{release.get('tag_name')}' contains no downloadable assets.")
 
+        if arch == PlatformArch.UNKNOWN:
+            raise ValueError(
+                f"Host CPU architecture is unrecognized; refusing to install a binary from "
+                f"release '{release.get('tag_name')}'."
+            )
+
         best_asset: dict[str, Any] | None = None
         best_score = -1
 
@@ -171,12 +183,17 @@ class GitHubReleaseClient:
                 and any(re.search(pat, name, re.IGNORECASE) for pat in preferred_patterns)
             )
             score = score_asset_match(name, arch, target_os)
-            # Platform-independent artifacts (JARs, generic zips) are selected by
-            # preferred_patterns even when the filename has no arch/OS token.
-            if score < 0 and not preferred_hit:
+            # Never install an asset that names a different CPU. preferred_patterns may
+            # only boost already-compatible files, or arch-neutral JARs / source zips.
+            if filename_has_cpu_arch(name) and score < 0:
                 continue
-            if preferred_hit:
-                score = max(score, 0) + 200
+            if score < 0:
+                if preferred_hit and is_arch_neutral_asset(name):
+                    score = 200
+                else:
+                    continue
+            elif preferred_hit:
+                score += 200
 
             if score > best_score:
                 best_score = score

@@ -56,7 +56,7 @@ Typical *Arr deployments become a Compose file per application: Sonarr, Radarr, 
 - **First-run wizard** — pick *Arr apps, download clients (including Usenet provider fields), media servers, VPN, and recommended tools; persist paths and credentials; start installs. Admin setup requires an email.
 - **Shared local login** — the manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin, Seerr). Plex still uses a Plex account.
 - **Automatic wiring** — after an app is healthy (or when you click **Auto-Wire**): categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr / Profilarr / NeutArr.
-- **Household homepage** — launcher plus calendar, downloads, recently added, and Seerr search. Widget debug explains empty tiles without showing API keys.
+- **Home Dashboard** — launcher plus calendar, downloads, recently added, and Seerr search. Widget debug in Settings → Debug explains empty tiles without showing API keys.
 - **Storage model** — `config`, `downloads`, and `media` with `PUID` / `PGID` and hardlink checks.
 - **VPN isolation** — qBittorrent, Prowlarr, and Flaresolverr can run in a Linux network namespace bound to WireGuard or OpenVPN; Usenet stays off the tunnel.
 - **Hardware transcoding** — VAAPI / QSV / NVIDIA when the host exposes devices.
@@ -121,23 +121,22 @@ Full steps: [docs/INSTALL.md](docs/INSTALL.md) · [deploy/DOCKER.md](deploy/DOCK
 
 ## Development
 
-**Prerequisites:** Python 3.11+, [Poetry](https://python-poetry.org/), Node.js 22.
+The appliance is a **Linux container**. Catalog installs (Sonarr, Jellyfin, qBittorrent-nox, Flaresolverr, …) are Linux binaries. Do not run the manager natively on macOS or Windows to test installs.
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
-cp .env.example .env
-poetry install
-cd frontend && npm ci && npm run build && cd ..
-poetry run python main.py
+./scripts/test-env.sh up
 ```
+
+Open **http://127.0.0.1:8080**. Data for this run is under `.docker-test/` (gitignored). Stop with `./scripts/test-env.sh down`.
 
 | URL | Purpose |
 |-----|---------|
-| http://localhost:8080 | Manager UI |
-| http://localhost:8080/docs | OpenAPI |
+| http://127.0.0.1:8080 | Manager UI (built dashboard from this checkout) |
+| http://127.0.0.1:8080/docs | OpenAPI |
 
-For a live dashboard, run `npm run dev` in `frontend/` as well. Tests: `poetry run pytest`.
+Optional live Vue reload (API still in Docker): `cd frontend && npm ci && npm run dev`, then use **http://127.0.0.1:5173**. Unit tests: `poetry run pytest`. Full workflow: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

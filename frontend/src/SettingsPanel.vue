@@ -1,15 +1,22 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { SETTINGS_SECTIONS } from './router'
+import { apiError, apiRequest, readJson } from './api.js'
+import { startGuardedInterval } from './pageVisible.js'
+import { readHomepageWidgetDebug, writeHomepageWidgetDebug } from './homepageDebug.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 
 const props = defineProps({
-  apiRequest: { type: Function, required: true },
   systemInfo: { type: Object, default: null },
   hostArch: { type: String, default: '' }
 })
 const emit = defineEmits(['session'])
-
-const section = ref('account')
+const route = useRoute()
+const section = computed(() => {
+  const value = String(route.params.section || 'account')
+  return SETTINGS_SECTIONS.includes(value) ? value : 'account'
+})
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -22,7 +29,7 @@ const backupInfo = ref({ backup_dir: '', legacy_dir: '', schedule: {} })
 const backupJob = ref(null)
 const restoreTarget = ref(null)
 const uploading = ref(false)
-let jobTimer = null
+let stopJobPollFn = null
 const form = ref({
   username: '',
   email: '',
@@ -61,6 +68,12 @@ const tunnelLive = ref({})
 const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
 const seerrConfigured = ref(false)
+const widgetDebug = ref(false)
+
+function toggleHomepageWidgetDebug() {
+  widgetDebug.value = !widgetDebug.value
+  writeHomepageWidgetDebug(widgetDebug.value)
+}
 
 const metrics = computed(() => props.systemInfo?.metrics || {})
 const storage = computed(() => snapshot.value.storage || props.systemInfo?.storage || {})
@@ -86,13 +99,6 @@ function formatBytes(n) {
 
 function prettyLabel(key) {
   return String(key || '').replace(/_/g, ' ')
-}
-
-function apiError(data, fallback) {
-  const detail = data?.detail
-  if (typeof detail === 'string') return detail
-  if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg
-  return fallback
 }
 
 function applySettingsPayload(data) {
@@ -139,27 +145,27 @@ async function loadAll() {
   error.value = ''
   try {
     const [meRes, setRes, bakRes, diagRes] = await Promise.all([
-      props.apiRequest('/api/auth/me'),
-      props.apiRequest('/api/settings'),
-      props.apiRequest('/api/backups'),
-      props.apiRequest('/api/diagnostics')
+      apiRequest('/api/auth/me'),
+      apiRequest('/api/settings'),
+      apiRequest('/api/backups'),
+      apiRequest('/api/diagnostics')
     ])
     if (meRes.ok) {
-      const me = await meRes.json()
+      const me = await readJson(meRes)
       form.value.username = me.username || 'admin'
       form.value.email = me.email || ''
     }
-    if (setRes.ok) applySettingsPayload(await setRes.json())
+    if (setRes.ok) applySettingsPayload(await readJson(setRes))
     else error.value = 'Could not load settings.'
     if (bakRes.ok) {
-      const bak = await bakRes.json()
+      const bak = await readJson(bakRes)
       backups.value = bak.backups || []
       backupInfo.value = bak
-      if (bak.job?.status === 'running' && !jobTimer) watchJob(bak.job)
-      else if (!jobTimer) backupJob.value = bak.job
+      if (bak.job?.status === 'running' && !stopJobPollFn) watchJob(bak.job)
+      else if (!stopJobPollFn) backupJob.value = bak.job
     }
     if (diagRes.ok) {
-      const diag = await diagRes.json()
+      const diag = await readJson(diagRes)
       share.value = diag.share || share.value
       errors.value = diag.errors || []
     }
@@ -175,11 +181,11 @@ async function patchSettings(payload) {
   error.value = ''
   notice.value = ''
   try {
-    const res = await props.apiRequest('/api/settings', {
+    const res = await apiRequest('/api/settings', {
       method: 'PATCH',
       body: JSON.stringify(payload)
     })
-    const data = await res.json()
+    const data = await readJson(res)
     if (!res.ok) {
       error.value = apiError(data, 'Could not save settings.')
       return
@@ -216,11 +222,11 @@ async function saveAccount() {
       email: form.value.email
     }
     if (form.value.new_password) body.new_password = form.value.new_password
-    const res = await props.apiRequest('/api/auth/account', {
+    const res = await apiRequest('/api/auth/account', {
       method: 'PATCH',
       body: JSON.stringify(body)
     })
-    const data = await res.json()
+    const data = await readJson(res)
     if (!res.ok) {
       error.value = apiError(data, 'Could not update account.')
       return
@@ -241,8 +247,8 @@ async function runUpdateCheck() {
   error.value = ''
   notice.value = ''
   try {
-    const res = await props.apiRequest('/api/updates/check', { method: 'POST' })
-    const data = await res.json()
+    const res = await apiRequest('/api/updates/check', { method: 'POST' })
+    const data = await readJson(res)
     if (!res.ok) {
       error.value = apiError(data, 'Update check failed.')
       return
@@ -270,8 +276,8 @@ const backupJobPercent = computed(() => {
 })
 
 function stopJobPoll() {
-  if (jobTimer) clearInterval(jobTimer)
-  jobTimer = null
+  if (stopJobPollFn) stopJobPollFn()
+  stopJobPollFn = null
 }
 
 function describeJob(job) {
@@ -300,11 +306,11 @@ function watchJob(job) {
   backupJob.value = job
   stopJobPoll()
   if (!job || job.status !== 'running') return
-  jobTimer = setInterval(async () => {
+  stopJobPollFn = startGuardedInterval(async () => {
     try {
-      const res = await props.apiRequest('/api/backups/job')
+      const res = await apiRequest('/api/backups/job')
       if (!res.ok) return
-      const data = await res.json()
+      const data = await readJson(res)
       backupJob.value = data.job
       if (!data.job || data.job.status !== 'running') {
         stopJobPoll()
@@ -325,8 +331,8 @@ async function startBackupJob(endpoint, body) {
   error.value = ''
   notice.value = ''
   try {
-    const res = await props.apiRequest(endpoint, { method: 'POST', body: JSON.stringify(body || {}) })
-    const data = await res.json().catch(() => ({}))
+    const res = await apiRequest(endpoint, { method: 'POST', body: JSON.stringify(body || {}) })
+    const data = await readJson(res)
     if (!res.ok) {
       error.value = apiError(data, 'Backup action failed.')
       return
@@ -347,8 +353,8 @@ function verifyBackup(name) {
 
 async function openRestore(name) {
   error.value = ''
-  const res = await props.apiRequest(`/api/backups/${encodeURIComponent(name)}`)
-  const data = await res.json().catch(() => ({}))
+  const res = await apiRequest(`/api/backups/${encodeURIComponent(name)}`)
+  const data = await readJson(res)
   if (!res.ok) {
     error.value = apiError(data, 'Could not read backup.')
     return
@@ -383,9 +389,10 @@ async function confirmRestore() {
 async function downloadBackup(name) {
   error.value = ''
   try {
-    const res = await props.apiRequest(`/api/backups/${encodeURIComponent(name)}/download`)
+    const res = await apiRequest(`/api/backups/${encodeURIComponent(name)}/download`)
     if (!res.ok) {
-      error.value = `Download failed (HTTP ${res.status}).`
+      const data = await readJson(res)
+      error.value = apiError(data, `Download failed (HTTP ${res.status}).`)
       return
     }
     const url = URL.createObjectURL(await res.blob())
@@ -409,12 +416,13 @@ async function uploadBackup(event) {
   error.value = ''
   notice.value = ''
   try {
-    const res = await props.apiRequest(`/api/backups/upload?filename=${encodeURIComponent(file.name)}`, {
+    const res = await apiRequest(`/api/backups/upload?filename=${encodeURIComponent(file.name)}`, {
       method: 'POST',
       body: file,
+      json: false,
       headers: { 'Content-Type': 'application/octet-stream' },
     })
-    const data = await res.json().catch(() => ({}))
+    const data = await readJson(res)
     if (!res.ok) {
       error.value = apiError(data, 'Upload failed.')
       return
@@ -430,7 +438,7 @@ async function uploadBackup(event) {
 
 async function deleteBackup(name) {
   if (!window.confirm(`Delete ${name}?`)) return
-  const res = await props.apiRequest(`/api/backups/${encodeURIComponent(name)}`, { method: 'DELETE' })
+  const res = await apiRequest(`/api/backups/${encodeURIComponent(name)}`, { method: 'DELETE' })
   if (res.ok) await loadAll()
 }
 
@@ -444,9 +452,9 @@ function backupKindLabel(item) {
 }
 
 async function loadStatus() {
-  const res = await props.apiRequest('/api/diagnostics')
+  const res = await apiRequest('/api/diagnostics')
   if (!res.ok) return
-  const data = await res.json()
+  const data = await readJson(res)
   share.value = data.share || share.value
   errors.value = data.errors || []
 }
@@ -456,10 +464,10 @@ async function createShare() {
   error.value = ''
   copied.value = false
   try {
-    const res = await props.apiRequest('/api/diagnostics/share', { method: 'POST' })
-    const data = await res.json()
+    const res = await apiRequest('/api/diagnostics/share', { method: 'POST' })
+    const data = await readJson(res)
     if (!res.ok) {
-      error.value = data.detail || 'Could not create debug link.'
+      error.value = apiError(data, 'Could not create debug link.')
       return
     }
     share.value = {
@@ -481,10 +489,10 @@ async function revokeShare() {
   saving.value = true
   error.value = ''
   try {
-    const res = await props.apiRequest('/api/diagnostics/share', { method: 'DELETE' })
+    const res = await apiRequest('/api/diagnostics/share', { method: 'DELETE' })
     if (!res.ok) {
-      const data = await res.json()
-      error.value = data.detail || 'Could not revoke debug link.'
+      const data = await readJson(res)
+      error.value = apiError(data, 'Could not revoke debug link.')
       return
     }
     share.value = { active: false, url: '', expires_at: null, ttl_hours: 24 }
@@ -533,7 +541,10 @@ watch(section, () => {
   notice.value = ''
 })
 
-onMounted(loadAll)
+onMounted(() => {
+  widgetDebug.value = readHomepageWidgetDebug()
+  loadAll()
+})
 onBeforeUnmount(stopJobPoll)
 </script>
 
@@ -547,7 +558,8 @@ onBeforeUnmount(stopJobPoll)
     </div>
 
     <nav class="settings-nav" aria-label="Settings sections">
-      <button v-for="item in [
+      <RouterLink
+        v-for="item in [
         ['account', 'Account'],
         ['general', 'General'],
         ['updates', 'Updates'],
@@ -559,9 +571,14 @@ onBeforeUnmount(stopJobPoll)
         ['integrations', 'Integrations'],
         ['github', 'GitHub'],
         ['debug', 'Debug']
-      ]" :key="item[0]" type="button" class="settings-nav-btn" :class="{ active: section === item[0] }" @click="section = item[0]">
+      ]"
+        :key="item[0]"
+        :to="{ name: 'settings', params: { section: item[0] } }"
+        class="settings-nav-btn"
+        :class="{ active: section === item[0] }"
+      >
         {{ item[1] }}
-      </button>
+      </RouterLink>
     </nav>
 
     <div v-if="error" class="ui-alert ui-alert-error">{{ error }}</div>
@@ -1033,6 +1050,30 @@ onBeforeUnmount(stopJobPoll)
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">DEBUG</span>
+          <h3>Home dashboard widgets</h3>
+          <p>
+            Show empty calendar, downloads, and recently added tiles plus per-source skip notes.
+            API keys are never shown.
+          </p>
+        </div>
+        <div class="ui-switch-row">
+          <div class="ui-switch-copy">
+            <strong>Widget debug</strong>
+            <span>When on, Home Dashboard explains why a widget is empty or failing.</span>
+          </div>
+          <button
+            type="button"
+            class="ui-switch"
+            role="switch"
+            :aria-checked="widgetDebug ? 'true' : 'false'"
+            @click="toggleHomepageWidgetDebug"
+          >
+            <span class="ui-switch-thumb"></span>
+          </button>
+        </div>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
           <h3>Error manager</h3>
           <p>
             Capture recent errors behind a time-limited URL for support. Secrets are redacted.
@@ -1115,6 +1156,7 @@ onBeforeUnmount(stopJobPoll)
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
 }
 .settings-nav-btn.active {
   color: #e0f2fe;

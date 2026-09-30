@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 
 from applications.base import BaseApplication
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
 from applications.qbittorrent.webui import ensure_webui_localhost_access
+from core.installer.arch import PlatformArch, detect_system_arch, host_arch_filename_token
 from core.vpn import vpn_manager
 
 MANIFEST = AppManifest(
@@ -33,6 +35,13 @@ class QBittorrentApp(BaseApplication):
     """
 
     manifest = MANIFEST
+
+    def preferred_patterns(self) -> Sequence[str]:
+        arch = detect_system_arch()
+        if arch == PlatformArch.UNKNOWN:
+            return ()
+        token = host_arch_filename_token(arch)
+        return (rf"{token}.*qbittorrent-nox",)
 
     def build_start_command(self, executable: Path) -> list[str]:
         username, password = "", ""

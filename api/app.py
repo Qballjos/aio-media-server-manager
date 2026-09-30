@@ -76,6 +76,12 @@ def create_app() -> FastAPI:
         for plugin in boot_catalog.all_plugins():
             if not plugin.manifest.daemon or not plugin.is_installed():
                 continue
+            if not plugin.supports_current_arch():
+                logger.info(
+                    "Autostart skipped for '%s': no build for this CPU architecture.",
+                    plugin.name,
+                )
+                continue
             if not autostart_for(plugin.name, default=True):
                 continue
             try:

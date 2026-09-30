@@ -39,6 +39,7 @@ class SeerrApp(BaseApplication):
         }
 
     def install(self) -> InstallResult:
+        self.require_host_arch()
         installer = AppInstaller()
         result = installer.install_from_github_source(
             self.github_repo,

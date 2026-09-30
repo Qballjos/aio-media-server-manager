@@ -1,0 +1,23 @@
+# Overlay for testing a git checkout inside the Linux appliance image.
+# Catalog installs need Linux (glibc, Chromium, ICU). Do not run those on macOS/Windows hosts.
+#
+#   ./scripts/test-env.sh up
+#
+# Data stays in .docker-test/ (gitignored). Manager UI: http://127.0.0.1:8080
+
+name: amm-test
+
+services:
+  aio-media-manager:
+    image: aio-media-server-manager:test
+    build: .
+    container_name: aio-media-manager-test
+    restart: "no"
+    volumes:
+      - ./.docker-test/config:/config
+      - ./.docker-test/data:/data
+      - ./.docker-test/backups:/backups
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "${TZ:-UTC}"

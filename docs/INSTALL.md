@@ -92,13 +92,14 @@ Copy [`.env.example`](../.env.example) for a native install. Compose already set
 
 ## Development clone
 
-Use a git checkout only when changing the code. Production should use the GHCR image or a tagged release.
+Use a git checkout only when changing the code. **Run that checkout in Docker** so catalog installs get Linux binaries (same as production). Do not start the manager with Poetry on macOS or Windows for install/start testing.
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
-cp .env.example .env
-poetry install
-cd frontend && npm ci && npm run build && cd ..
-poetry run python main.py
+./scripts/test-env.sh up
 ```
+
+Open `http://127.0.0.1:8080`. Stop with `./scripts/test-env.sh down`. Details: [Contributing](../CONTRIBUTING.md).
+
+Native Linux / LXC without Docker is documented in [deploy/LINUX.md](../deploy/LINUX.md).

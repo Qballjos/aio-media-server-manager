@@ -54,13 +54,16 @@ def test_default_yaml_matches_trash_hd_templates(tmp_path: Path):
     )
     text = path.read_text(encoding="utf-8")
     assert MANAGED_MARK in text
-    assert "web-1080p:" in text
-    assert "sonarr-anime-remux-1080p:" in text
-    assert "hd-bluray-web:" in text
-    assert "web-2160p:" not in text
-    assert "uhd-bluray-web:" not in text
+    assert "  tv:" in text
+    assert "  movies:" in text
+    assert text.count("base_url: http://127.0.0.1:8989") == 1
+    assert text.count("base_url: http://127.0.0.1:7878") == 1
+    assert "  web-1080p:" not in text
+    assert "  hd-bluray-web:" not in text
     assert "72dae194fc92bf828f32cde7744e51a1" in text
     assert "d1d67249d3890e49bc12e275d989a7e9" in text
+    assert "20e0fc959f1f1704bed501f23bdae76f" in text
+    assert "d1498e7d189fbe6c7110ceaabb7473e6" not in text
     assert "delete_old_custom_formats: true" in text
     assert "replace_existing_custom_formats" not in text
     assert "custom_format_groups:" not in text
@@ -83,11 +86,11 @@ def test_uhd_opt_in_and_jellyfin_naming(tmp_path: Path):
         force=True,
     )
     text = path.read_text(encoding="utf-8")
-    assert "web-2160p:" in text
-    assert "uhd-bluray-web:" in text
     assert "d1498e7d189fbe6c7110ceaabb7473e6" in text
     assert "64fb5f9858489bdac2af690e27c8f42f" in text
-    assert "jellyfin-tv" in text
+    assert text.count("base_url: http://127.0.0.1:8989") == 1
+    assert text.count("base_url: http://127.0.0.1:7878") == 1
+    assert "jellyfin-tvdb" in text
     assert "jellyfin-tmdb" in text
 
 
@@ -132,7 +135,7 @@ def test_recyclarr_api_prefs_and_yaml(tmp_path: Path, monkeypatch):
     )
     assert patched.status_code == 200
     body = patched.json()
-    assert "web-2160p:" in body["yaml"]
+    assert "d1498e7d189fbe6c7110ceaabb7473e6" in body["yaml"]
     assert body["prefs"]["sonarr_web_2160p"] is True
 
     saved = client.put("/api/recyclarr", json={"yaml": "sonarr:\n  hand-edit: true\n"}, headers=headers)
@@ -143,7 +146,8 @@ def test_recyclarr_api_prefs_and_yaml(tmp_path: Path, monkeypatch):
     reset = client.post("/api/recyclarr/reset", headers=headers)
     assert reset.status_code == 200
     assert reset.json()["user_edited"] is False
-    assert "web-1080p:" in reset.json()["yaml"]
+    assert "72dae194fc92bf828f32cde7744e51a1" in reset.json()["yaml"]
+    assert "  tv:" in reset.json()["yaml"]
 
 
 def test_recyclarr_sync_runs_once(tmp_path: Path, monkeypatch):
@@ -156,7 +160,7 @@ def test_recyclarr_sync_runs_once(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("core.recyclarr.get_application_api_key", lambda _name: "k")
     monkeypatch.setattr(auth_manager, "_settings", cfg)
 
-    completed = MagicMock(returncode=0, stdout="sync ok", stderr="")
+    completed = MagicMock(returncode=0, stdout="movies: Processing Radarr server movies\nmovies: Completed", stderr="")
     with patch("core.recyclarr.subprocess.run", return_value=completed) as mock_run:
         client = TestClient(create_app())
         headers = _auth_headers(client)
@@ -168,6 +172,7 @@ def test_recyclarr_sync_runs_once(tmp_path: Path, monkeypatch):
     assert "sync" in argv
     assert "--config" in argv
     assert argv[argv.index("--config") + 1].endswith("recyclarr.yml")
+    assert "--log" in argv
     assert "--app-data" not in argv
     env = mock_run.call_args.kwargs["env"]
     assert env["RECYCLARR_CONFIG_DIR"] == str(plugin.config_dir)

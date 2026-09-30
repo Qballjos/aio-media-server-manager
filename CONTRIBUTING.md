@@ -2,41 +2,43 @@
 
 Thank you for contributing to AIO Media Server Manager.
 
-## Development setup
+## Run the appliance (default)
 
-- Python 3.11 or newer
-- [Poetry](https://python-poetry.org/)
-- Node.js 22 (dashboard)
+Docker is the default way to test wizard, catalog installs, Open UI, and Auto-Wire. The image is Linux (`linux/amd64` or `linux/arm64`). macOS/Windows hosts only provide Docker Desktop; they are not a native install target.
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
-cp .env.example .env
+./scripts/test-env.sh up
+```
+
+Open **http://127.0.0.1:8080**. Volumes live in `.docker-test/`. Logs: `./scripts/test-env.sh logs`. Stop: `./scripts/test-env.sh down`.
+
+Optional live dashboard (proxies `/api` and `/health` to the container on port 8080):
+
+```bash
+cd frontend && npm ci && npm run dev
+```
+
+Then use **http://127.0.0.1:5173**, not the host `poetry run` API.
+
+If you need Intel/AMD transcoding on a Linux host that has `/dev/dri`, add `compose.gpu.yml` to a production compose command (see [deploy/DOCKER.md](deploy/DOCKER.md)). The test script does not map `/dev/dri`.
+
+## Unit tests and lint (host)
+
+Python 3.11+ with [Poetry](https://python-poetry.org/), and Node.js 22 for the dashboard build:
+
+```bash
 poetry install
 cd frontend && npm ci && cd ..
-```
-
-API:
-
-```bash
-poetry run python main.py
-```
-
-Dashboard with Vite (optional; proxies API requests):
-
-```bash
-cd frontend && npm run dev
-```
-
-## Checks before a pull request
-
-```bash
 poetry run pytest
 poetry run ruff check core api applications tests
 cd frontend && npm run build
 ```
 
 Optional: `pre-commit install` for Ruff and basic file checks on commit.
+
+Do not use `poetry run python main.py` on macOS/Windows to exercise catalog installs. That path is for native Linux / LXC only ([deploy/LINUX.md](deploy/LINUX.md)).
 
 ## Project rules
 
@@ -47,7 +49,7 @@ Optional: `pre-commit install` for Ruff and basic file checks on commit.
 - Do not log or return secrets in API responses.
 - Never delete media libraries in uninstall or backup paths.
 - Shared form controls live in `frontend/src/style.css` (`.ui-input`, `.ui-btn`, `.ui-btn-primary`, `.ui-btn-ghost`, `.ui-switch`). Match the first-run wizard; do not restyle inputs only in a scoped SFC.
-- When you add env vars, ports, or Settings behaviour, update `.env.example`, Compose/templates (`docker-compose.yml`, `deploy/synology/`, `deploy/unraid.xml`), and `docs/` / `deploy/*.md` in the same change.
+- When you add env vars, ports, or Settings behaviour, update `.env.example`, Compose/templates (`docker-compose.yml`, `compose.test.yml`, `compose.gpu.yml`, `deploy/synology/`, `deploy/unraid.xml`), and `docs/` / `deploy/*.md` in the same change.
 
 Report vulnerabilities through [GitHub private advisories](https://github.com/Qballjos/aio-media-server-manager/security/advisories/new), not public issues.
 

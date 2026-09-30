@@ -7,9 +7,23 @@ import requests
 from applications.base import BaseApplication
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
 from core.crypto import secret_store
-from core.installer.arch import detect_system_arch
+from core.installer.arch import detect_system_arch, detect_system_os, filename_has_cpu_arch, score_asset_match
 from core.installer.installer import AppInstaller, InstallResult
 from core.settings import settings
+
+_PLEX_LINUX_BUILD = {
+    "x86_64": "linux-x86_64",
+    "arm64": "linux-aarch64",
+}
+
+
+def plex_linux_build(host_arch: str | None = None) -> str:
+    arch = host_arch or detect_system_arch().value
+    build = _PLEX_LINUX_BUILD.get(arch)
+    if build is None:
+        raise RuntimeError(f"Plex Media Server Linux builds are not published for {arch}.")
+    return build
+
 
 MANIFEST = AppManifest(
     name="plex",
@@ -46,9 +60,10 @@ class PlexApp(BaseApplication):
         return [str(executable)]
 
     def install(self) -> InstallResult:
+        self.require_host_arch()
         installer = AppInstaller()
         arch = detect_system_arch().value
-        build = "linux-aarch64" if arch == "arm64" else "linux-x86_64"
+        build = plex_linux_build(arch)
         payload = requests.get("https://plex.tv/api/downloads/5.json", timeout=30).json()
         releases = payload.get("computer", {}).get("Linux", {}).get("releases", [])
         match = next(
@@ -62,10 +77,16 @@ class PlexApp(BaseApplication):
         if match is None:
             match = next((item for item in releases if item.get("build") == build), None)
         if match is None:
-            raise RuntimeError(f"No official Plex Media Server binary found for {arch}.")
+            raise RuntimeError(f"No official Plex Media Server binary found for {arch} ({build}).")
         url = match["url"]
         version = str(payload.get("computer", {}).get("Linux", {}).get("version") or "plex")
         filename = url.split("?")[0].rstrip("/").split("/")[-1]
+        host_arch = detect_system_arch()
+        if filename_has_cpu_arch(filename) and score_asset_match(filename, host_arch, detect_system_os()) < 0:
+            raise ValueError(
+                f"Refusing to install Plex asset '{filename}': "
+                f"it does not match host arch={host_arch.value}."
+            )
         archive_path = settings.cache_dir / "downloads" / filename
         archive_path.parent.mkdir(parents=True, exist_ok=True)
         sha = installer.download_file(url, archive_path)

@@ -1,5 +1,7 @@
 # One AIO container only — not a per-application compose stack.
 # Pull the published image, or pass --build to build locally from this repo.
+# Local checkout testing (Linux binaries, isolated volumes): ./scripts/test-env.sh up
+# Optional iGPU: docker compose -f docker-compose.yml -f compose.gpu.yml up -d
 services:
   aio-media-manager:
     image: ghcr.io/qballjos/aio-media-server-manager:latest
@@ -42,10 +44,9 @@ services:
       AMM_TRUSTED_PROXIES: ""
       # Optional GitHub token for install/update rate limits (or set it in Settings → GitHub):
       # GITHUB_TOKEN: ""
-    devices:
-      - /dev/dri:/dev/dri
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
     # Required for WireGuard/OpenVPN + netns isolation of qBittorrent.
     privileged: true
+    # Intel/AMD transcoding: add compose.gpu.yml (do not map /dev/dri unless it exists).

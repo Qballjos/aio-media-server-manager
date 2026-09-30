@@ -69,6 +69,7 @@ class ApplicationUpdater:
             shutil.copytree(plugin.install_dir, previous_install, dirs_exist_ok=True)
 
         try:
+            plugin.require_host_arch()
             result = plugin.install()
             healthy = True
             if start_after and plugin.manifest.daemon:

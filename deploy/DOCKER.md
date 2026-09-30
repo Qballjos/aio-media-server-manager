@@ -54,6 +54,18 @@ To rebuild from this checkout instead of GHCR:
 docker compose up -d --build
 ```
 
+That still uses `./config` and `./data` next to the compose file. **For development testing** (isolated volumes, no `/dev/dri` required):
+
+```bash
+./scripts/test-env.sh up
+```
+
+See [CONTRIBUTING.md](../CONTRIBUTING.md). Intel/AMD transcoding on a host that has render nodes:
+
+```bash
+docker compose -f docker-compose.yml -f compose.gpu.yml up -d
+```
+
 ## Plain Docker
 
 ```bash
@@ -79,7 +91,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   ghcr.io/qballjos/aio-media-server-manager:latest
 ```
 
-Add `-p` mappings for child WebUIs (the example above publishes the catalog defaults), or use `--network host` (then the manager is still on port 8080).
+Add `-p` mappings for child WebUIs (the example above publishes the catalog defaults), or use `--network host` (then the manager is still on port 8080). Drop `--device /dev/dri` when the host has no Intel/AMD render node (Docker Desktop on a Mac, many VPS hosts).
 
 ## Private GHCR image
 

@@ -24,6 +24,36 @@ def test_metrics_shape():
     assert isinstance(data["processes"], list)
 
 
+def test_metrics_shape_when_process_cpu_is_blocked(monkeypatch):
+    from core import metrics as metrics_mod
+
+    metrics_mod._proc_cache.clear()
+    supervisor = type("Supervisor", (), {})()
+    supervisor.list_processes = lambda: [{"name": "sonarr", "state": "running", "pid": 4242}]
+    monkeypatch.setattr(metrics_mod.ProcessSupervisor, "get", staticmethod(lambda: supervisor))
+
+    class BlockedProc:
+        pid = 4242
+
+        def is_running(self):
+            return True
+
+        def cpu_percent(self, interval=None):
+            raise SystemError("cpu_count_logical")
+
+    monkeypatch.setattr(metrics_mod.psutil, "Process", lambda pid: BlockedProc())
+    monkeypatch.setattr(
+        metrics_mod.psutil,
+        "cpu_count",
+        lambda logical=True: (_ for _ in ()).throw(SystemError("cpu_count_logical")),
+    )
+    data = collect_metrics()
+    assert "cpu_percent" in data
+    assert isinstance(data["processes"], list)
+    assert data["processes"][0]["name"] == "sonarr"
+    assert data["processes"][0]["cpu_percent"] is None
+
+
 def test_process_metrics_include_cpu_and_memory(monkeypatch):
     from core import metrics as metrics_mod
 

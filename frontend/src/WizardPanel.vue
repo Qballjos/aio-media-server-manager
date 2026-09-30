@@ -1,11 +1,9 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { appIconSrc } from './appIcons.js'
+import { apiError, apiRequest, readJson } from './api.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 
-const props = defineProps({
-  apiRequest: { type: Function, required: true }
-})
 const emit = defineEmits(['done'])
 
 const FLOW = [3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -88,7 +86,7 @@ function displayName(id) {
 function installStatusLabel(status) {
   if (status === 'queued') return 'QUEUED'
   if (status === 'installing') return 'INSTALLING'
-  if (status === 'started') return 'DONE'
+  if (status === 'started') return 'STARTED'
   if (status === 'already_installed') return 'INSTALLED'
   if (status === 'failed') return 'FAILED'
   return String(status || '').toUpperCase()
@@ -110,9 +108,9 @@ async function loadStep(id) {
   loading.value = true
   error.value = ''
   try {
-    const res = await props.apiRequest(`/api/wizard/step/${id}`)
+    const res = await apiRequest(`/api/wizard/step/${id}`)
     if (!res.ok) throw new Error('Could not load wizard step')
-    payload.value = await res.json()
+    payload.value = await readJson(res)
     const data = payload.value
     if (id === 3) {
       selections.media_dir = data.media_dir || ''
@@ -193,13 +191,13 @@ async function next() {
   error.value = ''
   try {
     if (step.value >= FIRST && step.value < LAST) {
-      const res = await props.apiRequest(`/api/wizard/step/${step.value}`, {
+      const res = await apiRequest(`/api/wizard/step/${step.value}`, {
         method: 'POST',
         body: JSON.stringify(bodyForStep(step.value))
       })
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not save this step')
+        const data = await readJson(res)
+        throw new Error(apiError(data, 'Could not save this step'))
       }
     }
     const idx = FLOW.indexOf(step.value)
@@ -227,7 +225,7 @@ async function skip() {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 8000)
   try {
-    const res = await props.apiRequest('/api/wizard/skip', {
+    const res = await apiRequest('/api/wizard/skip', {
       method: 'POST',
       signal: controller.signal
     })
@@ -246,9 +244,9 @@ async function finish() {
   error.value = ''
   installProgress.value = []
   try {
-    const res = await props.apiRequest('/api/wizard/execute', { method: 'POST' })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.detail || 'Wizard could not finish')
+    const res = await apiRequest('/api/wizard/execute', { method: 'POST' })
+    const data = await readJson(res)
+    if (!res.ok) throw new Error(apiError(data, 'Wizard could not finish'))
     const apps = data.target_apps || []
     const already = new Set(
       (data.installations || [])
@@ -263,7 +261,7 @@ async function finish() {
       if (item.status === 'already_installed') continue
       item.status = 'installing'
       try {
-        const inst = await props.apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
+        const inst = await apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
         item.status = inst.ok ? 'started' : 'failed'
       } catch (_) {
         item.status = 'failed'
@@ -290,9 +288,9 @@ const showUsenetCreds = computed(() => {
 const showVpnFields = computed(() => selections.vpn_provider && selections.vpn_provider !== 'none')
 
 onMounted(async () => {
-  const statusRes = await props.apiRequest('/api/wizard/status')
+  const statusRes = await apiRequest('/api/wizard/status')
   if (statusRes.ok) {
-    const status = await statusRes.json()
+    const status = await readJson(statusRes)
     step.value = clampToFlow(status.current_step || FIRST)
   }
   await loadStep(step.value)

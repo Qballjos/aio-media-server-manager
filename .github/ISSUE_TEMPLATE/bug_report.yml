@@ -32,7 +32,7 @@ body:
         - Unraid
         - Synology
         - TrueNAS
-        - Development (poetry)
+        - Development (Docker test env)
     validations:
       required: true
   - type: input

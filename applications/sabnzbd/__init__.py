@@ -130,6 +130,7 @@ class SabnzbdApp(BaseApplication):
         return write_runner(self.install_dir / "run-sabnzbd", lines)
 
     def install(self) -> InstallResult:
+        self.require_host_arch()
         installer = AppInstaller()
         result = installer.install_from_github(
             repo=self.github_repo,

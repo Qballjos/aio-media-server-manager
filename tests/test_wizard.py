@@ -47,7 +47,16 @@ def test_wizard_engine_lifecycle(tmp_path: Path):
     assert all(opt.get("help_url") for opt in step5["options"])
 
     step10 = engine.get_step_data(10)
-    assert set(step10["selected"]) >= {"bazarr", "flaresolverr"}
+    assert "bazarr" in step10["selected"]
+    from applications.community import FlaresolverrApp
+    from core.installer.arch import detect_system_arch
+
+    if detect_system_arch().value in FlaresolverrApp.manifest.supported_architectures:
+        assert "flaresolverr" in step10["selected"]
+        assert "flaresolverr" in {opt["id"] for opt in step10["options"]}
+    else:
+        assert "flaresolverr" not in step10["selected"]
+        assert "flaresolverr" not in {opt["id"] for opt in step10["options"]}
 
     step7 = engine.get_step_data(7)
     assert {opt["id"] for opt in step7["options"]} >= {"prowlarr", "sonarr", "radarr", "lidarr"}
@@ -99,6 +108,50 @@ def test_wizard_engine_lifecycle(tmp_path: Path):
     # Reload from disk to test persistence
     reloaded_engine = WizardEngine(state_file=state_file)
     assert reloaded_engine.get_status()["selections"]["vpn_provider"] == "privadovpn"
+
+
+def test_wizard_omits_unsupported_architecture_apps(tmp_path, monkeypatch):
+    from core.installer.arch import PlatformArch
+
+    monkeypatch.setattr("applications.base.detect_system_arch", lambda: PlatformArch.ARMV7)
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        install_dir=tmp_path / "apps",
+    )
+    engine = WizardEngine(state_file=tmp_path / "wizard_state.json", cfg=cfg)
+
+    step5 = engine.get_step_data(5)
+    assert {opt["id"] for opt in step5["options"]} == {"sabnzbd", "nzbget", "qbittorrent"}
+
+    step7 = engine.get_step_data(7)
+    assert {opt["id"] for opt in step7["options"]} == {"prowlarr", "sonarr", "radarr", "lidarr"}
+
+    step8 = engine.get_step_data(8)
+    assert step8["options"] == []
+    assert step8["selected"] == []
+
+    step9 = engine.get_step_data(9)
+    assert step9["options"] == []
+    assert step9["selected"] == "none"
+
+    step10 = engine.get_step_data(10)
+    assert step10["options"] == []
+    assert step10["selected"] == []
+
+    engine.update_step_selections(8, {"media_servers": ["jellyfin", "plex"]})
+    assert engine.get_status()["selections"]["media_servers"] == []
+    assert engine.get_status()["selections"]["media_server"] == "none"
+
+    engine.update_step_selections(9, {"request_system": "seerr"})
+    engine.update_step_selections(10, {"recommended_preview": ["bazarr", "flaresolverr"]})
+    targets = set(engine._target_apps())
+    assert "jellyfin" not in targets
+    assert "plex" not in targets
+    assert "seerr" not in targets
+    assert "bazarr" not in targets
+    assert "flaresolverr" not in targets
 
 
 def test_wizard_writes_pasted_vpn_config(tmp_path: Path):

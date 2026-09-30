@@ -95,7 +95,11 @@ def apply_shared_local_logins(
     if installed("jellyfin"):
         from core.integrations.jellyfin import JellyfinClient
 
-        client = JellyfinClient(port=port_for("jellyfin", 8096), api_key=api_key_for("jellyfin"))
+        client = JellyfinClient(
+            port=port_for("jellyfin", 8096),
+            api_key=api_key_for("jellyfin"),
+            config_dir=config_dir_for("jellyfin"),
+        )
         steps.append(_step("jellyfin", "set_shared_login", client.ensure_local_admin(username, password), username))
 
     if installed("profilarr"):
@@ -169,32 +173,84 @@ def sha256_hex(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
+def bazarr_password_hash(password: str) -> str:
+    """Bazarr compares login against MD5 hex of the password, not SHA-256."""
+    return hashlib.md5(password.encode("utf-8")).hexdigest()
+
+
+def bazarr_config_yaml(config_dir: Path) -> Path:
+    return Path(config_dir) / "config" / "config.yaml"
+
+
 def patch_bazarr_auth_yaml(config_path: Path, username: str, password: str) -> bool:
-    hashed = sha256_hex(password)
-    if not config_path.is_file():
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text(
-            "auth:\n"
-            "  type: form\n"
-            f"  username: {json.dumps(username)}\n"
-            f"  password: {hashed}\n",
-            encoding="utf-8",
-        )
+    hashed = bazarr_password_hash(password)
+    path = Path(config_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    updated = _rewrite_bazarr_auth_block(text, username, hashed)
+    if updated != text:
+        path.write_text(updated, encoding="utf-8")
         return True
-    text = config_path.read_text(encoding="utf-8")
-    if re.search(r"^auth:\s*$", text, re.MULTILINE):
-        text = re.sub(r"(?m)^(\s*)username:\s*.*$", rf"\1username: {json.dumps(username)}", text, count=1)
-        text = re.sub(r"(?m)^(\s*)password:\s*.*$", rf"\1password: {hashed}", text, count=1)
-        text = re.sub(r"(?m)^(\s*)type:\s*.*$", r"\1type: form", text, count=1)
-    else:
-        text += (
-            "\nauth:\n"
-            "  type: form\n"
-            f"  username: {json.dumps(username)}\n"
-            f"  password: {hashed}\n"
-        )
-    config_path.write_text(text, encoding="utf-8")
-    return True
+    return False
+
+
+def _rewrite_bazarr_auth_block(text: str, username: str, hashed: str) -> str:
+    user_line = f"  username: {json.dumps(username)}"
+    pass_line = f"  password: {hashed}"
+    type_line = "  type: form"
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if re.match(r"^auth:\s*$", line)), None)
+    if start is None:
+        extra = ["auth:", type_line, user_line, pass_line]
+        if not text.strip():
+            return "---\n" + "\n".join(extra) + "\n"
+        body = text if text.endswith("\n") else text + "\n"
+        return body + "\n".join(extra) + "\n"
+
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        line = lines[index]
+        if line and not line[0].isspace() and not line.startswith("#"):
+            end = index
+            break
+    block = lines[start:end]
+    replaced = {"username": False, "password": False, "type": False}
+    new_block = [block[0]]
+    for line in block[1:]:
+        stripped = line.lstrip(" \t")
+        if stripped.startswith("username:"):
+            new_block.append(user_line)
+            replaced["username"] = True
+        elif stripped.startswith("password:"):
+            new_block.append(pass_line)
+            replaced["password"] = True
+        elif stripped.startswith("type:"):
+            new_block.append(type_line)
+            replaced["type"] = True
+        else:
+            new_block.append(line)
+    if not replaced["type"]:
+        new_block.insert(1, type_line)
+    if not replaced["username"]:
+        new_block.append(user_line)
+    if not replaced["password"]:
+        new_block.append(pass_line)
+    result = "\n".join(lines[:start] + new_block + lines[end:])
+    if text.endswith("\n") or not result.endswith("\n"):
+        result = result.rstrip("\n") + "\n"
+    return result
+
+
+def restart_bazarr_if_running() -> None:
+    try:
+        from core.supervisor import ProcessSupervisor
+
+        supervisor = ProcessSupervisor.get()
+        if supervisor.status("bazarr").value != "running":
+            return
+        supervisor.run_coroutine_sync(supervisor.restart("bazarr"), timeout=90.0)
+    except Exception as exc:
+        logger.debug("Bazarr restart after login seed skipped: %s", exc)
 
 
 def _step(target: str, action: str, ok: bool, detail: str) -> dict[str, Any]:

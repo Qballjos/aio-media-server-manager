@@ -1,5 +1,6 @@
-from pathlib import Path
 import json
+import re
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.crypto import SecretStore
@@ -76,12 +77,43 @@ def test_set_servarr_forms_auth(mock_get, mock_put):
 
 
 def test_patch_bazarr_auth_yaml(tmp_path: Path):
+    from core.integrations.local_auth import bazarr_password_hash
+
     config = tmp_path / "config.yaml"
     assert patch_bazarr_auth_yaml(config, "amm", "SharedPass123!") is True
     text = config.read_text(encoding="utf-8")
     assert "type: form" in text
     assert "amm" in text
-    assert sha256_hex("SharedPass123!") in text
+    assert bazarr_password_hash("SharedPass123!") in text
+    assert sha256_hex("SharedPass123!") not in text
+    assert patch_bazarr_auth_yaml(config, "amm", "SharedPass123!") is False
+
+
+def test_patch_bazarr_auth_yaml_only_updates_auth_section(tmp_path: Path):
+    from core.integrations.local_auth import bazarr_password_hash
+
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "---\n"
+        "addic7ed:\n"
+        "  password: ''\n"
+        "  username: ''\n"
+        "auth:\n"
+        "  apikey: keep-me\n"
+        "  password: ''\n"
+        "  type: None\n"
+        "  username: ''\n"
+        "sonarr:\n"
+        "  username: ''\n",
+        encoding="utf-8",
+    )
+    assert patch_bazarr_auth_yaml(config, "amm", "SharedPass123!") is True
+    text = config.read_text(encoding="utf-8")
+    assert "apikey: keep-me" in text
+    assert "addic7ed:\n  password: ''\n  username: ''" in text
+    assert re.search(r"(?m)^auth:\n(?:  .*\n)*  username: \"amm\"", text)
+    assert bazarr_password_hash("SharedPass123!") in text
+    assert text.count(bazarr_password_hash("SharedPass123!")) == 1
 
 
 @patch("core.integrations.local_auth.requests.post")

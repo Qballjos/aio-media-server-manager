@@ -25,9 +25,9 @@ class FlaresolverrApp(SimpleApplication):
         category=AppCategory.INDEXERS,
         default_port=8191,
         executable_name="flaresolverr",
-        supported_architectures=("x86_64", "arm64"),
+        supported_architectures=("x86_64",),
         install_method=InstallMethod.GITHUB_RELEASE,
-        preferred_patterns=(r"flaresolverr_linux",),
+        preferred_patterns=(r"flaresolverr_linux_x64",),
         optional_dependencies=("prowlarr",),
         health_path="/",
     )
@@ -47,48 +47,6 @@ class FlaresolverrApp(SimpleApplication):
         from core.vpn import vpn_manager
 
         return vpn_manager.wrap_isolated_command(super().build_start_command(executable))
-
-    def install(self) -> InstallResult:
-        installer = AppInstaller()
-        try:
-            result = installer.install_from_github(
-                repo=self.github_repo,
-                app_name=self.name,
-                executable_name=self.executable_name,
-                preferred_patterns=self.preferred_patterns(),
-            )
-        except (ValueError, FileNotFoundError):
-            result = self._install_from_source(installer)
-        self.post_install()
-        return result
-
-    def _install_from_source(self, installer: AppInstaller) -> InstallResult:
-        result = installer.install_from_github_source(
-            self.github_repo,
-            self.name,
-            "src/flaresolverr.py",
-        )
-        venv_dir = create_venv(self.install_dir)
-        pip = venv_bin(venv_dir, "pip")
-        requirements = self.install_dir / "requirements.txt"
-        if requirements.is_file():
-            subprocess.run(
-                [str(pip), "install", "-r", str(requirements)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        python = venv_bin(venv_dir, "python")
-        script = self.install_dir / "src" / "flaresolverr.py"
-        runner = self.install_dir / "flaresolverr"
-        write_runner(
-            runner,
-            [
-                "#!/bin/sh",
-                f'exec "{python}" "{script}" "$@"',
-            ],
-        )
-        return result
 
 
 class GrimmoryApp(SimpleApplication):
@@ -244,6 +202,7 @@ class ShelfmarkApp(SimpleApplication):
         return env
 
     def install(self) -> InstallResult:
+        self.require_host_arch()
         installer = AppInstaller()
         result = installer.install_from_github_source(
             self.github_repo,

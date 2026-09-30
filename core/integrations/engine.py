@@ -434,12 +434,33 @@ class IntegrationEngine:
                 detail = "Seerr → " + "/".join(wired) if wired else detail
             steps.append(_step("seerr", "connect_media_services", seerr_ok, detail))
 
-        if not self._skip_uninstalled(steps, "bazarr", "pair_libraries"):
-            bazarr_client = BazarrClient(port=bazarr_port, api_key=bazarr_key)
-            baz_ok = bazarr_client.pair_sonarr(sonarr_url, sonarr_key or "") and bazarr_client.pair_radarr(
-                radarr_url, radarr_key or ""
+        if not self._skip_unavailable(steps, "bazarr", "pair_libraries", require_running=False):
+            bazarr_cfg = (
+                self._catalog.get("bazarr").config_dir
+                if self._catalog.has("bazarr")
+                else self._settings.config_dir / "bazarr"
             )
-            steps.append(_step("bazarr", "pair_libraries", baz_ok, "Bazarr ↔ Sonarr/Radarr"))
+            bazarr_client = BazarrClient(port=bazarr_port, api_key=bazarr_key)
+            baz_ok = bazarr_client.pair_libraries(
+                sonarr_url=sonarr_url if (self._installed("sonarr") and sonarr_key) else "",
+                sonarr_key=sonarr_key or "",
+                radarr_url=radarr_url if (self._installed("radarr") and radarr_key) else "",
+                radarr_key=radarr_key or "",
+                config_dir=bazarr_cfg,
+            )
+            wired = []
+            if self._installed("sonarr") and sonarr_key:
+                wired.append("Sonarr")
+            if self._installed("radarr") and radarr_key:
+                wired.append("Radarr")
+            steps.append(
+                _step(
+                    "bazarr",
+                    "pair_libraries",
+                    baz_ok,
+                    "Bazarr ↔ " + "/".join(wired) if wired else "Sonarr/Radarr API keys missing",
+                )
+            )
 
         try:
             rec_path = write_recyclarr_config(

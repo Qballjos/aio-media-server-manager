@@ -167,7 +167,10 @@ async def stop_application(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
     supervisor = ProcessSupervisor.get()
-    await supervisor.stop(name)
+    try:
+        await supervisor.stop(name)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Error stopping '%s': %s", name, exc)
 
     return {
         "status": "stopped",
@@ -489,4 +492,10 @@ async def uninstall_managed_application(
         )
     except UninstallError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Uninstall of %s failed: %s", name, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Uninstall of '{name}' failed: {exc}",
+        ) from exc
 

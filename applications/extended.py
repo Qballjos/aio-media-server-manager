@@ -11,7 +11,7 @@ from applications.base import SimpleApplication
 from applications.install_helpers import child_python, create_venv, venv_bin, write_runner
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
 from core.installer import AppInstaller, InstallResult
-from core.installer.arch import PlatformArch, detect_system_arch
+from core.installer.arch import linux_gnu_triple
 
 
 class LidarrApp(ArrApplication):
@@ -223,7 +223,8 @@ class BazarrApp(SimpleApplication):
         return venv_bin(venv_dir, "python")
 
     def _write_runner(self) -> Path | None:
-        script = self.install_dir / "bazarr.py"
+        main = self.install_dir / "bazarr" / "main.py"
+        script = main if main.is_file() else self.install_dir / "bazarr.py"
         if not script.is_file():
             return None
         venv_python = self._venv_python()
@@ -233,10 +234,11 @@ class BazarrApp(SimpleApplication):
             lines.append(
                 'export LD_LIBRARY_PATH="/opt/python3.13/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"'
             )
-        lines.append(f'exec "{interpreter}" "{script}" "$@"')
+        lines.append(f'exec "{interpreter}" -u "{script}" "$@"')
         return write_runner(self.install_dir / "run-bazarr", lines)
 
     def install(self) -> InstallResult:
+        self.require_host_arch()
         installer = AppInstaller()
         result = installer.install_from_github(
             repo=self.github_repo,
@@ -346,6 +348,7 @@ class ProfilarrApp(SimpleApplication):
         return self.install_dir
 
     def install(self) -> InstallResult:
+        self.require_host_arch()
         installer = AppInstaller()
         result = installer.install_from_github_source(
             self.github_repo,
@@ -372,11 +375,7 @@ class ProfilarrApp(SimpleApplication):
             env=env,
         )
         compiled = self.install_dir / "profilarr"
-        target = (
-            "aarch64-unknown-linux-gnu"
-            if detect_system_arch() == PlatformArch.ARM64
-            else "x86_64-unknown-linux-gnu"
-        )
+        target = linux_gnu_triple()
         mod = self.install_dir / "dist" / "build" / "mod.ts"
         if mod.is_file():
             compile = subprocess.run(
@@ -457,6 +456,7 @@ class NeutarrApp(SimpleApplication):
         }
 
     def install(self) -> InstallResult:
+        self.require_host_arch()
         installer = AppInstaller()
         result = installer.install_from_github_source(
             self.github_repo,
@@ -509,11 +509,7 @@ def _ensure_deno(bin_dir: Path) -> Path:
     deno = bin_dir / "deno"
     if deno.is_file():
         return deno
-    slug = (
-        "aarch64-unknown-linux-gnu"
-        if detect_system_arch() == PlatformArch.ARM64
-        else "x86_64-unknown-linux-gnu"
-    )
+    slug = linux_gnu_triple()
     installer = AppInstaller()
     cache = installer.settings.cache_dir / "downloads"
     cache.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,6 @@
 # Usage
 
-This guide covers what you do after the appliance is running. Installation and host paths are in [INSTALL.md](INSTALL.md).
+This guide covers what you do after the appliance is running. Installation and host paths are in [INSTALL.md](INSTALL.md). To try a git checkout, use `./scripts/test-env.sh up` (Linux container), not a native macOS/Windows process.
 
 ## 1. Create the administrator
 
@@ -26,28 +26,32 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 
 **Finish** persists settings and queues catalog installs. Wiring (indexers, download clients, libraries, Seerr, Recyclarr sync) runs **after each app is installed and answers its health check**, not during the Finish request. Apps that are not installed or not running are skipped so *Arr is not pointed at a dead downloader. You can run the same wiring later with **Auto-Wire** on the catalog.
 
-**Skip** opens the household homepage without installing anything. You can install applications later from **Catalog**.
+**Skip** opens the Home Dashboard without installing anything. You can install applications later from **Catalog**.
 
-## 3. Household homepage
+## 3. Home Dashboard
 
-After the wizard, **Home** is the front page for watching and requesting. It reuses the manager login (no extra household accounts). There are no start/stop/install controls here.
+After the wizard, **Home** is the front page for watching and requesting (`#/home`). It reuses the manager login. There are no start/stop/install controls here.
 
 - **Launcher** lists installed apps that have a WebUI. Recyclarr is omitted (CLI only). Stopped apps still appear dimmed.
 - **Coming up** is a real calendar of Sonarr/Radarr airings: a full month on wide screens, the current week on phones.
 - **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
 - **Recently added** uses Jellyfin and/or Plex. AMM tries the manager login first. You can also paste a Jellyfin API key under **Settings → Integrations** (or Catalog → Jellyfin → Settings). Create the key in Jellyfin Dashboard → API Keys.
 - **Search** talks to Seerr when it is running. Each result shows whether it is **Available**, **Partly available**, **Requested** or **Not in library**, with a **Get it now** button that sends a Seerr request. AMM reads `apiKey` from Seerr’s `settings.json`; if that fails, paste the key from Seerr Settings → General under **Settings → Integrations** (or Catalog → Seerr → Settings). If Seerr is missing or rejects the key, search falls back to Sonarr/Radarr lookup and shows the Seerr error above the results.
-- **Widget debug** on Home (or `?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
+- **Widget debug** in **Settings → Debug** (or `#/home?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
 
 Empty widgets stay hidden until debug is on. **Catalog** is still the admin dashboard for install, process controls, logs, and Auto-Wire.
 
+The dashboard uses hash URLs so you can bookmark or refresh without losing your place: `#/home`, `#/catalog`, `#/settings/backups`. A link such as `#/catalog?q=sonarr&status=active&cat=automation&sort=az` restores search, status/category filters, and sort. After login the hash is kept, so a shared Settings or Catalog link still opens the right screen. Log and backup downloads use the same signed-in session as the rest of the UI.
+
 ## 4. Catalog dashboard
 
-The dashboard lists the **17** catalog applications (installed vs available counts are separate).
+The dashboard lists the **17** catalog applications (installed vs available counts are separate) at `#/catalog`.
 
 - Filter by **status** and **category**
 - Sort by **popularity** or **A–Z**
 - **Search** by name
+
+Catalog process status refreshes about every 5 seconds while that page is open. Catalog metadata, update, and backup summaries refresh about every 30 seconds there. Home widgets refresh every 15 seconds. Background polls pause when the browser tab is hidden, and catch up when you come back. **Sync Status** still reloads everything at once.
 - **?** opens that application's official wiki or documentation
 - **Health** (header) opens host CPU/RAM/disk graphs plus per-application CPU and memory (including child processes)
 - **Download & Install** fetches the upstream binary and starts the process when it is a daemon
@@ -91,7 +95,7 @@ Open **Open UI** on each app the first time to confirm that product's own setup 
 
 ### Recyclarr (TRaSH Guides)
 
-Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `recyclarr sync --config recyclarr.yml` with `RECYCLARR_CONFIG_DIR` (Recyclarr 8 dropped `--app-data`). It writes an official Recyclarr v8 / [TRaSH Guides](https://trash-guides.info/) `recyclarr.yml`: HD WEB-1080p, Anime Remux-1080p, and HD Bluray+WEB by default. 4K profiles are opt-in.
+Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `recyclarr sync --config recyclarr.yml` with `RECYCLARR_CONFIG_DIR` (Recyclarr 8 dropped `--app-data`). It writes one Recyclarr instance per Sonarr/Radarr URL (multiple names on the same URL are skipped). Default TRaSH profiles: HD WEB-1080p, Anime Remux-1080p, and HD Bluray+WEB. 4K profiles are opt-in.
 
 **Catalog → Recyclarr → Settings** toggles profiles, Plex/Jellyfin naming, YAML edit, and restore defaults. Custom YAML is kept until you restore defaults. Last-sync details appear on the debug share when diagnostics are on.
 
@@ -117,7 +121,7 @@ Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `rec
 
 ## 8. Settings
 
-The **Settings** nav item is the admin page for the appliance (separate from per-app catalog cards). Bind mounts and the manager listen address stay in compose/env.
+The **Settings** nav item is the admin page for the appliance (separate from per-app catalog cards), at `#/settings/account` (and `#/settings/backups`, `#/settings/vpn`, …). Bind mounts and the manager listen address stay in compose/env.
 
 | Section | What it does |
 |---------|----------------|

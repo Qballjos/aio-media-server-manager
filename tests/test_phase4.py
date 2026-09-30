@@ -139,6 +139,30 @@ async def test_uninstall_refuses_media_paths(tmp_path: Path, catalog: Applicatio
         await uninstall_application(plugin, app_settings=catalog._settings)
 
 
+@pytest.mark.asyncio
+async def test_uninstall_continues_when_stop_fails(tmp_path: Path, catalog: ApplicationCatalog, monkeypatch):
+    plugin = catalog.get("sonarr")
+    plugin.install_dir = tmp_path / "apps" / "sonarr"
+    plugin.install_dir.mkdir(parents=True)
+    (plugin.install_dir / "Sonarr").write_text("x", encoding="utf-8")
+    plugin.config_dir = tmp_path / "config" / "sonarr"
+    plugin.config_dir.mkdir(parents=True)
+    forgotten: list[str] = []
+
+    class FakeSupervisor:
+        async def stop(self, name: str, timeout: float = 10.0) -> None:
+            raise RuntimeError("Task got Future attached to a different loop")
+
+        def forget(self, name: str) -> None:
+            forgotten.append(name)
+
+    monkeypatch.setattr("core.uninstall.ProcessSupervisor.get", lambda: FakeSupervisor())
+    result = await uninstall_application(plugin, app_settings=catalog._settings)
+    assert result["status"] == "uninstalled"
+    assert forgotten == ["sonarr"]
+    assert not plugin.install_dir.exists()
+
+
 def test_version_compare():
     assert _is_newer("1.2.0", "1.1.0")
     assert not _is_newer("1.1.0", "1.2.0")

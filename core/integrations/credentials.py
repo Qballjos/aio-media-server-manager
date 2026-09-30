@@ -62,6 +62,9 @@ def get_application_api_key(app_name: str, app_config_dir: Optional[Path] = None
 
         api_key = read_seerr_api_key(seerr_dir)
 
+    if app_name.lower() == "bazarr" and not api_key:
+        api_key = _read_bazarr_api_key(cfg_dir if cfg_dir.exists() else settings.config_dir / "bazarr")
+
     # Fallback: secret store (after disk so regenerated SAB keys win).
     if not api_key:
         stored = secret_store.get_secret(secret_key_name)
@@ -82,6 +85,20 @@ def get_application_api_key(app_name: str, app_config_dir: Optional[Path] = None
         secret_store.save_secret(secret_key_name, api_key)
         return api_key
 
+    return None
+
+
+def _read_bazarr_api_key(config_dir: Path) -> Optional[str]:
+    yaml_path = Path(config_dir) / "config" / "config.yaml"
+    if not yaml_path.is_file():
+        return None
+    try:
+        content = yaml_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(r"(?ms)^auth:\n(?:  .*\n)*?  apikey: ([A-Za-z0-9]+)", content)
+    if match:
+        return match.group(1)
     return None
 
 

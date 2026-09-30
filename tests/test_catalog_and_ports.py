@@ -74,6 +74,79 @@ def test_topological_sort_order():
     assert ordered_names.index("prowlarr") < ordered_names.index("radarr")
 
 
+def test_catalog_entries_hide_unsupported_architecture(tmp_path, monkeypatch):
+    from applications.base import SimpleApplication
+    from applications.manifest import AppManifest, InstallMethod
+    from applications.sonarr import SonarrApp
+    from core.installer.arch import PlatformArch
+
+    class X64OnlyApp(SimpleApplication):
+        manifest = AppManifest(
+            name="x64only",
+            display_name="X64 Only",
+            description="Test app with no ARM build.",
+            github_repo="example/x64only",
+            upstream_url="https://example.com",
+            tier=AppTier.OPTIONAL,
+            category=AppCategory.MEDIA,
+            default_port=19999,
+            executable_name="x64only",
+            supported_architectures=("x86_64",),
+            install_method=InstallMethod.GITHUB_RELEASE,
+        )
+
+    monkeypatch.setattr("applications.base.detect_system_arch", lambda: PlatformArch.ARM64)
+    monkeypatch.setattr("applications.catalog.detect_system_arch", lambda: PlatformArch.ARM64)
+    test_settings = Settings(
+        config_dir=tmp_path / "config",
+        install_dir=tmp_path / "apps",
+    )
+    catalog = ApplicationCatalog(
+        plugin_classes=(SonarrApp, X64OnlyApp),
+        app_settings=test_settings,
+    )
+    names = {row["name"] for row in catalog.entries()}
+    assert "sonarr" in names
+    assert "x64only" not in names
+    assert catalog.has("x64only")
+    assert catalog.is_visible("sonarr")
+    assert not catalog.is_visible("x64only")
+    assert "x64only" not in catalog.by_tier().get("optional", [])
+
+
+def test_flaresolverr_hidden_on_arm64(tmp_path, monkeypatch):
+    from applications.community import FlaresolverrApp
+    from core.installer.arch import PlatformArch
+    from core.wizard import WizardEngine
+
+    assert FlaresolverrApp.manifest.supported_architectures == ("x86_64",)
+    monkeypatch.setattr("applications.base.detect_system_arch", lambda: PlatformArch.ARM64)
+    monkeypatch.setattr("applications.catalog.detect_system_arch", lambda: PlatformArch.ARM64)
+    test_settings = Settings(
+        config_dir=tmp_path / "config",
+        install_dir=tmp_path / "apps",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+    )
+    catalog = ApplicationCatalog(app_settings=test_settings)
+    names = {row["name"] for row in catalog.entries()}
+    assert "flaresolverr" not in names
+    assert catalog.has("flaresolverr")
+    assert not catalog.is_visible("flaresolverr")
+
+    engine = WizardEngine(state_file=tmp_path / "wizard_state.json", cfg=test_settings)
+    step10 = engine.get_step_data(10)
+    assert "flaresolverr" not in {opt["id"] for opt in step10["options"]}
+    assert "flaresolverr" not in step10["selected"]
+    assert "flaresolverr" not in engine._target_apps()
+
+    monkeypatch.setattr("applications.base.detect_system_arch", lambda: PlatformArch.X86_64)
+    monkeypatch.setattr("applications.catalog.detect_system_arch", lambda: PlatformArch.X86_64)
+    x64_catalog = ApplicationCatalog(app_settings=test_settings)
+    assert x64_catalog.is_visible("flaresolverr")
+    assert "flaresolverr" in {row["name"] for row in x64_catalog.entries()}
+
+
 def test_catalog_entries_include_popularity():
     catalog = ApplicationCatalog()
     sonarr = catalog.get("sonarr").catalog_entry()

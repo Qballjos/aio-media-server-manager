@@ -79,18 +79,23 @@ def yaml_path(config_dir: Path) -> Path:
 
 
 def _recyclarr_log_files(config_dir: Path) -> str:
-    root = Path(config_dir) / "logs"
-    if not root.is_dir():
-        return ""
-    chunks: list[str] = []
-    for path in sorted(root.glob("*.log"))[-3:]:
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")[-2500:]
-        except OSError:
+    roots = (Path(config_dir) / "logs", Path(config_dir) / "logs" / "cli")
+    paths: list[Path] = []
+    for root in roots:
+        if not root.is_dir():
             continue
-        if text.strip():
-            chunks.append(f"--- {path.name} ---\n{text.strip()}")
-    return "\n".join(chunks)
+        paths.extend(root.glob("*.log"))
+        paths.extend(root.glob("*.debug.log"))
+    if not paths:
+        return ""
+    newest = max(paths, key=lambda path: path.stat().st_mtime)
+    try:
+        text = newest.read_text(encoding="utf-8", errors="replace")[-4000:]
+    except OSError:
+        return ""
+    if not text.strip():
+        return ""
+    return f"--- {newest.name} ---\n{text.strip()}"
 
 
 def load_prefs(config_dir: Path) -> dict[str, Any]:
@@ -224,6 +229,8 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
         return _fail_sync(plugin.config_dir, "Recyclarr binary is missing.")
     if "--config" not in cmd and "-c" not in cmd:
         cmd.extend(["--config", str(yaml_file)])
+    if "--log" not in cmd:
+        cmd.extend(["--log", "info"])
     env = {**os.environ, **plugin.extra_env()}
     env.pop("RECYCLARR_APP_DATA", None)
     env["RECYCLARR_CONFIG_DIR"] = str(plugin.config_dir)
@@ -248,13 +255,23 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
         log = f"{log}\n{extra}".strip()
     ok = completed.returncode == 0
     lowered = log.lower()
-    if ok and "initializing provider" in lowered and not any(
-        token in lowered for token in ("processing", "created", "updated", "completed", "no changes", "already up")
-    ):
+    processed = any(
+        token in lowered
+        for token in ("processing", "created", "updated", "completed", "no changes", "already up", "up to date")
+    )
+    if ok and not processed:
         ok = False
-        detail = "Recyclarr loaded TRaSH providers but did not sync any Sonarr/Radarr instances."
+        if "split instances" in lowered:
+            detail = (
+                "Recyclarr skipped sync because multiple instance names share the same "
+                "Sonarr/Radarr URL. Use one instance per server with multiple quality profiles."
+            )
+        else:
+            detail = "Recyclarr loaded TRaSH providers but did not sync any Sonarr/Radarr instances."
+    elif ok:
+        detail = "Sync finished."
     else:
-        detail = "Sync finished." if ok else f"Recyclarr exited {completed.returncode}."
+        detail = f"Recyclarr exited {completed.returncode}."
     result = {
         "ok": ok,
         "detail": detail,
@@ -330,7 +347,7 @@ def _refresh_endpoints(path: Path, sonarr_url: str, sonarr_key: str, radarr_url:
 
 def _naming_block(kind: str, style: str) -> str:
     if kind == "sonarr":
-        series = {"plex": "plex-tv", "jellyfin": "jellyfin-tv"}.get(style, "default")
+        series = {"plex": "plex-imdb", "jellyfin": "jellyfin-tvdb"}.get(style, "default")
         return (
             "    media_naming:\n"
             f"      series: {series}\n"
@@ -352,16 +369,20 @@ def _naming_block(kind: str, style: str) -> str:
     )
 
 
-def _instance(
+def _service_instance(
     *,
     name: str,
     url: str,
     key: str,
     qdef: str,
-    trash_id: str,
-    comment: str,
+    profiles: list[tuple[str, str]],
     naming: str,
 ) -> str:
+    profile_lines: list[str] = []
+    for trash_id, comment in profiles:
+        profile_lines.append(f"      - trash_id: {trash_id}  # {comment}")
+        profile_lines.append("        reset_unmatched_scores:")
+        profile_lines.append("          enabled: true")
     return (
         f"  {name}:\n"
         f"    base_url: {url}\n"
@@ -370,10 +391,9 @@ def _instance(
         "    quality_definition:\n"
         f"      type: {qdef}\n"
         "    quality_profiles:\n"
-        f"      - trash_id: {trash_id}  # {comment}\n"
-        "        reset_unmatched_scores:\n"
-        "          enabled: true\n"
-        f"{naming}"
+        + "\n".join(profile_lines)
+        + "\n"
+        + naming
     )
 
 
@@ -386,82 +406,58 @@ def _render_yaml(
     radarr_key: str,
     naming: str,
 ) -> str:
-    sonarr_blocks: list[str] = []
+    # Recyclarr 8 identifies a server by base_url. Extra instance names on the same URL are
+    # split and then skipped (exit 0, no Processing). One instance per *Arr, many profiles.
+    sonarr_profiles: list[tuple[str, str]] = []
     if prefs.get("sonarr_web_1080p"):
-        sonarr_blocks.append(
-            _instance(
-                name="web-1080p",
-                url=sonarr_url,
-                key=sonarr_key,
-                qdef="series",
-                trash_id=_SONARR_WEB_1080P,
-                comment="WEB-1080p",
-                naming=_naming_block("sonarr", naming),
-            )
-        )
+        sonarr_profiles.append((_SONARR_WEB_1080P, "WEB-1080p"))
     if prefs.get("sonarr_web_2160p"):
-        sonarr_blocks.append(
-            _instance(
-                name="web-2160p",
-                url=sonarr_url,
-                key=sonarr_key,
-                qdef="series",
-                trash_id=_SONARR_WEB_2160P,
-                comment="WEB-2160p",
-                naming=_naming_block("sonarr", naming),
-            )
-        )
+        sonarr_profiles.append((_SONARR_WEB_2160P, "WEB-2160p"))
     if prefs.get("sonarr_anime"):
-        sonarr_blocks.append(
-            _instance(
-                name="sonarr-anime-remux-1080p",
-                url=sonarr_url,
-                key=sonarr_key,
-                qdef="anime",
-                trash_id=_SONARR_ANIME_REMUX_1080P,
-                comment="[Anime] Remux-1080p",
-                naming=_naming_block("sonarr", naming),
-            )
-        )
-    radarr_blocks: list[str] = []
+        sonarr_profiles.append((_SONARR_ANIME_REMUX_1080P, "[Anime] Remux-1080p"))
+    sonarr_qdef = (
+        "series"
+        if prefs.get("sonarr_web_1080p") or prefs.get("sonarr_web_2160p")
+        else "anime"
+    )
+    radarr_profiles: list[tuple[str, str]] = []
     if prefs.get("radarr_hd"):
-        radarr_blocks.append(
-            _instance(
-                name="hd-bluray-web",
-                url=radarr_url,
-                key=radarr_key,
-                qdef="movie",
-                trash_id=_RADARR_HD_BLURAY_WEB,
-                comment="HD Bluray + WEB",
-                naming=_naming_block("radarr", naming),
-            )
-        )
+        radarr_profiles.append((_RADARR_HD_BLURAY_WEB, "HD Bluray + WEB"))
     if prefs.get("radarr_uhd"):
-        radarr_blocks.append(
-            _instance(
-                name="uhd-bluray-web",
-                url=radarr_url,
-                key=radarr_key,
-                qdef="movie",
-                trash_id=_RADARR_UHD_BLURAY_WEB,
-                comment="UHD Bluray + WEB",
-                naming=_naming_block("radarr", naming),
-            )
-        )
+        radarr_profiles.append((_RADARR_UHD_BLURAY_WEB, "UHD Bluray + WEB"))
     parts = [
         "# yaml-language-server: $schema=https://schemas.recyclarr.dev/v8/config-schema.json",
         f"# {MANAGED_MARK} — official Recyclarr v8 / TRaSH Guides templates.",
+        "# One instance per Sonarr/Radarr URL. Extra names on the same URL are skipped by Recyclarr 8.",
         "# HD profiles are on by default. Enable 4K from Catalog → Recyclarr → Settings.",
         "# Guide-backed quality profiles pull custom formats from TRaSH Guides.",
         "# https://recyclarr.dev/wiki/guide-configs/",
         "",
     ]
-    if sonarr_blocks:
+    if sonarr_profiles:
         parts.append("sonarr:")
-        parts.extend(sonarr_blocks)
-    if radarr_blocks:
+        parts.append(
+            _service_instance(
+                name="tv",
+                url=sonarr_url,
+                key=sonarr_key,
+                qdef=sonarr_qdef,
+                profiles=sonarr_profiles,
+                naming=_naming_block("sonarr", naming),
+            )
+        )
+    if radarr_profiles:
         parts.append("radarr:")
-        parts.extend(radarr_blocks)
-    if not sonarr_blocks and not radarr_blocks:
+        parts.append(
+            _service_instance(
+                name="movies",
+                url=radarr_url,
+                key=radarr_key,
+                qdef="movie",
+                profiles=radarr_profiles,
+                naming=_naming_block("radarr", naming),
+            )
+        )
+    if not sonarr_profiles and not radarr_profiles:
         parts.append("# No TRaSH profiles selected.")
     return "\n".join(parts).rstrip() + "\n"

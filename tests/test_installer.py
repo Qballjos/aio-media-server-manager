@@ -17,6 +17,9 @@ from core.installer.arch import (
     PlatformOS,
     detect_system_arch,
     detect_system_os,
+    filename_has_cpu_arch,
+    is_arch_neutral_asset,
+    linux_gnu_triple,
     matches_arch_pattern,
     score_asset_match,
 )
@@ -112,6 +115,236 @@ def test_select_asset_allows_preferred_jar():
         preferred_patterns=(r"grimmory\.jar$",),
     )
     assert asset["name"] == "grimmory.jar"
+
+
+def test_select_asset_rejects_preferred_wrong_arch():
+    from core.installer.github import GitHubReleaseClient
+
+    client = GitHubReleaseClient()
+    release = {
+        "tag_name": "v3.5.2",
+        "assets": [
+            {"name": "flaresolverr_linux_x64.tar.gz", "browser_download_url": "http://example/x64"},
+            {"name": "flaresolverr_windows_x64.zip", "browser_download_url": "http://example/win"},
+        ],
+    }
+    with pytest.raises(ValueError, match="No compatible binary asset"):
+        client.select_asset(
+            release,
+            PlatformArch.ARM64,
+            PlatformOS.LINUX,
+            preferred_patterns=(r"flaresolverr_linux",),
+        )
+
+
+def test_select_asset_prefers_matching_linux_arch():
+    from core.installer.github import GitHubReleaseClient
+
+    client = GitHubReleaseClient()
+    release = {
+        "tag_name": "v3.5.2",
+        "assets": [
+            {"name": "flaresolverr_linux_x64.tar.gz", "browser_download_url": "http://example/x64"},
+            {"name": "flaresolverr_linux_aarch64.tar.gz", "browser_download_url": "http://example/arm"},
+        ],
+    }
+    asset = client.select_asset(
+        release,
+        PlatformArch.ARM64,
+        PlatformOS.LINUX,
+        preferred_patterns=(r"flaresolverr_linux",),
+    )
+    assert asset["name"] == "flaresolverr_linux_aarch64.tar.gz"
+
+
+def test_filename_has_cpu_arch():
+    assert filename_has_cpu_arch("flaresolverr_linux_x64.tar.gz")
+    assert filename_has_cpu_arch("flaresolverr_linux_aarch64.tar.gz")
+    assert not filename_has_cpu_arch("grimmory.jar")
+    assert not filename_has_cpu_arch("linux-generic.tar.gz")
+
+
+def test_is_arch_neutral_asset():
+    assert is_arch_neutral_asset("grimmory.jar")
+    assert is_arch_neutral_asset("bazarr.zip")
+    assert is_arch_neutral_asset("SABnzbd-4.5.3-src.tar.gz")
+    assert not is_arch_neutral_asset("flaresolverr_linux_x64.tar.gz")
+    assert not is_arch_neutral_asset("linux-generic.tar.gz")
+    assert not is_arch_neutral_asset("nzbget-26.3-amd64.deb")
+
+
+def test_linux_gnu_triple_never_defaults():
+    assert linux_gnu_triple(PlatformArch.X86_64) == "x86_64-unknown-linux-gnu"
+    assert linux_gnu_triple(PlatformArch.ARM64) == "aarch64-unknown-linux-gnu"
+    with pytest.raises(RuntimeError, match="linux-gnu"):
+        linux_gnu_triple(PlatformArch.ARMV7)
+    with pytest.raises(RuntimeError, match="linux-gnu"):
+        linux_gnu_triple(PlatformArch.UNKNOWN)
+
+
+def test_select_asset_rejects_unknown_host_arch():
+    from core.installer.github import GitHubReleaseClient
+
+    client = GitHubReleaseClient()
+    release = {
+        "tag_name": "v1.0.0",
+        "assets": [
+            {"name": "App.linux-core-x64.tar.gz", "browser_download_url": "http://example/x64"},
+        ],
+    }
+    with pytest.raises(ValueError, match="unrecognized"):
+        client.select_asset(release, PlatformArch.UNKNOWN, PlatformOS.LINUX, preferred_patterns=("linux",))
+
+
+def test_select_asset_rejects_linux_tarball_without_arch():
+    from core.installer.github import GitHubReleaseClient
+
+    client = GitHubReleaseClient()
+    release = {
+        "tag_name": "v1.0.0",
+        "assets": [
+            {"name": "recyclarr-linux.tar.gz", "browser_download_url": "http://example/generic"},
+        ],
+    }
+    with pytest.raises(ValueError, match="No compatible binary asset"):
+        client.select_asset(
+            release,
+            PlatformArch.ARM64,
+            PlatformOS.LINUX,
+            preferred_patterns=("linux",),
+        )
+
+
+def test_select_asset_arr_linux_core_matches_host():
+    from core.installer.github import GitHubReleaseClient
+
+    client = GitHubReleaseClient()
+    release = {
+        "tag_name": "v4.0.14.2939",
+        "assets": [
+            {"name": "Sonarr.main.4.0.14.2939.linux-core-x64.tar.gz", "browser_download_url": "u-x64"},
+            {"name": "Sonarr.main.4.0.14.2939.linux-core-arm64.tar.gz", "browser_download_url": "u-arm"},
+            {"name": "Sonarr.main.4.0.14.2939.osx-core-arm64.tar.gz", "browser_download_url": "u-osx"},
+        ],
+    }
+    arm = client.select_asset(release, PlatformArch.ARM64, PlatformOS.LINUX, preferred_patterns=("linux-core", "linux"))
+    x64 = client.select_asset(release, PlatformArch.X86_64, PlatformOS.LINUX, preferred_patterns=("linux-core", "linux"))
+    assert arm["name"] == "Sonarr.main.4.0.14.2939.linux-core-arm64.tar.gz"
+    assert x64["name"] == "Sonarr.main.4.0.14.2939.linux-core-x64.tar.gz"
+
+
+def test_select_asset_qbittorrent_and_nzbget_match_host():
+    from core.installer.github import GitHubReleaseClient
+
+    client = GitHubReleaseClient()
+    qbit = {
+        "tag_name": "release-5.0.0",
+        "assets": [
+            {"name": "x86_64-qbittorrent-nox", "browser_download_url": "u-x64"},
+            {"name": "aarch64-qbittorrent-nox", "browser_download_url": "u-arm"},
+        ],
+    }
+    nzb = {
+        "tag_name": "v26.3",
+        "assets": [
+            {"name": "nzbget-26.3-amd64.deb", "browser_download_url": "u-deb-x64"},
+            {"name": "nzbget-26.3-arm64.deb", "browser_download_url": "u-deb-arm"},
+            {"name": "nzbget-26.3-bin-linux.run", "browser_download_url": "u-run"},
+        ],
+    }
+    assert (
+        client.select_asset(qbit, PlatformArch.ARM64, PlatformOS.LINUX, preferred_patterns=("qbittorrent-nox",))["name"]
+        == "aarch64-qbittorrent-nox"
+    )
+    assert (
+        client.select_asset(qbit, PlatformArch.X86_64, PlatformOS.LINUX, preferred_patterns=("qbittorrent-nox",))["name"]
+        == "x86_64-qbittorrent-nox"
+    )
+    assert (
+        client.select_asset(nzb, PlatformArch.ARM64, PlatformOS.LINUX, preferred_patterns=(r"\.deb$",))["name"]
+        == "nzbget-26.3-arm64.deb"
+    )
+    assert (
+        client.select_asset(nzb, PlatformArch.X86_64, PlatformOS.LINUX, preferred_patterns=(r"\.deb$",))["name"]
+        == "nzbget-26.3-amd64.deb"
+    )
+
+
+def test_catalog_github_apps_never_select_wrong_cpu(tmp_path):
+    from applications.catalog import ApplicationCatalog
+    from applications.manifest import InstallMethod
+    from core.installer.arch import filename_has_cpu_arch, is_arch_neutral_asset, matches_arch_pattern
+    from core.installer.github import GitHubReleaseClient
+    from core.settings import Settings
+
+    test_settings = Settings(
+        AMM_CONFIG_DIR=tmp_path / "config",
+        AMM_DOWNLOAD_DIR=tmp_path / "downloads",
+        AMM_MEDIA_DIR=tmp_path / "media",
+        AMM_CACHE_DIR=tmp_path / "cache",
+        AMM_INSTALL_DIR=tmp_path / "apps",
+        PUID=1000,
+        PGID=1000,
+    )
+    catalog = ApplicationCatalog(app_settings=test_settings)
+    client = GitHubReleaseClient()
+    names = [
+        "App.linux-core-x64.tar.gz",
+        "App.linux-core-arm64.tar.gz",
+        "recyclarr-linux-x64.tar.gz",
+        "recyclarr-linux-arm64.tar.gz",
+        "x86_64-qbittorrent-nox",
+        "aarch64-qbittorrent-nox",
+        "nzbget-26.3-amd64.deb",
+        "nzbget-26.3-arm64.deb",
+        "flaresolverr_linux_x64.tar.gz",
+        "flaresolverr_linux_aarch64.tar.gz",
+        "linux-generic.tar.gz",
+        "bazarr.zip",
+        "grimmory.jar",
+        "SABnzbd-4.5.3-src.tar.gz",
+    ]
+    release = {
+        "tag_name": "v1.0.0",
+        "assets": [{"name": name, "browser_download_url": f"http://example/{name}"} for name in names],
+    }
+    github_apps = [
+        plugin
+        for plugin in catalog.all_plugins()
+        if plugin.manifest.install_method == InstallMethod.GITHUB_RELEASE
+    ]
+    assert github_apps, "expected GitHub-release catalog apps"
+    for plugin in github_apps:
+        for host in (PlatformArch.X86_64, PlatformArch.ARM64):
+            try:
+                asset = client.select_asset(
+                    release,
+                    host,
+                    PlatformOS.LINUX,
+                    preferred_patterns=plugin.preferred_patterns(),
+                )
+            except ValueError:
+                continue
+            selected = asset["name"]
+            if filename_has_cpu_arch(selected):
+                assert matches_arch_pattern(selected, host), (
+                    f"{plugin.name} selected {selected} for {host.value}"
+                )
+            else:
+                assert is_arch_neutral_asset(selected), (
+                    f"{plugin.name} selected non-neutral {selected} for {host.value}"
+                )
+
+
+def test_plex_linux_build_never_defaults():
+    from applications.plex import plex_linux_build
+
+    assert plex_linux_build("x86_64") == "linux-x86_64"
+    assert plex_linux_build("arm64") == "linux-aarch64"
+    with pytest.raises(RuntimeError, match="not published"):
+        plex_linux_build("armv7")
+    with pytest.raises(RuntimeError, match="not published"):
+        plex_linux_build("unknown")
 
 
 def test_score_rejects_nzbget_run_installer():
@@ -342,12 +575,18 @@ def test_bazarr_start_uses_python_not_raw_script(tmp_path: Path):
     venv_python.parent.mkdir(parents=True)
     venv_python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     venv_python.chmod(0o755)
+    main = install_root / "bazarr" / "bazarr" / "main.py"
+    main.parent.mkdir(parents=True, exist_ok=True)
+    main.write_text("print('bazarr')\n", encoding="utf-8")
 
     app = BazarrApp(base_config_dir=tmp_path / "config", base_install_dir=install_root)
     cmd = app.start_command()
     runner = install_root / "bazarr" / "run-bazarr"
     assert runner.is_file()
-    assert str(venv_python) in runner.read_text(encoding="utf-8")
+    runner_text = runner.read_text(encoding="utf-8")
+    assert str(venv_python) in runner_text
+    assert str(main) in runner_text
+    assert "bazarr.py" not in runner_text
     assert cmd[0] == str(runner)
     assert "--no-update" in cmd
     assert str(app.port) in cmd

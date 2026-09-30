@@ -110,12 +110,52 @@ class WizardEngine:
         self._save_state()
         return self.get_status()
 
+    def _catalog(self) -> ApplicationCatalog:
+        return ApplicationCatalog(app_settings=self._settings)
+
+    def _is_visible_app(self, name: str, catalog: ApplicationCatalog | None = None) -> bool:
+        if not name or name == "none":
+            return False
+        cat = catalog or self._catalog()
+        return cat.is_visible(name)
+
+    def _prune_unsupported_selections(self) -> None:
+        selections = self._state.setdefault("selections", {})
+        catalog = self._catalog()
+
+        def keep(name: str) -> bool:
+            return self._is_visible_app(str(name or ""), catalog)
+
+        for key in ("download_clients", "arr_apps", "media_servers", "recommended_preview"):
+            current = selections.get(key)
+            if isinstance(current, list):
+                selections[key] = [item for item in current if keep(item)]
+
+        servers = selections.get("media_servers") or []
+        if servers:
+            selections["media_server"] = servers[0]
+        elif selections.get("media_server") and selections["media_server"] != "none":
+            if not keep(str(selections["media_server"])):
+                selections["media_server"] = "none"
+                selections["media_servers"] = []
+
+        request_system = selections.get("request_system")
+        if request_system and request_system != "none" and not keep(str(request_system)):
+            selections["request_system"] = "none"
+
+        clients = selections.get("download_clients") or []
+        preferred = selections.get("preferred_download_client")
+        if preferred and preferred not in clients:
+            selections["preferred_download_client"] = clients[0] if clients else ""
+
     def _annotate_options(self, options: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        catalog = ApplicationCatalog(app_settings=self._settings)
+        catalog = self._catalog()
         annotated = []
         for option in options:
             item = dict(option)
             name = item.get("id") or ""
+            if catalog.has(name) and not catalog.is_visible(name):
+                continue
             if catalog.has(name):
                 plugin = catalog.get(name)
                 item["help_url"] = help_url_for(
@@ -126,6 +166,7 @@ class WizardEngine:
         return annotated
 
     def get_status(self) -> dict[str, Any]:
+        self._prune_unsupported_selections()
         selections = dict(self._state.get("selections", {}))
         selections.pop("qbittorrent_password", None)
         selections.pop("usenet_password", None)
@@ -138,6 +179,7 @@ class WizardEngine:
 
     def get_step_data(self, step_id: int) -> dict[str, Any]:
         """Provide context & metadata for a given wizard step."""
+        self._prune_unsupported_selections()
         selections = self._state.get("selections", {})
 
         if step_id == 1:
@@ -246,6 +288,10 @@ class WizardEngine:
             }
 
         if step_id == 8:
+            servers = selections.get("media_servers")
+            if not isinstance(servers, list):
+                media = selections.get("media_server")
+                servers = [media] if media and media != "none" else []
             return {
                 "step": 8,
                 "options": self._annotate_options(
@@ -254,8 +300,7 @@ class WizardEngine:
                         {"id": "plex", "name": "Plex Media Server (can share the same library as Jellyfin)"},
                     ]
                 ),
-                "selected": selections.get("media_servers")
-                or ([selections["media_server"]] if selections.get("media_server") else ["jellyfin"]),
+                "selected": [name for name in servers if name and name != "none"],
                 "plex_claim": selections.get("plex_claim", ""),
             }
 
@@ -391,6 +436,8 @@ class WizardEngine:
                 selections.get("recommended_preview", ["bazarr", "flaresolverr"]),
             )
 
+        self._prune_unsupported_selections()
+
         # Advance step
         if step_id < 12:
             self._state["current_step"] = max(self._state.get("current_step", 1), step_id + 1)
@@ -399,6 +446,7 @@ class WizardEngine:
         return self.get_status()
 
     def _target_apps(self) -> list[str]:
+        self._prune_unsupported_selections()
         selections = self._state.get("selections", {})
         catalog = ApplicationCatalog(app_settings=self._settings)
         target: set[str] = set(selections.get("download_clients", []))
@@ -415,7 +463,7 @@ class WizardEngine:
             ordered = catalog.resolve_install_order(list(target))
         except Exception:
             ordered = sorted(target)
-        return [name for name in ordered if catalog.has(name)]
+        return [name for name in ordered if catalog.is_visible(name)]
 
     def apply_initial_settings(self) -> None:
         """Persist path/VPN/credential choices from the wizard into runtime settings."""
@@ -493,6 +541,7 @@ class WizardEngine:
         Persist first-run settings, then report which catalog apps should be installed.
         Catalog POST /install is kicked off by the UI so this request stays short.
         """
+        self._prune_unsupported_selections()
         self.apply_initial_settings()
         catalog = ApplicationCatalog(app_settings=self._settings)
         target_apps = self._target_apps()

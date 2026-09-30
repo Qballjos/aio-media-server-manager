@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Sequence
 
 from applications.manifest import AppManifest, InstallMethod
 from core.installer import AppInstaller, InstallResult
-from core.installer.arch import detect_system_arch
+from core.installer.arch import PlatformArch, detect_system_arch
 from core.settings import settings
 
 if TYPE_CHECKING:
@@ -80,8 +80,23 @@ class BaseApplication(abc.ABC):
         return self.manifest.executable_name
 
     def supports_current_arch(self) -> bool:
-        arch = detect_system_arch().value
-        return arch in self.manifest.supported_architectures
+        arch = detect_system_arch()
+        if arch == PlatformArch.UNKNOWN:
+            return False
+        return arch.value in self.manifest.supported_architectures
+
+    def require_host_arch(self) -> PlatformArch:
+        arch = detect_system_arch()
+        if arch == PlatformArch.UNKNOWN:
+            raise RuntimeError(
+                f"Cannot install '{self.name}': host CPU architecture is unrecognized."
+            )
+        if arch.value not in self.manifest.supported_architectures:
+            raise RuntimeError(
+                f"Cannot install '{self.name}': host architecture {arch.value} is not supported "
+                f"(supported: {', '.join(self.manifest.supported_architectures)})."
+            )
+        return arch
 
     def metadata_path(self) -> Path:
         return self.install_dir / ".amm_installed.json"
@@ -129,6 +144,7 @@ class BaseApplication(abc.ABC):
 
     def install(self) -> InstallResult:
         """Default GitHub-release install. Override for PyPI / custom sources."""
+        self.require_host_arch()
         if self.manifest.install_method == InstallMethod.PYPI:
             installer = AppInstaller()
             result = installer.install_from_pypi(

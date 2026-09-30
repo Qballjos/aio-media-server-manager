@@ -27,7 +27,14 @@ from typing import Callable, Sequence
 
 import requests
 
-from core.installer.arch import PlatformArch, PlatformOS, detect_system_arch, detect_system_os
+from core.installer.arch import (
+    PlatformArch,
+    PlatformOS,
+    detect_system_arch,
+    detect_system_os,
+    filename_has_cpu_arch,
+    score_asset_match,
+)
 from core.installer.extractor import ArchiveExtractor
 from core.installer.github import GitHubReleaseClient
 from core.settings import Settings, settings
@@ -83,6 +90,10 @@ class AppInstaller:
         """
         arch = detect_system_arch()
         sys_os = detect_system_os()
+        if arch == PlatformArch.UNKNOWN:
+            raise RuntimeError(
+                f"Cannot install '{app_name}': host CPU architecture is unrecognized."
+            )
 
         logger.info(
             "Installing '%s' from GitHub repo '%s' (detected arch=%s, os=%s)...",
@@ -108,6 +119,11 @@ class AppInstaller:
             preferred_patterns=preferred_patterns,
         )
         asset_name = asset["name"]
+        if filename_has_cpu_arch(asset_name) and score_asset_match(asset_name, arch, sys_os) < 0:
+            raise ValueError(
+                f"Refusing to install '{asset_name}' for '{app_name}': "
+                f"it does not match host arch={arch.value} os={sys_os.value}."
+            )
         download_url = asset["browser_download_url"]
 
         # 3. Discover checksum if available
@@ -197,7 +213,18 @@ class AppInstaller:
         """
         Download and install an application from an arbitrary download URL.
         """
+        arch = detect_system_arch()
+        sys_os = detect_system_os()
+        if arch == PlatformArch.UNKNOWN:
+            raise RuntimeError(
+                f"Cannot install '{app_name}': host CPU architecture is unrecognized."
+            )
         filename = url.split("?")[0].rstrip("/").split("/")[-1]
+        if filename_has_cpu_arch(filename) and score_asset_match(filename, arch, sys_os) < 0:
+            raise ValueError(
+                f"Refusing to install '{filename}' for '{app_name}': "
+                f"it does not match host arch={arch.value} os={sys_os.value}."
+            )
         cache_dir = self.settings.cache_dir / "downloads"
         cache_dir.mkdir(parents=True, exist_ok=True)
         archive_path = cache_dir / filename

@@ -1,13 +1,13 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
+import { apiError, apiRequest, readJson } from './api.js'
+import { startGuardedInterval } from './pageVisible.js'
+import { readHomepageWidgetDebug } from './homepageDebug.js'
 
-const props = defineProps({
-  apiRequest: { type: Function, required: true },
-})
 const emit = defineEmits(['manage'])
-
-const DEBUG_KEY = 'amm-homepage-widget-debug'
+const route = useRoute()
 const emptySnapshot = () => ({
   apps: [],
   calendar: [],
@@ -45,20 +45,16 @@ function notesFor(widget) {
   return widgetNotes.value.filter((item) => item.widget === widget)
 }
 
-function toggleWidgetDebug() {
-  widgetDebug.value = !widgetDebug.value
-  try {
-    localStorage.setItem(DEBUG_KEY, widgetDebug.value ? '1' : '0')
-  } catch (_) {
-    /* ignore */
-  }
+function debugFlagFromRoute() {
+  const raw = route.query.debug
+  return raw === '1' || raw === 'true'
 }
 
 async function loadSnapshot() {
   try {
-    const res = await props.apiRequest('/api/homepage')
+    const res = await apiRequest('/api/homepage')
     if (res.ok) {
-      const data = await res.json()
+      const data = await readJson(res)
       snapshot.value = {
         ...emptySnapshot(),
         ...data,
@@ -90,9 +86,9 @@ async function runSearch() {
   }
   searching.value = true
   try {
-    const res = await props.apiRequest(`/api/homepage/search?q=${encodeURIComponent(q)}`)
+    const res = await apiRequest(`/api/homepage/search?q=${encodeURIComponent(q)}`)
     if (res.ok) {
-      const data = await res.json()
+      const data = await readJson(res)
       results.value = data.results || []
       searchSeerr.value = !!data.seerr
       searchError.value = data.error || ''
@@ -133,7 +129,7 @@ async function requestTitle(item) {
   requestBusy.value = key
   notice.value = ''
   try {
-    const res = await props.apiRequest('/api/homepage/request', {
+    const res = await apiRequest('/api/homepage/request', {
       method: 'POST',
       body: JSON.stringify({
         mediaType: item.mediaType,
@@ -141,13 +137,13 @@ async function requestTitle(item) {
         seasons: item.mediaType === 'tv' ? 'all' : undefined,
       }),
     })
-    const data = await res.json().catch(() => ({}))
+    const data = await readJson(res)
     if (res.ok && data.ok !== false) {
       notice.value = data.detail || 'Request submitted.'
       item.status = 'requested'
       item.can_request = false
     } else {
-      notice.value = data.detail || 'Request failed.'
+      notice.value = apiError(data, 'Request failed.')
     }
   } catch (err) {
     notice.value = err.message || 'Request failed.'
@@ -232,15 +228,25 @@ const calendarWeeks = computed(() => {
 onMounted(() => {
   try {
     const params = new URLSearchParams(window.location.search)
-    widgetDebug.value = params.get('debug') === '1' || localStorage.getItem(DEBUG_KEY) === '1'
+    widgetDebug.value =
+      debugFlagFromRoute() || params.get('debug') === '1' || readHomepageWidgetDebug()
   } catch (_) {
-    widgetDebug.value = false
+    widgetDebug.value = debugFlagFromRoute() || readHomepageWidgetDebug()
   }
   loadSnapshot()
-  poll = setInterval(loadSnapshot, 15000)
+  poll = startGuardedInterval(loadSnapshot, 15000)
 })
+watch(
+  () => route.query.debug,
+  (value) => {
+    if (value === '1' || value === 'true') widgetDebug.value = true
+    if (value === undefined && route.name === 'home') {
+      widgetDebug.value = readHomepageWidgetDebug()
+    }
+  }
+)
 onUnmounted(() => {
-  if (poll) clearInterval(poll)
+  if (poll) poll()
   clearTimeout(searchTimer)
 })
 </script>
@@ -249,23 +255,12 @@ onUnmounted(() => {
   <section class="home-shell">
     <div class="home-hero glass-card">
       <div>
-        <p class="home-kicker">Household</p>
+        <p class="home-kicker">Home Dashboard</p>
         <h2>Watch and request</h2>
         <p class="home-lead">
           Open installed apps and see what’s airing, downloading, or newly added. Process
           controls stay on Catalog.
         </p>
-      </div>
-      <div class="home-hero-actions">
-        <button
-          type="button"
-          class="ui-btn ui-btn-ghost"
-          :class="{ 'is-on': widgetDebug }"
-          @click="toggleWidgetDebug"
-        >
-          {{ widgetDebug ? 'Hide widget debug' : 'Widget debug' }}
-        </button>
-        <button type="button" class="ui-btn ui-btn-ghost" @click="emit('manage')">Open Catalog</button>
       </div>
     </div>
 
@@ -426,14 +421,14 @@ onUnmounted(() => {
       </div>
       <p v-else class="home-muted">
         Calendar, downloads, and recently added appear after Sonarr, Radarr, download clients, Jellyfin, or Plex are running.
-        Turn on Widget debug to see why a source is skipped or failing.
+        Turn on Widget debug in Settings → Debug to see why a source is skipped or failing.
       </p>
     </template>
     <article v-if="!loading && widgetDebug" class="home-widget glass-card home-debug-panel">
       <h3>Widget debug</h3>
       <p class="home-muted">
-        Per-source status for this homepage. API keys are never shown. Add
-        <code>?debug=1</code> to the URL to keep this on.
+        Per-source status for this homepage. API keys are never shown. Toggle this under
+        Settings → Debug, or add <code>?debug=1</code> to the URL.
       </p>
       <ul v-if="widgetNotes.length" class="home-debug">
         <li v-for="(note, idx) in widgetNotes" :key="idx">
@@ -455,21 +450,7 @@ onUnmounted(() => {
   min-width: 0;
 }
 .home-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
   padding: 1.25rem 1.4rem;
-}
-.home-hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-.home-hero-actions .is-on {
-  border-color: var(--color-info);
-  color: var(--color-info);
 }
 .home-kicker {
   font-size: 0.72rem;
@@ -796,11 +777,6 @@ onUnmounted(() => {
 }
 .home-debug-state[data-state='empty'] {
   color: var(--color-warning, #e6b84d);
-}
-@media (max-width: 720px) {
-  .home-hero {
-    flex-direction: column;
-  }
 }
 @media (max-width: 800px) {
   .cal-range-month {

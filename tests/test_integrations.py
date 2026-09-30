@@ -59,6 +59,14 @@ def test_credentials_discovery(tmp_path: Path):
     )
     assert get_application_api_key("seerr", app_config_dir=seerr_dir) == "seerr-api-key-abcdefghijklmnopqrstuvwxyz"
 
+    baz_dir = tmp_path / "bazarr"
+    (baz_dir / "config").mkdir(parents=True)
+    (baz_dir / "config" / "config.yaml").write_text(
+        "auth:\n  apikey: abcdef0123456789abcdef0123456789\n  username: amm\nsonarr:\n  apikey: ''\n",
+        encoding="utf-8",
+    )
+    assert get_application_api_key("bazarr", app_config_dir=baz_dir) == "abcdef0123456789abcdef0123456789"
+
     set_application_api_key("jellyfin", "jf-user-supplied-key-abcdefghijklmnopqrstuvwxyz")
     assert get_application_api_key("jellyfin", app_config_dir=tmp_path / "jellyfin-empty") == (
         "jf-user-supplied-key-abcdefghijklmnopqrstuvwxyz"
@@ -566,18 +574,64 @@ def test_nzbget_client(mock_post):
 
 
 @patch("requests.post")
-def test_bazarr_client(mock_post):
+def test_bazarr_client(mock_post, tmp_path: Path):
     mock_resp = MagicMock()
-    mock_resp.status_code = 201
+    mock_resp.status_code = 204
+    mock_resp.text = ""
     mock_post.return_value = mock_resp
     client = BazarrClient(api_key="baz")
-    assert client.pair_sonarr("http://127.0.0.1:8989", "sonarr") is True
-    assert client.pair_radarr("http://127.0.0.1:7878", "radarr") is True
+    assert client.pair_sonarr("http://127.0.0.1:8989", "sonarr-key", tmp_path) is True
+    assert client.pair_radarr("http://10.0.0.5:7878", "radarr-key", tmp_path) is True
+    first = mock_post.call_args_list[0]
+    assert first.kwargs["data"]["settings-sonarr-apikey"] == "sonarr-key"
+    assert first.kwargs["data"]["settings-general-use_sonarr"] == "true"
+    yaml_text = (tmp_path / "config" / "config.yaml").read_text(encoding="utf-8")
+    assert "use_sonarr: true" in yaml_text
+    assert "use_radarr: true" in yaml_text
+    assert "apikey: sonarr-key" in yaml_text
+    assert "apikey: radarr-key" in yaml_text
+    assert "ip: 10.0.0.5" in yaml_text
+
+
+@patch("core.integrations.bazarr.BazarrClient._reload")
+@patch("requests.post")
+def test_bazarr_pair_libraries_does_not_restart(mock_post, mock_reload, tmp_path: Path):
+    mock_post.return_value = MagicMock(status_code=500, text="nope")
+    client = BazarrClient(api_key="baz")
+    assert client.pair_libraries(
+        sonarr_url="http://127.0.0.1:8989",
+        sonarr_key="sonarr-key",
+        radarr_url="http://127.0.0.1:7878",
+        radarr_key="radarr-key",
+        config_dir=tmp_path,
+    ) is True
+    mock_reload.assert_not_called()
+
+
+def test_patch_bazarr_arr_yaml_enables_existing_blocks(tmp_path: Path):
+    from core.integrations.bazarr import patch_bazarr_arr_yaml
+
+    config = tmp_path / "config" / "config.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        "general:\n  use_sonarr: false\n  use_radarr: false\n"
+        "sonarr:\n  ip: 127.0.0.1\n  port: 8989\n  apikey: ''\n"
+        "radarr:\n  ip: 127.0.0.1\n  port: 7878\n  apikey: ''\n",
+        encoding="utf-8",
+    )
+    assert patch_bazarr_arr_yaml(tmp_path, "sonarr", "127.0.0.1", 8989, "s-key") is True
+    assert patch_bazarr_arr_yaml(tmp_path, "radarr", "127.0.0.1", 7878, "r-key") is True
+    text = config.read_text(encoding="utf-8")
+    assert "use_sonarr: true" in text
+    assert "use_radarr: true" in text
+    assert "apikey: s-key" in text
+    assert "apikey: r-key" in text
+    assert "use_sonarr: false" not in text
 
 
 @patch("requests.post")
 def test_bazarr_set_ui_auth_sends_plaintext_and_hashes_yaml(mock_post, tmp_path: Path):
-    from core.integrations.local_auth import sha256_hex
+    from core.integrations.local_auth import bazarr_password_hash, sha256_hex
 
     mock_post.return_value = MagicMock(status_code=201)
     client = BazarrClient(api_key="baz")
@@ -587,7 +641,17 @@ def test_bazarr_set_ui_auth_sends_plaintext_and_hashes_yaml(mock_post, tmp_path:
     assert payload["auth"]["password"] == "SharedPass123!"
     yaml_text = (tmp_path / "config" / "config.yaml").read_text(encoding="utf-8")
     assert "type: form" in yaml_text
-    assert sha256_hex("SharedPass123!") in yaml_text
+    assert bazarr_password_hash("SharedPass123!") in yaml_text
+    assert sha256_hex("SharedPass123!") not in yaml_text
+
+
+@patch("core.integrations.local_auth.restart_bazarr_if_running")
+@patch("requests.post")
+def test_bazarr_set_ui_auth_skips_restart_when_api_ok(mock_post, mock_restart, tmp_path: Path):
+    mock_post.return_value = MagicMock(status_code=201)
+    client = BazarrClient(api_key="baz")
+    assert client.set_ui_auth("amm", "SharedPass123!", tmp_path) is True
+    mock_restart.assert_not_called()
 
 
 def test_optimization_hooks(tmp_path: Path):
@@ -601,15 +665,17 @@ def test_optimization_hooks(tmp_path: Path):
     assert rec.is_file()
     rec_text = rec.read_text(encoding="utf-8")
     assert "base_url: http://127.0.0.1:8989" in rec_text
-    assert "web-1080p:" in rec_text
-    assert "hd-bluray-web:" in rec_text
-    assert "sonarr-anime-remux-1080p:" in rec_text
-    assert "web-2160p:" not in rec_text
+    assert rec_text.count("base_url: http://127.0.0.1:8989") == 1
+    assert rec_text.count("base_url: http://127.0.0.1:7878") == 1
+    assert "  tv:" in rec_text
+    assert "  movies:" in rec_text
+    assert "  web-1080p:" not in rec_text
+    assert "d1498e7d189fbe6c7110ceaabb7473e6" not in rec_text
     assert "trash_id: 72dae194fc92bf828f32cde7744e51a1" in rec_text
     assert "trash_id: d1d67249d3890e49bc12e275d989a7e9" in rec_text
     assert "reset_unmatched_scores" in rec_text
     assert "custom_format_groups:" not in rec_text
-    assert "plex-tv" in rec_text
+    assert "plex-imdb" in rec_text
     pro = write_profilarr_config(
         tmp_path / "profilarr",
         sonarr_url="http://127.0.0.1:8989",

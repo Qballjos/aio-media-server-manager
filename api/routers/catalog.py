@@ -6,6 +6,7 @@ Lists available applications, port allocations, dependencies, and triggers insta
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -88,6 +89,12 @@ async def get_application_details(name: str, request: Request) -> dict[str, Any]
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
+    if not plugin.supports_current_arch():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{name}' is not available for this host architecture.",
+        )
+
     return plugin.catalog_entry()
 
 
@@ -113,6 +120,16 @@ async def install_application(
             "version": plugin.installed_metadata().get("version"),
         }
 
+    if not plugin.supports_current_arch():
+        arch = detect_system_arch().value
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Application '{name}' has no build for host architecture '{arch}'. "
+                "Installs never fall back to another CPU architecture."
+            ),
+        )
+
     from core.diagnostics import diagnostics
     from core.maintenance import begin_install, end_install
 
@@ -120,7 +137,7 @@ async def install_application(
         begin_install()
         try:
             logger.info("Starting background install for '%s'...", name)
-            plugin.install()
+            await asyncio.to_thread(plugin.install)
             logger.info("Background install for '%s' completed successfully.", name)
             try:
                 await finalize_application_install(plugin)

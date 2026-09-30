@@ -147,6 +147,7 @@ class JellyfinApp(BaseApplication):
         return cmd
 
     def install(self) -> InstallResult:
+        self.require_host_arch()
         installer = AppInstaller()
         repo_arch = jellyfin_repo_arch()
         listing_url = f"{JELLYFIN_LINUX_REPO}/latest-stable/{repo_arch}/"

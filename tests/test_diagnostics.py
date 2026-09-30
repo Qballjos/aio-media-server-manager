@@ -25,7 +25,7 @@ def test_catalog_counts_available_vs_installed(tmp_path: Path):
         )
     )
     counts = catalog.counts()
-    assert counts["catalog"] == len(catalog.names())
+    assert counts["catalog"] == len(catalog.entries())
     assert counts["installed"] == 0
     assert counts["available"] == counts["catalog"]
     plugin = catalog.get("sonarr")

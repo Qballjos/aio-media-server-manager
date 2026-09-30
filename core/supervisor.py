@@ -5,7 +5,6 @@ Manages the lifecycle of named child processes:
   - Start   : asyncio.create_subprocess_exec, stdout/stderr routing
   - Stop    : SIGTERM → wait → SIGKILL (timeout)
   - Restart : stop + start with the same command/env
-  - Zombie reaping : SIGCHLD handler calling os.waitpid(-1, WNOHANG)
   - Auto-restart   : configurable restart policy with exponential backoff
   - Shutdown       : SIGTERM/SIGINT handler for graceful teardown
 
@@ -25,6 +24,7 @@ import logging
 import os
 import signal
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -129,18 +129,16 @@ class ProcessSupervisor:
         self._start_order: list[str] = []  # Ordered list for reverse-shutdown
         self._subscribers: list[tuple[asyncio.Queue, str | None]] = []
 
-        # Register OS-level signal handlers (if running in main thread)
         try:
             loop = asyncio.get_event_loop()
             for sig in (signal.SIGTERM, signal.SIGINT):
                 loop.add_signal_handler(sig, lambda s=sig: asyncio.ensure_future(self._shutdown(s)))
-            # SIGCHLD: reap zombie children
-            signal.signal(signal.SIGCHLD, self._sigchld_handler)
         except (ValueError, RuntimeError, NotImplementedError):
             logger.debug("Signal handlers could not be installed (not running in main thread).")
 
         # Background auto-restart task
         self._restart_task: asyncio.Task | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -170,7 +168,7 @@ class ProcessSupervisor:
         log_dir: Path | None = None,
     ) -> None:
         """Start a named process.  Raises RuntimeError if already running."""
-        async with self._lock:
+        async with self._locked():
             entry = self._entries.get(name)
             if entry and entry.state == ProcessState.RUNNING:
                 raise RuntimeError(f"Process '{name}' is already running.")
@@ -188,6 +186,11 @@ class ProcessSupervisor:
                 self._entries[name] = entry
             else:
                 entry.spec = spec
+            if entry.state == ProcessState.CRASH_LOOP:
+                entry.crash_timestamps.clear()
+                entry.restart_attempts = 0
+                entry.state = ProcessState.STOPPED
+            reclaim_leftover_processes(spec.cmd)
 
             await self._do_start(entry)
             self._loop = asyncio.get_running_loop()
@@ -201,20 +204,28 @@ class ProcessSupervisor:
 
     async def stop(self, name: str, timeout: float = _STOP_TIMEOUT) -> None:
         """Gracefully stop a named process (SIGTERM then SIGKILL)."""
-        async with self._lock:
+        async with self._locked():
             entry = self._entries.get(name)
-            if entry is None or entry.state == ProcessState.STOPPED:
+            if entry is None or entry.state in (ProcessState.STOPPED, ProcessState.STOPPING):
                 logger.debug("stop(%s): already stopped", name)
+                if entry is not None:
+                    entry.state = ProcessState.STOPPED
+                    entry.process = None
+                    reclaim_leftover_processes(entry.spec.cmd)
                 return
             await self._do_stop(entry, timeout=timeout)
+            reclaim_leftover_processes(entry.spec.cmd if entry.spec else [])
 
     async def restart(self, name: str) -> None:
         """Stop then start a named process with the same spec."""
-        async with self._lock:
+        async with self._locked():
             entry = self._entries.get(name)
             if entry is None:
                 raise KeyError(f"Unknown process: {name!r}")
             await self._do_stop(entry)
+            reclaim_leftover_processes(entry.spec.cmd)
+            entry.crash_timestamps.clear()
+            entry.restart_attempts = 0
             await self._do_start(entry)
 
     def status(self, name: str) -> ProcessState:
@@ -269,6 +280,11 @@ class ProcessSupervisor:
             if entry.state in (ProcessState.CRASH_LOOP, ProcessState.FAILED):
                 entry.state = ProcessState.STOPPED
 
+    def forget(self, name: str) -> None:
+        """Drop a managed process after uninstall so status is not leftover."""
+        self._entries.pop(name, None)
+        self._start_order = [item for item in self._start_order if item != name]
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -291,6 +307,7 @@ class ProcessSupervisor:
                 env=process_env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,
             )
         except FileNotFoundError as exc:
             logger.error("Cannot start '%s': executable not found — %s", spec.name, exc)
@@ -321,38 +338,88 @@ class ProcessSupervisor:
         logger.info("Process '%s' started (PID %d)", spec.name, proc.pid)
 
     async def _do_stop(self, entry: ProcessEntry, timeout: float = _STOP_TIMEOUT) -> None:
-        """Low-level stop (must be called with self._lock held)."""
-        if entry.process is None or entry.state == ProcessState.STOPPED:
+        """Low-level stop (must be called with self._lock held). Never hangs forever."""
+        proc = entry.process
+        if proc is None or entry.state == ProcessState.STOPPED:
+            entry.state = ProcessState.STOPPED
+            entry.process = None
             return
 
         entry.state = ProcessState.STOPPING
-        proc = entry.process
         name = entry.spec.name
-        logger.info("Stopping process '%s' (PID %d)…", name, proc.pid)
+        pid = proc.pid
+        logger.info("Stopping process '%s' (PID %s)…", name, pid)
 
         try:
-            proc.send_signal(signal.SIGTERM)
-        except ProcessLookupError:
-            pass  # Already gone
+            if not _pid_alive(pid) and proc.returncode is not None:
+                entry.exit_code = proc.returncode
+                logger.info("Process '%s' was already exited (code %s).", name, entry.exit_code)
+                return
 
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.warning(
-                "Process '%s' did not exit within %.0fs — sending SIGKILL.", name, timeout
-            )
+            _signal_tree(pid, signal.SIGTERM)
             try:
-                proc.kill()
-            except ProcessLookupError:
+                proc.send_signal(signal.SIGTERM)
+            except (ProcessLookupError, OSError):
                 pass
-            await proc.wait()
 
-        entry.exit_code = proc.returncode
-        entry.state = ProcessState.STOPPED
-        entry.process = None
-        logger.info(
-            "Process '%s' stopped (exit code %s).", name, entry.exit_code
-        )
+            try:
+                await _await_proc_exit(proc, timeout)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Process '%s' did not exit within %.0fs — sending SIGKILL.", name, timeout
+                )
+                _signal_tree(pid, signal.SIGKILL)
+                try:
+                    proc.kill()
+                except (ProcessLookupError, OSError):
+                    pass
+                try:
+                    await _await_proc_exit(proc, 2.0)
+                except (asyncio.TimeoutError, RuntimeError, ProcessLookupError):
+                    logger.warning(
+                        "Process '%s' PID %s still did not report exit after SIGKILL.",
+                        name,
+                        pid,
+                    )
+                    _signal_tree(pid, signal.SIGKILL)
+                    reclaim_leftover_processes(entry.spec.cmd if entry.spec else [])
+                    kill_deadline = time.monotonic() + 5.0
+                    while _pid_alive(pid) and time.monotonic() < kill_deadline:
+                        await asyncio.sleep(0.1)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Error stopping '%s': %s", name, exc)
+            _signal_tree(pid, signal.SIGKILL)
+        finally:
+            entry.exit_code = proc.returncode
+            entry.state = ProcessState.STOPPED
+            entry.process = None
+            logger.info("Process '%s' stopped (exit code %s).", name, entry.exit_code)
+
+    @asynccontextmanager
+    async def _locked(self):
+        """Acquire the supervisor lock, replacing it if it is bound to a closed loop."""
+        lock = self._lock
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        stored = self._loop
+        if stored is not None and loop is not None and stored is not loop and stored.is_closed():
+            lock = asyncio.Lock()
+            self._lock = lock
+            self._loop = loop
+        try:
+            await lock.acquire()
+        except RuntimeError:
+            lock = asyncio.Lock()
+            self._lock = lock
+            if loop is not None:
+                self._loop = loop
+            await lock.acquire()
+        try:
+            yield
+        finally:
+            lock.release()
 
     async def _drain_stream(
         self,
@@ -412,30 +479,37 @@ class ProcessSupervisor:
         proc = entry.process
         if proc is None:
             return
-        await proc.wait()
+        try:
+            await proc.wait()
+        except (RuntimeError, ProcessLookupError) as exc:
+            logger.debug("watch_exit wait failed for %s: %s", entry.spec.name, exc)
+            return
+        if entry.process is not proc:
+            return
         entry.exit_code = proc.returncode
-        if entry.state != ProcessState.STOPPING:
-            now = time.monotonic()
-            # Retain crashes in sliding window
-            entry.crash_timestamps = [
-                t for t in entry.crash_timestamps if now - t <= _CRASH_WINDOW_SECONDS
-            ]
-            entry.crash_timestamps.append(now)
-            if len(entry.crash_timestamps) >= _CRASH_THRESHOLD:
-                entry.state = ProcessState.CRASH_LOOP
-                logger.error(
-                    "Process '%s' entered CRASH_LOOP: %d crashes in last %ds. Auto-restart halted.",
-                    entry.spec.name,
-                    len(entry.crash_timestamps),
-                    int(_CRASH_WINDOW_SECONDS),
-                )
-            else:
-                entry.state = ProcessState.FAILED
-                logger.warning(
-                    "Process '%s' exited unexpectedly (exit code %s).",
-                    entry.spec.name,
-                    entry.exit_code,
-                )
+        if entry.state in (ProcessState.STOPPING, ProcessState.STOPPED):
+            return
+        now = time.monotonic()
+        # Retain crashes in sliding window
+        entry.crash_timestamps = [
+            t for t in entry.crash_timestamps if now - t <= _CRASH_WINDOW_SECONDS
+        ]
+        entry.crash_timestamps.append(now)
+        if len(entry.crash_timestamps) >= _CRASH_THRESHOLD:
+            entry.state = ProcessState.CRASH_LOOP
+            logger.error(
+                "Process '%s' entered CRASH_LOOP: %d crashes in last %ds. Auto-restart halted.",
+                entry.spec.name,
+                len(entry.crash_timestamps),
+                int(_CRASH_WINDOW_SECONDS),
+            )
+        else:
+            entry.state = ProcessState.FAILED
+            logger.warning(
+                "Process '%s' exited unexpectedly (exit code %s).",
+                entry.spec.name,
+                entry.exit_code,
+            )
         # Schedule a restart evaluation (handled by _restart_watcher)
         entry.next_restart_at = time.monotonic()  # Evaluate immediately
 
@@ -448,7 +522,7 @@ class ProcessSupervisor:
             while not self._shutting_down:
                 await asyncio.sleep(1.0)
                 now = time.monotonic()
-                async with self._lock:
+                async with self._locked():
                     for entry in list(self._entries.values()):
                         if entry.state != ProcessState.FAILED:
                             continue
@@ -504,25 +578,110 @@ class ProcessSupervisor:
         # Give the event loop a chance to clean up before the process exits
         asyncio.get_event_loop().stop()
 
-    # ------------------------------------------------------------------
-    # SIGCHLD — zombie reaping
-    # ------------------------------------------------------------------
 
-    @staticmethod
-    def _sigchld_handler(_signum: int, _frame: object) -> None:
-        """
-        Reap any exited child processes immediately to avoid zombies.
+def _pid_alive(pid: int | None) -> bool:
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
-        Called in the main thread's signal context; must be fast and
-        non-blocking.  We loop with WNOHANG until no more children are
-        available to reap.
-        """
+
+def _signal_tree(pid: int | None, sig: int) -> None:
+    if not pid:
+        return
+    try:
+        os.killpg(pid, sig)
+        return
+    except OSError:
+        pass
+    try:
+        os.kill(pid, sig)
+    except OSError:
+        pass
+
+
+def reclaim_leftover_processes(cmd: Sequence[str] | None) -> int:
+    """Kill leftover children (Bazarr's launcher, etc.) that still match this app command."""
+    token = _reclaim_token(cmd)
+    if not token:
+        return 0
+    try:
+        import psutil
+    except ImportError:
+        return 0
+
+    killed = 0
+    mine = {os.getpid(), os.getppid()}
+    try:
+        processes = list(psutil.process_iter(["pid", "cmdline"]))
+    except (psutil.Error, PermissionError, OSError):
+        return 0
+    for proc in processes:
+        pid = proc.info.get("pid")
+        if not pid or pid in mine:
+            continue
+        cmdline = proc.info.get("cmdline") or []
+        if not _cmdline_belongs_to_app(cmdline, token):
+            continue
         try:
-            while True:
-                pid, _status = os.waitpid(-1, os.WNOHANG)
-                if pid == 0:
-                    break
-        except ChildProcessError:
-            pass  # No children — expected
-        except OSError:
-            pass
+            logger.warning("Killing leftover process PID %s for %s", pid, token)
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except psutil.TimeoutExpired:
+                proc.kill()
+            killed += 1
+        except (psutil.Error, OSError):
+            continue
+    return killed
+
+
+def _reclaim_token(cmd: Sequence[str] | None) -> str:
+    if not cmd:
+        return ""
+    try:
+        path = Path(cmd[0]).resolve()
+    except OSError:
+        path = Path(cmd[0])
+    parent = path.parent
+    if parent.name in {"bin", "Scripts"} and parent.parent.name == "venv":
+        return str(parent.parent.parent)
+    if parent.name in {"bin", "sbin", "Scripts"}:
+        return ""
+    return str(parent)
+
+
+def _cmdline_belongs_to_app(cmdline: Sequence[str], token: str) -> bool:
+    marker = token.rstrip("/") + "/"
+    joined = " ".join(cmdline)
+    return marker in joined or joined.endswith(token.rstrip("/"))
+
+
+async def _await_proc_exit(proc: asyncio.subprocess.Process, timeout: float) -> None:
+    """Wait for an asyncio subprocess without hanging if wait() is broken."""
+    pid = proc.pid
+    deadline = time.monotonic() + timeout
+
+    def _exited() -> bool:
+        return proc.returncode is not None or not _pid_alive(pid)
+
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=timeout)
+        return
+    except asyncio.TimeoutError:
+        if _exited():
+            return
+        raise
+    except (RuntimeError, ProcessLookupError) as exc:
+        logger.debug("proc.wait() failed: %s", exc)
+
+    while time.monotonic() < deadline:
+        if _exited():
+            return
+        await asyncio.sleep(0.1)
+    if _exited():
+        return
+    raise asyncio.TimeoutError()

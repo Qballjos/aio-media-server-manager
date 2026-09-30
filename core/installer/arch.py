@@ -126,6 +126,75 @@ def matches_arch_pattern(filename: str, arch: PlatformArch) -> bool:
     return False
 
 
+def filename_has_cpu_arch(filename: str) -> bool:
+    """True when the filename names a CPU architecture (x64, arm64, armv7, …)."""
+    for patterns in _ARCH_PATTERNS.values():
+        for pattern in patterns:
+            if pattern.search(filename):
+                return True
+    return False
+
+
+_OS_NATIVE_HINTS = ("linux", "windows", "win32", "win64", "darwin", "macos", "osx")
+
+
+def is_arch_neutral_asset(filename: str) -> bool:
+    """
+    True for artifacts that are not CPU-specific (JARs, Python source zips).
+    Native OS tarballs/debs without a matching arch token are not neutral.
+    """
+    name = filename.lower()
+    if name.endswith((".sha256", ".sha512", ".asc", ".sig", ".md5", ".txt", ".json")):
+        return False
+    if name.endswith(".jar"):
+        return True
+    if "source" in name or "-src." in name or "_src." in name:
+        return True
+    if name.endswith(".whl") and "none-any" in name:
+        return True
+    if name.endswith((".deb", ".rpm", ".exe", ".msi")):
+        return False
+    if filename_has_cpu_arch(filename):
+        return False
+    if any(hint in name for hint in _OS_NATIVE_HINTS):
+        return False
+    return True
+
+
+_LINUX_GNU_TRIPLES: dict[PlatformArch, str] = {
+    PlatformArch.X86_64: "x86_64-unknown-linux-gnu",
+    PlatformArch.ARM64: "aarch64-unknown-linux-gnu",
+}
+
+_HOST_ARCH_FILENAME_TOKENS: dict[PlatformArch, str] = {
+    PlatformArch.X86_64: r"(?:x86_64|amd64|x64)",
+    PlatformArch.ARM64: r"(?:aarch64|arm64)",
+    PlatformArch.ARMV7: r"(?:armv7l?|armhf|arm32)",
+}
+
+
+def linux_gnu_triple(arch: PlatformArch | None = None) -> str:
+    """Return the rustc/deno linux-gnu target for the host CPU. Never defaults."""
+    host = arch or detect_system_arch()
+    triple = _LINUX_GNU_TRIPLES.get(host)
+    if triple is None:
+        raise RuntimeError(
+            f"No linux-gnu binary target is published for architecture {host.value}."
+        )
+    return triple
+
+
+def host_arch_filename_token(arch: PlatformArch | None = None) -> str:
+    """Regex token that matches CPU names used in GitHub asset filenames."""
+    host = arch or detect_system_arch()
+    token = _HOST_ARCH_FILENAME_TOKENS.get(host)
+    if token is None:
+        raise RuntimeError(
+            f"Unrecognized CPU architecture {host.value}; refusing to select a binary."
+        )
+    return token
+
+
 def score_asset_match(
     filename: str,
     arch: PlatformArch,

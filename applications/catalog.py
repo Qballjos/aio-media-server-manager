@@ -108,13 +108,23 @@ class ApplicationCatalog:
     def all_plugins(self) -> list[BaseApplication]:
         return list(self._plugins.values())
 
+    def visible_plugins(self) -> list[BaseApplication]:
+        """Catalog and wizard listings omit apps that have no build for this CPU."""
+        return [plugin for plugin in self._plugins.values() if plugin.supports_current_arch()]
+
+    def is_visible(self, name: str) -> bool:
+        try:
+            return self.get(name).supports_current_arch()
+        except KeyError:
+            return False
+
     def set_port(self, name: str, port: int) -> None:
         plugin = self.get(name)
         plugin.apply_listen_port(port)
 
     def entries(self) -> list[dict]:
         arch = detect_system_arch().value
-        return [plugin.catalog_entry(host_arch=arch) for plugin in self._plugins.values()]
+        return [plugin.catalog_entry(host_arch=arch) for plugin in self.visible_plugins()]
 
     def counts(self, entries: list[dict] | None = None) -> dict[str, int]:
         rows = entries if entries is not None else self.entries()
@@ -128,7 +138,7 @@ class ApplicationCatalog:
 
     def by_tier(self) -> dict[str, list[str]]:
         grouped: dict[str, list[str]] = defaultdict(list)
-        for plugin in self._plugins.values():
+        for plugin in self.visible_plugins():
             grouped[plugin.manifest.tier.value].append(plugin.name)
         return dict(grouped)
 

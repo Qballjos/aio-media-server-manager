@@ -21,7 +21,7 @@ def collect_metrics() -> dict[str, Any]:
         "disk": {"total": 0, "used": 0, "percent": 0},
         "network": {"bytes_sent": 0, "bytes_recv": 0},
         "temperatures": {},
-        "processes": _process_metrics(),
+        "processes": [],
     }
     try:
         vm = psutil.virtual_memory()
@@ -58,6 +58,10 @@ def collect_metrics() -> dict[str, Any]:
         }
     except Exception:
         pass
+    try:
+        payload["processes"] = _process_metrics()
+    except Exception:
+        payload["processes"] = []
     return payload
 
 
@@ -98,7 +102,7 @@ def _cached_proc(pid: int) -> psutil.Process | None:
             _proc_cache[pid] = proc
             proc.cpu_percent(interval=None)
         return proc
-    except (psutil.Error, OSError):
+    except (psutil.Error, OSError, SystemError):
         _proc_cache.pop(pid, None)
         return None
 
@@ -128,6 +132,6 @@ def _tree_usage(pid: int) -> tuple[float | None, int | None, float | None, int, 
             kids = proc.children(recursive=False)
             children += len(kids)
             stack.extend(child.pid for child in kids)
-        except (psutil.Error, OSError):
+        except (psutil.Error, OSError, SystemError):
             _proc_cache.pop(current, None)
     return round(cpu, 1), rss, round(mem_pct, 2), children, seen
