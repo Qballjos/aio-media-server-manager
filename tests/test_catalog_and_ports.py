@@ -158,6 +158,7 @@ def test_dockerfile_chromium_only_on_amd64():
     assert FlaresolverrApp.manifest.supported_architectures == ("x86_64",)
     assert 'if [ "${TARGETARCH:-amd64}" = "amd64" ]' in text
     assert "fonts-liberation chromium xvfb" in text
+    assert "\n        git \\\n" in text or "        git \\" in text
     unconditional = []
     for line in text.splitlines():
         stripped = line.strip()

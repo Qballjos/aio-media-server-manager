@@ -272,6 +272,11 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
         detail = "Sync finished."
     else:
         detail = f"Recyclarr exited {completed.returncode}."
+        if "start process 'git'" in lowered or "file path 'git'" in lowered:
+            detail = (
+                "Recyclarr needs git to clone TRaSH Guides. "
+                "Install git on the host (native) or recreate the container from an image that includes git."
+            )
     result = {
         "ok": ok,
         "detail": detail,

@@ -178,3 +178,27 @@ def test_recyclarr_sync_runs_once(tmp_path: Path, monkeypatch):
     assert env["RECYCLARR_CONFIG_DIR"] == str(plugin.config_dir)
     assert "RECYCLARR_APP_DATA" not in env
     assert (plugin.config_dir / "last-sync.json").is_file()
+
+
+def test_recyclarr_sync_explains_missing_git(tmp_path: Path, monkeypatch):
+    cfg = _settings(tmp_path)
+    catalog = ApplicationCatalog(app_settings=cfg)
+    plugin = catalog.get("recyclarr")
+    plugin.install_dir.mkdir(parents=True, exist_ok=True)
+    (plugin.install_dir / "recyclarr").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr("core.recyclarr.ApplicationCatalog", lambda: catalog)
+    monkeypatch.setattr("core.recyclarr.get_application_api_key", lambda _name: "k")
+    monkeypatch.setattr(auth_manager, "_settings", cfg)
+
+    completed = MagicMock(
+        returncode=1,
+        stdout="",
+        stderr="Failed to start a process with file path 'git'. No such file or directory",
+    )
+    with patch("core.recyclarr.subprocess.run", return_value=completed):
+        client = TestClient(create_app())
+        headers = _auth_headers(client)
+        res = client.post("/api/recyclarr/sync", headers=headers)
+    assert res.status_code == 200
+    assert res.json()["ok"] is False
+    assert "git" in res.json()["detail"].lower()

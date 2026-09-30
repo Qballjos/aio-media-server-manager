@@ -54,8 +54,9 @@ RUN printf '%s\n' \
 #   Seerr: Node 22 (copied from nodebin)
 #   Grimmory: JRE 25 (copied from jre), mariadb-server
 #   Flaresolverr (x86_64 / amd64 image only): chromium, xvfb, fonts-liberation
+#   Recyclarr: git (clones TRaSH Guides on sync)
 #   VPN: iproute2, openvpn, wireguard-tools
-# git is omitted: catalog installs use GitHub zipballs/releases, not git clone.
+# Catalog app installs use GitHub zipballs/releases; Recyclarr still shells out to git.
 # Official `unrar` lives in Debian non-free; unrar-free reports version 0.00 to SABnzbd.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources; \
@@ -71,6 +72,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
+        git \
         ffmpeg \
         iproute2 \
         openvpn \
