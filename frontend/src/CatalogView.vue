@@ -360,7 +360,7 @@ async function installApp(name, displayName) {
     const res = await apiRequest(`/api/catalog/${name}/install`, { method: 'POST' })
     const data = await readJson(res)
     if (res.ok) {
-      showToast(`Installation initiated for ${displayName || name}...`, 'success')
+      showToast(`Installing ${displayName || name}…`, 'success')
       setTimeout(() => props.refreshDashboard(), 3000)
     } else {
       showToast(apiError(data, `Failed to install ${name}`), 'error')
@@ -455,7 +455,7 @@ onUnmounted(() => {
             role="button"
             tabindex="0"
             :aria-pressed="catalogStatusFilters.includes('active')"
-            title="Show only running services"
+            title="Show only running apps"
             @click="filterByActiveServices"
             @keydown.enter.prevent="filterByActiveServices"
             @keydown.space.prevent="filterByActiveServices"
@@ -466,7 +466,7 @@ onUnmounted(() => {
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">ACTIVE SERVICES</div>
+              <div class="stat-label">ACTIVE</div>
               <div class="stat-value font-mono">
                 <span class="text-glow-cyan">{{ activeAppCount }}</span>
                 <span class="stat-sub"> running</span>
@@ -493,7 +493,7 @@ onUnmounted(() => {
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">INSTALLED PLUGINS</div>
+              <div class="stat-label">INSTALLED</div>
               <div class="stat-value font-mono">
                 <span class="text-glow-purple">{{ installedAppCount }}</span>
                 <span class="stat-sub"> of {{ catalogSize }}</span>
@@ -521,7 +521,7 @@ onUnmounted(() => {
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">AVAILABLE TO INSTALL</div>
+              <div class="stat-label">AVAILABLE</div>
               <div class="stat-value font-mono">
                 <span class="text-glow-cyan">{{ availableAppCount }}</span>
                 <span class="stat-sub"> of {{ catalogSize }}</span>
@@ -534,7 +534,7 @@ onUnmounted(() => {
             :class="{ 'is-filter-on': showHealthModal }"
             role="button"
             tabindex="0"
-            title="Open host health graphs"
+            title="Host health"
             @click="openHealthModal"
             @keydown.enter.prevent="openHealthModal"
             @keydown.space.prevent="openHealthModal"
@@ -582,9 +582,9 @@ onUnmounted(() => {
         <!-- Services Section Header -->
         <div class="section-title-row">
           <div>
-            <h2 class="section-title">Core Applications Stack</h2>
+            <h2 class="section-title">Applications</h2>
             <p class="section-subtitle">
-              Supervised media pipeline components running bare-metal inside a unified container.
+              Install, start, and manage apps in this appliance.
               <span v-if="updateStatus.last_check_at || (updateStatus.available || []).length">
                 Last update check {{ formatUpdateWhen(updateStatus.last_check_at) }}
                 · last apply {{ formatUpdateWhen(updateStatus.last_apply_at) }}
@@ -602,7 +602,7 @@ onUnmounted(() => {
               <polyline points="1 20 1 14 7 14"></polyline>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
-            <span>Sync Status</span>
+            <span>Refresh</span>
           </button>
         </div>
 
@@ -741,7 +741,7 @@ onUnmounted(() => {
                       class="help-btn"
                       :title="'Help / wiki for ' + service.displayName"
                     >?</a>
-                    <span class="category-pill">{{ service.category }}</span>
+                    <span class="category-pill">{{ CATEGORY_LABELS[service.category] || service.category }}</span>
                     <span v-if="service.updateAvailable" class="update-pill">Update available</span>
                   </div>
                   <div v-if="service.daemon" class="service-port font-mono">
@@ -751,7 +751,7 @@ onUnmounted(() => {
                       target="_blank"
                       rel="noopener noreferrer"
                       class="port-link"
-                      title="Open WebUI"
+                      title="Open UI"
                     >
                       :{{ service.port }}
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -778,7 +778,7 @@ onUnmounted(() => {
             <div class="service-meta font-mono">
               <span v-if="service.installedVersion">v{{ service.installedVersion }}<template v-if="service.latestVersion"> → {{ service.latestVersion }}</template></span>
               <span v-else-if="service.installed">Installed</span>
-              <span v-else class="text-dim">Not Installed</span>
+              <span v-else class="text-dim">Not installed</span>
 
               <span v-if="service.uptime" class="uptime-text">
                 up {{ formatUptime(service.uptime) }}

@@ -50,7 +50,7 @@ Keep downloads and media as **directories on one dataset**. Two ZFS datasets can
    - `/mnt/tank/apps/aio-media-manager` → `/config`
    - `/mnt/tank/data` → `/data`
    - `/mnt/tank/backups/aio-media-manager` → `/backups`
-5. Environment: `PUID` / `PGID` = the UID/GID you used with `chown`, plus `TZ`, `AMM_DOWNLOAD_DIR=/data/downloads` and `AMM_MEDIA_DIR=/data/media`. Optional `GITHUB_TOKEN` for GitHub rate limits (or Settings → GitHub after first-run).
+5. Environment: `PUID` / `PGID` = the UID/GID you used with `chown`, plus `TZ`, `AMM_DOWNLOAD_DIR=/data/downloads` and `AMM_MEDIA_DIR=/data/media`. Optional `GITHUB_TOKEN` for GitHub rate limits (or Settings → Updates after first-run).
 6. Privileged / `NET_ADMIN` if you enable qBittorrent VPN.
 7. GPU: pass `/dev/dri` (Intel/AMD) or NVIDIA runtime when transcoding.
 

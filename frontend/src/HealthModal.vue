@@ -162,8 +162,8 @@ onUnmounted(() => {
               <span>Applications</span>
               <strong class="font-mono">{{ healthProcesses.length }}</strong>
             </div>
-            <p class="health-chart-meta">CPU and RAM include child processes for each supervised app.</p>
-            <p v-if="!healthProcesses.length" class="health-chart-meta">No supervised processes yet. Start apps from Catalog.</p>
+            <p class="health-chart-meta">CPU and RAM include all processes for each app.</p>
+            <p v-if="!healthProcesses.length" class="health-chart-meta">No running apps yet. Start them from Catalog.</p>
             <div v-else class="health-apps-table-wrap">
               <table class="health-apps-table">
                 <thead>

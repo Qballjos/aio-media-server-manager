@@ -27,8 +27,10 @@ services:
       - "32400:32400"   # Plex
     volumes:
       - /volume1/docker/aio-media-manager/config:/config
-      # Same shared folder (not two separate DSM shares) so *Arr can hardlink.
-      - /volume1/data:/data
+      # User home so File Station → Home shows downloads + media.
+      # Same parent (not two DSM shares) so *Arr can hardlink.
+      # install.sh writes the real home path; replace "admin" if needed.
+      - /volume1/homes/admin/aio-media-manager:/data
       # Config backups. Prefer a different volume or a Hyper Backup target folder.
       - /volume1/docker/aio-media-manager/backups:/backups
     environment:
@@ -42,7 +44,7 @@ services:
       AMM_CLOUDFLARE_TUNNEL_ENABLED: "false"
       AMM_CLOUDFLARE_TUNNEL_TOKEN_FILE: /config/cloudflare/tunnel.token
       AMM_TRUSTED_PROXIES: ""
-      # Optional GitHub token for install/update rate limits (or Settings → GitHub):
+      # Optional GitHub token for install/update rate limits (or Settings → Updates):
       # GITHUB_TOKEN: ""
     cap_add:
       - NET_ADMIN

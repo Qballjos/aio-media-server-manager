@@ -61,7 +61,7 @@ Typical *Arr deployments become a Compose file per application: Sonarr, Radarr, 
 
 **Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr, Profilarr, and NeutArr.
 
-**Home Dashboard.** Launcher plus calendar, downloads, recently added, and Seerr search. Widget diagnostics live under **Settings → Debug** (empty tiles explained; API keys never shown).
+**Home.** Launcher plus calendar, downloads, recently added, and Seerr search. Widget diagnostics live under **Settings → Homepage** (empty tiles explained; API keys never shown).
 
 **Operations.** `config` / `downloads` / `media` with `PUID` / `PGID` and hardlink checks. Optional WireGuard or OpenVPN isolation for qBittorrent, Prowlarr, and Flaresolverr (Usenet stays off the tunnel). Optional VAAPI / QSV / NVIDIA transcoding. Optional Cloudflare Tunnel (`cloudflared` inside this appliance). Configuration backups with verify, per-app restore, and a schedule.
 
@@ -93,7 +93,7 @@ Each catalog card includes a help control that opens that project's official doc
 | Guide | Contents |
 |-------|----------|
 | [Installation](docs/INSTALL.md) | Host folders, ports, platform index |
-| [Usage](docs/USAGE.md) | Wizard, Home Dashboard, catalog, Auto-Wire, Settings |
+| [Usage](docs/USAGE.md) | Wizard, Home, catalog, Auto-Wire, Settings |
 | [Docker](deploy/DOCKER.md) | Primary deployment |
 | [Linux / LXC](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md) | Platform notes |
 | [Cloudflare Tunnel](deploy/CLOUDFLARE.md) | Remote access without inbound ports |

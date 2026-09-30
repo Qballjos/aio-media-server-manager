@@ -82,17 +82,17 @@ Copy [`.env.example`](../.env.example) for a native install. Compose already set
 
 | Variable | Purpose |
 |----------|---------|
-| `PUID` / `PGID` | Child process user (also Settings → Permissions) |
-| `TZ` / `AMM_TIMEZONE` | Clock, logs, scheduled updates (also Settings → General) |
+| `PUID` / `PGID` | Child process user (also Settings → System) |
+| `TZ` / `AMM_TIMEZONE` | Clock, logs, scheduled updates (also Settings → System) |
 | `AMM_LOG_LEVEL` | Root log level |
 | `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Bind paths — change mounts in compose, not the UI |
 | `AMM_API_HOST` / `AMM_API_PORT` | Manager listen address (compose/env only) |
-| `GITHUB_TOKEN` | Optional; also Settings → GitHub (not written back to compose) |
+| `GITHUB_TOKEN` | Optional; also Settings → Updates (not written back to compose) |
 | `AMM_UPDATE_CHECK_SCHEDULE` | `off` / `daily` / `weekly` / `monthly` |
 | `AMM_UPDATE_APPLY_SCHEDULE` | `off` / `same` / `daily` / `weekly` / `monthly` |
 | `AMM_UPDATE_TIME` | `HH:MM` in the host timezone |
-| `AMM_CLOUDFLARE_TUNNEL_*` | Optional tunnel; also Settings → Remote access |
-| `AMM_VPN_*` | Optional VPN for qBittorrent, Prowlarr, and Flaresolverr; also Settings → VPN |
+| `AMM_CLOUDFLARE_TUNNEL_*` | Optional tunnel; also Settings → Network |
+| `AMM_VPN_*` | Optional VPN for qBittorrent, Prowlarr, and Flaresolverr; also Settings → Network |
 
 ## Development clone
 

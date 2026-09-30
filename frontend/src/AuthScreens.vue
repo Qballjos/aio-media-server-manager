@@ -86,7 +86,7 @@ async function handleSetup() {
     applySession(data)
     authForm.value.password = ''
     authForm.value.confirmPassword = ''
-    showToast('Admin setup completed successfully! Welcome to AIO Media Manager.', 'success')
+    showToast('Admin setup completed successfully! Welcome to AIO Media Server Manager.', 'success')
     emit('session', data)
   } catch (err) {
     authError.value = 'Network error during setup: ' + err.message
@@ -153,9 +153,9 @@ onMounted(() => {
               alt="AIO Media Server Manager"
               class="auth-logo"
             />
-            <span class="accent-badge">INITIAL SETUP</span>
-            <h2>Create Administrator</h2>
-            <p>Welcome! Set up the initial administrator account to protect and manage your server.</p>
+            <span class="accent-badge">SETUP</span>
+            <h2>Create administrator</h2>
+            <p>Create the local admin account that protects the dashboard and API.</p>
           </div>
 
           <form @submit.prevent="handleSetup" class="auth-form">
@@ -164,7 +164,7 @@ onMounted(() => {
             </div>
 
             <div class="form-group">
-              <label class="ui-field">Administrator Username
+              <label class="ui-field">Username
               <input
                 v-model="authForm.username"
                 type="text"
@@ -189,7 +189,7 @@ onMounted(() => {
             </div>
 
             <div class="form-group">
-              <label class="ui-field">Admin Password (minimum 8 characters)
+              <label class="ui-field">Password (minimum 8 characters)
               <input
                 v-model="authForm.password"
                 type="password"
@@ -201,7 +201,7 @@ onMounted(() => {
             </div>
 
             <div class="form-group">
-              <label class="ui-field">Confirm Password
+              <label class="ui-field">Confirm password
               <input
                 v-model="authForm.confirmPassword"
                 type="password"
@@ -214,7 +214,7 @@ onMounted(() => {
 
             <button type="submit" :disabled="authLoading" class="ui-btn ui-btn-primary btn-block">
               <span v-if="authLoading" class="spinner"></span>
-              <span v-else>Initialize System & Log In</span>
+              <span v-else>Create account</span>
             </button>
           </form>
         </div>
@@ -231,8 +231,8 @@ onMounted(() => {
               class="auth-logo"
             />
             <span class="accent-badge">SIGN IN</span>
-            <h2>Manager Access</h2>
-            <p>Enter your administrator credentials to manage services and server config.</p>
+            <h2>Sign in</h2>
+            <p>Use the administrator username and password.</p>
           </div>
 
           <form @submit.prevent="handleLogin" class="auth-form">
@@ -267,7 +267,7 @@ onMounted(() => {
 
             <button type="submit" :disabled="authLoading" class="ui-btn ui-btn-primary btn-block">
               <span v-if="authLoading" class="spinner"></span>
-              <span v-else>Authenticate Session</span>
+              <span v-else>Sign in</span>
             </button>
           </form>
         </div>

@@ -37,7 +37,7 @@ git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
 ```
 
-Point the volume paths in `docker-compose.yml` at the folders you created, and set `PUID`/`PGID` to the values from `id`. Set `TZ` to your IANA timezone (or change it later in Settings → General).
+Point the volume paths in `docker-compose.yml` at the folders you created, and set `PUID`/`PGID` to the values from `id`. Set `TZ` to your IANA timezone (or change it later in Settings → System).
 
 ```bash
 docker compose pull
@@ -48,7 +48,7 @@ Open `http://<host>:8080`. Create the administrator (username, **email**, passwo
 
 Upgrading from a compose file without `/backups`: create the host folder, add `- /path/to/backups:/backups` under `volumes:`, and recreate the container. New backups go to `/backups`. Older ones in `/config/backups` stay listed and restorable, and you can delete them once you have fresh backups.
 
-Optional `GITHUB_TOKEN` (or Settings → GitHub) raises GitHub API limits for catalog installs and scheduled update checks. Do not commit the token; the example compose leaves it commented.
+Optional `GITHUB_TOKEN` (or Settings → Updates) raises GitHub API limits for catalog installs and scheduled update checks. Do not commit the token; the example compose leaves it commented.
 
 To rebuild from this checkout instead of GHCR:
 

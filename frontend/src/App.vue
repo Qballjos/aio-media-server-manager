@@ -144,7 +144,7 @@ async function fetchWizardStatus() {
 async function onWizardDone() {
   wizardCompleted.value = true
   await router.replace({ name: 'home' })
-  showToast('Setup wizard finished. Catalog installs may continue in the background.', 'success')
+  showToast('Setup finished. Catalog installs may continue in the background.', 'success')
   await refreshDashboard()
 }
 
@@ -197,13 +197,13 @@ async function runAutomatedWiring() {
     const res = await apiRequest('/api/integrations/run', { method: 'POST' })
     if (res.ok) {
       const data = await readJson(res)
-      showToast(`Auto-wiring completed (${data.steps?.length || 0} tasks executed)`, 'success')
+      showToast(`Auto-Wire finished (${data.steps?.length || 0} tasks)`, 'success')
       await refreshDashboard()
     } else {
-      showToast('Automated wiring failed', 'error')
+      showToast('Auto-Wire failed', 'error')
     }
   } catch (err) {
-    showToast(`Wiring error: ${err}`, 'error')
+    showToast(`Auto-Wire error: ${err}`, 'error')
   } finally {
     wiringRunning.value = false
   }
@@ -244,8 +244,8 @@ onUnmounted(() => {
           />
         </div>
         <div class="brand-titles">
-          <h1 class="brand-name">AIO Media Manager</h1>
-          <span class="brand-tagline">Unified Media Automation Stack</span>
+          <h1 class="brand-name">AIO Media Server Manager</h1>
+          <span class="brand-tagline">One appliance</span>
         </div>
       </div>
 
@@ -254,7 +254,7 @@ onUnmounted(() => {
           <span class="pulse-dot"></span>
           <span class="metric-val font-mono">{{ currentTime }}</span>
         </div>
-        <div v-if="transcodingAvailable" class="metric-pill hide-narrow">
+        <div v-if="transcodingAvailable" class="metric-pill hide-narrow" title="Hardware transcoding available">
           <span class="metric-label">GPU</span>
           <span class="metric-val font-mono">HW</span>
         </div>
@@ -263,7 +263,7 @@ onUnmounted(() => {
           :to="{ name: 'home', query: route.name === 'home' ? route.query : {} }"
           class="metric-pill metric-pill-action"
           :class="{ 'is-active': currentView === 'home' }"
-          title="Home dashboard"
+          title="Home"
         >
           Home
         </RouterLink>
@@ -283,7 +283,7 @@ onUnmounted(() => {
             : { name: 'settings', params: { section: 'account' } }"
           class="metric-pill metric-pill-action"
           :class="{ 'is-active': currentView === 'settings' }"
-          title="Settings and debug share link"
+          title="Appliance settings"
         >
           Settings
         </RouterLink>
@@ -292,7 +292,7 @@ onUnmounted(() => {
           @click="runAutomatedWiring"
           class="metric-pill metric-pill-action"
           :disabled="wiringRunning"
-          title="Trigger automatic integration wiring across applications"
+          title="Wire installed apps to each other"
         >
           <span v-if="wiringRunning" class="spinner spinner-sm"></span>
           <span v-else>⚡ <span class="hide-compact">Auto-Wire</span></span>

@@ -66,10 +66,10 @@ async function loadSnapshot() {
       }
       snapshotError.value = ''
     } else {
-      snapshotError.value = `Homepage API HTTP ${res.status}`
+      snapshotError.value = `Home API HTTP ${res.status}`
     }
   } catch (err) {
-    snapshotError.value = err?.message || 'Homepage snapshot failed'
+    snapshotError.value = err?.message || 'Home snapshot failed'
   } finally {
     loading.value = false
   }
@@ -255,7 +255,7 @@ onUnmounted(() => {
   <section class="home-shell">
     <div class="home-hero glass-card">
       <div>
-        <p class="home-kicker">Home Dashboard</p>
+        <p class="home-kicker">Home</p>
         <h2>Watch and request</h2>
         <p class="home-lead">
           Open installed apps and see what’s airing, downloading, or newly added. Process
@@ -264,12 +264,12 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <p v-if="loading" class="home-muted">Loading homepage…</p>
+    <p v-if="loading" class="home-muted">Loading Home…</p>
     <p v-if="snapshotError" class="home-notice">{{ snapshotError }}</p>
 
     <div v-if="!loading && !snapshot.apps.length" class="home-empty glass-card">
       <h3>Nothing to launch yet</h3>
-      <p>Finish the wizard or install apps from Catalog. This page only lists installed services.</p>
+      <p>Finish setup or install apps from Catalog. This page only lists installed applications.</p>
       <button type="button" class="ui-btn ui-btn-primary" @click="emit('manage')">Go to Catalog</button>
     </div>
 
@@ -293,7 +293,7 @@ onUnmounted(() => {
           />
           <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
           <span class="home-app-name">{{ app.display_name }}</span>
-          <span class="home-app-state">{{ app.running ? 'Open' : 'Stopped' }}</span>
+          <span class="home-app-state">{{ app.running ? 'Open UI' : 'Stopped' }}</span>
         </a>
       </div>
 
@@ -421,14 +421,14 @@ onUnmounted(() => {
       </div>
       <p v-else class="home-muted">
         Calendar, downloads, and recently added appear after Sonarr, Radarr, download clients, Jellyfin, or Plex are running.
-        Turn on Widget debug in Settings → Debug to see why a source is skipped or failing.
+        Turn on Widget debug in Settings → Homepage to see why a source is skipped or failing.
       </p>
     </template>
     <article v-if="!loading && widgetDebug" class="home-widget glass-card home-debug-panel">
       <h3>Widget debug</h3>
       <p class="home-muted">
-        Per-source status for this homepage. API keys are never shown. Toggle this under
-        Settings → Debug, or add <code>?debug=1</code> to the URL.
+        Per-source status for Home. API keys are never shown. Toggle this under
+        Settings → Homepage, or add <code>?debug=1</code> to the URL.
       </p>
       <ul v-if="widgetNotes.length" class="home-debug">
         <li v-for="(note, idx) in widgetNotes" :key="idx">
@@ -436,7 +436,7 @@ onUnmounted(() => {
           <span>{{ note.widget }} / {{ note.source }} — {{ note.detail }}</span>
         </li>
       </ul>
-      <p v-else class="home-muted">No widget sources reported yet. Reload the homepage.</p>
+      <p v-else class="home-muted">No widget sources reported yet. Reload Home.</p>
     </article>
   </section>
 </template>

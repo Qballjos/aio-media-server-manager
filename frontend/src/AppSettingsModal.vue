@@ -308,7 +308,7 @@ watch(
             </label>
             <p class="settings-hint">
               Optional. Saved keys are used for
-              {{ settingsApp.name === 'seerr' ? 'homepage search and requests' : 'Recently added' }}.
+              {{ settingsApp.name === 'seerr' ? 'Home search and requests' : 'Recently added' }}.
               Leave empty to keep the current key.
             </p>
           </div>

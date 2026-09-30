@@ -24,20 +24,20 @@ After sign-in, a 9-step wizard runs until you finish it or choose **Skip for now
 | 8 | Recommended tools (Bazarr on by default; Flaresolverr on x86_64 by default; Recyclarr, Profilarr, NeutArr, Grimmory, Shelfmark optional) |
 | 9 | Review, then save and install |
 
-**Finish** persists settings and queues catalog installs. Wiring (indexers, download clients, libraries, Seerr, Recyclarr sync) runs **after each app is installed and answers its health check**, not during the Finish request. Apps that are not installed or not running are skipped so *Arr is not pointed at a dead downloader. You can run the same wiring later with **Auto-Wire** on Catalog. The wizard and catalog omit applications the host architecture cannot run.
+**Finish** stays on the wizard and shows per-app install progress until each selected catalog install finishes (or fails). **Open Home** leaves the wizard while remaining installs continue in the background. Wiring (indexers, download clients, libraries, Seerr, Recyclarr sync) runs **after each app is installed and answers its health check**, not during the Finish request. Apps that are not installed or not running are skipped so *Arr is not pointed at a dead downloader. You can run the same wiring later with **Auto-Wire** on Catalog. The wizard and catalog omit applications the host architecture cannot run.
 
-**Skip** opens the Home Dashboard without installing anything. You can install applications later from **Catalog**.
+**Skip** opens **Home** without installing anything. You can install applications later from **Catalog**.
 
-## 3. Home Dashboard
+## 3. Home
 
 After the wizard, **Home** is the front page for watching and requesting (`#/home`). It reuses the manager login. There are no start/stop/install controls here.
 
 - **Launcher** lists installed apps that have a WebUI. Recyclarr is omitted (CLI only). Stopped apps still appear dimmed.
 - **Coming up** is a real calendar of Sonarr/Radarr airings: a full month on wide screens, the current week on phones.
 - **Downloading** uses SABnzbd, NZBGet, and/or qBittorrent queues.
-- **Recently added** uses Jellyfin and/or Plex. The manager tries the shared local login first. You can also paste a Jellyfin API key under **Settings → Integrations** (or Catalog → Jellyfin → Settings). Create the key in Jellyfin Dashboard → API Keys.
-- **Search** talks to Seerr when it is running. Each result shows whether it is **Available**, **Partly available**, **Requested**, or **Not in library**, with a **Get it now** button that sends a Seerr request. The manager reads `apiKey` from Seerr’s `settings.json`; if that fails, paste the key from Seerr Settings → General under **Settings → Integrations** (or Catalog → Seerr → Settings). If Seerr is missing or rejects the key, search falls back to Sonarr/Radarr lookup and shows the Seerr error above the results.
-- **Widget debug** in **Settings → Debug** (or `#/home?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
+- **Recently added** uses Jellyfin and/or Plex. The manager tries the shared local login first. You can also paste a Jellyfin API key under **Settings → Homepage** (or Catalog → Jellyfin → Settings). Create the key in Jellyfin Dashboard → API Keys.
+- **Search** talks to Seerr when it is running. Each result shows whether it is **Available**, **Partly available**, **Requested**, or **Not in library**, with a **Get it now** button that sends a Seerr request. The manager reads `apiKey` from Seerr’s `settings.json`; if that fails, paste the key from Seerr Settings → General under **Settings → Homepage** (or Catalog → Seerr → Settings). If Seerr is missing or rejects the key, search falls back to Sonarr/Radarr lookup and shows the Seerr error above the results.
+- **Widget debug** in **Settings → Homepage** (or `#/home?debug=1`) shows why a widget is empty: not installed, stopped, missing API key, HTTP error, timeout, or an empty API result. Keys are never shown.
 
 Empty widgets stay hidden until debug is on. **Catalog** is still the admin dashboard for install, process controls, logs, and Auto-Wire.
 
@@ -51,8 +51,8 @@ The catalog lists up to **17** applications at `#/catalog` (installed vs availab
 - Sort by **popularity** or **A–Z**
 - **Search** by name
 - **?** opens that application's official wiki or documentation
-- **Health** (header) opens host CPU/RAM/disk graphs plus per-application CPU and memory (including child processes)
-- **Download & Install** fetches the upstream binary and starts the process when it is a daemon
+- **Health** opens host CPU/RAM/disk graphs plus per-app CPU and memory
+- **Install** fetches the upstream binary and starts the process when it is a daemon
 - Installed apps: **Start** or **Stop**, **Open UI**, and **More** (Restart, Logs, Settings, Update, Uninstall)
 - **Auto-Wire** (header) re-runs integration after apps are healthy: download clients in Sonarr/Radarr (qBittorrent and SABnzbd when installed), Prowlarr, Seerr, Bazarr, and a Recyclarr `sync` when Recyclarr is installed
 - Catalog **Settings** on a card changes the listen **port** (persisted; running apps are restarted) and **start with the manager**. Config/install paths are shown read-only. Bind mounts still change in compose, not here
@@ -101,8 +101,8 @@ Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `rec
 
 ## 6. VPN and remote access
 
-- Upload or paste a WireGuard (`.conf`) or OpenVPN (`.ovpn`) profile in the wizard or **Settings → VPN**. It is written under `/config/vpn/` (`wg0.conf` or `client.ovpn`) with mode `600`. You can still point at an existing path. **qBittorrent**, **Prowlarr**, and **Flaresolverr** are tunneled. Usenet clients stay on the normal network.
-- Optional [Cloudflare Tunnel](../deploy/CLOUDFLARE.md) can be toggled from **Settings → Remote access** or `AMM_CLOUDFLARE_TUNNEL_*`. `cloudflared` runs inside this appliance.
+- Upload or paste a WireGuard (`.conf`) or OpenVPN (`.ovpn`) profile in the wizard or **Settings → Network**. It is written under `/config/vpn/` (`wg0.conf` or `client.ovpn`) with mode `600`. You can still point at an existing path. **qBittorrent**, **Prowlarr**, and **Flaresolverr** are tunneled. Usenet clients stay on the normal network.
+- Optional [Cloudflare Tunnel](../deploy/CLOUDFLARE.md) can be toggled from **Settings → Network** or `AMM_CLOUDFLARE_TUNNEL_*`. `cloudflared` runs inside this appliance.
 
 ## 7. Backups and updates
 
@@ -117,26 +117,22 @@ Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `rec
 
 **Catalog Update** on a card always runs stop → snapshot → install → health check → rollback. The last three pre-update snapshots per app are kept under `/backups/app-snapshots/<app>/`.
 
-**Settings → Updates** schedules GitHub checks (off / daily / weekly / monthly) and optionally applies them (off = notify only, same as check, or a separate cadence). Time of day uses the host timezone from **Settings → General**. The job skips apps that are not installed or in a crash loop, respects `GITHUB_TOKEN` / Settings → GitHub, and pauses while the wizard is open or an install is running. Last check / last apply timestamps appear on Catalog and in Settings.
+**Settings → Updates** schedules GitHub checks (off / daily / weekly / monthly) and optionally applies them (off = notify only, same as check, or a separate cadence). Time of day uses the host timezone from **Settings → System**. The job skips apps that are not installed or in a crash loop, respects `GITHUB_TOKEN` / Settings → Updates (GitHub token), and pauses while the wizard is open or an install is running. Last check / last apply timestamps appear on Catalog and in Settings.
 
 ## 8. Settings
 
-The **Settings** nav item is the admin page for the appliance (separate from per-app catalog cards), at `#/settings/account` (and `#/settings/backups`, `#/settings/vpn`, …). Bind mounts and the manager listen address stay in compose/env.
+The **Settings** nav item is the admin page for the appliance (separate from per-app catalog cards), at `#/settings/account` (and `#/settings/backups`, `#/settings/network`, …). Older hashes such as `#/settings/vpn` still redirect. Bind mounts and the manager listen address stay in compose/env.
 
 | Section | What it does |
 |---------|----------------|
 | Account | Username, email, password (current password required) |
-| General | Timezone, log level; manager bind host/port is shown read-only |
-| Updates | Check/apply schedules and Check now |
-| Storage | Architecture, CPU, memory, disk, filesystem format (read-only) |
-| Permissions | PUID / PGID — saving restarts running child processes |
+| System | Timezone, log level, PUID/PGID, host CPU/RAM, storage paths (read-only) |
+| Updates | Catalog check/apply schedules, Check now, optional GitHub token |
 | Backups | Schedule, retention, backup now, verify, per-app restore, download/upload, delete |
-| VPN | Enable, protocol, upload/paste config, path, kill switch |
-| Remote access | Cloudflare Tunnel on/off, token (write-only), trusted proxy IPs |
-| GitHub | Optional token for rate limits (not shown again after save) |
-| Integrations | Optional pasted API keys for Jellyfin and Seerr (homepage widgets) |
-| Debug | Homepage widget diagnostics, error ring, and time-limited share URL (`/debug/{token}`) |
+| Network | VPN (enable, protocol, config, kill switch) and Cloudflare Tunnel (token, trusted proxies) |
+| Homepage | Jellyfin and Seerr API keys for Home widgets, plus widget debug |
+| Diagnostics | Error ring and time-limited support share URL (`/debug/{token}`) |
 
-Do not leave debug sharing on after you finish a support conversation.
+Do not leave the support share URL on after you finish a support conversation.
 
 Inputs and buttons across login, wizard, catalog, and Settings use the same control styles as the first-run wizard.

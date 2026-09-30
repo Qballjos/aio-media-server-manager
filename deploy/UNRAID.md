@@ -50,7 +50,7 @@ chown -R 99:100 /mnt/cache/appdata/aio-media-manager /mnt/cache/data
    - `/config` → `/mnt/user/appdata/aio-media-manager`
    - `/data` → `/mnt/cache/data`
    - `/backups` → `/mnt/user/backups/aio-media-manager`
-9. Variables: `PUID=99`, `PGID=100`, `TZ=<IANA timezone>`, `AMM_DOWNLOAD_DIR=/data/downloads`, `AMM_MEDIA_DIR=/data/media`. Optional: `GITHUB_TOKEN` for GitHub rate limits (or set it later in Settings → GitHub).
+9. Variables: `PUID=99`, `PGID=100`, `TZ=<IANA timezone>`, `AMM_DOWNLOAD_DIR=/data/downloads`, `AMM_MEDIA_DIR=/data/media`. Optional: `GITHUB_TOKEN` for GitHub rate limits (or set it later in Settings → Updates).
 
 A starting XML template is in [`unraid.xml`](unraid.xml) (copy into `/boot/config/plugins/dockerMan/templates-user/` if you maintain local templates).
 

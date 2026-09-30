@@ -166,7 +166,7 @@ onUnmounted(() => {
               :alt="app.displayName"
               class="app-icon app-icon-sm"
             />
-            <h3>{{ app?.displayName }} Process Logs</h3>
+            <h3>{{ app?.displayName }} logs</h3>
             <span class="font-mono text-dim">({{ app?.name }})</span>
           </div>
 
@@ -174,18 +174,18 @@ onUnmounted(() => {
             <input
               type="text"
               v-model="logFilter"
-              placeholder="Search logs..."
+              placeholder="Search logs…"
               class="ui-input font-mono log-search"
             />
             <label class="toggle-control font-mono">
               <input type="checkbox" v-model="logOnlyErrors" />
-              <span>Errors Only</span>
+              <span>Errors only</span>
             </label>
             <label class="toggle-control font-mono">
               <input type="checkbox" v-model="autoScrollLogs" />
-              <span>Auto-Scroll</span>
+              <span>Auto-scroll</span>
             </label>
-            <button @click="downloadLogs(app?.name)" class="btn-icon" title="Download Logs">
+            <button @click="downloadLogs(app?.name)" class="btn-icon" title="Download logs">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
@@ -210,9 +210,9 @@ onUnmounted(() => {
 
         <div class="log-console font-mono" ref="logContainerRef">
           <div v-if="filteredLogLines.length === 0" class="log-empty">
-            <span v-if="logLoading">Streaming output buffer...</span>
-            <span v-else-if="logLines.length > 0">No logs matching filter criteria.</span>
-            <span v-else>No output received yet for this process.</span>
+            <span v-if="logLoading">Loading logs…</span>
+            <span v-else-if="logLines.length > 0">No logs match this filter.</span>
+            <span v-else>No logs yet for this app.</span>
           </div>
           <div
             v-for="(line, idx) in filteredLogLines"

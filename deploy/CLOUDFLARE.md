@@ -37,7 +37,7 @@ On Synology use `/volume1/docker/aio-media-manager/config/cloudflare/`. On Unrai
 
 ## Enable on the appliance
 
-In the manager UI: **Settings → Remote access**, turn Cloudflare Tunnel on, and paste the token once (it is not shown again).
+In the manager UI: **Settings → Network**, turn Cloudflare Tunnel on, and paste the token once (it is not shown again).
 
 Or set environment variables and restart:
 

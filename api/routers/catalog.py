@@ -114,6 +114,9 @@ async def install_application(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
     if plugin.is_installed():
+        from core.install_jobs import set_job
+
+        set_job(name, "already_installed")
         return {
             "status": "already_installed",
             "message": f"Application '{name}' is already installed.",
@@ -131,9 +134,13 @@ async def install_application(
         )
 
     from core.diagnostics import diagnostics
+    from core.install_jobs import set_job
     from core.maintenance import begin_install, end_install
 
+    set_job(name, "queued")
+
     async def _do_install():
+        set_job(name, "installing")
         begin_install()
         try:
             logger.info("Starting background install for '%s'...", name)
@@ -143,9 +150,10 @@ async def install_application(
                 await finalize_application_install(plugin)
             except Exception as err:
                 logger.error("Post-install wiring failed for '%s': %s", name, err, exc_info=True)
+            set_job(name, "started")
         except Exception as err:
             logger.error("Failed to install '%s': %s", name, err, exc_info=True)
-
+            set_job(name, "failed", str(err))
             diagnostics.record_exception(err, source=f"install:{name}")
         finally:
             end_install()

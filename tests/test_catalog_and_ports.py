@@ -240,6 +240,25 @@ def test_catalog_help_urls_and_icons():
     assert extra == [], f"Unused app icons: {extra}"
 
 
+def test_catalog_entry_includes_install_job_status():
+    from core.install_jobs import clear_jobs, set_job
+
+    clear_jobs()
+    try:
+        catalog = ApplicationCatalog()
+        entry = catalog.get("sonarr").catalog_entry()
+        assert entry["install_job"] is None
+        set_job("sonarr", "installing")
+        entry = catalog.get("sonarr").catalog_entry()
+        assert entry["install_job"] == "installing"
+        set_job("sonarr", "failed", "disk full")
+        entry = catalog.get("sonarr").catalog_entry()
+        assert entry["install_job"] == "failed"
+        assert entry["install_error"] == "disk full"
+    finally:
+        clear_jobs()
+
+
 def test_port_manager_registry_and_availability():
     """PortManager reports allocated ports and finds free alternatives."""
     pm = PortManager()

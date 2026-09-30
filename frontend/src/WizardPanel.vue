@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import VpnConfigFields from './VpnConfigFields.vue'
@@ -18,10 +18,11 @@ const saving = ref(false)
 const error = ref('')
 const installing = ref(false)
 const installProgress = ref([])
+let finishAborted = false
 
 const TITLE = {
   3: 'Storage',
-  4: 'Permissions',
+  4: 'File ownership',
   5: 'Download clients',
   6: 'VPN',
   7: '*Arr apps',
@@ -77,10 +78,58 @@ function optionHelp(option) {
   return option.help_url || ''
 }
 
-function displayName(id) {
-  const raw = String(id || '')
+function displayName(id, fallback) {
+  const item = installProgress.value.find((row) => row.name === id)
+  if (item?.displayName) return item.displayName
+  const raw = String(fallback || id || '')
   if (!raw) return '—'
   return raw.charAt(0).toUpperCase() + raw.slice(1)
+}
+
+function isInstallTerminal(status) {
+  return ['started', 'failed', 'already_installed'].includes(status)
+}
+
+function patchInstallItem(name, patch) {
+  installProgress.value = installProgress.value.map((item) =>
+    item.name === name ? { ...item, ...patch } : item
+  )
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function refreshInstallProgress() {
+  const res = await apiRequest('/api/catalog')
+  if (!res.ok) return
+  const data = await readJson(res)
+  const byName = Object.fromEntries((data.applications || []).map((row) => [row.name, row]))
+  installProgress.value = installProgress.value.map((item) => {
+    const row = byName[item.name]
+    if (!row) return item
+    const next = { ...item, displayName: row.display_name || item.displayName }
+    if (row.installed || row.install_job === 'started' || row.install_job === 'already_installed') {
+      next.status = row.install_job === 'already_installed' ? 'already_installed' : 'started'
+    } else if (row.install_job === 'failed') {
+      next.status = 'failed'
+      next.detail = row.install_error || item.detail
+    } else if (item.status === 'failed') {
+      return next
+    } else if (row.install_job === 'installing' || row.install_job === 'queued') {
+      next.status = 'installing'
+    }
+    return next
+  })
+}
+
+async function waitForAppInstall(name) {
+  while (!finishAborted) {
+    await refreshInstallProgress()
+    const item = installProgress.value.find((row) => row.name === name)
+    if (!item || isInstallTerminal(item.status)) return
+    await sleep(1500)
+  }
 }
 
 function installStatusLabel(status) {
@@ -243,6 +292,7 @@ async function finish() {
   installing.value = true
   error.value = ''
   installProgress.value = []
+  finishAborted = false
   try {
     const res = await apiRequest('/api/wizard/execute', { method: 'POST' })
     const data = await readJson(res)
@@ -255,27 +305,49 @@ async function finish() {
     )
     installProgress.value = apps.map((name) => ({
       name,
+      displayName: displayName(name),
       status: already.has(name) ? 'already_installed' : 'queued'
     }))
-    for (const item of installProgress.value) {
-      if (item.status === 'already_installed') continue
-      item.status = 'installing'
+    await nextTick()
+    await refreshInstallProgress()
+    for (const item of [...installProgress.value]) {
+      if (finishAborted) return
+      if (isInstallTerminal(item.status)) continue
+      patchInstallItem(item.name, { status: 'installing' })
       try {
         const inst = await apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
-        item.status = inst.ok ? 'started' : 'failed'
-      } catch (_) {
-        item.status = 'failed'
+        const instData = await readJson(inst)
+        if (!inst.ok) {
+          patchInstallItem(item.name, {
+            status: 'failed',
+            detail: apiError(instData, 'Install failed')
+          })
+          continue
+        }
+        if (instData.status === 'already_installed') {
+          patchInstallItem(item.name, { status: 'already_installed' })
+          continue
+        }
+        await waitForAppInstall(item.name)
+      } catch (err) {
+        patchInstallItem(item.name, { status: 'failed', detail: err.message })
       }
     }
-    if (installProgress.value.length) {
-      await new Promise((resolve) => setTimeout(resolve, 700))
+    if (!finishAborted && installProgress.value.length) {
+      await refreshInstallProgress()
+      await sleep(800)
     }
-    emit('done')
+    if (!finishAborted) emit('done')
   } catch (err) {
-    error.value = err.message
+    if (!finishAborted) error.value = err.message
   } finally {
-    installing.value = false
+    if (!finishAborted) installing.value = false
   }
+}
+
+function leaveToHome() {
+  finishAborted = true
+  emit('done')
 }
 
 const summary = computed(() => payload.value.summary || payload.value.selections || {})
@@ -294,6 +366,10 @@ onMounted(async () => {
     step.value = clampToFlow(status.current_step || FIRST)
   }
   await loadStep(step.value)
+})
+
+onUnmounted(() => {
+  finishAborted = true
 })
 </script>
 
@@ -358,7 +434,10 @@ onMounted(async () => {
                   />
                   <span v-else>{{ displayName(item.name).slice(0, 2).toUpperCase() }}</span>
                 </span>
-                <span class="wizard-install-name">{{ displayName(item.name) }}</span>
+                <span class="wizard-install-name">
+                  {{ displayName(item.name) }}
+                  <small v-if="item.status === 'failed' && item.detail" class="wizard-install-error">{{ item.detail }}</small>
+                </span>
                 <span class="wizard-status" :class="installBadgeClass(item.status)">
                   <span v-if="item.status === 'installing'" class="spinner spinner-sm"></span>
                   <span v-else class="wizard-status-dot"></span>
@@ -415,11 +494,11 @@ onMounted(async () => {
           </div>
           <template v-if="showQbitCreds">
             <label class="ui-field">
-              <span>qBittorrent WebUI username</span>
+              <span>qBittorrent username</span>
               <input v-model="selections.qbittorrent_username" class="ui-input font-mono" placeholder="Leave blank to use the manager username" />
             </label>
             <label class="ui-field">
-              <span>qBittorrent WebUI password</span>
+              <span>qBittorrent password</span>
               <input v-model="selections.qbittorrent_password" type="password" class="ui-input" placeholder="Leave blank to use the manager password" />
             </label>
             <p class="wizard-muted">Blank qBittorrent username and password use the same login as AIO Media Server Manager.</p>
@@ -574,7 +653,19 @@ onMounted(async () => {
       </div>
 
       <div class="wizard-actions">
-        <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || installing" @click="skip">Skip for now</button>
+        <button
+          v-if="installing"
+          type="button"
+          class="ui-btn ui-btn-ghost"
+          @click="leaveToHome"
+        >Open Home</button>
+        <button
+          v-else
+          type="button"
+          class="ui-btn ui-btn-ghost"
+          :disabled="saving"
+          @click="skip"
+        >Skip for now</button>
         <div class="wizard-nav">
           <button type="button" class="ui-btn ui-btn-ghost" :disabled="step === FIRST || saving || installing" @click="back">Back</button>
           <button v-if="step !== LAST" type="button" class="ui-btn ui-btn-primary" :disabled="saving || loading" @click="next">
@@ -855,6 +946,13 @@ onMounted(async () => {
   font-weight: 600;
   color: #f3f4f6;
   overflow-wrap: anywhere;
+}
+.wizard-install-error {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #fca5a5;
 }
 .wizard-status {
   display: inline-flex;

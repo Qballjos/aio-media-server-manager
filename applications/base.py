@@ -200,9 +200,12 @@ class BaseApplication(abc.ABC):
         """Called after applications have started. Default is a no-op."""
 
     def catalog_entry(self, *, host_arch: str | None = None) -> dict:
+        from core.install_jobs import get_job
+
         arch = host_arch or detect_system_arch().value
         meta = self.installed_metadata() or {}
-        return {
+        job = get_job(self.name)
+        entry = {
             **self.manifest.to_dict(),
             "port": self.port,
             "installed": self.is_installed(),
@@ -211,7 +214,11 @@ class BaseApplication(abc.ABC):
             "arm64_available": "arm64" in self.manifest.supported_architectures,
             "current_arch_supported": arch in self.manifest.supported_architectures,
             "current_arch": arch,
+            "install_job": job["status"] if job else None,
         }
+        if job and job.get("message"):
+            entry["install_error"] = job["message"]
+        return entry
 
     def __repr__(self) -> str:
         return (

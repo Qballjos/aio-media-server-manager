@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { SETTINGS_SECTIONS } from './router'
+import { resolveSettingsSection, SETTINGS_NAV } from './router'
 import { apiError, apiRequest, readJson } from './api.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug, writeHomepageWidgetDebug } from './homepageDebug.js'
@@ -13,10 +13,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['session'])
 const route = useRoute()
-const section = computed(() => {
-  const value = String(route.params.section || 'account')
-  return SETTINGS_SECTIONS.includes(value) ? value : 'account'
-})
+const section = computed(() => resolveSettingsSection(route.params.section))
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -559,19 +556,7 @@ onBeforeUnmount(stopJobPoll)
 
     <nav class="settings-nav" aria-label="Settings sections">
       <RouterLink
-        v-for="item in [
-        ['account', 'Account'],
-        ['general', 'General'],
-        ['updates', 'Updates'],
-        ['storage', 'Storage'],
-        ['permissions', 'Permissions'],
-        ['backups', 'Backups'],
-        ['vpn', 'VPN'],
-        ['remote', 'Remote access'],
-        ['integrations', 'Integrations'],
-        ['github', 'GitHub'],
-        ['debug', 'Debug']
-      ]"
+        v-for="item in SETTINGS_NAV"
         :key="item[0]"
         :to="{ name: 'settings', params: { section: item[0] } }"
         class="settings-nav-btn"
@@ -609,11 +594,11 @@ onBeforeUnmount(stopJobPoll)
       </div>
     </template>
 
-    <template v-else-if="section === 'general'">
+    <template v-else-if="section === 'system'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>General</h3>
-          <p>Timezone for logs and later update schedules. Log level applies immediately.</p>
+          <h3>Clock and logs</h3>
+          <p>Timezone for backups, updates, and logs. Log level applies immediately.</p>
         </div>
         <form class="form-stack" @submit.prevent="patchSettings({ timezone: form.timezone, log_level: form.log_level })">
           <label class="ui-field">Timezone
@@ -639,78 +624,21 @@ onBeforeUnmount(stopJobPoll)
         </form>
         <p class="share-idle">Manager listen address {{ snapshot.api_host }}:{{ snapshot.api_port }} is compose/env only.</p>
       </div>
-    </template>
-
-    <template v-else-if="section === 'updates'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Updates</h3>
-          <p>Check GitHub in the host timezone. Apply can stay off (notify only) or match the check schedule.</p>
+          <h3>File ownership</h3>
+          <p>Saving PUID/PGID restarts running apps so new files stay owned correctly.</p>
         </div>
-        <p class="share-meta" v-if="snapshot.updates">
-          Last check {{ formatWhen(snapshot.updates.last_check_at) }}
-          · last apply {{ formatWhen(snapshot.updates.last_apply_at) }}
-          · {{ (snapshot.updates.available || []).length }} waiting
-          <span v-if="snapshot.updates.paused"> · paused ({{ snapshot.updates.paused_reason }})</span>
-        </p>
-        <form class="form-stack" @submit.prevent="patchSettings({
-          update_check_schedule: form.update_check_schedule,
-          update_apply_schedule: form.update_apply_schedule,
-          update_time: form.update_time,
-          update_weekday: Number(form.update_weekday),
-          update_day_of_month: Number(form.update_day_of_month)
-        })">
-          <label class="ui-field">Check schedule
-            <select v-model="form.update_check_schedule" class="ui-input">
-              <option value="off">Off</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+        <form class="form-stack" @submit.prevent="patchSettings({ puid: Number(form.puid), pgid: Number(form.pgid) })">
+          <label class="ui-field">PUID
+            <input v-model.number="form.puid" type="number" min="1" class="ui-input font-mono" required />
           </label>
-          <label class="ui-field">Apply schedule
-            <select v-model="form.update_apply_schedule" class="ui-input">
-              <option value="off">Off (notify only)</option>
-              <option value="same">Same as check</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+          <label class="ui-field">PGID
+            <input v-model.number="form.pgid" type="number" min="1" class="ui-input font-mono" required />
           </label>
-          <label class="ui-field">Time of day
-            <input v-model="form.update_time" type="time" class="ui-input font-mono" />
-          </label>
-          <label v-if="form.update_check_schedule === 'weekly' || form.update_apply_schedule === 'weekly'" class="ui-field">Weekday
-            <select v-model.number="form.update_weekday" class="ui-input">
-              <option :value="0">Monday</option>
-              <option :value="1">Tuesday</option>
-              <option :value="2">Wednesday</option>
-              <option :value="3">Thursday</option>
-              <option :value="4">Friday</option>
-              <option :value="5">Saturday</option>
-              <option :value="6">Sunday</option>
-            </select>
-          </label>
-          <label v-if="form.update_check_schedule === 'monthly' || form.update_apply_schedule === 'monthly'" class="ui-field">Day of month
-            <input v-model.number="form.update_day_of_month" type="number" min="1" max="28" class="ui-input font-mono" />
-          </label>
-          <div class="share-row">
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save schedule</button>
-            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="runUpdateCheck">Check now</button>
-          </div>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save and restart apps</button>
         </form>
-        <ul v-if="(snapshot.updates?.available || []).length" class="backup-list">
-          <li v-for="item in snapshot.updates.available" :key="item.name">
-            <div>
-              <strong>{{ item.name }}</strong>
-              <span class="path-line font-mono">{{ item.installed_version || '—' }} → {{ item.latest_version }}</span>
-            </div>
-          </li>
-        </ul>
       </div>
-    </template>
-
-    <template v-else-if="section === 'storage'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">HOST</span>
@@ -776,20 +704,84 @@ onBeforeUnmount(stopJobPoll)
       </div>
     </template>
 
-    <template v-else-if="section === 'permissions'">
+    <template v-else-if="section === 'updates'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Permissions</h3>
-          <p>Saving PUID/PGID restarts running child processes so new files stay owned correctly.</p>
+          <h3>Updates</h3>
+          <p>Check GitHub in the host timezone (System). Apply can stay off (notify only) or match the check schedule.</p>
         </div>
-        <form class="form-stack" @submit.prevent="patchSettings({ puid: Number(form.puid), pgid: Number(form.pgid) })">
-          <label class="ui-field">PUID
-            <input v-model.number="form.puid" type="number" min="1" class="ui-input font-mono" required />
+        <p class="share-meta" v-if="snapshot.updates">
+          Last check {{ formatWhen(snapshot.updates.last_check_at) }}
+          · last apply {{ formatWhen(snapshot.updates.last_apply_at) }}
+          · {{ (snapshot.updates.available || []).length }} waiting
+          <span v-if="snapshot.updates.paused"> · paused ({{ snapshot.updates.paused_reason }})</span>
+        </p>
+        <form class="form-stack" @submit.prevent="patchSettings({
+          update_check_schedule: form.update_check_schedule,
+          update_apply_schedule: form.update_apply_schedule,
+          update_time: form.update_time,
+          update_weekday: Number(form.update_weekday),
+          update_day_of_month: Number(form.update_day_of_month)
+        })">
+          <label class="ui-field">Check schedule
+            <select v-model="form.update_check_schedule" class="ui-input">
+              <option value="off">Off</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
           </label>
-          <label class="ui-field">PGID
-            <input v-model.number="form.pgid" type="number" min="1" class="ui-input font-mono" required />
+          <label class="ui-field">Apply schedule
+            <select v-model="form.update_apply_schedule" class="ui-input">
+              <option value="off">Off (notify only)</option>
+              <option value="same">Same as check</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
           </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save and restart children</button>
+          <label class="ui-field">Time of day
+            <input v-model="form.update_time" type="time" class="ui-input font-mono" />
+          </label>
+          <label v-if="form.update_check_schedule === 'weekly' || form.update_apply_schedule === 'weekly'" class="ui-field">Weekday
+            <select v-model.number="form.update_weekday" class="ui-input">
+              <option :value="0">Monday</option>
+              <option :value="1">Tuesday</option>
+              <option :value="2">Wednesday</option>
+              <option :value="3">Thursday</option>
+              <option :value="4">Friday</option>
+              <option :value="5">Saturday</option>
+              <option :value="6">Sunday</option>
+            </select>
+          </label>
+          <label v-if="form.update_check_schedule === 'monthly' || form.update_apply_schedule === 'monthly'" class="ui-field">Day of month
+            <input v-model.number="form.update_day_of_month" type="number" min="1" max="28" class="ui-input font-mono" />
+          </label>
+          <div class="share-row">
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save schedule</button>
+            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="runUpdateCheck">Check now</button>
+          </div>
+        </form>
+        <ul v-if="(snapshot.updates?.available || []).length" class="backup-list">
+          <li v-for="item in snapshot.updates.available" :key="item.name">
+            <div>
+              <strong>{{ item.name }}</strong>
+              <span class="path-line font-mono">{{ item.installed_version || '—' }} → {{ item.latest_version }}</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>GitHub token</h3>
+          <p>Optional. Catalog installs and scheduled update checks stay under the authenticated rate limit.</p>
+        </div>
+        <p class="share-meta">{{ githubConfigured ? 'A token is saved.' : 'No token configured.' }}</p>
+        <form class="form-stack" @submit.prevent="patchSettings({ github_token: form.github_token })">
+          <label class="ui-field">Personal access token (blank clears it)
+            <input v-model="form.github_token" type="password" class="ui-input font-mono" autocomplete="off" />
+          </label>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save token</button>
         </form>
       </div>
     </template>
@@ -917,7 +909,7 @@ onBeforeUnmount(stopJobPoll)
       </div>
     </template>
 
-    <template v-else-if="section === 'vpn'">
+    <template v-else-if="section === 'network'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>VPN</h3>
@@ -957,13 +949,10 @@ onBeforeUnmount(stopJobPoll)
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save VPN</button>
         </form>
       </div>
-    </template>
-
-    <template v-else-if="section === 'remote'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Remote access</h3>
-          <p>Cloudflare Tunnel token is stored on disk and never shown again. Trusted proxies are comma-separated IPs/CIDRs.</p>
+          <h3>Cloudflare Tunnel</h3>
+          <p>Token is stored on disk and never shown again. Trusted proxies are comma-separated IPs/CIDRs.</p>
         </div>
         <p class="share-meta">
           Tunnel {{ tunnelLive.connected ? 'connected' : 'not connected' }}
@@ -977,7 +966,7 @@ onBeforeUnmount(stopJobPoll)
         })">
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
-              <strong>Cloudflare Tunnel</strong>
+              <strong>Enable tunnel</strong>
               <span>Requires cloudflared in the image and a tunnel token.</span>
             </div>
             <button type="button" class="ui-switch" role="switch" :aria-checked="form.cloudflare_tunnel_enabled ? 'true' : 'false'" @click="form.cloudflare_tunnel_enabled = !form.cloudflare_tunnel_enabled">
@@ -995,12 +984,12 @@ onBeforeUnmount(stopJobPoll)
       </div>
     </template>
 
-    <template v-else-if="section === 'integrations'">
+    <template v-else-if="section === 'homepage'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Jellyfin API key</h3>
           <p>
-            Homepage Recently added uses this key. Create one in Jellyfin Dashboard → API Keys
+            Home → Recently added uses this key. Create one in Jellyfin Dashboard → API Keys
             (or paste the access token). Leave blank and save to clear it.
           </p>
         </div>
@@ -1016,7 +1005,7 @@ onBeforeUnmount(stopJobPoll)
         <div class="settings-card-head">
           <h3>Seerr API key</h3>
           <p>
-            Homepage search and requests use this key. AMM reads it from Seerr's settings.json when it can;
+            Home search and requests use this key. The manager reads it from Seerr's settings.json when it can;
             otherwise copy it from Seerr Settings → General. Leave blank and save to clear it.
           </p>
         </div>
@@ -1028,29 +1017,9 @@ onBeforeUnmount(stopJobPoll)
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
         </form>
       </div>
-    </template>
-
-    <template v-else-if="section === 'github'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>GitHub</h3>
-          <p>Optional token so catalog installs and later scheduled updates stay under the authenticated rate limit.</p>
-        </div>
-        <p class="share-meta">{{ githubConfigured ? 'A token is saved.' : 'No token configured.' }}</p>
-        <form class="form-stack" @submit.prevent="patchSettings({ github_token: form.github_token })">
-          <label class="ui-field">Personal access token (blank clears it)
-            <input v-model="form.github_token" type="password" class="ui-input font-mono" autocomplete="off" />
-          </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save token</button>
-        </form>
-      </div>
-    </template>
-
-    <template v-else>
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <span class="accent-badge">DEBUG</span>
-          <h3>Home dashboard widgets</h3>
+          <h3>Widget debug</h3>
           <p>
             Show empty calendar, downloads, and recently added tiles plus per-source skip notes.
             API keys are never shown.
@@ -1058,8 +1027,8 @@ onBeforeUnmount(stopJobPoll)
         </div>
         <div class="ui-switch-row">
           <div class="ui-switch-copy">
-            <strong>Widget debug</strong>
-            <span>When on, Home Dashboard explains why a widget is empty or failing.</span>
+            <strong>Explain empty widgets</strong>
+            <span>When on, Home explains why a widget is empty or failing. You can also add <code>?debug=1</code> to the Home URL.</span>
           </div>
           <button
             type="button"
@@ -1072,9 +1041,12 @@ onBeforeUnmount(stopJobPoll)
           </button>
         </div>
       </div>
+    </template>
+
+    <template v-else-if="section === 'diagnostics'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Error manager</h3>
+          <h3>Support share</h3>
           <p>
             Capture recent errors behind a time-limited URL for support. Secrets are redacted.
             The link expires after {{ share.ttl_hours || 24 }} hours.
@@ -1082,7 +1054,7 @@ onBeforeUnmount(stopJobPoll)
         </div>
         <div class="ui-switch-row">
           <div class="ui-switch-copy">
-            <strong>Debug share URL</strong>
+            <strong>Support share URL</strong>
             <span>When on, a time-limited link is available for support.</span>
           </div>
           <button

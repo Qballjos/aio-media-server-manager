@@ -13,26 +13,36 @@ Enable SSH (Control Panel → Terminal & SNMP → Enable SSH service), then:
 ssh admin@<nas-ip>
 ```
 
-The install script creates `/volume1/docker/aio-media-manager` (with `config/` and `backups/`), a shared `/volume1/data` tree (`downloads` + `media`), and writes `docker-compose.yml` with your `PUID`/`PGID`. Downloads and media stay one bind (`/data`) so *Arr can hardlink. Config backups go to the `/backups` mount; include that folder in a Hyper Backup task, or point `BACKUPS=` at another volume.
+The install script creates `/volume1/docker/aio-media-manager` (with `config/` and `backups/`) and a data tree in the **DSM user home** (`File Station → Home → aio-media-manager` with `downloads/` and `media/`). That path is a real user home, so DSM can browse it. A raw `/volume1/data` folder is not a shared folder and does not show up in File Station; re-running the script moves that tree into home if it still exists. Downloads and media stay one bind (`/data`) so *Arr can hardlink. Config backups go to the `/backups` mount; include that folder in a Hyper Backup task, or point `BACKUPS=` at another volume.
+
+User Home Service must be on (Control Panel → User & Group → Advanced). SSH as the DSM user whose Home should hold the libraries, or set `HOME_USER=`.
 
 ```bash
 id
 curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sudo sh
 ```
 
-If SSH is `admin` but the media share belongs to another user:
+If SSH is `admin` but Home should belong to another DSM user:
 
 ```bash
 id media
-sudo PUID=1026 PGID=100 sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
+sudo HOME_USER=media PUID=1026 PGID=100 sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
 ```
 
 Other volume or paths:
 
 ```bash
 sudo VOLUME=/volume2 \
-     DATA=/volume2/data \
+     HOME_USER=media \
      BACKUPS=/volume1/backups/aio-media-manager \
+     PUID=1026 PGID=100 \
+     sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
+```
+
+To keep libraries on a DSM shared folder instead of Home, set `DATA=` to that folder (still one parent for `downloads` and `media`):
+
+```bash
+sudo DATA=/volume1/media/aio-media-manager \
      PUID=1026 PGID=100 \
      sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
 ```
