@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1
 # Single AIO appliance image — all apps run as supervised processes inside this container.
 
-FROM node:22-alpine AS frontend
+# Vue dist is JS/CSS. Build it on the builder CPU, not under QEMU, or
+# `npm ci` on linux/arm64 hangs for a long time on GitHub-hosted amd64 runners.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
 WORKDIR /ui
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 COPY logo-aio-media-manager.png ./public/logo-aio-media-manager.png
 RUN npm run build
