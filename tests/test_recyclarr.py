@@ -199,6 +199,5 @@ def test_recyclarr_sync_explains_missing_git(tmp_path: Path, monkeypatch):
         client = TestClient(create_app())
         headers = _auth_headers(client)
         res = client.post("/api/recyclarr/sync", headers=headers)
-    assert res.status_code == 200
-    assert res.json()["ok"] is False
-    assert "git" in res.json()["detail"].lower()
+    assert res.status_code == 400
+    assert "git" in str(res.json()["detail"]).lower()
