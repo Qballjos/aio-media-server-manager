@@ -294,7 +294,13 @@ class RecyclarrApp(SimpleApplication):
         return ["sync"]
 
     def extra_env(self) -> dict[str, str]:
-        return {"RECYCLARR_CONFIG_DIR": str(self.config_dir)}
+        from core.recyclarr import git_executable, _path_with_git
+
+        env = {"RECYCLARR_CONFIG_DIR": str(self.config_dir)}
+        git_exe = git_executable()
+        if git_exe:
+            env["PATH"] = _path_with_git(dict(os.environ), git_exe)
+        return env
 
     def post_install(self) -> None:
         from applications.catalog import ApplicationCatalog

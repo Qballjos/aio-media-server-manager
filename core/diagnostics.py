@@ -216,7 +216,7 @@ class DiagnosticsStore:
     def _recyclarr_debug(self) -> dict[str, Any]:
         try:
             from applications.catalog import ApplicationCatalog
-            from core.recyclarr import last_sync_payload, yaml_path
+            from core.recyclarr import git_executable, last_sync_payload, settings_path, yaml_path
 
             catalog = ApplicationCatalog(app_settings=settings)
             plugin = catalog.get("recyclarr") if catalog.has("recyclarr") else None
@@ -224,11 +224,14 @@ class DiagnosticsStore:
             env = plugin.extra_env() if plugin else {}
             args = plugin.start_args() if plugin else []
             last = last_sync_payload(config_dir)
+            git_exe = git_executable()
             return {
                 "installed": bool(plugin and plugin.is_installed()),
                 "daemon": bool(plugin.manifest.daemon) if plugin else False,
                 "config_dir": str(config_dir),
                 "yaml_exists": yaml_path(config_dir).is_file(),
+                "settings_exists": settings_path(config_dir).is_file(),
+                "git": git_exe,
                 "start_args": args,
                 "config_env": env.get("RECYCLARR_CONFIG_DIR"),
                 "last_sync": last,

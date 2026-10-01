@@ -107,7 +107,7 @@ Open **Open UI** on each app the first time to confirm that product's own setup 
 
 ### Recyclarr (TRaSH Guides)
 
-Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `recyclarr sync --config recyclarr.yml` with `RECYCLARR_CONFIG_DIR` (Recyclarr 8 dropped `--app-data`). It clones TRaSH Guides with **git**, then writes one Recyclarr instance per Sonarr/Radarr URL (multiple names on the same URL are skipped). Default TRaSH profiles: HD WEB-1080p, Anime Remux-1080p, and HD Bluray+WEB. 4K profiles are opt-in.
+Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `recyclarr sync --config recyclarr.yml` with `RECYCLARR_CONFIG_DIR` (Recyclarr 8 dropped `--app-data`). The manager writes `settings.yml` `git_path` to the host git binary (the image includes git) so TRaSH Guides can clone, then writes one Recyclarr instance per Sonarr/Radarr URL (multiple names on the same URL are skipped). Default TRaSH profiles: HD WEB-1080p, Anime Remux-1080p, and HD Bluray+WEB. 4K profiles are opt-in.
 
 **Catalog → Recyclarr → Settings** toggles profiles, Plex/Jellyfin naming, YAML edit, and restore defaults. Custom YAML is kept until you restore defaults. Last-sync details appear on the debug share when diagnostics are on.
 

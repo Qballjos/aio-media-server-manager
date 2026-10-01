@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,12 @@ PREFS_NAME = "amm-prefs.json"
 YAML_NAME = "recyclarr.yml"
 LAST_SYNC_NAME = "last-sync.json"
 MANAGED_MARK = "AMM Recyclarr managed"
+SETTINGS_NAME = "settings.yml"
+_GIT_PATH_RE = re.compile(r"^git_path:\s*.*$", re.MULTILINE)
+_GIT_MISSING = (
+    "Recyclarr needs git to clone TRaSH Guides. "
+    "Install git on the host (native) or recreate the container from an image that includes git."
+)
 
 # Official Recyclarr config-templates / TRaSH guide-backed profile IDs.
 _SONARR_WEB_1080P = "72dae194fc92bf828f32cde7744e51a1"
@@ -76,6 +83,51 @@ def prefs_path(config_dir: Path) -> Path:
 
 def yaml_path(config_dir: Path) -> Path:
     return Path(config_dir) / YAML_NAME
+
+
+def settings_path(config_dir: Path) -> Path:
+    return Path(config_dir) / SETTINGS_NAME
+
+
+def git_executable() -> str | None:
+    found = shutil.which("git")
+    if found:
+        return found
+    for candidate in ("/usr/bin/git", "/usr/local/bin/git", "/bin/git"):
+        path = Path(candidate)
+        if path.is_file() and os.access(path, os.X_OK):
+            return str(path)
+    return None
+
+
+def ensure_git_path_setting(config_dir: Path, git_exe: str) -> None:
+    """Point Recyclarr at an absolute git binary (settings.yml git_path)."""
+    path = settings_path(config_dir)
+    quoted = json.dumps(git_exe)
+    line = f"git_path: {quoted}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.is_file():
+        path.write_text(
+            "# yaml-language-server: $schema=https://schemas.recyclarr.dev/latest/settings-schema.json\n"
+            f"# {MANAGED_MARK}\n"
+            f"{line}\n",
+            encoding="utf-8",
+        )
+        return
+    text = path.read_text(encoding="utf-8")
+    if re.search(rf"^git_path:\s*{re.escape(quoted)}\s*$", text, re.MULTILINE):
+        return
+    if _GIT_PATH_RE.search(text):
+        path.write_text(_GIT_PATH_RE.sub(line, text, count=1), encoding="utf-8")
+        return
+    path.write_text(text.rstrip() + "\n" + line + "\n", encoding="utf-8")
+
+
+def _path_with_git(env: dict[str, str], git_exe: str) -> str:
+    git_dir = str(Path(git_exe).parent)
+    current = env.get("PATH") or os.environ.get("PATH") or ""
+    parts = [item for item in current.split(os.pathsep) if item and item != git_dir]
+    return os.pathsep.join([git_dir, *parts]) if parts else git_dir
 
 
 def _recyclarr_log_files(config_dir: Path) -> str:
@@ -214,6 +266,10 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
     plugin = catalog.get("recyclarr")
     if not plugin.is_installed():
         return _fail_sync(plugin.config_dir, "Install Recyclarr first.")
+    git_exe = git_executable()
+    if not git_exe:
+        return _fail_sync(plugin.config_dir, _GIT_MISSING)
+    ensure_git_path_setting(plugin.config_dir, git_exe)
     write_recyclarr_config(
         plugin.config_dir,
         sonarr_url=f"http://127.0.0.1:{catalog.get('sonarr').port if catalog.has('sonarr') else 8989}",
@@ -235,6 +291,7 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
     env.pop("RECYCLARR_APP_DATA", None)
     env["RECYCLARR_CONFIG_DIR"] = str(plugin.config_dir)
     env.setdefault("HOME", str(plugin.config_dir))
+    env["PATH"] = _path_with_git(env, git_exe)
     try:
         completed = subprocess.run(
             cmd,
@@ -273,10 +330,7 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
     else:
         detail = f"Recyclarr exited {completed.returncode}."
         if "start process 'git'" in lowered or "file path 'git'" in lowered:
-            detail = (
-                "Recyclarr needs git to clone TRaSH Guides. "
-                "Install git on the host (native) or recreate the container from an image that includes git."
-            )
+            detail = _GIT_MISSING
     result = {
         "ok": ok,
         "detail": detail,

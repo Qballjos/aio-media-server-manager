@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +14,7 @@ from core.auth import auth_manager
 from core.recyclarr import (
     MANAGED_MARK,
     default_prefs,
+    ensure_git_path_setting,
     load_prefs,
     save_yaml,
     write_recyclarr_config,
@@ -158,6 +160,7 @@ def test_recyclarr_sync_runs_once(tmp_path: Path, monkeypatch):
     (plugin.install_dir / "recyclarr").write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr("core.recyclarr.ApplicationCatalog", lambda: catalog)
     monkeypatch.setattr("core.recyclarr.get_application_api_key", lambda _name: "k")
+    monkeypatch.setattr("core.recyclarr.git_executable", lambda: "/usr/bin/git")
     monkeypatch.setattr(auth_manager, "_settings", cfg)
 
     completed = MagicMock(returncode=0, stdout="movies: Processing Radarr server movies\nmovies: Completed", stderr="")
@@ -177,7 +180,9 @@ def test_recyclarr_sync_runs_once(tmp_path: Path, monkeypatch):
     env = mock_run.call_args.kwargs["env"]
     assert env["RECYCLARR_CONFIG_DIR"] == str(plugin.config_dir)
     assert "RECYCLARR_APP_DATA" not in env
+    assert env["PATH"].split(os.pathsep)[0] == "/usr/bin"
     assert (plugin.config_dir / "last-sync.json").is_file()
+    assert 'git_path: "/usr/bin/git"' in (plugin.config_dir / "settings.yml").read_text(encoding="utf-8")
 
 
 def test_recyclarr_sync_explains_missing_git(tmp_path: Path, monkeypatch):
@@ -188,6 +193,7 @@ def test_recyclarr_sync_explains_missing_git(tmp_path: Path, monkeypatch):
     (plugin.install_dir / "recyclarr").write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr("core.recyclarr.ApplicationCatalog", lambda: catalog)
     monkeypatch.setattr("core.recyclarr.get_application_api_key", lambda _name: "k")
+    monkeypatch.setattr("core.recyclarr.git_executable", lambda: "/usr/bin/git")
     monkeypatch.setattr(auth_manager, "_settings", cfg)
 
     completed = MagicMock(
@@ -201,3 +207,34 @@ def test_recyclarr_sync_explains_missing_git(tmp_path: Path, monkeypatch):
         res = client.post("/api/recyclarr/sync", headers=headers)
     assert res.status_code == 400
     assert "git" in str(res.json()["detail"]).lower()
+
+
+def test_sync_fails_before_launch_when_git_missing(tmp_path: Path, monkeypatch):
+    cfg = _settings(tmp_path)
+    catalog = ApplicationCatalog(app_settings=cfg)
+    plugin = catalog.get("recyclarr")
+    plugin.install_dir.mkdir(parents=True, exist_ok=True)
+    (plugin.install_dir / "recyclarr").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr("core.recyclarr.ApplicationCatalog", lambda: catalog)
+    monkeypatch.setattr("core.recyclarr.get_application_api_key", lambda _name: "k")
+    monkeypatch.setattr("core.recyclarr.git_executable", lambda: None)
+    monkeypatch.setattr(auth_manager, "_settings", cfg)
+
+    with patch("core.recyclarr.subprocess.run") as mock_run:
+        client = TestClient(create_app())
+        headers = _auth_headers(client)
+        res = client.post("/api/recyclarr/sync", headers=headers)
+    mock_run.assert_not_called()
+    assert res.status_code == 400
+    assert "git" in str(res.json()["detail"]).lower()
+
+
+def test_ensure_git_path_setting_writes_and_updates(tmp_path: Path):
+    root = tmp_path / "recyclarr"
+    ensure_git_path_setting(root, "/usr/bin/git")
+    text = (root / "settings.yml").read_text(encoding="utf-8")
+    assert 'git_path: "/usr/bin/git"' in text
+    ensure_git_path_setting(root, "/usr/local/bin/git")
+    updated = (root / "settings.yml").read_text(encoding="utf-8")
+    assert 'git_path: "/usr/local/bin/git"' in updated
+    assert updated.count("git_path:") == 1
