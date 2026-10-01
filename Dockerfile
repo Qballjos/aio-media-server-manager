@@ -23,7 +23,8 @@ FROM --platform=$BUILDPLATFORM golang:1.23-bookworm AS wggo
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
-RUN git clone --depth 1 --branch 0.0.20230223 https://github.com/WireGuard/wireguard-go.git . \
+# 0.0.20230223 fails on Go 1.23: golang.org/x/net still calls syscall.recvmsg.
+RUN git -c advice.detachedHead=false clone --depth 1 --branch 0.0.20250522 https://github.com/WireGuard/wireguard-go.git . \
     && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
         go build -trimpath -ldflags="-s -w" -o /wireguard-go .
 
