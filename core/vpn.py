@@ -402,16 +402,12 @@ class VpnManager:
         self._last_error = ""
         self._active_wg_conf: Path | None = None
         self._cached_underlay_ips: list[str] | None = None
-        self._status_cache: dict[str, Any] | None = None
-        self._status_cache_at = 0.0
         self._handshake_cache: bool | None = None
         self._handshake_cache_at = 0.0
         self._wg_ifaces_cache: list[str] | None = None
         self._wg_ifaces_cache_at = 0.0
 
     def _invalidate_runtime_cache(self) -> None:
-        self._status_cache = None
-        self._status_cache_at = 0.0
         self._handshake_cache = None
         self._handshake_cache_at = 0.0
         self._wg_ifaces_cache = None
@@ -422,9 +418,8 @@ class VpnManager:
         return Path(self.settings.vpn_config_path)
 
     def status(self) -> dict[str, Any]:
-        now = time.monotonic()
-        if self._status_cache is not None and (now - self._status_cache_at) < 2.0:
-            return dict(self._status_cache)
+        # Do not cache the full payload — settings like vpn_enabled must be live.
+        # Expensive wg/iface probes are cached separately for ~2s.
         tunnel_up = self._tunnel_up()
         netns = self._netns_exists()
         isolated = bool(self.settings.vpn_enabled and tunnel_up)
@@ -441,7 +436,7 @@ class VpnManager:
             if self.settings.vpn_protocol == "wireguard"
             else tunnel_up
         )
-        payload = {
+        return {
             "enabled": self.settings.vpn_enabled,
             "enforce": self.settings.vpn_enforce,
             "provider": self.settings.vpn_provider,
@@ -471,9 +466,6 @@ class VpnManager:
             "isolation_mode": self.isolation_mode(),
             "vpn_app_uid": VPN_APP_UID if self.uses_uid_isolation() else None,
         }
-        self._status_cache = payload
-        self._status_cache_at = now
-        return dict(payload)
 
     def isolation_mode(self) -> str:
         if not self.settings.vpn_enabled or not self._is_linux():

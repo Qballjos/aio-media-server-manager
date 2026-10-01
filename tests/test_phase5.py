@@ -31,6 +31,9 @@ from core.vpn import (
 
 
 def test_metrics_shape():
+    from core.metrics import clear_metrics_cache
+
+    clear_metrics_cache()
     data = collect_metrics()
     assert "cpu_percent" in data
     assert "memory" in data
@@ -42,8 +45,9 @@ def test_metrics_shape():
 
 def test_metrics_shape_when_process_cpu_is_blocked(monkeypatch):
     from core import metrics as metrics_mod
+    from core.metrics import clear_metrics_cache
 
-    metrics_mod._proc_cache.clear()
+    clear_metrics_cache()
     supervisor = type("Supervisor", (), {})()
     supervisor.list_processes = lambda: [{"name": "sonarr", "state": "running", "pid": 4242}]
     monkeypatch.setattr(metrics_mod.ProcessSupervisor, "get", staticmethod(lambda: supervisor))
@@ -72,8 +76,9 @@ def test_metrics_shape_when_process_cpu_is_blocked(monkeypatch):
 
 def test_process_metrics_include_cpu_and_memory(monkeypatch):
     from core import metrics as metrics_mod
+    from core.metrics import clear_metrics_cache
 
-    metrics_mod._proc_cache.clear()
+    clear_metrics_cache()
     supervisor = type("Supervisor", (), {})()
     supervisor.list_processes = lambda: [{"name": "sonarr", "state": "running", "pid": 4242}]
     monkeypatch.setattr(metrics_mod.ProcessSupervisor, "get", staticmethod(lambda: supervisor))

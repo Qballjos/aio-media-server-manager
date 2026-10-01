@@ -16,6 +16,14 @@ _metrics_cache_at = 0.0
 _METRICS_TTL = 2.0
 
 
+def clear_metrics_cache() -> None:
+    """Drop cached host metrics (tests and after process-set changes)."""
+    global _metrics_cache, _metrics_cache_at
+    _metrics_cache = None
+    _metrics_cache_at = 0.0
+    _proc_cache.clear()
+
+
 def collect_metrics() -> dict[str, Any]:
     global _metrics_cache, _metrics_cache_at
     now = time.monotonic()
