@@ -357,14 +357,19 @@ def test_dns_for_netns_prefers_profile_then_public_fallback(tmp_path: Path, monk
 
 
 def test_wireguard_covers_default_route_and_sanitize():
-    from core.vpn import sanitize_wireguard_runtime, wireguard_covers_default_route
+    from core.vpn import (
+        parse_wireguard_tunnel_address,
+        sanitize_wireguard_runtime,
+        wireguard_covers_default_route,
+    )
 
     full = (
-        "[Interface]\nPrivateKey = x\nDNS = 1.1.1.1\n"
+        "[Interface]\nPrivateKey = x\nAddress = 10.64.1.2/32\nDNS = 1.1.1.1\n"
         "PostUp = iptables -A FORWARD -j ACCEPT\n\n"
         "[Peer]\nAllowedIPs = 0.0.0.0/0, ::/0\n"
     )
     assert wireguard_covers_default_route(full)
+    assert parse_wireguard_tunnel_address(full) == "10.64.1.2"
     cleaned = sanitize_wireguard_runtime(full)
     assert "DNS" not in cleaned
     assert "PostUp" not in cleaned
