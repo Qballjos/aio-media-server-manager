@@ -10,7 +10,7 @@ from pathlib import Path
 _WEBUI_LOCAL_DEFAULTS = {
     "WebUI\\LocalHostAuth": "false",
     "WebUI\\AuthSubnetWhitelistEnabled": "true",
-    "WebUI\\AuthSubnetWhitelist": "127.0.0.0/8, ::1, 10.200.200.0/24",
+    "WebUI\\AuthSubnetWhitelist": "127.0.0.0/8, ::1, 10.200.200.0/24, 172.16.0.0/12",
     "WebUI\\CSRFProtection": "false",
     "WebUI\\HostHeaderValidation": "false",
     "WebUI\\BannedIPs": "",

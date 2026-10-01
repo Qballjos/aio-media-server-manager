@@ -3,7 +3,9 @@ core/vpn.py — Optional VPN isolation for BitTorrent, Prowlarr, and Flaresolver
 
 Usenet (SABnzbd/NZBGet) always stays on the host network. When VPN is enabled
 on Linux, qBittorrent, Prowlarr, and Flaresolverr run inside the `amm-torrent`
-netns so their egress uses the tunnel only. Local WebUIs are DNAT'd from 127.0.0.1.
+netns so their egress uses the tunnel only. Local WebUIs are published via a
+TCP proxy in the main netns (Docker/Synology cannot DNAT reliably into the
+torrent namespace).
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from typing import Any
 
 from core.settings import Settings, settings
 from core.supervisor import ProcessSupervisor
+from core.vpn_proxy import vpn_webui_proxy
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +305,7 @@ class VpnManager:
             "usenet_bypasses_vpn": True,
             "last_error": self._last_error or "",
             "endpoint_hosts": self._endpoint_hosts(),
+            "webui_proxy_ports": vpn_webui_proxy.listening_ports(),
         }
         return payload
 
@@ -404,6 +408,7 @@ class VpnManager:
         return {"status": "error", "detail": self._last_error, **self.status()}
 
     def stop(self) -> dict[str, Any]:
+        vpn_webui_proxy.stop_all()
         proto = self.settings.vpn_protocol
         if proto == "wireguard" and shutil.which("wg-quick"):
             down_conf = self._active_wg_conf if self._active_wg_conf and self._active_wg_conf.is_file() else self.config_path
@@ -638,7 +643,11 @@ class VpnManager:
             return
         self._ns_iptables(["-N", _KS_CHAIN])
         self._ns_iptables(["-F", _KS_CHAIN])
+        # Replies to DNATed/proxied WebUI traffic must return even when the peer is a
+        # Docker bridge address rather than 10.200.200.0/24.
         rules = [
+            ["-A", _KS_CHAIN, "-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED", "-j", "RETURN"],
+            ["-A", _KS_CHAIN, "-m", "state", "--state", "ESTABLISHED,RELATED", "-j", "RETURN"],
             ["-A", _KS_CHAIN, "-o", "lo", "-j", "RETURN"],
             ["-A", _KS_CHAIN, "-d", "10.200.200.0/24", "-j", "RETURN"],
         ]
@@ -648,14 +657,13 @@ class VpnManager:
             [
                 ["-A", _KS_CHAIN, "-o", "wg+", "-j", "RETURN"],
                 ["-A", _KS_CHAIN, "-o", "tun+", "-j", "RETURN"],
-                ["-A", _KS_CHAIN, "-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED", "-j", "RETURN"],
                 ["-A", _KS_CHAIN, "-j", "DROP"],
             ]
         )
         for spec in rules:
             result = self._ns_iptables(spec)
-            if result.returncode != 0 and "conntrack" in spec:
-                logger.debug("Kill switch conntrack rule skipped: %s", (result.stderr or "")[:180])
+            if result.returncode != 0 and ("conntrack" in spec or "state" in spec):
+                logger.debug("Kill switch reply rule skipped: %s", (result.stderr or "")[:180])
         if self._ns_iptables(["-C", "OUTPUT", "-j", _KS_CHAIN]).returncode != 0:
             self._ns_iptables(["-I", "OUTPUT", "1", "-j", _KS_CHAIN])
         self._ns_iptables(["-P", "FORWARD", "DROP"])
@@ -708,30 +716,25 @@ class VpnManager:
             self._unlink_netns_bind()
 
     def _forward_local_ports(self) -> None:
-        iptables = shutil.which("iptables")
-        if not iptables:
-            logger.warning("iptables not found; VPN WebUIs may be unreachable on 127.0.0.1.")
-            return
+        """Publish netns WebUIs on the main netns so Docker port maps work.
+
+        Prefer a userspace TCP proxy (reliable with Synology/Docker userland
+        proxies). Keep a light FORWARD accept so the proxy can reach the veth peer.
+        """
+        ports = self._webui_ports()
+        ready = vpn_webui_proxy.ensure(ports.values(), dest_host=_NS_PEER_IP)
+        if ready:
+            logger.info("VPN WebUI proxies ready on ports %s", ", ".join(str(p) for p in ready))
+        else:
+            logger.warning("VPN WebUI proxies failed to bind; falling back to iptables DNAT.")
+            self._forward_local_ports_dnat(ports)
+
         subprocess.run(
             ["sysctl", "-w", "net.ipv4.ip_forward=1"],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        subprocess.run(
-            ["sysctl", "-w", "net.ipv4.conf.all.route_localnet=1"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        for port in self._webui_ports().values():
-            dest = f"{_NS_PEER_IP}:{port}"
-            dnat = ["-p", "tcp", "--dport", str(port), "-j", "DNAT", "--to-destination", dest]
-            self._ensure_nat("PREROUTING", dnat)
-            self._ensure_nat("OUTPUT", ["-d", "127.0.0.1", *dnat])
-            self._ensure_nat("OUTPUT", ["-o", "lo", *dnat])
-        masq = ["-d", f"{_NS_PEER_IP}/32", "-p", "tcp", "-j", "MASQUERADE"]
-        self._ensure_nat("POSTROUTING", masq)
         inbound = [
             "FORWARD",
             "-o",
@@ -747,6 +750,39 @@ class VpnManager:
             result = self._host_iptables(["-I", "FORWARD", "1", *inbound[1:]])
             if result.returncode != 0:
                 logger.warning("VPN WebUI forward rule failed: %s", (result.stderr or "")[:200])
+        established = [
+            "FORWARD",
+            "-i",
+            _VETH_HOST,
+            "-m",
+            "conntrack",
+            "--ctstate",
+            "ESTABLISHED,RELATED",
+            "-j",
+            "ACCEPT",
+        ]
+        if self._host_iptables(["-C", *established]).returncode != 0:
+            self._host_iptables(["-I", "FORWARD", "1", *established[1:]])
+
+    def _forward_local_ports_dnat(self, ports: dict[str, int]) -> None:
+        iptables = shutil.which("iptables")
+        if not iptables:
+            logger.warning("iptables not found; VPN WebUIs may be unreachable.")
+            return
+        subprocess.run(
+            ["sysctl", "-w", "net.ipv4.conf.all.route_localnet=1"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        for port in ports.values():
+            dest = f"{_NS_PEER_IP}:{port}"
+            dnat = ["-p", "tcp", "--dport", str(port), "-j", "DNAT", "--to-destination", dest]
+            self._ensure_nat_insert("PREROUTING", dnat)
+            self._ensure_nat_insert("OUTPUT", ["-d", "127.0.0.1", *dnat])
+            self._ensure_nat_insert("OUTPUT", ["-o", "lo", *dnat])
+        masq = ["-d", f"{_NS_PEER_IP}/32", "-p", "tcp", "-j", "MASQUERADE"]
+        self._ensure_nat_insert("POSTROUTING", masq)
 
     def _ensure_nat(self, chain: str, spec: list[str]) -> None:
         check = ["-t", "nat", "-C", chain, *spec]
@@ -760,6 +796,28 @@ class VpnManager:
                 " ".join(spec),
                 (result.stderr or "")[:200],
             )
+
+    def _ensure_nat_insert(self, chain: str, spec: list[str]) -> None:
+        check = ["-t", "nat", "-C", chain, *spec]
+        if self._host_iptables(check).returncode == 0:
+            return
+        result = self._host_iptables(["-t", "nat", "-I", chain, "1", *spec])
+        if result.returncode != 0:
+            logger.warning(
+                "VPN WebUI NAT %s %s failed: %s",
+                chain,
+                " ".join(spec),
+                (result.stderr or "")[:200],
+            )
+
+    def refresh_local_forwards(self) -> None:
+        """Re-bind WebUI proxies while the tunnel is up (Docker may flush paths)."""
+        if not self.settings.vpn_enabled or not self._is_linux():
+            vpn_webui_proxy.stop_all()
+            return
+        if not self.tunneled_apps_allowed():
+            return
+        self._forward_local_ports()
 
     def _tunnel_interface_names(self) -> list[str]:
         result = self._ip(["netns", "exec", TORRENT_NETNS, "ip", "-o", "link", "show", "up"])

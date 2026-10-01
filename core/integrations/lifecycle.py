@@ -123,6 +123,11 @@ async def stop_tunneled_apps() -> list[str]:
 async def enforce_vpn_isolation() -> list[str]:
     """If VPN is on without a tunnel, stop qBittorrent/Prowlarr/Flaresolverr."""
     if vpn_manager.tunneled_apps_allowed():
+        # Keep WebUI proxies alive while the tunnel is up (Docker may race start).
+        try:
+            vpn_manager.refresh_local_forwards()
+        except Exception as exc:
+            logger.debug("VPN WebUI forward refresh failed: %s", exc)
         return []
     stopped = await stop_tunneled_apps()
     if stopped:

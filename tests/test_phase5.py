@@ -390,7 +390,7 @@ def test_host_veth_guard_allows_established_webui_replies(tmp_path: Path, monkey
     assert any(item[:3] == ["-I", "FORWARD", "1"] for item in calls)
 
 
-def test_forward_local_ports_dnat_published_and_loopback(tmp_path: Path, monkeypatch):
+def test_forward_local_ports_starts_webui_proxy(tmp_path: Path, monkeypatch):
     cfg = Settings(
         config_dir=tmp_path / "config",
         download_dir=tmp_path / "dl",
@@ -400,6 +400,34 @@ def test_forward_local_ports_dnat_published_and_loopback(tmp_path: Path, monkeyp
     mgr = VpnManager(cfg)
     calls: list[list[str]] = []
     monkeypatch.setattr(mgr, "_webui_ports", lambda: {"qbittorrent": 8081, "prowlarr": 9696})
+    monkeypatch.setattr(
+        "core.vpn.vpn_webui_proxy.ensure",
+        lambda ports, dest_host="10.200.200.2": [8081, 9696],
+    )
+    monkeypatch.setattr("core.vpn.subprocess.run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))
+
+    def fake_iptables(args: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(list(args))
+        return subprocess.CompletedProcess(args, 1, "", "")
+
+    monkeypatch.setattr(mgr, "_host_iptables", fake_iptables)
+    mgr._forward_local_ports()
+    blob = " ".join(" ".join(item) for item in calls)
+    assert "FORWARD" in blob
+    assert "10.200.200.2" in blob
+
+
+def test_forward_local_ports_dnat_fallback_when_proxy_fails(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+    )
+    mgr = VpnManager(cfg)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(mgr, "_webui_ports", lambda: {"qbittorrent": 8081, "prowlarr": 9696})
+    monkeypatch.setattr("core.vpn.vpn_webui_proxy.ensure", lambda ports, dest_host="10.200.200.2": [])
     monkeypatch.setattr(
         "core.vpn.shutil.which",
         lambda name: "/sbin/iptables" if name == "iptables" else None,
@@ -418,6 +446,52 @@ def test_forward_local_ports_dnat_published_and_loopback(tmp_path: Path, monkeyp
     assert "8081" in blob
     assert "9696" in blob
     assert "MASQUERADE" in blob
+
+
+def test_vpn_webui_proxy_forwards_bytes():
+    import socket
+    import threading
+    import time
+    from core.vpn_proxy import VpnWebUiProxy
+
+    backend = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    backend.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    backend.bind(("127.0.0.1", 0))
+    backend.listen(1)
+    backend_port = backend.getsockname()[1]
+    received: dict[str, bytes] = {}
+
+    def accept_backend() -> None:
+        conn, _ = backend.accept()
+        received["data"] = conn.recv(64)
+        conn.sendall(b"pong")
+        conn.close()
+
+    threading.Thread(target=accept_backend, daemon=True).start()
+
+    proxy = VpnWebUiProxy()
+    listen_port = None
+    for _ in range(20):
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind(("0.0.0.0", 0))
+        candidate = probe.getsockname()[1]
+        probe.close()
+        time.sleep(0.02)
+        if proxy.ensure({candidate: backend_port}, dest_host="127.0.0.1") == [candidate]:
+            listen_port = candidate
+            break
+    assert listen_port is not None
+    assert listen_port in proxy.listening_ports()
+
+    client = socket.create_connection(("127.0.0.1", listen_port), timeout=3)
+    client.sendall(b"ping")
+    assert client.recv(64) == b"pong"
+    client.close()
+    proxy.stop_all()
+    assert proxy.listening_ports() == []
+    assert received.get("data") == b"ping"
+    backend.close()
 
 
 def test_stale_netns_file_is_not_ready(tmp_path: Path, monkeypatch):
