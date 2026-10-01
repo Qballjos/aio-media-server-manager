@@ -69,6 +69,15 @@ def create_app() -> FastAPI:
         from core.app_prefs import autostart_for
         from applications.catalog import ApplicationCatalog
         from core.supervisor import ProcessSupervisor
+        from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager
+
+        if settings.vpn_enabled:
+            result = await asyncio.to_thread(vpn_manager.start)
+            if result.get("status") == "error" or not result.get("tunnel_up"):
+                logger.warning(
+                    "VPN did not come up; qBittorrent/Prowlarr stay stopped. %s",
+                    result.get("detail") or result.get("status"),
+                )
 
         supervisor = ProcessSupervisor.get()
         boot_catalog = ApplicationCatalog()
@@ -84,6 +93,12 @@ def create_app() -> FastAPI:
                 continue
             if not autostart_for(plugin.name, default=True):
                 continue
+            if plugin.name in VPN_TUNNELED_APPS:
+                try:
+                    vpn_manager.assert_can_start_tunneled_app(plugin.name)
+                except VpnIsolationError as err:
+                    logger.warning("Autostart skipped for %s: %s", plugin.name, err)
+                    continue
             try:
                 await supervisor.start(
                     name=plugin.name,

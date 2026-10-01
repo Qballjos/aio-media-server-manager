@@ -17,6 +17,7 @@ from core.vpn import (
     VpnIsolationError,
     VpnManager,
     parse_vpn_dns_servers,
+    parse_vpn_underlay_hosts,
     save_vpn_config_text,
     vpn_start_failure_detail,
 )
@@ -107,7 +108,7 @@ def test_transcoding_probe_does_not_require_gpu():
     assert "notes" in probe
 
 
-def test_vpn_status_without_tunnel(tmp_path: Path):
+def test_vpn_status_without_tunnel(tmp_path: Path, monkeypatch):
     cfg = Settings(
         config_dir=tmp_path / "config",
         download_dir=tmp_path / "dl",
@@ -123,9 +124,27 @@ def test_vpn_status_without_tunnel(tmp_path: Path):
     assert status["tunneled_apps"] == ["flaresolverr", "prowlarr", "qbittorrent"]
     assert status["unprotected_apps"] == []
     assert status["tunnel_up"] is False
+    assert status["kill_switch"] is True
     assert "privadovpn" in status["supported_providers"]
+    monkeypatch.setattr(mgr, "_is_linux", lambda: False)
     cmd = mgr.wrap_torrent_command(["qbittorrent-nox"])
     assert cmd[0] == "qbittorrent-nox"
+
+
+def test_vpn_wraps_without_netns_so_start_fails_closed(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+        vpn_enforce=False,
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_is_linux", lambda: True)
+    monkeypatch.setattr(mgr, "_netns_exists", lambda: False)
+    monkeypatch.setattr("core.vpn.shutil.which", lambda name: "/sbin/ip" if name == "ip" else None)
+    wrapped = mgr.wrap_torrent_command(["qbittorrent-nox"])
+    assert wrapped[:4] == ["ip", "netns", "exec", TORRENT_NETNS]
 
 
 def test_vpn_wraps_when_linux_netns_exists(tmp_path: Path, monkeypatch):
@@ -145,13 +164,13 @@ def test_vpn_wraps_when_linux_netns_exists(tmp_path: Path, monkeypatch):
     assert wrapped[-1] == "-nobrowser"
 
 
-def test_vpn_kill_switch_blocks_tunneled_apps(tmp_path: Path, monkeypatch):
+def test_vpn_kill_switch_blocks_tunneled_apps_when_vpn_is_on(tmp_path: Path, monkeypatch):
     cfg = Settings(
         config_dir=tmp_path / "config",
         download_dir=tmp_path / "dl",
         media_dir=tmp_path / "media",
         vpn_enabled=True,
-        vpn_enforce=True,
+        vpn_enforce=False,
     )
     mgr = VpnManager(cfg)
     monkeypatch.setattr(mgr, "_is_linux", lambda: True)
@@ -165,6 +184,7 @@ def test_vpn_kill_switch_blocks_tunneled_apps(tmp_path: Path, monkeypatch):
             pass
     mgr.assert_can_start_tunneled_app("sabnzbd")
     assert "flaresolverr" in VPN_TUNNELED_APPS
+    assert mgr.status()["kill_switch"] is True
 
 
 def test_save_vpn_config_text_writes_default_path(tmp_path: Path):
@@ -187,6 +207,8 @@ def test_parse_vpn_dns_from_wireguard_and_openvpn():
     assert parse_vpn_dns_servers("DNS = 10.2.0.1, 10.2.0.2\n") == ["10.2.0.1", "10.2.0.2"]
     assert parse_vpn_dns_servers("dhcp-option DNS 103.86.96.100\n") == ["103.86.96.100"]
     assert parse_vpn_dns_servers("[Interface]\nPrivateKey = x\n") == []
+    assert parse_vpn_underlay_hosts("Endpoint = 203.0.113.10:51820\n") == ["203.0.113.10"]
+    assert parse_vpn_underlay_hosts("remote 198.51.100.8 1194\n") == ["198.51.100.8"]
 
 
 def test_vpn_start_failure_explains_missing_wireguard_go():
@@ -228,10 +250,11 @@ def test_qbittorrent_start_command_not_netns_on_non_linux(tmp_path: Path):
 
 
 def test_system_info_includes_phase5_fields():
-    client = TestClient(create_app())
+    client = TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     resp = client.get("/api/system/info")
     assert resp.status_code == 200
     data = resp.json()
+    assert data["debug"] is True
     assert "metrics" in data
     assert "transcoding" in data
     assert "library" in data

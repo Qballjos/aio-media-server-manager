@@ -26,10 +26,23 @@ async def vpn_status(request: Request) -> dict[str, Any]:
 @router.post("/start")
 async def vpn_start(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
-    return vpn_manager.start()
+    from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
+
+    stopped = await stop_tunneled_apps()
+    result = vpn_manager.start()
+    if result.get("tunnel_up"):
+        result["started_apps"] = await start_tunneled_apps(stopped)
+    else:
+        result["started_apps"] = []
+    return result
 
 
 @router.post("/stop")
 async def vpn_stop(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
-    return vpn_manager.stop()
+    from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
+
+    stopped = await stop_tunneled_apps()
+    result = vpn_manager.stop()
+    result["started_apps"] = await start_tunneled_apps(stopped)
+    return result

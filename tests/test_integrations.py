@@ -3,6 +3,7 @@ tests/test_integrations.py — Tests for the automatic integration engine and cl
 """
 
 from pathlib import Path
+import json
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
@@ -279,6 +280,16 @@ def test_qbittorrent_client(mock_get, mock_post):
     client = QBittorrentClient()
     assert client.login() is True
     assert client.create_category("sonarr", "/downloads/torrents/tv") is True
+    assert client.set_download_paths("/data/downloads/torrents", "/data/downloads/incomplete") is True
+    posted = mock_post.call_args_list[-1]
+    body = posted.kwargs.get("data") or posted[1].get("data")
+    prefs = json.loads(body["json"])
+    assert prefs["lsd"] is False
+    assert prefs["max_ratio"] == -1
+    assert prefs["max_seeding_time"] == -1
+    assert prefs["max_connec"] == 800
+    assert prefs["upnp"] is False
+    assert prefs["anonymous_mode"] is False
 
 
 @patch("requests.get")
@@ -423,6 +434,9 @@ def test_qbittorrent_profile_bypasses_localhost_auth(tmp_path: Path):
     assert "WebUI\\LocalHostAuth=false" in text
     assert "127.0.0.0/8" in text
     assert "10.200.200.0/24" in text
+    assert "Session\\LSDEnabled=false" in text
+    assert "Session\\GlobalMaxRatio=-1" in text
+    assert "Bittorrent\\Encryption=0" in text
     nested = tmp_path / "qBittorrent" / "config" / "qBittorrent.conf"
     assert nested.is_file()
     assert "10.200.200.0/24" in nested.read_text(encoding="utf-8")

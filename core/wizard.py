@@ -485,7 +485,7 @@ class WizardEngine:
             cfg.vpn_enabled = True
             cfg.vpn_provider = "privadovpn" if vpn_provider == "privadovpn" else vpn_provider
             cfg.vpn_protocol = selections.get("vpn_protocol") or "wireguard"
-            cfg.vpn_enforce = bool(selections.get("vpn_enforce"))
+            cfg.vpn_enforce = True
             if selections.get("vpn_config_path"):
                 cfg.vpn_config_path = Path(selections["vpn_config_path"]).expanduser().resolve()
         else:

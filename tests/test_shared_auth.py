@@ -61,6 +61,9 @@ def test_apply_qbittorrent_webui_login_sets_preferences(tmp_path: Path, monkeypa
     conf = (tmp_path / "qBittorrent" / "qBittorrent.conf").read_text(encoding="utf-8")
     assert "WebUI\\Username=qballjos" in conf
     assert "WebUI\\Password_PBKDF2=" in conf
+    assert "Session\\LSDEnabled=false" in conf
+    assert "Session\\GlobalMaxRatio=-1" in conf
+    assert "Session\\MaxConnections=800" in conf
 
 
 @patch("core.integrations.local_auth.requests.put")

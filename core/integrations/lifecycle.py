@@ -80,6 +80,59 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
     return report
 
 
+async def stop_tunneled_apps() -> list[str]:
+    """Stop qBittorrent, Prowlarr, and Flaresolverr so they cannot leak on the house WAN."""
+    supervisor = ProcessSupervisor.get()
+    stopped: list[str] = []
+    for name in sorted(VPN_TUNNELED_APPS):
+        state = supervisor.status(name)
+        value = getattr(state, "value", state)
+        if value != "running":
+            continue
+        try:
+            await supervisor.stop(name)
+            stopped.append(name)
+        except Exception as exc:
+            logger.warning("Could not stop tunneled app %s: %s", name, exc)
+    return stopped
+
+
+async def start_tunneled_apps(names: list[str] | None = None) -> list[str]:
+    """Start tunneled apps only when the VPN namespace has a live tunnel (or VPN is off)."""
+    from applications.catalog import ApplicationCatalog
+
+    catalog = ApplicationCatalog()
+    supervisor = ProcessSupervisor.get()
+    log_dir = settings.config_dir / "logs"
+    wanted = set(names) if names is not None else set(VPN_TUNNELED_APPS)
+    started: list[str] = []
+    for name in sorted(wanted):
+        if name not in VPN_TUNNELED_APPS:
+            continue
+        if not catalog.has(name):
+            continue
+        plugin = catalog.get(name)
+        if not plugin.manifest.daemon or not plugin.is_installed():
+            continue
+        try:
+            vpn_manager.assert_can_start_tunneled_app(name)
+        except VpnIsolationError as exc:
+            logger.info("Leaving '%s' stopped: %s", name, exc)
+            continue
+        try:
+            await supervisor.start(
+                name=name,
+                cmd=plugin.start_command(),
+                cwd=plugin.working_directory(),
+                env=plugin.extra_env(),
+                log_dir=log_dir,
+            )
+            started.append(name)
+        except Exception as exc:
+            logger.warning("Could not start tunneled app %s: %s", name, exc)
+    return started
+
+
 async def _wait_healthy(plugin: BaseApplication, timeout: float = 90.0) -> bool:
     url = plugin.health_check_url()
     deadline = time.monotonic() + timeout

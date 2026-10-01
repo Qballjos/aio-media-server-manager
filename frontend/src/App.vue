@@ -39,6 +39,7 @@ const wizardCompleted = ref(true)
 const wizardStatusLoaded = ref(false)
 const wiringRunning = ref(false)
 const currentTime = ref(new Date().toLocaleTimeString())
+const vpnLive = ref({})
 const showHealthModal = ref(false)
 const logApp = ref(null)
 const settingsService = ref(null)
@@ -56,6 +57,10 @@ const currentView = computed(() => {
 })
 
 const transcodingAvailable = computed(() => systemInfo.value?.transcoding?.available)
+const showVpnPill = computed(
+  () => authStatus.value.authenticated && wizardCompleted.value && !!vpnLive.value.enabled,
+)
+const vpnTunnelUp = computed(() => !!vpnLive.value.tunnel_up)
 
 setUnauthorizedHandler(() => {
   if (!authStatus.value.authenticated) return
@@ -86,6 +91,7 @@ async function handleLogout() {
   clearSession()
   authStatus.value.authenticated = false
   authStatus.value.username = null
+  vpnLive.value = {}
   router.replace({ name: 'home' })
   showToast('Logged out successfully.', 'info')
 }
@@ -115,11 +121,22 @@ async function fetchApplications() {
   }
 }
 
+async function fetchVpnStatus() {
+  if (!authStatus.value.authenticated) return
+  try {
+    const res = await apiRequest('/api/vpn/status')
+    if (res.ok) vpnLive.value = await readJson(res)
+  } catch (err) {
+    console.error('VPN status error:', err)
+  }
+}
+
 async function fetchSystemInfo() {
   try {
     const res = await apiRequest('/api/system/info')
     if (res.ok) {
       systemInfo.value = await readJson(res)
+      if (systemInfo.value?.vpn) vpnLive.value = systemInfo.value.vpn
     }
   } catch (err) {
     console.error('System info fetch error:', err)
@@ -168,7 +185,7 @@ async function fetchUpdateStatus() {
 async function refreshDashboard() {
   isLoadingData.value = true
   try {
-    await Promise.all([fetchCatalog(), fetchApplications(), fetchSystemInfo(), fetchUpdateStatus()])
+    await Promise.all([fetchCatalog(), fetchApplications(), fetchSystemInfo(), fetchUpdateStatus(), fetchVpnStatus()])
   } finally {
     isLoadingData.value = false
   }
@@ -177,6 +194,7 @@ async function refreshDashboard() {
 function pollLiveStatus() {
   if (!authStatus.value.authenticated || !wizardCompleted.value) return
   if (currentView.value === 'catalog') fetchApplications()
+  fetchVpnStatus()
 }
 
 function pollSlowStatus() {
@@ -187,6 +205,7 @@ function pollSlowStatus() {
 
 function onHealthSystem(data) {
   systemInfo.value = data
+  if (data?.vpn) vpnLive.value = data.vpn
 }
 
 function openCatalog() {
@@ -269,6 +288,15 @@ onUnmounted(() => {
         <div class="metric-pill hide-compact" :title="currentTime">
           <span class="pulse-dot"></span>
           <span class="metric-val font-mono">{{ currentTime }}</span>
+        </div>
+        <div
+          v-if="showVpnPill"
+          class="metric-pill"
+          :class="vpnTunnelUp ? 'is-vpn-up' : 'is-vpn-down'"
+          :title="vpnTunnelUp ? 'VPN tunnel up' : 'VPN tunnel down'"
+        >
+          <span class="pulse-dot"></span>
+          <span class="metric-val font-mono">VPN</span>
         </div>
         <div v-if="transcodingAvailable" class="metric-pill hide-narrow" title="Hardware transcoding available">
           <span class="metric-label">GPU</span>

@@ -101,7 +101,11 @@ const transcoding = computed(() => props.systemInfo?.transcoding || {})
 const storageRows = computed(() =>
   Object.entries(storage.value).map(([label, info]) => ({ label, ...info }))
 )
-const hardlinks = computed(() => storage.value?.download_dir?.hardlinks_supported !== false)
+const hardlinks = computed(() => {
+  const flag = storage.value?.download_dir?.hardlinks_supported
+  if (flag === undefined) return null
+  return flag !== false
+})
 
 function formatBytes(n) {
   const v = Number(n) || 0
@@ -222,7 +226,7 @@ async function patchSettings(payload) {
 async function saveVpn() {
   const payload = {
     vpn_enabled: form.value.vpn_enabled,
-    vpn_enforce: form.value.vpn_enforce,
+    vpn_enforce: !!form.value.vpn_enabled,
     vpn_provider: form.value.vpn_provider,
     vpn_protocol: form.value.vpn_protocol,
     vpn_config_path: form.value.vpn_config_path
@@ -719,7 +723,7 @@ onBeforeUnmount(() => {
           </div>
           <div>
             <dt>Hardlinks</dt>
-            <dd>{{ hardlinks ? 'Supported between downloads and media' : 'Not available — *Arr will copy' }}</dd>
+            <dd>{{ hardlinks == null ? '—' : hardlinks ? 'Supported between downloads and media' : 'Not available — *Arr will copy' }}</dd>
           </div>
           <div>
             <dt>Transcoding</dt>
@@ -730,7 +734,7 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Storage paths</h3>
-          <p>Filesystem format and capacity. Edit mounts in docker-compose, not here.</p>
+          <p>Filesystem format and capacity. Shown from localhost, or when Diagnostics support share is on. Edit mounts in docker-compose, not here.</p>
         </div>
         <div class="storage-table-wrap">
           <table class="storage-table">
@@ -749,7 +753,7 @@ onBeforeUnmount(() => {
                 </td>
               </tr>
               <tr v-if="!storageRows.length">
-                <td colspan="3" class="share-idle">System info is not loaded yet.</td>
+                <td colspan="3" class="share-idle">Open Settings from this appliance (localhost) or turn on Diagnostics → Support share to load storage details.</td>
               </tr>
             </tbody>
           </table>
@@ -981,10 +985,10 @@ onBeforeUnmount(() => {
           </div>
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
-              <strong>Kill switch / enforce</strong>
-              <span>Block tunneled apps when the tunnel is down.</span>
+              <strong>Kill switch</strong>
+              <span>Always on while VPN is enabled. Prowlarr and qBittorrent only use the tunnel; if it is down they stay stopped and cannot use the house WAN.</span>
             </div>
-            <button type="button" class="ui-switch" role="switch" :aria-checked="form.vpn_enforce ? 'true' : 'false'" @click="form.vpn_enforce = !form.vpn_enforce">
+            <button type="button" class="ui-switch" role="switch" :aria-checked="form.vpn_enabled ? 'true' : 'false'" disabled>
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
@@ -1102,7 +1106,8 @@ onBeforeUnmount(() => {
           <h3>Support share</h3>
           <p>
             Capture recent errors behind a time-limited URL for support. Secrets are redacted.
-            The link expires after {{ share.ttl_hours || 24 }} hours.
+            The link expires after {{ share.ttl_hours || 24 }} hours. Host dumps and process logs
+            use the same switch, except from localhost which is always allowed for troubleshooting.
           </p>
         </div>
         <div class="ui-switch-row">
@@ -1133,9 +1138,9 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Recent errors</h3>
-          <p>Last captured ERROR+ events from this manager process.</p>
+          <p>Last captured ERROR+ events. Shown from localhost, or while Support share is on.</p>
         </div>
-        <div v-if="!errors.length" class="share-idle">No errors captured since startup.</div>
+        <div v-if="!errors.length" class="share-idle">{{ share.active ? 'No errors captured since startup.' : 'Turn on Support share, or open Settings from localhost, to view captured errors.' }}</div>
         <pre v-else class="error-log font-mono">{{ errors.map(e => `[${e.timestamp}] ${e.level} ${e.source}\n${e.message}`).join('\n\n') }}</pre>
       </div>
     </template>

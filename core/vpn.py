@@ -30,6 +30,7 @@ _NS_HOST_IP = "10.200.200.1"
 _NS_PEER_IP = "10.200.200.2"
 _DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191}
 _FALLBACK_DNS = ("1.1.1.1", "9.9.9.9")
+_KS_CHAIN = "AMM-KS"
 
 
 class VpnIsolationError(RuntimeError):
@@ -122,6 +123,31 @@ def _is_dns_address(value: str) -> bool:
     return ":" in host
 
 
+def parse_vpn_underlay_hosts(text: str) -> list[str]:
+    """VPN server hostnames/IPs that must use the house underlay for the handshake."""
+    hosts: list[str] = []
+    seen: set[str] = set()
+    for raw in (text or "").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        lower = line.lower()
+        host = ""
+        if lower.startswith("endpoint"):
+            _, _, rest = line.partition("=")
+            if not rest.strip():
+                _, _, rest = line.partition(" ")
+            host = rest.strip().split(":")[0].strip().strip("[]")
+        elif lower.startswith("remote ") or lower.startswith("remote\t"):
+            parts = line.split()
+            if len(parts) >= 2:
+                host = parts[1].strip()
+        if host and host not in seen:
+            seen.add(host)
+            hosts.append(host)
+    return hosts
+
+
 def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
     detail = (stderr or stdout or "").strip()
     if returncode == 127 or "command not found" in detail.lower():
@@ -162,7 +188,7 @@ class VpnManager:
             "config_present": self.config_path.is_file(),
             "config_path": str(self.config_path),
             "tunnel_up": tunnel_up,
-            "kill_switch": self.settings.vpn_enforce,
+            "kill_switch": bool(self.settings.vpn_enabled),
             "netns": TORRENT_NETNS if os.name == "posix" else None,
             "netns_ready": netns,
             "platform_linux": self._is_linux(),
@@ -183,35 +209,32 @@ class VpnManager:
         return self.wrap_isolated_command(cmd)
 
     def wrap_isolated_command(self, cmd: list[str]) -> list[str]:
-        """Prefix a command with `ip netns exec` when the isolation netns exists."""
+        """Run the process inside amm-torrent when VPN is enabled.
+
+        Always prefix on Linux so a missing netns fails closed instead of leaking
+        onto the house WAN.
+        """
         if not self.settings.vpn_enabled:
             return cmd
         if not self._is_linux():
             return cmd
         if shutil.which("ip") is None:
             return cmd
-        if not self._netns_exists():
-            logger.warning(
-                "VPN is enabled but netns %s is missing; not wrapping %s",
-                TORRENT_NETNS,
-                cmd[:1],
-            )
-            return cmd
         return ["ip", "netns", "exec", TORRENT_NETNS, *cmd]
 
     def assert_can_start_tunneled_app(self, name: str) -> None:
         if name not in VPN_TUNNELED_APPS:
             return
-        if not self.settings.vpn_enabled or not self.settings.vpn_enforce:
+        if not self.settings.vpn_enabled:
             return
         if not self._is_linux():
-            logger.warning("VPN enforce is set but network namespaces are Linux-only.")
+            logger.warning("VPN is enabled but network namespaces are Linux-only.")
             return
         if self._netns_exists() and self._tunnel_up():
             return
         raise VpnIsolationError(
-            f"Refusing to start '{name}' off-VPN: enable the tunnel first "
-            f"(netns {TORRENT_NETNS} with WireGuard/OpenVPN up)."
+            f"Refusing to start '{name}' off-VPN: the tunnel must be up "
+            f"(netns {TORRENT_NETNS} with WireGuard/OpenVPN) while VPN is enabled."
         )
 
     def start(self) -> dict[str, Any]:
@@ -240,6 +263,7 @@ class VpnManager:
             subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60, env=env)
             if self._is_linux():
                 self._forward_local_ports()
+                self._apply_netns_kill_switch()
             return {"status": "started", **self.status()}
         except subprocess.CalledProcessError as exc:
             detail = vpn_start_failure_detail(exc.returncode, exc.stderr or "", exc.stdout or "")
@@ -266,7 +290,7 @@ class VpnManager:
     def _unprotected(self, running: bool, isolated: bool) -> bool:
         if not running:
             return False
-        if not self.settings.vpn_enforce:
+        if not self.settings.vpn_enabled:
             return False
         return not isolated
 
@@ -285,8 +309,129 @@ class VpnManager:
         self._ip(["netns", "exec", TORRENT_NETNS, "ip", "link", "set", _VETH_NS, "up"])
         self._ip(["netns", "exec", TORRENT_NETNS, "ip", "link", "set", "lo", "up"])
         self._write_netns_resolv()
+        self._apply_host_veth_guard()
+        self._apply_netns_kill_switch()
         # No default route via the veth: the only WAN path is the VPN interface.
         return None
+
+    def _host_iptables(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+        iptables = shutil.which("iptables")
+        if iptables is None:
+            return subprocess.CompletedProcess(args, 1, "", "iptables not found")
+        try:
+            return subprocess.run([iptables, *args], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return subprocess.CompletedProcess(args, 1, "", str(exc))
+
+    def _ns_iptables(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+        iptables = shutil.which("iptables")
+        ip = shutil.which("ip")
+        if iptables is None or ip is None:
+            return subprocess.CompletedProcess(args, 1, "", "iptables not found")
+        try:
+            return subprocess.run(
+                [ip, "netns", "exec", TORRENT_NETNS, iptables, *args],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return subprocess.CompletedProcess(args, 1, "", str(exc))
+
+    def _underlay_ips(self) -> list[str]:
+        import socket
+
+        hosts: list[str] = []
+        try:
+            if self.config_path.is_file():
+                hosts = parse_vpn_underlay_hosts(self.config_path.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            hosts = []
+        ips: list[str] = []
+        seen: set[str] = set()
+        for host in hosts:
+            resolved: list[str] = []
+            if _is_dns_address(host) and ":" not in host:
+                resolved = [host]
+            else:
+                try:
+                    infos = socket.getaddrinfo(host, None, socket.AF_INET)
+                    resolved = [item[4][0] for item in infos]
+                except OSError:
+                    resolved = []
+            for ip in resolved:
+                if ip not in seen:
+                    seen.add(ip)
+                    ips.append(ip)
+        return ips
+
+    def _apply_host_veth_guard(self) -> None:
+        """Forward only VPN handshake packets from amm-torrent; drop any other WAN leak."""
+        dests = self._underlay_ips()
+        for dest in dests:
+            accept = ["FORWARD", "-i", _VETH_HOST, "-d", dest, "-j", "ACCEPT"]
+            if self._host_iptables(["-C", *accept]).returncode != 0:
+                self._host_iptables(["-I", "FORWARD", "1", "-i", _VETH_HOST, "-d", dest, "-j", "ACCEPT"])
+            nat = [
+                "-t",
+                "nat",
+                "-C",
+                "POSTROUTING",
+                "-s",
+                f"{_NS_PEER_IP}/32",
+                "-d",
+                dest,
+                "-j",
+                "MASQUERADE",
+            ]
+            if self._host_iptables(nat).returncode != 0:
+                self._host_iptables(
+                    [
+                        "-t",
+                        "nat",
+                        "-A",
+                        "POSTROUTING",
+                        "-s",
+                        f"{_NS_PEER_IP}/32",
+                        "-d",
+                        dest,
+                        "-j",
+                        "MASQUERADE",
+                    ]
+                )
+            self._ip(["netns", "exec", TORRENT_NETNS, "ip", "route", "replace", dest, "via", _NS_HOST_IP])
+        drop = ["FORWARD", "-i", _VETH_HOST, "-j", "DROP"]
+        if self._host_iptables(["-C", *drop]).returncode != 0:
+            self._host_iptables(["-A", *drop])
+
+    def _apply_netns_kill_switch(self) -> None:
+        """Drop any non-tunnel WAN from Prowlarr/qBittorrent/Flaresolverr."""
+        if shutil.which("iptables") is None:
+            logger.warning("iptables not found; cannot install the torrent VPN kill switch.")
+            return
+        self._ns_iptables(["-N", _KS_CHAIN])
+        self._ns_iptables(["-F", _KS_CHAIN])
+        rules = [
+            ["-A", _KS_CHAIN, "-o", "lo", "-j", "RETURN"],
+            ["-A", _KS_CHAIN, "-d", "10.200.200.0/24", "-j", "RETURN"],
+        ]
+        for dest in self._underlay_ips():
+            rules.append(["-A", _KS_CHAIN, "-d", dest, "-j", "RETURN"])
+        rules.extend(
+            [
+                ["-A", _KS_CHAIN, "-o", "wg+", "-j", "RETURN"],
+                ["-A", _KS_CHAIN, "-o", "tun+", "-j", "RETURN"],
+                ["-A", _KS_CHAIN, "-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED", "-j", "RETURN"],
+                ["-A", _KS_CHAIN, "-j", "DROP"],
+            ]
+        )
+        for spec in rules:
+            result = self._ns_iptables(spec)
+            if result.returncode != 0 and "conntrack" in spec:
+                logger.debug("Kill switch conntrack rule skipped: %s", (result.stderr or "")[:180])
+        if self._ns_iptables(["-C", "OUTPUT", "-j", _KS_CHAIN]).returncode != 0:
+            self._ns_iptables(["-I", "OUTPUT", "1", "-j", _KS_CHAIN])
+        self._ns_iptables(["-P", "FORWARD", "DROP"])
 
     def _write_netns_resolv(self) -> None:
         """Docker's 127.0.0.11 resolver is not reachable from amm-torrent."""
@@ -319,6 +464,23 @@ class VpnManager:
         return ports
 
     def _teardown_netns(self) -> None:
+        for dest in self._underlay_ips():
+            self._host_iptables(["-D", "FORWARD", "-i", _VETH_HOST, "-d", dest, "-j", "ACCEPT"])
+            self._host_iptables(
+                [
+                    "-t",
+                    "nat",
+                    "-D",
+                    "POSTROUTING",
+                    "-s",
+                    f"{_NS_PEER_IP}/32",
+                    "-d",
+                    dest,
+                    "-j",
+                    "MASQUERADE",
+                ]
+            )
+        self._host_iptables(["-D", "FORWARD", "-i", _VETH_HOST, "-j", "DROP"])
         self._ip(["link", "delete", _VETH_HOST])
         if self._netns_exists():
             self._ip(["netns", "delete", TORRENT_NETNS])
@@ -360,7 +522,10 @@ class VpnManager:
             subprocess.run(add, capture_output=True, text=True, timeout=5)
 
     def _tunnel_up(self) -> bool:
-        if self._is_linux() and self._netns_exists() and shutil.which("wg"):
+        """True only when a WireGuard/OpenVPN iface is up *inside* amm-torrent."""
+        if not self._is_linux() or not self._netns_exists():
+            return False
+        if shutil.which("wg"):
             try:
                 out = subprocess.run(
                     ["ip", "netns", "exec", TORRENT_NETNS, "wg", "show"],
@@ -372,15 +537,13 @@ class VpnManager:
                     return True
             except (OSError, subprocess.TimeoutExpired):
                 pass
-        if shutil.which("wg"):
-            try:
-                out = subprocess.run(["wg", "show"], capture_output=True, text=True, timeout=3)
-                if out.returncode == 0 and out.stdout.strip():
-                    return True
-            except (OSError, subprocess.TimeoutExpired):
-                pass
-        for name in ("tun0", "wg0", "utun0"):
-            if Path(f"/sys/class/net/{name}").exists() or Path(f"/dev/{name}").exists():
+        result = self._ip(["netns", "exec", TORRENT_NETNS, "ip", "-o", "link", "show", "up"])
+        for line in (result.stdout or "").splitlines():
+            parts = line.split(":", 2)
+            if len(parts) < 2:
+                continue
+            name = parts[1].strip().split("@", 1)[0]
+            if name.startswith("wg") or name.startswith("tun"):
                 return True
         return False
 

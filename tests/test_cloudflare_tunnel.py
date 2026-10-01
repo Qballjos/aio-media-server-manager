@@ -44,7 +44,7 @@ def test_persist_token_file_permissions(tmp_path: Path):
 
 
 def test_system_info_includes_cloudflare_tunnel():
-    client = TestClient(create_app())
+    client = TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     resp = client.get("/api/system/info")
     assert resp.status_code == 200
     data = resp.json()

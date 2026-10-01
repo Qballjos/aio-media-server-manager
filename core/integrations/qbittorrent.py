@@ -20,6 +20,56 @@ from applications.qbittorrent.webui import ensure_webui_localhost_access
 
 logger = logging.getLogger(__name__)
 
+# Leave seed ratio/time to Sonarr/Radarr/Lidarr. Tune for a VPN + fast WAN.
+QB_RUNTIME_DEFAULTS = {
+    "anonymous_mode": False,
+    "dht": True,
+    "pex": True,
+    "lsd": False,
+    "encryption": 0,
+    "upnp": False,
+    "random_port": False,
+    "listen_port": 6881,
+    "max_ratio_enabled": False,
+    "max_ratio": -1,
+    "max_seeding_time_enabled": False,
+    "max_seeding_time": -1,
+    "max_inactive_seeding_time_enabled": False,
+    "max_inactive_seeding_time": -1,
+    "max_ratio_act": 0,
+    "queueing_enabled": False,
+    "dont_count_slow_torrents": True,
+    "dl_limit": 0,
+    "up_limit": 0,
+    "alt_dl_limit": 0,
+    "alt_up_limit": 0,
+    "scheduler_enabled": False,
+    "max_connec": 800,
+    "max_connec_per_torrent": 200,
+    "max_uploads": 100,
+    "max_uploads_per_torrent": 8,
+    "enable_multi_connections_from_same_ip": True,
+    "announce_to_all_trackers": True,
+    "announce_to_all_tiers": True,
+    "resolve_peer_countries": False,
+    "reannounce_when_address_changed": True,
+    "preallocate_all": True,
+    "incomplete_files_ext": True,
+    "utp_tcp_mixed_mode": 0,
+    "bittorrent_protocol": 0,
+    "async_io_threads": 8,
+    "file_pool_size": 500,
+    "checking_memory_use": 128,
+    "send_buffer_watermark": 20480,
+    "send_buffer_low_watermark": 512,
+    "send_buffer_watermark_factor": 150,
+    "socket_backlog_size": 4096,
+    "connection_speed": 300,
+    "memory_working_set_limit": 1024,
+    "enable_os_cache": True,
+    "i2p_enabled": False,
+}
+
 
 def _persist_webui(config_dir, username: str, password: str) -> None:
     ensure_webui_localhost_access(
@@ -193,10 +243,11 @@ class QBittorrentClient:
             return False
 
     def set_download_paths(self, save_path: str, incomplete_path: str) -> bool:
-        """Set default completed and incomplete torrent directories."""
+        """Set completed/incomplete folders and VPN-safe high-speed client defaults."""
         try:
             payload = json.dumps(
                 {
+                    **QB_RUNTIME_DEFAULTS,
                     "save_path": save_path,
                     "temp_path": incomplete_path,
                     "temp_path_enabled": True,

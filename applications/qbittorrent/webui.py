@@ -16,6 +16,47 @@ _WEBUI_LOCAL_DEFAULTS = {
     "WebUI\\BannedIPs": "",
 }
 
+# Appliance defaults: VPN-safe, high-throughput, leave seed time/ratio to *Arr.
+_PREFERENCES_CLIENT_DEFAULTS = {
+    "Connection\\UPnP": "false",
+    "Connection\\PortRangeMin": "6881",
+    "Connection\\GlobalDLLimit": "-1",
+    "Connection\\GlobalUPLimit": "-1",
+    "Downloads\\PreAllocation": "true",
+    "Downloads\\UseIncompleteExtension": "true",
+    "Queueing\\QueueingEnabled": "false",
+    "Bittorrent\\DHT": "true",
+    "Bittorrent\\PeX": "true",
+    "Bittorrent\\LSD": "false",
+    "Bittorrent\\Encryption": "0",
+    "Bittorrent\\MaxRatio": "-1",
+    "Advanced\\AnonymousMode": "false",
+    "Advanced\\AnnounceToAllTrackers": "true",
+    "Advanced\\osCache": "true",
+}
+
+_BITTORRENT_SESSION_DEFAULTS = {
+    "Session\\AnonymousMode": "false",
+    "Session\\DHTEnabled": "true",
+    "Session\\PeXEnabled": "true",
+    "Session\\LSDEnabled": "false",
+    "Session\\Encryption": "0",
+    "Session\\MaxConnections": "800",
+    "Session\\MaxConnectionsPerTorrent": "200",
+    "Session\\MaxUploads": "100",
+    "Session\\MaxUploadsPerTorrent": "8",
+    "Session\\GlobalMaxRatio": "-1",
+    "Session\\GlobalMaxSeedingMinutes": "-1",
+    "Session\\GlobalMaxInactiveSeedingMinutes": "-1",
+    "Session\\MaxRatioAction": "0",
+    "Session\\QueueingEnabled": "false",
+    "Session\\Port": "6881",
+    "Session\\UPnP": "false",
+    "Session\\Preallocation": "true",
+    "Session\\MultiConnectionsPerIp": "true",
+    "Session\\IgnoreSlowTorrentsForQueueing": "true",
+}
+
 
 def qbit_conf_paths(profile_dir: Path) -> tuple[Path, Path]:
     root = Path(profile_dir)
@@ -60,6 +101,35 @@ def ensure_webui_localhost_access(
     return written or qbit_conf_paths(profile_dir)[0]
 
 
+def _upsert_ini_section(lines: list[str], section_header: str, extras: dict[str, str]) -> list[str]:
+    found = {key: False for key in extras}
+    rewritten: list[str] = []
+    in_section = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_section = stripped == section_header
+            rewritten.append(line)
+            continue
+        matched = False
+        if in_section:
+            for key, value in extras.items():
+                if stripped.startswith(f"{key}="):
+                    rewritten.append(f"{key}={value}")
+                    found[key] = True
+                    matched = True
+                    break
+        if not matched:
+            rewritten.append(line)
+    missing = [key for key, seen in found.items() if not seen]
+    if missing:
+        if not any(item.strip() == section_header for item in rewritten):
+            rewritten.append(section_header)
+        insert_at = next(i for i, item in enumerate(rewritten) if item.strip() == section_header) + 1
+        rewritten[insert_at:insert_at] = [f"{key}={extras[key]}" for key in missing]
+    return rewritten
+
+
 def _write_webui_conf(
     conf: Path,
     *,
@@ -69,8 +139,8 @@ def _write_webui_conf(
 ) -> Path:
     conf.parent.mkdir(parents=True, exist_ok=True)
     text = conf.read_text(encoding="utf-8") if conf.is_file() else ""
-    lines = text.splitlines()
     extras: dict[str, str] = dict(_WEBUI_LOCAL_DEFAULTS)
+    extras.update(_PREFERENCES_CLIENT_DEFAULTS)
     user = (username or "").strip()
     secret = password or ""
     if user and secret:
@@ -87,26 +157,9 @@ def _write_webui_conf(
     else:
         extras["WebUI\\AlternativeUIEnabled"] = "false"
         extras["WebUI\\RootFolder"] = ""
-    found = {key: False for key in extras}
-    rewritten: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("WebUI\\Password_ha1="):
-            continue
-        matched = False
-        for key, value in extras.items():
-            if stripped.startswith(f"{key}="):
-                rewritten.append(f"{key}={value}")
-                found[key] = True
-                matched = True
-                break
-        if not matched:
-            rewritten.append(line)
-    missing = [key for key, seen in found.items() if not seen]
-    if missing:
-        if not any(item.strip() == "[Preferences]" for item in rewritten):
-            rewritten.append("[Preferences]")
-        insert_at = next(i for i, item in enumerate(rewritten) if item.strip() == "[Preferences]") + 1
-        rewritten[insert_at:insert_at] = [f"{key}={extras[key]}" for key in missing]
-    conf.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+    lines = text.splitlines()
+    lines = [line for line in lines if not line.strip().startswith("WebUI\\Password_ha1=")]
+    lines = _upsert_ini_section(lines, "[Preferences]", extras)
+    lines = _upsert_ini_section(lines, "[BitTorrent]", _BITTORRENT_SESSION_DEFAULTS)
+    conf.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return conf

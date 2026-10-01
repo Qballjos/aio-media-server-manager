@@ -162,7 +162,9 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         settings.backup_retention = body.backup_retention
     if body.vpn_enabled is not None:
         settings.vpn_enabled = body.vpn_enabled
-    if body.vpn_enforce is not None:
+        if body.vpn_enabled:
+            settings.vpn_enforce = True
+    if body.vpn_enforce is not None and not settings.vpn_enabled:
         settings.vpn_enforce = body.vpn_enforce
     if body.vpn_provider is not None:
         provider = body.vpn_provider.strip().lower()
@@ -251,16 +253,29 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         raise HTTPException(status_code=500, detail=f"Could not save settings: {exc}") from exc
 
     if body.vpn_enabled is True:
+        from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
+
+        stopped = await stop_tunneled_apps()
         result = vpn_manager.start()
         if result.get("status") == "error":
             notes.append(f"VPN start failed: {result.get('detail') or 'unknown error'}")
+            notes.append("qBittorrent and Prowlarr are stopped so they cannot leak.")
         elif result.get("tunnel_up"):
+            started = await start_tunneled_apps(stopped)
             notes.append("VPN started.")
+            if started:
+                notes.append("Started " + ", ".join(started) + " on the tunnel.")
         else:
-            notes.append("VPN start ran but the tunnel is still down. Check Settings → Network.")
+            notes.append("VPN start ran but the tunnel is still down. qBittorrent and Prowlarr stay stopped.")
     elif body.vpn_enabled is False:
+        from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
+
+        stopped = await stop_tunneled_apps()
         vpn_manager.stop()
+        started = await start_tunneled_apps(stopped)
         notes.append("VPN stopped.")
+        if started:
+            notes.append("Started " + ", ".join(started) + " on the house network.")
 
     if body.cloudflare_tunnel_enabled is True:
         result = await cloudflare_tunnel.start()

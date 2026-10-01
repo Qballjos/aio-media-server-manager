@@ -222,7 +222,7 @@ class Settings(BaseSettings):
     vpn_enabled: bool = Field(default=False, validation_alias="AMM_VPN_ENABLED")
     vpn_enforce: bool = Field(
         default=False,
-        description="Warn/block qBittorrent when the tunnel is down.",
+        description="Always on while VPN is enabled: block qBittorrent/Prowlarr off-tunnel.",
         validation_alias="AMM_VPN_ENFORCE",
     )
     vpn_provider: str = Field(default="privadovpn", validation_alias="AMM_VPN_PROVIDER")

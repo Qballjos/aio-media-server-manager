@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from core.auth import auth_manager
+from core.debug_access import can_view_debug
 from core.diagnostics import diagnostics
 
 router = APIRouter(tags=["Diagnostics"])
@@ -34,7 +35,7 @@ async def diagnostics_status(request: Request) -> dict[str, Any]:
             "url": _share_url(request, token) if token else None,
             "ttl_hours": 24,
         },
-        "errors": diagnostics.recent_errors(40),
+        "errors": diagnostics.recent_errors(40) if can_view_debug(request) else [],
     }
 
 

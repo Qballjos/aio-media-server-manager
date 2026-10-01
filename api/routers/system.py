@@ -1,43 +1,45 @@
 """
 api/routers/system.py — System information endpoints.
 
-GET /api/system/info  →  resolved paths, puid/pgid, storage validation,
-                          supervisor process list.
+GET /api/system/info  →  operational status for a session; full dump from
+                          localhost or while Diagnostics support share is on.
 """
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
 import psutil
 
+from core.cloudflare_tunnel import cloudflare_tunnel
+from core.debug_access import can_view_debug, is_local_troubleshooting, require_local_or_debug_switch, require_local_or_session
 from core.library_layout import LibraryLayout
+from core.log_redactor import redact_log_line
 from core.metrics import collect_metrics
 from core.settings import settings
 from core.storage import StorageManager
 from core.supervisor import ProcessSupervisor
 from core.transcoding import probe_transcoding
-from core.cloudflare_tunnel import cloudflare_tunnel
 from core.vpn import vpn_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/system", tags=["System"])
 
 
-@router.get("/info", summary="System information")
-async def system_info() -> dict:
-    """
-    Returns:
-    - Resolved storage paths
-    - PUID / PGID
-    - Per-path validation results (exists, writable, filesystem type)
-    - Supervisor process list
-    """
+def _operational_status() -> dict:
+    return {
+        "debug": False,
+        "transcoding": probe_transcoding(),
+        "vpn": vpn_manager.status(),
+        "cloudflare_tunnel": cloudflare_tunnel.status(),
+    }
+
+
+def _debug_status() -> dict:
     sm = StorageManager(settings)
     path_info = sm.validate_all()
-
     paths_summary = {}
     for label, info in path_info.items():
         entry = {
@@ -62,33 +64,48 @@ async def system_info() -> dict:
         paths_summary[label] = entry
 
     supervisor = ProcessSupervisor.get()
-    processes = supervisor.list_processes()
+    payload = _operational_status()
+    payload.update(
+        {
+            "debug": True,
+            "settings": settings.as_serialisable_dict(),
+            "storage": paths_summary,
+            "processes": supervisor.list_processes(),
+            "metrics": collect_metrics(),
+            "library": LibraryLayout.from_settings(settings).as_dict(),
+        }
+    )
+    return payload
 
-    return {
-        "settings": settings.as_serialisable_dict(),
-        "storage": paths_summary,
-        "processes": processes,
-        "metrics": collect_metrics(),
-        "library": LibraryLayout.from_settings(settings).as_dict(),
-        "transcoding": probe_transcoding(),
-        "vpn": vpn_manager.status(),
-        "cloudflare_tunnel": cloudflare_tunnel.status(),
-    }
+
+@router.get("/info", summary="System information")
+async def system_info(request: Request) -> dict:
+    """
+    Session: VPN, transcoding, Cloudflare. Full host dump from localhost, or
+    from a session while Diagnostics → Support share is on.
+    """
+    if can_view_debug(request):
+        return _debug_status()
+    require_local_or_session(request)
+    return _operational_status()
 
 
 @router.get("/processes", summary="List supervised processes")
-async def list_processes() -> dict:
-    """Returns the current state of all supervised processes."""
+async def list_processes(request: Request) -> dict:
+    """Supervisor process list — localhost or Diagnostics support share."""
+    require_local_or_debug_switch(request)
     supervisor = ProcessSupervisor.get()
     return {"processes": supervisor.list_processes()}
 
 
 @router.get("/processes/{name}/logs", summary="Get process logs")
-async def get_process_logs(name: str) -> dict:
-    """Returns the last 500 log lines for a named process."""
+async def get_process_logs(name: str, request: Request) -> dict:
+    """Process logs — localhost (raw) or Diagnostics support share (redacted)."""
+    require_local_or_debug_switch(request)
     supervisor = ProcessSupervisor.get()
     logs = supervisor.get_logs(name)
     if not logs and name not in {p["name"] for p in supervisor.list_processes()}:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Process '{name}' not found.")
+    if not is_local_troubleshooting(request):
+        logs = [redact_log_line(line) for line in logs]
     return {"name": name, "logs": logs}

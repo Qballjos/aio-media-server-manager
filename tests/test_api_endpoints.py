@@ -158,10 +158,15 @@ def test_applications_endpoints(client: TestClient):
 
 
 def test_system_info_endpoint(client: TestClient):
-    """GET /api/system/info returns paths and supervisor status."""
+    """Unauthenticated LAN clients cannot read the host dump."""
     resp = client.get("/api/system/info")
+    assert resp.status_code == 401
+
+    local = TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
+    resp = local.get("/api/system/info")
     assert resp.status_code == 200
     data = resp.json()
+    assert data["debug"] is True
     assert "storage" in data
     assert "settings" in data
     assert "puid" in data["settings"]

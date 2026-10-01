@@ -67,7 +67,7 @@ RUN printf '%s\n' \
 #   Grimmory: JRE 25 (copied from jre), mariadb-server
 #   Flaresolverr (x86_64 / amd64 image only): chromium, xvfb, fonts-liberation
 #   Recyclarr: git (clones TRaSH Guides on sync)
-#   VPN: iproute2, openvpn, wireguard-tools, wireguard-go (userspace fallback)
+#   VPN: iproute2, openvpn, wireguard-tools, iptables, wireguard-go (userspace fallback)
 # Catalog app installs use GitHub zipballs/releases; Recyclarr still shells out to git.
 # Official `unrar` lives in Debian non-free; unrar-free reports version 0.00 to SABnzbd.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
@@ -89,6 +89,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         iproute2 \
         openvpn \
         wireguard-tools \
+        iptables \
         libssl3 \
         libgssapi-krb5-2 \
         zlib1g \

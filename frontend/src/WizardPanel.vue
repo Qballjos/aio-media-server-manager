@@ -224,7 +224,7 @@ function bodyForStep(id) {
       vpn_provider: selections.vpn_provider,
       vpn_config_path: selections.vpn_config_path,
       vpn_protocol: selections.vpn_protocol,
-      vpn_enforce: !!selections.vpn_enforce,
+      vpn_enforce: selections.vpn_provider !== 'none',
       ...(selections.vpn_config_text ? { vpn_config_text: selections.vpn_config_text } : {})
     }
   }
@@ -551,10 +551,6 @@ onUnmounted(() => {
               v-model:text="selections.vpn_config_text"
               :has-config="!!selections.has_vpn_config"
             />
-            <label class="wizard-option" :class="{ selected: selections.vpn_enforce }">
-              <input type="checkbox" v-model="selections.vpn_enforce" />
-              Enforce kill switch for tunneled apps
-            </label>
           </template>
         </template>
 
