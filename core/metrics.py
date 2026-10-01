@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import psutil
@@ -10,9 +11,16 @@ from core.supervisor import ProcessSupervisor
 
 # psutil.Process.cpu_percent(interval=None) is 0.0 until a process has been sampled once.
 _proc_cache: dict[int, psutil.Process] = {}
+_metrics_cache: dict[str, Any] | None = None
+_metrics_cache_at = 0.0
+_METRICS_TTL = 2.0
 
 
 def collect_metrics() -> dict[str, Any]:
+    global _metrics_cache, _metrics_cache_at
+    now = time.monotonic()
+    if _metrics_cache is not None and (now - _metrics_cache_at) < _METRICS_TTL:
+        return dict(_metrics_cache)
     payload = {
         "cpu_percent": 0.0,
         "cpu_per_core": [],
@@ -62,7 +70,9 @@ def collect_metrics() -> dict[str, Any]:
         payload["processes"] = _process_metrics()
     except Exception:
         payload["processes"] = []
-    return payload
+    _metrics_cache = payload
+    _metrics_cache_at = now
+    return dict(payload)
 
 
 def _process_metrics() -> list[dict[str, Any]]:

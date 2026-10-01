@@ -80,8 +80,10 @@ def test_session_without_debug_switch_gets_operational_info_only():
     assert data["debug"] is False
     assert "vpn" in data
     assert "transcoding" in data
+    assert "metrics" in data
+    assert "cpu_percent" in data["metrics"]
     assert "storage" not in data
-    assert "metrics" not in data
+    assert "settings" not in data
     assert "processes" not in data
 
 

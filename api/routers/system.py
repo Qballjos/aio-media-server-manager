@@ -1,12 +1,13 @@
 """
 api/routers/system.py — System information endpoints.
 
-GET /api/system/info  →  operational status for a session; full dump from
-                          localhost or while Diagnostics support share is on.
+GET /api/system/info  →  operational status (incl. host metrics) for a session;
+                          full dump from localhost or while Diagnostics support share is on.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
@@ -34,6 +35,8 @@ def _operational_status() -> dict:
         "transcoding": probe_transcoding(),
         "vpn": vpn_manager.status(),
         "cloudflare_tunnel": cloudflare_tunnel.status(),
+        # Safe for any logged-in admin session (Host health / Settings overview).
+        "metrics": collect_metrics(),
     }
 
 
@@ -81,13 +84,13 @@ def _debug_status() -> dict:
 @router.get("/info", summary="System information")
 async def system_info(request: Request) -> dict:
     """
-    Session: VPN, transcoding, Cloudflare. Full host dump from localhost, or
-    from a session while Diagnostics → Support share is on.
+    Session: VPN, transcoding, Cloudflare, and host metrics. Full host dump from
+    localhost, or from a session while Diagnostics → Support share is on.
     """
     if can_view_debug(request):
-        return _debug_status()
+        return await asyncio.to_thread(_debug_status)
     require_local_or_session(request)
-    return _operational_status()
+    return await asyncio.to_thread(_operational_status)
 
 
 @router.get("/processes", summary="List supervised processes")

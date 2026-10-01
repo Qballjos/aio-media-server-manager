@@ -97,7 +97,7 @@ onMounted(() => {
   localInfo.value = props.systemInfo
   recordHealthSample(props.systemInfo)
   fetchSystemInfo()
-  stopHealthPoll = startGuardedInterval(fetchSystemInfo, 2000)
+  stopHealthPoll = startGuardedInterval(fetchSystemInfo, 5000)
 })
 
 onUnmounted(() => {
@@ -119,7 +119,7 @@ onUnmounted(() => {
         </div>
         <div class="health-body">
           <p v-if="info && info.debug === false" class="health-chart-meta">
-            Host CPU, RAM, disk, and process details are available from this appliance (localhost) or when Diagnostics → Support share is on.
+            Storage paths and full debug dumps stay off until Diagnostics → Support share is on (or you open the UI on localhost).
           </p>
           <article class="health-chart-card">
             <div class="health-chart-head">

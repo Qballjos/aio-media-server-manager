@@ -93,14 +93,41 @@ def test_homepage_snapshot_reuses_memory_cache(tmp_path):
         patch("core.homepage.get_application_api_key", return_value="k"),
         patch("core.homepage._fetch_json", side_effect=fake_fetch),
     ):
-        first = homepage_snapshot("nas.local")
+        first = homepage_snapshot("nas.local", force=True)
         second = homepage_snapshot("nas.local")
         forced = homepage_snapshot("nas.local", force=True)
-        other_host = homepage_snapshot("other.local")
+        other_host = homepage_snapshot("other.local", force=True)
     assert first["calendar"] == second["calendar"]
     assert calls["n"] == 3
     assert forced["apps"][0]["url"].startswith("http://nas.local:")
     assert other_host["apps"][0]["url"].startswith("http://other.local:")
+
+
+def test_homepage_cold_miss_returns_launcher_immediately(tmp_path, monkeypatch):
+    catalog = FakeCatalog([_plugin("sonarr", 8989, tmp_path)])
+    started = []
+    real_thread = threading.Thread
+
+    def fake_thread(*args, **kwargs):
+        name = kwargs.get("name") or ""
+        if str(name).startswith("homepage-refresh-"):
+            started.append(kwargs.get("target"))
+            return SimpleNamespace(start=lambda: None)
+        return real_thread(*args, **kwargs)
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"sonarr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", return_value=([], None)),
+        patch("threading.Thread", side_effect=fake_thread),
+    ):
+        snap = homepage_snapshot("nas.local")
+    assert snap["apps"]
+    assert snap.get("partial") is True
+    assert snap["calendar"] == []
+    assert started
+
 
 
 def test_homepage_stale_snapshot_returns_immediately(tmp_path, monkeypatch):
@@ -145,7 +172,7 @@ def test_homepage_hides_uninstalled_and_cli_apps(tmp_path):
         patch("core.homepage._get_json", return_value=None),
         patch("core.homepage.get_application_api_key", return_value=None),
     ):
-        snap = homepage_snapshot("192.168.2.10")
+        snap = homepage_snapshot("192.168.2.10", force=True)
     names = [item["name"] for item in snap["apps"]]
     assert names == ["sonarr"]
     assert snap["apps"][0]["url"] == "http://192.168.2.10:8989"
@@ -192,6 +219,7 @@ def test_homepage_launcher_marks_crash_loop_sick(tmp_path):
             _plugin("radarr", 7878, tmp_path),
         ]
     )
+    clear_homepage_snapshot_cache()
     with (
         patch("core.homepage.ApplicationCatalog", return_value=catalog),
         patch("core.homepage._running_names", return_value={"radarr"}),
@@ -205,7 +233,7 @@ def test_homepage_launcher_marks_crash_loop_sick(tmp_path):
         patch("core.homepage.get_application_api_key", return_value=None),
         patch("core.homepage._fetch_json", return_value=(None, "skipped")),
     ):
-        snap = homepage_snapshot("nas.local")
+        snap = homepage_snapshot("crash-loop.local")
     by_name = {item["name"]: item for item in snap["apps"]}
     assert by_name["sonarr"]["running"] is False
     assert by_name["sonarr"]["sick"] is True
@@ -241,7 +269,7 @@ def test_homepage_downloads_include_speed(tmp_path):
         ),
     ):
         data = homepage_downloads()
-        snap = homepage_snapshot("nas.local")
+        snap = homepage_snapshot("nas.local", force=True)
     item = data["downloads"][0]
     assert item["title"] == "Show.nzb"
     assert item["progress"] == 42
@@ -273,7 +301,7 @@ def test_homepage_calendar_from_sonarr(tmp_path):
             ),
         ),
     ):
-        snap = homepage_snapshot("host.local")
+        snap = homepage_snapshot("host.local", force=True)
     assert snap["calendar"][0]["title"] == "Example Show"
     assert "S01E02" in snap["calendar"][0]["detail"]
     assert "Pilot" in snap["calendar"][0]["detail"]
@@ -299,7 +327,7 @@ def test_homepage_jellyfin_recent_has_poster_proxy(tmp_path):
             ),
         ),
     ):
-        snap = homepage_snapshot("nas.local")
+        snap = homepage_snapshot("nas.local", force=True)
     assert snap["recent"][0]["title"] == "Dune"
     assert snap["recent"][0]["poster"].startswith("/api/homepage/art?source=jellyfin")
     assert "abc" in snap["recent"][0]["poster"]
@@ -377,7 +405,7 @@ def test_homepage_jellyfin_full_season_is_one_tile(tmp_path):
         patch("core.homepage.get_application_api_key", return_value="k"),
         patch("core.homepage._fetch_json", return_value=({"Items": items}, None)),
     ):
-        snap = homepage_snapshot("nas.local")
+        snap = homepage_snapshot("nas.local", force=True)
     assert len(snap["recent"]) == 1
     assert snap["recent"][0]["title"] == "Severance"
     assert snap["recent"][0]["detail"] == "Season 01"
@@ -409,7 +437,7 @@ def test_homepage_seerr_requests_row(tmp_path):
         patch("core.homepage.get_application_api_key", return_value="k"),
         patch("core.homepage._fetch_json", side_effect=fake_fetch),
     ):
-        snap = homepage_snapshot("nas.local")
+        snap = homepage_snapshot("nas.local", force=True)
     assert snap["requests"][0]["title"] == "Dune"
     assert snap["requests"][0]["detail"] == "Qballjos"
     assert "image.tmdb.org" in snap["requests"][0]["poster"]
@@ -423,7 +451,7 @@ def test_homepage_widget_debug_http_error(tmp_path):
         patch("core.homepage.get_application_api_key", return_value="k"),
         patch("core.homepage._fetch_json", return_value=(None, "HTTP 401")),
     ):
-        snap = homepage_snapshot("host.local")
+        snap = homepage_snapshot("host.local", force=True)
     assert snap["calendar"] == []
     notes = {item["source"]: item for item in snap["widgets"] if item["widget"] == "calendar"}
     assert notes["sonarr"]["state"] == "error"
@@ -438,7 +466,7 @@ def test_homepage_widget_debug_stopped_source(tmp_path):
         patch("core.homepage._running_names", return_value=set()),
         patch("core.homepage.get_application_api_key", return_value="k"),
     ):
-        snap = homepage_snapshot("host.local")
+        snap = homepage_snapshot("host.local", force=True)
     jelly = next(item for item in snap["widgets"] if item["source"] == "jellyfin")
     assert jelly["state"] == "skipped"
     assert jelly["detail"] == "stopped"

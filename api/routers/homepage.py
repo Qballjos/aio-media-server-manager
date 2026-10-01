@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -28,19 +29,19 @@ def _ensure_authenticated(request: Request) -> None:
 async def get_homepage(request: Request, refresh: bool = False) -> dict[str, Any]:
     _ensure_authenticated(request)
     host = request.url.hostname or "127.0.0.1"
-    return homepage_snapshot(host, force=refresh)
+    return await asyncio.to_thread(homepage_snapshot, host, force=refresh)
 
 
 @router.get("/downloads", summary="Live download queues")
 async def get_homepage_downloads(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
-    return homepage_downloads()
+    return await asyncio.to_thread(homepage_downloads)
 
 
 @router.get("/art", summary="Poster image for Home rails")
 async def homepage_artwork(request: Request, source: str = "", item_id: str = "") -> Response:
     _ensure_authenticated(request)
-    body, content_type = homepage_art(source, item_id)
+    body, content_type = await asyncio.to_thread(homepage_art, source, item_id)
     if not body:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artwork not found")
     return Response(content=body, media_type=content_type or "image/jpeg")
@@ -50,13 +51,13 @@ async def homepage_artwork(request: Request, source: str = "", item_id: str = ""
 async def search_homepage(request: Request, q: str = "") -> dict[str, Any]:
     _ensure_authenticated(request)
     host = request.url.hostname or "127.0.0.1"
-    return homepage_search(host, q)
+    return await asyncio.to_thread(homepage_search, host, q)
 
 
 @router.post("/request", summary="Submit a Seerr request")
 async def request_media(request: Request, body: HomepageRequestBody) -> dict[str, Any]:
     _ensure_authenticated(request)
-    result = homepage_request(body.model_dump())
+    result = await asyncio.to_thread(homepage_request, body.model_dump())
     if not result.get("ok"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("detail"))
     return result

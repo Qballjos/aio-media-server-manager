@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -31,7 +32,7 @@ def _persist_vpn_policy(*, enabled: bool) -> None:
 @router.get("/status")
 async def vpn_status(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
-    return vpn_manager.status()
+    return await asyncio.to_thread(vpn_manager.status)
 
 
 @router.post("/start")
@@ -42,7 +43,7 @@ async def vpn_start(request: Request) -> dict[str, Any]:
 
     _persist_vpn_policy(enabled=True)
     stopped = await stop_tunneled_apps()
-    result = vpn_manager.start()
+    result = await asyncio.to_thread(vpn_manager.start)
     if result.get("tunnel_up"):
         result["started_apps"] = await start_tunneled_apps(stopped)
     else:
@@ -59,7 +60,7 @@ async def vpn_stop(request: Request) -> dict[str, Any]:
     from core.settings import settings
 
     stopped = await stop_tunneled_apps()
-    result = vpn_manager.stop()
+    result = await asyncio.to_thread(vpn_manager.stop)
     if settings.vpn_enabled:
         await enforce_vpn_isolation()
         result["started_apps"] = []
@@ -76,8 +77,8 @@ async def vpn_restart(request: Request) -> dict[str, Any]:
 
     _persist_vpn_policy(enabled=True)
     stopped = await stop_tunneled_apps()
-    vpn_manager.stop()
-    result = vpn_manager.start()
+    await asyncio.to_thread(vpn_manager.stop)
+    result = await asyncio.to_thread(vpn_manager.start)
     if result.get("tunnel_up"):
         result["started_apps"] = await start_tunneled_apps(stopped)
     else:

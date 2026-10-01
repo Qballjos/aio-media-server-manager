@@ -465,9 +465,10 @@ onMounted(() => {
   syncCalViewToViewport()
   window.addEventListener('resize', syncCalViewToViewport)
   loadSnapshot()
-  loadDownloads()
-  poll = startGuardedInterval(loadSnapshot, 15000)
-  downloadsPoll = startGuardedInterval(loadDownloads, 3000)
+  // Defer live queues so first paint is the launcher snapshot.
+  setTimeout(() => loadDownloads(), 750)
+  poll = startGuardedInterval(loadSnapshot, 20000)
+  downloadsPoll = startGuardedInterval(loadDownloads, 8000)
 })
 watch(
   () => route.query.debug,

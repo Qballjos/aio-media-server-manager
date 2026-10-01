@@ -402,12 +402,29 @@ class VpnManager:
         self._last_error = ""
         self._active_wg_conf: Path | None = None
         self._cached_underlay_ips: list[str] | None = None
+        self._status_cache: dict[str, Any] | None = None
+        self._status_cache_at = 0.0
+        self._handshake_cache: bool | None = None
+        self._handshake_cache_at = 0.0
+        self._wg_ifaces_cache: list[str] | None = None
+        self._wg_ifaces_cache_at = 0.0
+
+    def _invalidate_runtime_cache(self) -> None:
+        self._status_cache = None
+        self._status_cache_at = 0.0
+        self._handshake_cache = None
+        self._handshake_cache_at = 0.0
+        self._wg_ifaces_cache = None
+        self._wg_ifaces_cache_at = 0.0
 
     @property
     def config_path(self) -> Path:
         return Path(self.settings.vpn_config_path)
 
     def status(self) -> dict[str, Any]:
+        now = time.monotonic()
+        if self._status_cache is not None and (now - self._status_cache_at) < 2.0:
+            return dict(self._status_cache)
         tunnel_up = self._tunnel_up()
         netns = self._netns_exists()
         isolated = bool(self.settings.vpn_enabled and tunnel_up)
@@ -419,6 +436,11 @@ class VpnManager:
             running[name] = is_running
             if self._unprotected(is_running, isolated):
                 unprotected.append(name)
+        handshake_ok = (
+            self._wireguard_handshake_fresh()
+            if self.settings.vpn_protocol == "wireguard"
+            else tunnel_up
+        )
         payload = {
             "enabled": self.settings.vpn_enabled,
             "enforce": self.settings.vpn_enforce,
@@ -445,11 +467,13 @@ class VpnManager:
             "endpoint_hosts": self._endpoint_hosts(),
             "endpoint_ips": list(self._cached_underlay_ips or []),
             "webui_proxy_ports": vpn_webui_proxy.listening_ports(),
-            "handshake_ok": self._wireguard_handshake_fresh() if self.settings.vpn_protocol == "wireguard" else tunnel_up,
+            "handshake_ok": handshake_ok,
             "isolation_mode": self.isolation_mode(),
             "vpn_app_uid": VPN_APP_UID if self.uses_uid_isolation() else None,
         }
-        return payload
+        self._status_cache = payload
+        self._status_cache_at = now
+        return dict(payload)
 
     def isolation_mode(self) -> str:
         if not self.settings.vpn_enabled or not self._is_linux():
@@ -700,6 +724,7 @@ class VpnManager:
                 self._forward_local_ports()
                 self._apply_netns_kill_switch()
                 self._write_netns_resolv(self._dns_for_netns())
+            self._invalidate_runtime_cache()
             return {"status": "started", **self.status()}
         except subprocess.CalledProcessError as exc:
             return self._fail(vpn_start_failure_detail(exc.returncode, exc.stderr or "", exc.stdout or ""))
@@ -784,11 +809,13 @@ class VpnManager:
             VPN_APP_UID,
             _VPN_TABLE,
         )
+        self._invalidate_runtime_cache()
         return {"status": "started", **self.status()}
 
     def _fail(self, detail: str) -> dict[str, Any]:
         self._last_error = (detail or "VPN start failed.")[:2000]
         logger.error("VPN start failed: %s", self._last_error)
+        self._invalidate_runtime_cache()
         return {"status": "error", "detail": self._last_error, **self.status()}
 
     def stop(self) -> dict[str, Any]:
@@ -809,6 +836,7 @@ class VpnManager:
             self._clear_uid_wireguard_routing()
             self._clear_main_wireguard_routing()
             self._teardown_netns()
+        self._invalidate_runtime_cache()
         return {"status": "stopped", **self.status()}
 
     def _ensure_vpn_app_user(self) -> None:
@@ -1758,6 +1786,9 @@ class VpnManager:
             )
 
     def _main_tunnel_interface_names(self) -> list[str]:
+        now = time.monotonic()
+        if self._wg_ifaces_cache is not None and (now - self._wg_ifaces_cache_at) < 2.0:
+            return list(self._wg_ifaces_cache)
         result = self._ip(["-o", "link", "show", "up"])
         names: list[str] = []
         for line in (result.stdout or "").splitlines():
@@ -1767,7 +1798,9 @@ class VpnManager:
             name = parts[1].strip().split("@", 1)[0]
             if name.startswith("wg") or name.startswith("tun"):
                 names.append(name)
-        return names
+        self._wg_ifaces_cache = names
+        self._wg_ifaces_cache_at = now
+        return list(names)
 
     def _tunnel_interface_names(self) -> list[str]:
         result = self._ip(["netns", "exec", TORRENT_NETNS, "ip", "-o", "link", "show", "up"])
@@ -1799,7 +1832,12 @@ class VpnManager:
 
     def _wireguard_handshake_fresh(self, max_age_seconds: int = 180) -> bool:
         """True when wg in the main netns reports a recent peer handshake."""
+        now_mono = time.monotonic()
+        if self._handshake_cache is not None and (now_mono - self._handshake_cache_at) < 2.0:
+            return self._handshake_cache
         if not shutil.which("wg"):
+            self._handshake_cache = False
+            self._handshake_cache_at = now_mono
             return False
         try:
             out = subprocess.run(
@@ -1809,10 +1847,15 @@ class VpnManager:
                 timeout=3,
             )
         except (OSError, subprocess.TimeoutExpired):
+            self._handshake_cache = False
+            self._handshake_cache_at = now_mono
             return False
         if out.returncode != 0:
+            self._handshake_cache = False
+            self._handshake_cache_at = now_mono
             return False
         now = time.time()
+        fresh = False
         for line in (out.stdout or "").splitlines():
             parts = line.split()
             if len(parts) < 3:
@@ -1822,8 +1865,11 @@ class VpnManager:
             except ValueError:
                 continue
             if ts > 0 and (now - ts) <= max_age_seconds:
-                return True
-        return False
+                fresh = True
+                break
+        self._handshake_cache = fresh
+        self._handshake_cache_at = now_mono
+        return fresh
 
     def _wait_for_wireguard_handshake(self, timeout_seconds: float = 25.0) -> bool:
         deadline = time.monotonic() + timeout_seconds

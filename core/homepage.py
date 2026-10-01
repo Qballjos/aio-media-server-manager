@@ -24,7 +24,7 @@ from core.supervisor import ProcessSupervisor
 
 logger = logging.getLogger(__name__)
 
-_TIMEOUT = 4.0
+_TIMEOUT = 2.0
 _CACHE_TTL = 30.0
 _LAUNCHER_SKIP = frozenset({"recyclarr", "flaresolverr"})
 _LAUNCHER_CATEGORY_ORDER = (
@@ -106,7 +106,38 @@ def homepage_snapshot(host: str, *, force: bool = False) -> dict[str, Any]:
             if age >= _CACHE_TTL:
                 _schedule_refresh(ident)
             return snap
-        return _build_and_store(ident)
+        # Cold miss: return launcher immediately; fill widgets in the background.
+        shell = _launcher_shell(ident)
+        _snapshots[ident] = _SnapshotEntry(shell, time.monotonic() - _CACHE_TTL)
+        _schedule_refresh(ident)
+        return copy.deepcopy(shell)
+
+
+def _launcher_shell(host: str) -> dict[str, Any]:
+    catalog = ApplicationCatalog()
+    running = _running_names()
+    seerr = catalog.has("seerr") and catalog.get("seerr").is_installed()
+    seerr_running = seerr and "seerr" in running
+    return {
+        "apps": _launcher_apps(catalog, running, host),
+        "calendar": [],
+        "downloads": [],
+        "recent": [],
+        "requests": [],
+        "seerr": {
+            "available": bool(seerr_running),
+            "url": _web_url(host, _port(catalog, "seerr", 5055)) if seerr else None,
+        },
+        "widgets": [
+            {
+                "widget": "home",
+                "source": "amm",
+                "level": "info",
+                "detail": "Loading calendar and activity…",
+            }
+        ],
+        "partial": True,
+    }
 
 
 def homepage_downloads() -> dict[str, Any]:

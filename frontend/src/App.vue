@@ -246,7 +246,8 @@ async function fetchUpdateStatus() {
 async function refreshDashboard() {
   isLoadingData.value = true
   try {
-    await Promise.all([fetchCatalog(), fetchApplications(), fetchSystemInfo(), fetchUpdateStatus(), fetchVpnStatus()])
+    // system/info already includes vpn — skip a separate vpn round-trip on load
+    await Promise.all([fetchCatalog(), fetchApplications(), fetchSystemInfo(), fetchUpdateStatus()])
   } finally {
     isLoadingData.value = false
   }
@@ -316,8 +317,8 @@ onMounted(() => {
   stopClock = startGuardedInterval(() => {
     currentTime.value = new Date().toLocaleTimeString()
   }, 1000)
-  stopLivePoll = startGuardedInterval(pollLiveStatus, 5000)
-  stopSlowPoll = startGuardedInterval(pollSlowStatus, 30000)
+  stopLivePoll = startGuardedInterval(pollLiveStatus, 10000)
+  stopSlowPoll = startGuardedInterval(pollSlowStatus, 45000)
 })
 
 onUnmounted(() => {
