@@ -33,6 +33,7 @@ from core.integrations.sabnzbd import SABnzbdClient, read_sabnzbd_ini
 from core.integrations.seerr import SeerrClient
 from core.integrations.sonarr import SonarrClient
 from core.integrations.usenet import load_usenet_server
+from core.vpn import TORRENT_BRIDGE_HOST, VpnManager, vpn_manager
 from core.library_layout import (
     DOWNLOAD_CATEGORIES,
     LIBRARY_FOLDERS,
@@ -208,6 +209,12 @@ class IntegrationEngine:
         sonarr_url = f"http://127.0.0.1:{sonarr_port}"
         radarr_url = f"http://127.0.0.1:{radarr_port}"
         lidarr_url = f"http://127.0.0.1:{lidarr_port}"
+        # Prowlarr runs inside amm-torrent when VPN is on; 127.0.0.1 there is not Sonarr.
+        if vpn_manager.settings.vpn_enabled and VpnManager._is_linux():
+            bridge = TORRENT_BRIDGE_HOST
+            sonarr_url = f"http://{bridge}:{sonarr_port}"
+            radarr_url = f"http://{bridge}:{radarr_port}"
+            lidarr_url = f"http://{bridge}:{lidarr_port}"
 
         if not self._skip_unavailable(steps, "sabnzbd", "configure_folders_and_categories"):
             sab_client = SABnzbdClient(port=sab_port, api_key=sab_key)

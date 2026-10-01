@@ -14,6 +14,7 @@ import logging
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,8 @@ _VETH_HOST = "amm-veth-h"
 _VETH_NS = "amm-veth-n"
 _NS_HOST_IP = "10.200.200.1"
 _NS_PEER_IP = "10.200.200.2"
+# Reachable from amm-torrent for Prowlarr → Sonarr/Radarr (main netns listeners).
+TORRENT_BRIDGE_HOST = _NS_HOST_IP
 _DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191}
 _FALLBACK_DNS = ("1.1.1.1", "9.9.9.9")
 _KS_CHAIN = "AMM-KS"
@@ -227,6 +230,37 @@ def ensure_wireguard_table_off(text: str) -> str:
     return "".join(out)
 
 
+def sanitize_wireguard_runtime(text: str) -> str:
+    """Drop DNS/hooks AMM already handles (or that break Synology iptables)."""
+    drop = {"dns", "postup", "postdown", "preup", "predown"}
+    out: list[str] = []
+    for raw in text.splitlines(keepends=True):
+        key = raw.split("#", 1)[0].strip().split("=", 1)[0].strip().lower()
+        if key in drop:
+            continue
+        out.append(raw)
+    return "".join(out)
+
+
+def wireguard_covers_default_route(text: str) -> bool:
+    """True when any peer AllowedIPs includes 0.0.0.0/0 (full-tunnel egress)."""
+    for raw in (text or "").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line.lower().startswith("allowedips"):
+            continue
+        _, _, values = line.partition("=")
+        if not values.strip():
+            _, _, values = line.partition(" ")
+        tokens = {
+            item.strip().lower()
+            for item in values.replace(";", ",").split(",")
+            if item.strip()
+        }
+        if "0.0.0.0/0" in tokens:
+            return True
+    return False
+
+
 def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
     detail = (stderr or stdout or "").strip()
     lower = detail.lower()
@@ -264,6 +298,7 @@ class VpnManager:
         self.settings = app_settings or settings
         self._last_error = ""
         self._active_wg_conf: Path | None = None
+        self._cached_underlay_ips: list[str] | None = None
 
     @property
     def config_path(self) -> Path:
@@ -305,7 +340,9 @@ class VpnManager:
             "usenet_bypasses_vpn": True,
             "last_error": self._last_error or "",
             "endpoint_hosts": self._endpoint_hosts(),
+            "endpoint_ips": list(self._cached_underlay_ips or []),
             "webui_proxy_ports": vpn_webui_proxy.listening_ports(),
+            "handshake_ok": self._wireguard_handshake_fresh() if tunnel_up else False,
         }
         return payload
 
@@ -358,7 +395,15 @@ class VpnManager:
     def start(self) -> dict[str, Any]:
         if not self.config_path.is_file():
             return self._fail(f"VPN config missing: {self.config_path}")
+        self._cached_underlay_ips = None
         if self._is_linux():
+            # Resolve endpoints once so routes/NAT/kill-switch/config pin the same IPs.
+            self._cached_underlay_ips = self._resolve_underlay_ips()
+            if not self._cached_underlay_ips:
+                return self._fail(
+                    "Could not resolve the VPN Endpoint to an IP from the house network. "
+                    "Check DNS on the NAS or use a numeric Endpoint in the profile."
+                )
             self._drop_stale_netns()
             self._ensure_resolvconf_shim()
             ns_error = self._ensure_netns()
@@ -367,6 +412,15 @@ class VpnManager:
         proto = self.settings.vpn_protocol
         up_conf = self.config_path
         if proto == "wireguard":
+            try:
+                raw = self.config_path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                return self._fail(f"Could not read WireGuard config: {exc}")
+            if not wireguard_covers_default_route(raw):
+                return self._fail(
+                    "WireGuard AllowedIPs must include 0.0.0.0/0 so indexers and DNS "
+                    "can use the tunnel. Split-tunnel profiles are not supported."
+                )
             exe = shutil.which("wg-quick")
             if exe:
                 try:
@@ -397,6 +451,11 @@ class VpnManager:
                 self._apply_netns_kill_switch()
                 self._purge_stale_dns_underlay()
                 self._write_netns_resolv(self._dns_for_netns())
+                if proto == "wireguard" and not self._wait_for_wireguard_handshake():
+                    return self._fail(
+                        "WireGuard interface is up but no handshake completed. "
+                        "Check the profile, endpoint reachability, and NAS outbound UDP."
+                    )
             return {"status": "started", **self.status()}
         except subprocess.CalledProcessError as exc:
             return self._fail(vpn_start_failure_detail(exc.returncode, exc.stderr or "", exc.stdout or ""))
@@ -428,6 +487,7 @@ class VpnManager:
                     timeout=30,
                 )
         self._active_wg_conf = None
+        self._cached_underlay_ips = None
         if self._is_linux():
             self._teardown_netns()
         return {"status": "stopped", **self.status()}
@@ -455,6 +515,13 @@ class VpnManager:
         self._ip(["netns", "exec", TORRENT_NETNS, "ip", "addr", "add", f"{_NS_PEER_IP}/24", "dev", _VETH_NS])
         self._ip(["netns", "exec", TORRENT_NETNS, "ip", "link", "set", _VETH_NS, "up"])
         self._ip(["netns", "exec", TORRENT_NETNS, "ip", "link", "set", "lo", "up"])
+        # Enable forwarding before wg-quick so the first handshake can leave the veth.
+        subprocess.run(
+            ["sysctl", "-w", "net.ipv4.ip_forward=1"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         self._write_netns_resolv()
         self._apply_host_veth_guard()
         self._apply_netns_kill_switch()
@@ -486,6 +553,11 @@ class VpnManager:
             return subprocess.CompletedProcess(args, 1, "", str(exc))
 
     def _underlay_ips(self) -> list[str]:
+        if self._cached_underlay_ips is not None:
+            return list(self._cached_underlay_ips)
+        return self._resolve_underlay_ips()
+
+    def _resolve_underlay_ips(self) -> list[str]:
         import socket
 
         hosts: list[str] = []
@@ -579,7 +651,7 @@ class VpnManager:
     def _prepared_wireguard_config(self) -> Path:
         raw = self.config_path.read_text(encoding="utf-8", errors="replace")
         rewritten = ensure_wireguard_table_off(
-            rewrite_wireguard_endpoints(raw, self._endpoint_ip_map())
+            sanitize_wireguard_runtime(rewrite_wireguard_endpoints(raw, self._endpoint_ip_map()))
         )
         runtime_dir = Path("/run/amm-vpn")
         try:
@@ -628,7 +700,7 @@ class VpnManager:
                 "MASQUERADE",
             ]
             if self._host_iptables(nat).returncode != 0:
-                self._host_iptables(
+                result = self._host_iptables(
                     [
                         "-t",
                         "nat",
@@ -642,6 +714,12 @@ class VpnManager:
                         "MASQUERADE",
                     ]
                 )
+                if result.returncode != 0:
+                    logger.warning(
+                        "VPN underlay MASQUERADE for %s failed: %s",
+                        dest,
+                        (result.stderr or "")[:200],
+                    )
             self._ip(["netns", "exec", TORRENT_NETNS, "ip", "route", "replace", dest, "via", _NS_HOST_IP])
         # Older builds pinned public DNS via the underlay; drop those so queries use wg0.
         self._purge_stale_dns_underlay()
@@ -707,9 +785,18 @@ class VpnManager:
         if not servers:
             servers = list(_FALLBACK_DNS)
         path = Path(f"/etc/netns/{TORRENT_NETNS}/resolv.conf")
+        content = "".join(f"nameserver {item}\n" for item in servers)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("".join(f"nameserver {item}\n" for item in servers), encoding="utf-8")
+            if path.is_file():
+                try:
+                    if path.read_text(encoding="utf-8") == content:
+                        return
+                except OSError:
+                    pass
+            tmp = path.with_name(path.name + ".tmp")
+            tmp.write_text(content, encoding="utf-8")
+            os.replace(tmp, path)
         except OSError as exc:
             logger.warning("Could not write %s: %s", path, exc)
 
@@ -845,14 +932,14 @@ class VpnManager:
             )
 
     def refresh_local_forwards(self) -> None:
-        """Re-bind WebUI proxies while the tunnel is up (Docker may flush paths)."""
+        """Re-bind WebUI proxies / underlay routes while the tunnel is up."""
         if not self.settings.vpn_enabled or not self._is_linux():
             vpn_webui_proxy.stop_all()
             return
         if not self.tunneled_apps_allowed():
             return
+        self._apply_host_veth_guard()
         self._forward_local_ports()
-        self._purge_stale_dns_underlay()
         self._write_netns_resolv(self._dns_for_netns())
 
     def _tunnel_interface_names(self) -> list[str]:
@@ -883,8 +970,44 @@ class VpnManager:
                 ["netns", "exec", TORRENT_NETNS, "ip", "-6", "route", "replace", "default", "dev", name]
             )
 
+    def _wireguard_handshake_fresh(self, max_age_seconds: int = 180) -> bool:
+        """True when wg reports a recent peer handshake inside amm-torrent."""
+        if not shutil.which("wg") or not self._netns_exists():
+            return False
+        try:
+            out = subprocess.run(
+                ["ip", "netns", "exec", TORRENT_NETNS, "wg", "show", "all", "latest-handshakes"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        if out.returncode != 0:
+            return False
+        now = time.time()
+        for line in (out.stdout or "").splitlines():
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            try:
+                ts = int(parts[-1])
+            except ValueError:
+                continue
+            if ts > 0 and (now - ts) <= max_age_seconds:
+                return True
+        return False
+
+    def _wait_for_wireguard_handshake(self, timeout_seconds: float = 20.0) -> bool:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            if self._wireguard_handshake_fresh():
+                return True
+            time.sleep(1.0)
+        return self._wireguard_handshake_fresh()
+
     def _tunnel_up(self) -> bool:
-        """True only when a WireGuard/OpenVPN iface is up *inside* amm-torrent."""
+        """True when the tunnel data plane is usable inside amm-torrent."""
         if not self._is_linux() or not self._netns_exists():
             return False
         if shutil.which("wg"):
@@ -896,7 +1019,8 @@ class VpnManager:
                     timeout=3,
                 )
                 if out.returncode == 0 and out.stdout.strip():
-                    return True
+                    # Interface alone is not enough — require a real handshake.
+                    return self._wireguard_handshake_fresh()
             except (OSError, subprocess.TimeoutExpired):
                 pass
         return bool(self._tunnel_interface_names())

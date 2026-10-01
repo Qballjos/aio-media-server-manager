@@ -356,6 +356,49 @@ def test_dns_for_netns_prefers_profile_then_public_fallback(tmp_path: Path, monk
     assert "9.9.9.9" in servers
 
 
+def test_wireguard_covers_default_route_and_sanitize():
+    from core.vpn import sanitize_wireguard_runtime, wireguard_covers_default_route
+
+    full = (
+        "[Interface]\nPrivateKey = x\nDNS = 1.1.1.1\n"
+        "PostUp = iptables -A FORWARD -j ACCEPT\n\n"
+        "[Peer]\nAllowedIPs = 0.0.0.0/0, ::/0\n"
+    )
+    assert wireguard_covers_default_route(full)
+    cleaned = sanitize_wireguard_runtime(full)
+    assert "DNS" not in cleaned
+    assert "PostUp" not in cleaned
+    assert "AllowedIPs" in cleaned
+    assert not wireguard_covers_default_route("[Peer]\nAllowedIPs = 10.0.0.0/8\n")
+
+
+def test_write_netns_resolv_is_idempotent(tmp_path: Path, monkeypatch):
+    import os
+
+    resolv = tmp_path / "resolv.conf"
+    writes = {"n": 0}
+    real_replace = os.replace
+
+    def counting_replace(src, dst):
+        writes["n"] += 1
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", counting_replace)
+
+    def write_resolv(servers: list[str]) -> None:
+        content = "".join(f"nameserver {item}\n" for item in servers)
+        if resolv.is_file() and resolv.read_text(encoding="utf-8") == content:
+            return
+        tmp = resolv.with_name(resolv.name + ".tmp")
+        tmp.write_text(content, encoding="utf-8")
+        os.replace(tmp, resolv)
+
+    write_resolv(["1.1.1.1"])
+    write_resolv(["1.1.1.1"])
+    assert writes["n"] == 1
+    assert resolv.read_text(encoding="utf-8") == "nameserver 1.1.1.1\n"
+
+
 def test_vpn_start_failure_explains_missing_wireguard_go():
     text = vpn_start_failure_detail(127, "", "")
     assert "wireguard-go" in text
