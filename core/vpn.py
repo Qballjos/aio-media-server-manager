@@ -467,6 +467,14 @@ class VpnManager:
     def wrap_torrent_command(self, cmd: list[str]) -> list[str]:
         return self.wrap_isolated_command(cmd)
 
+    def _vpn_app_gid(self) -> int:
+        """Primary group for VPN-isolated apps — share PGID so downloads stay group-readable by Arr."""
+        try:
+            gid = int(self.settings.pgid)
+        except (TypeError, ValueError):
+            gid = VPN_APP_GID
+        return gid if gid > 0 else VPN_APP_GID
+
     def wrap_isolated_command(self, cmd: list[str]) -> list[str]:
         """Force tunneled apps through the VPN without nested NAT on Synology."""
         if not self.settings.vpn_enabled:
@@ -479,10 +487,11 @@ class VpnManager:
                 return cmd
             self._ensure_vpn_app_user()
             home = f"/tmp/{VPN_APP_USER}"
+            gid = self._vpn_app_gid()
             return [
                 "setpriv",
                 f"--reuid={VPN_APP_UID}",
-                f"--regid={VPN_APP_GID}",
+                f"--regid={gid}",
                 "--clear-groups",
                 "--",
                 "env",
@@ -526,18 +535,139 @@ class VpnManager:
         if not self.uses_uid_isolation():
             return
         self._ensure_vpn_app_user()
-        paths: list[Path] = []
+        gid = self._vpn_app_gid()
         try:
             from applications.catalog import ApplicationCatalog
 
             if ApplicationCatalog(app_settings=self.settings).has(name):
                 app = ApplicationCatalog(app_settings=self.settings).get(name)
-                paths.append(Path(app.config_dir))
+                config_dir = Path(app.config_dir)
+                self._chown_tree(config_dir, uid=VPN_APP_UID, gid=gid)
+                self._strip_posix_acls(config_dir)
+                self._chmod_tree(config_dir, dir_mode=0o755, file_mode=0o644)
+                if not self._vpn_uid_can_write(config_dir, gid=gid):
+                    # Synology ACL often blocks uid 910 even after chown; open the app config.
+                    logger.warning(
+                        "VPN uid %s still cannot write %s after chown; relaxing mode (Synology ACL).",
+                        VPN_APP_UID,
+                        config_dir,
+                    )
+                    self._chmod_tree(config_dir, dir_mode=0o777, file_mode=0o666)
+                    self._strip_posix_acls(config_dir)
+                    if not self._vpn_uid_can_write(config_dir, gid=gid):
+                        logger.error(
+                            "VPN uid %s cannot write %s. On Synology run: "
+                            "sudo synoacltool -del %s (host path) then chown -R %s:%s that folder.",
+                            VPN_APP_UID,
+                            config_dir,
+                            config_dir,
+                            VPN_APP_UID,
+                            gid,
+                        )
         except Exception:
             logger.debug("Could not resolve config dir for %s", name, exc_info=True)
-        paths.append(Path(self.settings.download_dir))
-        for path in paths:
-            self._chown_tree(path)
+        # Downloads stay owned by PUID:PGID so Arr can import; VPN uid shares PGID.
+        self._prepare_shared_download_tree(Path(self.settings.download_dir), gid=gid)
+
+    def _vpn_uid_can_write(self, path: Path, *, gid: int) -> bool:
+        if not path.is_dir():
+            return False
+        setpriv = shutil.which("setpriv")
+        if not setpriv:
+            return False
+        probe = path / f".ammvpn_write_test_{VPN_APP_UID}"
+        try:
+            result = subprocess.run(
+                [
+                    setpriv,
+                    f"--reuid={VPN_APP_UID}",
+                    f"--regid={gid}",
+                    "--clear-groups",
+                    "--",
+                    "sh",
+                    "-c",
+                    f"echo ok > '{probe}' && rm -f '{probe}'",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            return result.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+    def _strip_posix_acls(self, path: Path) -> None:
+        setfacl = shutil.which("setfacl")
+        if not setfacl or not path.exists():
+            return
+        try:
+            subprocess.run(
+                [setfacl, "-b", "-R", str(path)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            logger.debug("setfacl -b %s failed: %s", path, exc)
+
+    def _chmod_tree(self, path: Path, *, dir_mode: int, file_mode: int) -> None:
+        if not path.exists():
+            return
+        try:
+            if path.is_dir():
+                os.chmod(path, dir_mode)
+            else:
+                os.chmod(path, file_mode)
+                return
+        except OSError as exc:
+            logger.debug("chmod %s failed: %s", path, exc)
+        for root, dirs, files in os.walk(path):
+            for name in dirs:
+                try:
+                    os.chmod(Path(root) / name, dir_mode)
+                except OSError:
+                    pass
+            for name in files:
+                try:
+                    os.chmod(Path(root) / name, file_mode)
+                except OSError:
+                    pass
+
+    def _prepare_shared_download_tree(self, path: Path, *, gid: int) -> None:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.warning("Could not create download dir %s: %s", path, exc)
+            return
+        try:
+            puid = int(self.settings.puid)
+        except (TypeError, ValueError):
+            puid = VPN_APP_UID
+        # Owner stays PUID; group PGID with setgid so new files stay group-accessible.
+        self._chown_tree(path, uid=puid, gid=gid, mode=0o2775)
+        # VPN uid must be able to write into the tree even when some files are 644/755.
+        self._ensure_group_writable(path)
+
+    def _ensure_group_writable(self, path: Path) -> None:
+        if not path.is_dir():
+            return
+        for root, dirs, files in os.walk(path):
+            for name in dirs:
+                target = Path(root) / name
+                try:
+                    mode = target.stat().st_mode
+                    os.chmod(target, mode | 0o2770)
+                except OSError:
+                    pass
+            for name in files:
+                target = Path(root) / name
+                try:
+                    mode = target.stat().st_mode
+                    os.chmod(target, mode | 0o660)
+                except OSError:
+                    pass
 
     def start(self) -> dict[str, Any]:
         if not self.config_path.is_file():
@@ -741,16 +871,28 @@ class VpnManager:
         except KeyError:
             return False
 
-    def _chown_tree(self, path: Path) -> None:
+    def _chown_tree(
+        self,
+        path: Path,
+        *,
+        uid: int = VPN_APP_UID,
+        gid: int = VPN_APP_GID,
+        mode: int | None = 0o755,
+    ) -> None:
         if not path.exists():
             try:
                 path.mkdir(parents=True, exist_ok=True)
-            except OSError:
+            except OSError as exc:
+                logger.warning("Could not create %s for VPN apps: %s", path, exc)
                 return
         try:
-            os.chown(path, VPN_APP_UID, VPN_APP_GID)
+            os.chown(path, uid, gid)
+            if mode is not None:
+                os.chmod(path, mode)
         except OSError as exc:
-            logger.debug("chown %s failed: %s", path, exc)
+            logger.warning("chown/chmod %s -> %s:%s failed: %s", path, uid, gid, exc)
+            # Fall back to recursive chown(1) which sometimes succeeds when os.chown fails.
+            self._chown_cli(path, uid, gid)
             return
         if not path.is_dir():
             return
@@ -758,9 +900,36 @@ class VpnManager:
             for name in dirs + files:
                 target = Path(root) / name
                 try:
-                    os.chown(target, VPN_APP_UID, VPN_APP_GID)
+                    os.chown(target, uid, gid)
+                    if mode is not None and target.is_dir():
+                        os.chmod(target, mode)
+                    elif mode is not None and target.is_file():
+                        os.chmod(target, 0o644 if mode == 0o755 else (mode & 0o666))
                 except OSError:
                     pass
+
+    def _chown_cli(self, path: Path, uid: int, gid: int) -> None:
+        chown = shutil.which("chown")
+        if not chown:
+            return
+        try:
+            result = subprocess.run(
+                [chown, "-R", f"{uid}:{gid}", str(path)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+            if result.returncode != 0:
+                logger.warning(
+                    "chown -R %s:%s %s failed: %s",
+                    uid,
+                    gid,
+                    path,
+                    (result.stderr or result.stdout or "")[:200],
+                )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            logger.warning("chown -R %s failed: %s", path, exc)
 
     def _apply_uid_wireguard_routing(self) -> str | None:
         ifaces = self._main_tunnel_interface_names()

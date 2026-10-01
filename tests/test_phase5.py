@@ -155,7 +155,7 @@ def test_vpn_wraps_wireguard_with_setpriv_uid(tmp_path: Path, monkeypatch):
         lambda name: "/usr/bin/setpriv" if name == "setpriv" else None,
     )
     wrapped = mgr.wrap_torrent_command(["qbittorrent-nox"])
-    assert wrapped[:4] == ["setpriv", f"--reuid={VPN_APP_UID}", f"--regid={VPN_APP_GID}", "--clear-groups"]
+    assert wrapped[:4] == ["setpriv", f"--reuid={VPN_APP_UID}", f"--regid={cfg.pgid}", "--clear-groups"]
     assert "qbittorrent-nox" in wrapped
 
 
@@ -695,7 +695,7 @@ def test_flaresolverr_start_command_wraps_on_linux(tmp_path: Path, monkeypatch):
     exe.write_text("x", encoding="utf-8")
     exe.chmod(0o755)
     cmd = app.build_start_command(exe)
-    assert cmd[:4] == ["setpriv", f"--reuid={VPN_APP_UID}", f"--regid={VPN_APP_GID}", "--clear-groups"]
+    assert cmd[:4] == ["setpriv", f"--reuid={VPN_APP_UID}", f"--regid={cfg.pgid}", "--clear-groups"]
 
 
 def test_qbittorrent_start_command_not_netns_on_non_linux(tmp_path: Path):

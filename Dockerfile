@@ -93,6 +93,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         ffmpeg \
         iproute2 \
         util-linux \
+        acl \
         openvpn \
         wireguard-tools \
         iptables \
