@@ -19,6 +19,7 @@ from core.vpn import (
     VpnManager,
     parse_vpn_dns_servers,
     parse_vpn_underlay_hosts,
+    rewrite_wireguard_endpoints,
     save_vpn_config_text,
     vpn_start_failure_detail,
 )
@@ -126,6 +127,7 @@ def test_vpn_status_without_tunnel(tmp_path: Path, monkeypatch):
     assert status["unprotected_apps"] == []
     assert status["tunnel_up"] is False
     assert status["kill_switch"] is True
+    assert status["last_error"] == ""
     assert "privadovpn" in status["supported_providers"]
     monkeypatch.setattr(mgr, "_is_linux", lambda: False)
     cmd = mgr.wrap_torrent_command(["qbittorrent-nox"])
@@ -210,6 +212,30 @@ def test_parse_vpn_dns_from_wireguard_and_openvpn():
     assert parse_vpn_dns_servers("[Interface]\nPrivateKey = x\n") == []
     assert parse_vpn_underlay_hosts("Endpoint = 203.0.113.10:51820\n") == ["203.0.113.10"]
     assert parse_vpn_underlay_hosts("remote 198.51.100.8 1194\n") == ["198.51.100.8"]
+    assert parse_vpn_underlay_hosts("Endpoint = vpn.example.com:51820\n") == ["vpn.example.com"]
+
+
+def test_rewrite_wireguard_endpoints_pins_hostname():
+    text = "[Peer]\nPublicKey = abc\nEndpoint = vpn.example.com:51820\nAllowedIPs = 0.0.0.0/0\n"
+    out = rewrite_wireguard_endpoints(text, {"vpn.example.com": "203.0.113.9"})
+    assert "Endpoint = 203.0.113.9:51820" in out
+    assert "vpn.example.com" not in out
+
+
+def test_bootstrap_ips_include_public_dns_not_vpn_only_dns(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_underlay_ips", lambda: ["203.0.113.10"])
+    ips = mgr._bootstrap_ips()
+    assert ips[0] == "203.0.113.10"
+    assert "1.1.1.1" in ips
+    assert "9.9.9.9" in ips
+    assert "198.18.0.2" not in ips
 
 
 def test_vpn_start_failure_explains_missing_wireguard_go():

@@ -137,7 +137,7 @@ def parse_vpn_underlay_hosts(text: str) -> list[str]:
             _, _, rest = line.partition("=")
             if not rest.strip():
                 _, _, rest = line.partition(" ")
-            host = rest.strip().split(":")[0].strip().strip("[]")
+            host, _port = _split_endpoint(rest.strip())
         elif lower.startswith("remote ") or lower.startswith("remote\t"):
             parts = line.split()
             if len(parts) >= 2:
@@ -146,6 +146,45 @@ def parse_vpn_underlay_hosts(text: str) -> list[str]:
             seen.add(host)
             hosts.append(host)
     return hosts
+
+
+def _split_endpoint(value: str) -> tuple[str, str]:
+    raw = (value or "").strip()
+    if raw.startswith("["):
+        host, _, rest = raw[1:].partition("]")
+        port = rest.lstrip(":").split()[0].strip() if rest else ""
+        return host.strip(), port or "51820"
+    if raw.count(":") == 1:
+        host, _, port = raw.partition(":")
+        return host.strip(), (port.split()[0].strip() or "51820")
+    return raw, "51820"
+
+
+def rewrite_wireguard_endpoints(text: str, resolved: dict[str, str]) -> str:
+    """Pin Endpoint hostnames to IPs so wg-quick inside amm-torrent does not need DNS."""
+    if not resolved:
+        return text
+    lines: list[str] = []
+    for raw in text.splitlines(keepends=True):
+        stripped = raw.split("#", 1)[0].strip()
+        if not stripped.lower().startswith("endpoint"):
+            lines.append(raw)
+            continue
+        prefix, sep, rest = raw.partition("=")
+        if not sep:
+            prefix, sep, rest = raw.partition(" ")
+        value = rest.strip()
+        if not value:
+            lines.append(raw)
+            continue
+        host, port = _split_endpoint(value.split("#", 1)[0].strip())
+        ip = resolved.get(host) or resolved.get(host.lower())
+        if not ip or ip == host:
+            lines.append(raw)
+            continue
+        newline = "\n" if raw.endswith("\n") else ""
+        lines.append(f"{prefix}{sep} {ip}:{port}{newline}")
+    return "".join(lines)
 
 
 def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
@@ -171,6 +210,8 @@ def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
 class VpnManager:
     def __init__(self, app_settings: Settings | None = None) -> None:
         self.settings = app_settings or settings
+        self._last_error = ""
+        self._active_wg_conf: Path | None = None
 
     @property
     def config_path(self) -> Path:
@@ -210,6 +251,8 @@ class VpnManager:
             "unprotected_apps": unprotected,
             "supported_providers": list(PROVIDERS),
             "usenet_bypasses_vpn": True,
+            "last_error": self._last_error or "",
+            "endpoint_hosts": self._endpoint_hosts(),
         }
         return payload
 
@@ -247,22 +290,30 @@ class VpnManager:
 
     def start(self) -> dict[str, Any]:
         if not self.config_path.is_file():
-            return {"status": "error", "detail": f"VPN config missing: {self.config_path}"}
+            return self._fail(f"VPN config missing: {self.config_path}")
         if self._is_linux():
             self._drop_stale_netns()
             self._ensure_resolvconf_shim()
             ns_error = self._ensure_netns()
             if ns_error:
-                return {"status": "error", "detail": ns_error, **self.status()}
+                return self._fail(ns_error)
         proto = self.settings.vpn_protocol
+        up_conf = self.config_path
         if proto == "wireguard":
             exe = shutil.which("wg-quick")
-            inner = [exe, "up", str(self.config_path)] if exe else None
+            if exe:
+                try:
+                    up_conf = self._prepared_wireguard_config()
+                except OSError as exc:
+                    return self._fail(f"Could not prepare WireGuard config: {exc}")
+                inner = [exe, "up", str(up_conf)]
+            else:
+                inner = None
         else:
             exe = shutil.which("openvpn")
             inner = [exe, "--config", str(self.config_path), "--daemon"] if exe else None
         if not inner:
-            return {"status": "error", "detail": f"{proto} tools are not installed on this host."}
+            return self._fail(f"{proto} tools are not installed on this host.")
         cmd = self.wrap_isolated_command(inner) if self._is_linux() else inner
         env = os.environ.copy()
         env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -271,28 +322,36 @@ class VpnManager:
             env["WG_QUICK_USERSPACE_IMPLEMENTATION"] = wg_go
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60, env=env)
+            self._active_wg_conf = up_conf if proto == "wireguard" else None
+            self._last_error = ""
             if self._is_linux():
                 self._forward_local_ports()
                 self._apply_netns_kill_switch()
+                self._write_netns_resolv(self._profile_dns_servers() or list(_FALLBACK_DNS))
             return {"status": "started", **self.status()}
         except subprocess.CalledProcessError as exc:
-            detail = vpn_start_failure_detail(exc.returncode, exc.stderr or "", exc.stdout or "")
-            logger.warning("VPN start failed: %s", detail)
-            return {"status": "error", "detail": detail, **self.status()}
+            return self._fail(vpn_start_failure_detail(exc.returncode, exc.stderr or "", exc.stdout or ""))
         except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-            logger.warning("VPN start failed: %s", exc)
-            return {"status": "error", "detail": str(exc), **self.status()}
+            return self._fail(str(exc))
+
+    def _fail(self, detail: str) -> dict[str, Any]:
+        self._last_error = (detail or "VPN start failed.")[:2000]
+        logger.error("VPN start failed: %s", self._last_error)
+        return {"status": "error", "detail": self._last_error, **self.status()}
 
     def stop(self) -> dict[str, Any]:
         proto = self.settings.vpn_protocol
-        if proto == "wireguard" and shutil.which("wg-quick") and self.config_path.is_file():
-            down = ["wg-quick", "down", str(self.config_path)]
-            subprocess.run(
-                self.wrap_isolated_command(down) if self._is_linux() else down,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
+        if proto == "wireguard" and shutil.which("wg-quick"):
+            down_conf = self._active_wg_conf if self._active_wg_conf and self._active_wg_conf.is_file() else self.config_path
+            if down_conf.is_file():
+                down = ["wg-quick", "down", str(down_conf)]
+                subprocess.run(
+                    self.wrap_isolated_command(down) if self._is_linux() else down,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+        self._active_wg_conf = None
         if self._is_linux():
             self._teardown_netns()
         return {"status": "stopped", **self.status()}
@@ -377,9 +436,80 @@ class VpnManager:
                     ips.append(ip)
         return ips
 
+    def _endpoint_hosts(self) -> list[str]:
+        try:
+            if self.config_path.is_file():
+                return parse_vpn_underlay_hosts(
+                    self.config_path.read_text(encoding="utf-8", errors="replace")
+                )
+        except OSError:
+            return []
+        return []
+
+    def _endpoint_ip_map(self) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        ips = self._underlay_ips()
+        hosts = self._endpoint_hosts()
+        if len(hosts) == 1 and ips:
+            mapping[hosts[0]] = ips[0]
+            mapping[hosts[0].lower()] = ips[0]
+            return mapping
+        import socket
+
+        for host in hosts:
+            if _is_dns_address(host) and ":" not in host:
+                mapping[host] = host
+                continue
+            try:
+                infos = socket.getaddrinfo(host, None, socket.AF_INET)
+                ip = infos[0][4][0] if infos else ""
+            except OSError:
+                ip = ""
+            if ip:
+                mapping[host] = ip
+                mapping[host.lower()] = ip
+        return mapping
+
+    def _profile_dns_servers(self) -> list[str]:
+        try:
+            if self.config_path.is_file():
+                return parse_vpn_dns_servers(
+                    self.config_path.read_text(encoding="utf-8", errors="replace")
+                )
+        except OSError:
+            return []
+        return []
+
+    def _bootstrap_ips(self) -> list[str]:
+        """Handshake endpoints plus public DNS. Skip VPN-only DNS (e.g. 198.18.x)."""
+        ips = list(self._underlay_ips())
+        seen = set(ips)
+        for dns in _FALLBACK_DNS:
+            if dns not in seen:
+                seen.add(dns)
+                ips.append(dns)
+        return ips
+
+    def _prepared_wireguard_config(self) -> Path:
+        raw = self.config_path.read_text(encoding="utf-8", errors="replace")
+        rewritten = rewrite_wireguard_endpoints(raw, self._endpoint_ip_map())
+        runtime_dir = Path("/run/amm-vpn")
+        try:
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            runtime_dir = Path(self.settings.config_dir) / "vpn" / ".run"
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+        dest = runtime_dir / "wg0.conf"
+        dest.write_text(rewritten if rewritten.endswith("\n") else rewritten + "\n", encoding="utf-8")
+        try:
+            dest.chmod(0o600)
+        except OSError:
+            pass
+        return dest
+
     def _apply_host_veth_guard(self) -> None:
         """Forward only VPN handshake packets from amm-torrent; drop any other WAN leak."""
-        dests = self._underlay_ips()
+        dests = self._bootstrap_ips()
         established = [
             "FORWARD",
             "-i",
@@ -440,7 +570,7 @@ class VpnManager:
             ["-A", _KS_CHAIN, "-o", "lo", "-j", "RETURN"],
             ["-A", _KS_CHAIN, "-d", "10.200.200.0/24", "-j", "RETURN"],
         ]
-        for dest in self._underlay_ips():
+        for dest in self._bootstrap_ips():
             rules.append(["-A", _KS_CHAIN, "-d", dest, "-j", "RETURN"])
         rules.extend(
             [
@@ -458,14 +588,8 @@ class VpnManager:
             self._ns_iptables(["-I", "OUTPUT", "1", "-j", _KS_CHAIN])
         self._ns_iptables(["-P", "FORWARD", "DROP"])
 
-    def _write_netns_resolv(self) -> None:
+    def _write_netns_resolv(self, servers: list[str] | None = None) -> None:
         """Docker's 127.0.0.11 resolver is not reachable from amm-torrent."""
-        servers = []
-        try:
-            if self.config_path.is_file():
-                servers = parse_vpn_dns_servers(self.config_path.read_text(encoding="utf-8", errors="replace"))
-        except OSError:
-            servers = []
         if not servers:
             servers = list(_FALLBACK_DNS)
         path = Path(f"/etc/netns/{TORRENT_NETNS}/resolv.conf")
@@ -489,7 +613,7 @@ class VpnManager:
         return ports
 
     def _teardown_netns(self) -> None:
-        for dest in self._underlay_ips():
+        for dest in self._bootstrap_ips():
             self._host_iptables(["-D", "FORWARD", "-i", _VETH_HOST, "-d", dest, "-j", "ACCEPT"])
             self._host_iptables(
                 [
