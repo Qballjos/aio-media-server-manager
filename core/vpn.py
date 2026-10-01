@@ -286,6 +286,49 @@ def sanitize_wireguard_runtime(text: str) -> str:
     return "".join(out)
 
 
+def ensure_wireguard_persistent_keepalive(text: str, interval: int = 25) -> str:
+    """Ensure each peer has PersistentKeepalive so handshakes start behind NAT/Table=off.
+
+    With Table=off + UID routing, nothing sends traffic as root during start, so
+    WireGuard never initiates a handshake unless keepalive is set.
+    """
+    if interval <= 0:
+        return text
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    in_peer = False
+    saw_keepalive = False
+
+    def _flush_keepalive() -> None:
+        nonlocal saw_keepalive
+        if in_peer and not saw_keepalive:
+            if out and not str(out[-1]).endswith("\n"):
+                out[-1] = str(out[-1]) + "\n"
+            out.append(f"PersistentKeepalive = {interval}\n")
+            saw_keepalive = True
+
+    for raw in lines:
+        stripped = raw.split("#", 1)[0].strip()
+        lower = stripped.lower()
+        if lower.startswith("[") and lower.endswith("]"):
+            _flush_keepalive()
+            in_peer = lower == "[peer]"
+            saw_keepalive = False
+            out.append(raw)
+            continue
+        if in_peer and lower.startswith("persistentkeepalive"):
+            newline = "\n" if raw.endswith("\n") else ""
+            prefix, sep, _rest = raw.partition("=")
+            if not sep:
+                prefix, sep, _rest = raw.partition(" ")
+            out.append(f"{prefix}{sep} {interval}{newline}")
+            saw_keepalive = True
+            continue
+        out.append(raw)
+    _flush_keepalive()
+    return "".join(out)
+
+
 def wireguard_covers_default_route(text: str) -> bool:
     """True when any peer AllowedIPs includes 0.0.0.0/0 (full-tunnel egress)."""
     for raw in (text or "").splitlines():
@@ -997,8 +1040,10 @@ class VpnManager:
 
     def _prepared_wireguard_config(self, *, relay_port: int | None = None) -> Path:
         raw = self.config_path.read_text(encoding="utf-8", errors="replace")
-        rewritten = ensure_wireguard_table_off(
-            sanitize_wireguard_runtime(rewrite_wireguard_endpoints(raw, self._endpoint_ip_map()))
+        rewritten = ensure_wireguard_persistent_keepalive(
+            ensure_wireguard_table_off(
+                sanitize_wireguard_runtime(rewrite_wireguard_endpoints(raw, self._endpoint_ip_map()))
+            )
         )
         # relay_port kept for API compatibility with older call sites; unused in UID mode.
         _ = relay_port

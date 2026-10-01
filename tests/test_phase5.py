@@ -20,6 +20,7 @@ from core.vpn import (
     VPN_TUNNELED_APPS,
     VpnIsolationError,
     VpnManager,
+    ensure_wireguard_persistent_keepalive,
     ensure_wireguard_table_off,
     parse_vpn_dns_servers,
     parse_vpn_underlay_hosts,
@@ -328,6 +329,21 @@ def test_ensure_wireguard_table_off_inserts_and_replaces():
     assert "Table = auto" not in replaced
     assert "Table = off" in replaced
     assert replaced.count("Table =") == 1
+
+
+def test_ensure_wireguard_persistent_keepalive_inserts_and_normalizes():
+    added = ensure_wireguard_persistent_keepalive(
+        "[Interface]\nPrivateKey = x\n\n[Peer]\nPublicKey = y\nEndpoint = 1.2.3.4:51820\n"
+    )
+    assert "PersistentKeepalive = 25" in added
+    assert added.index("[Peer]") < added.index("PersistentKeepalive = 25")
+    replaced = ensure_wireguard_persistent_keepalive(
+        "[Peer]\nPublicKey = y\nPersistentKeepalive = 10\n",
+        interval=25,
+    )
+    assert "PersistentKeepalive = 10" not in replaced
+    assert "PersistentKeepalive = 25" in replaced
+    assert replaced.count("PersistentKeepalive") == 1
 
 
 def test_bootstrap_ips_are_underlay_endpoints_only(tmp_path: Path, monkeypatch):
