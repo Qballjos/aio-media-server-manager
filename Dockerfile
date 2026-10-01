@@ -30,6 +30,8 @@ RUN git -c advice.detachedHead=false clone --depth 1 --branch 0.0.20250522 https
 
 FROM python:3.14-slim-bookworm
 ARG TARGETARCH
+ARG AMM_VERSION=0.1.0
+ARG AMM_GIT_SHA=
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
@@ -41,6 +43,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     AMM_API_PORT=8080 \
     JAVA_HOME=/opt/java \
     AMM_CHILD_PYTHON=/usr/local/bin/python3.13 \
+    AMM_VERSION=${AMM_VERSION} \
+    AMM_GIT_SHA=${AMM_GIT_SHA} \
     PATH="/opt/java/bin:${PATH}" \
     WG_QUICK_USERSPACE_IMPLEMENTATION=/usr/bin/wireguard-go
 

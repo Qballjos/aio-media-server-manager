@@ -162,6 +162,17 @@
   box-shadow: 0 0 8px #f87171;
 }
 
+.metric-pill.is-updates {
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.4);
+  text-decoration: none;
+}
+
+.metric-pill.is-updates .pulse-dot {
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+}
+
 .metric-label {
   color: #64748b;
   font-weight: 600;

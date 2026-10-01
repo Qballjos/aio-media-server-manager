@@ -18,7 +18,7 @@ const props = defineProps({
   systemInfo: { type: Object, default: null },
   hostArch: { type: String, default: '' }
 })
-const emit = defineEmits(['session'])
+const emit = defineEmits(['session', 'updates'])
 const route = useRoute()
 const section = computed(() => resolveSettingsSection(route.params.section))
 const loading = ref(false)
@@ -216,6 +216,7 @@ async function patchSettings(payload) {
     }
     applySettingsPayload(data)
     notice.value = (data.notes && data.notes.join(' ')) || 'Saved.'
+    if (Object.prototype.hasOwnProperty.call(payload, 'update_check_schedule')) emit('updates')
   } catch (err) {
     error.value = err.message || 'Could not save settings.'
   } finally {
@@ -280,6 +281,7 @@ async function runUpdateCheck() {
     const count = (data.available || []).length
     notice.value = count ? `${count} update(s) available.` : 'No updates found.'
     await loadAll()
+    emit('updates')
   } catch (err) {
     error.value = err.message || 'Update check failed.'
   } finally {
@@ -765,13 +767,17 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Updates</h3>
-          <p>Check GitHub in the host timezone (System). Apply can stay off (notify only) or match the check schedule.</p>
+          <p>Check GitHub in the host timezone (System). Apply can stay off (header notice only) or match the check schedule. Catalog apps can be applied in-place. A newer appliance image is notified only — pull and recreate on the host.</p>
         </div>
         <p class="share-meta" v-if="snapshot.updates">
           Last check {{ formatWhen(snapshot.updates.last_check_at) }}
           · last apply {{ formatWhen(snapshot.updates.last_apply_at) }}
           · {{ (snapshot.updates.available || []).length }} waiting
           <span v-if="snapshot.updates.paused"> · paused ({{ snapshot.updates.paused_reason }})</span>
+        </p>
+        <p class="share-meta" v-if="snapshot.updates?.appliance">
+          Appliance {{ snapshot.updates.appliance.installed_version }}
+          <span v-if="!snapshot.updates.appliance.running_sha"> · local build (no image SHA)</span>
         </p>
         <form class="form-stack" @submit.prevent="patchSettings({
           update_check_schedule: form.update_check_schedule,
@@ -822,8 +828,9 @@ onBeforeUnmount(() => {
         <ul v-if="(snapshot.updates?.available || []).length" class="backup-list">
           <li v-for="item in snapshot.updates.available" :key="item.name">
             <div>
-              <strong>{{ item.name }}</strong>
+              <strong>{{ item.display_name || item.name }}</strong>
               <span class="path-line font-mono">{{ item.installed_version || '—' }} → {{ item.latest_version }}</span>
+              <span v-if="item.kind === 'appliance'" class="path-line">{{ item.apply_hint }}</span>
             </div>
           </li>
         </ul>

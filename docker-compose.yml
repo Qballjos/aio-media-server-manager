@@ -5,7 +5,11 @@
 services:
   aio-media-manager:
     image: ghcr.io/qballjos/aio-media-server-manager:latest
-    build: .
+    build:
+      context: .
+      args:
+        AMM_GIT_SHA: ${AMM_GIT_SHA:-}
+        AMM_VERSION: ${AMM_VERSION:-0.1.0}
     container_name: aio-media-manager
     restart: unless-stopped
     ports:

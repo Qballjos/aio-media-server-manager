@@ -65,6 +65,7 @@ def test_check_skips_missing_and_crash_loop(tmp_path: Path):
     with (
         patch("core.update_schedule.ApplicationCatalog", return_value=catalog),
         patch("core.update_schedule.ProcessSupervisor.get", return_value=supervisor),
+        patch("core.update_schedule.check_appliance_image", return_value={"name": "aio-media-server-manager", "update_available": False}),
         patch.object(sched.updater, "update_available") as check,
     ):
         result = sched.check_installed()
@@ -98,3 +99,78 @@ async def test_tick_paused_when_wizard_open(tmp_path: Path, monkeypatch):
     report = await sched.tick()
     assert report["status"] == "paused"
     assert report["reason"] == "wizard"
+
+
+def test_public_status_notify_enabled(tmp_path: Path):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        install_dir=tmp_path / "apps",
+        update_check_schedule="off",
+    )
+    cfg.initialise()
+    sched = UpdateScheduler(app_settings=cfg)
+    assert sched.public_status()["notify_enabled"] is False
+    cfg.update_check_schedule = "daily"
+    assert sched.public_status()["notify_enabled"] is True
+    assert sched.public_status()["appliance"]["kind"] == "appliance"
+
+
+def test_check_includes_appliance_update(tmp_path: Path):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        install_dir=tmp_path / "apps",
+    )
+    cfg.initialise()
+    sched = UpdateScheduler(app_settings=cfg)
+    catalog = MagicMock()
+    catalog.all_plugins.return_value = []
+    appliance = {
+        "name": "aio-media-server-manager",
+        "kind": "appliance",
+        "update_available": True,
+        "latest_version": "abc1234",
+        "apply_hint": "pull",
+    }
+    with (
+        patch("core.update_schedule.ApplicationCatalog", return_value=catalog),
+        patch("core.update_schedule.ProcessSupervisor.get", return_value=MagicMock()),
+        patch("core.update_schedule.check_appliance_image", return_value=appliance),
+    ):
+        result = sched.check_installed()
+    assert result["available"] == [appliance]
+    assert result["appliance"]["update_available"] is True
+
+
+@pytest.mark.asyncio
+async def test_apply_skips_appliance(tmp_path: Path):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        install_dir=tmp_path / "apps",
+    )
+    cfg.initialise()
+    sched = UpdateScheduler(app_settings=cfg)
+    appliance = {
+        "name": "aio-media-server-manager",
+        "kind": "appliance",
+        "update_available": True,
+        "apply_hint": "docker pull ghcr.io/qballjos/aio-media-server-manager:latest",
+    }
+    sched.save_state({**sched.load_state(), "available": [appliance]})
+    catalog = MagicMock()
+    catalog.has.return_value = False
+    with (
+        patch("core.update_schedule.ApplicationCatalog", return_value=catalog),
+        patch("core.update_schedule.ProcessSupervisor.get", return_value=MagicMock()),
+        patch.object(sched, "_refresh_github"),
+        patch.object(sched.updater, "update") as apply_update,
+    ):
+        result = await sched.apply_available()
+    apply_update.assert_not_called()
+    assert result["results"][0]["reason"] == "appliance_host_pull"
+    assert sched.load_state()["available"][0]["kind"] == "appliance"

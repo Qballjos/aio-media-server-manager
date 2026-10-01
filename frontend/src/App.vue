@@ -29,7 +29,14 @@ const authStatus = ref({
   username: null,
 })
 const catalogApps = ref([])
-const updateStatus = ref({ available: [], last_check_at: null, last_apply_at: null, paused: false })
+const UPDATE_TOAST_KEY = 'amm-update-notice'
+const updateStatus = ref({
+  available: [],
+  last_check_at: null,
+  last_apply_at: null,
+  paused: false,
+  notify_enabled: false,
+})
 const backupStatus = ref({})
 const applications = ref([])
 const systemInfo = ref(null)
@@ -61,6 +68,51 @@ const showVpnPill = computed(
   () => authStatus.value.authenticated && wizardCompleted.value && !!vpnLive.value.enabled,
 )
 const vpnTunnelUp = computed(() => !!vpnLive.value.tunnel_up)
+const availableUpdates = computed(() => updateStatus.value.available || [])
+const showUpdatesPill = computed(
+  () =>
+    authStatus.value.authenticated &&
+    wizardCompleted.value &&
+    !!updateStatus.value.notify_enabled &&
+    availableUpdates.value.length > 0,
+)
+const updatesPillLabel = computed(() => {
+  const n = availableUpdates.value.length
+  return n === 1 ? '1 update' : `${n} updates`
+})
+
+function updateFingerprint(status) {
+  return (status?.available || [])
+    .map((row) => `${row.kind || 'catalog'}:${row.name}:${row.latest_version || row.latest_sha || ''}`)
+    .sort()
+    .join('|')
+}
+
+function maybeNotifyUpdates(status) {
+  if (!status?.notify_enabled) return
+  const items = status.available || []
+  if (!items.length) return
+  const fingerprint = updateFingerprint(status)
+  try {
+    if (sessionStorage.getItem(UPDATE_TOAST_KEY) === fingerprint) return
+    sessionStorage.setItem(UPDATE_TOAST_KEY, fingerprint)
+  } catch (_) {}
+  const appliance = items.some((row) => row.kind === 'appliance')
+  const catalog = items.filter((row) => row.kind !== 'appliance')
+  let message = 'Updates available'
+  if (catalog.length && appliance) {
+    message = `${catalog.length} app update(s) and a newer appliance image are available`
+  } else if (appliance) {
+    message = 'A newer appliance image is available. Pull and recreate on the host.'
+  } else if (catalog.length === 1) {
+    const row = catalog[0]
+    const version = row.latest_version ? ` ${row.latest_version}` : ''
+    message = `${row.display_name || row.name}${version} is available`
+  } else {
+    message = `${catalog.length} catalog updates are available`
+  }
+  showToast(message, 'info')
+}
 
 setUnauthorizedHandler(() => {
   if (!authStatus.value.authenticated) return
@@ -175,7 +227,11 @@ function onSettingsSession(data) {
 async function fetchUpdateStatus() {
   try {
     const [res, bak] = await Promise.all([apiRequest('/api/updates/status'), apiRequest('/api/backups')])
-    if (res.ok) updateStatus.value = await readJson(res)
+    if (res.ok) {
+      const data = await readJson(res)
+      updateStatus.value = data
+      maybeNotifyUpdates(data)
+    }
     if (bak.ok) backupStatus.value = (await readJson(bak)).schedule || {}
   } catch (err) {
     console.error('Update status error:', err)
@@ -200,7 +256,7 @@ function pollLiveStatus() {
 function pollSlowStatus() {
   if (!authStatus.value.authenticated || !wizardCompleted.value) return
   if (!showHealthModal.value) fetchSystemInfo()
-  if (currentView.value === 'catalog') fetchUpdateStatus()
+  fetchUpdateStatus()
 }
 
 function onHealthSystem(data) {
@@ -298,6 +354,15 @@ onUnmounted(() => {
           <span class="pulse-dot"></span>
           <span class="metric-val font-mono">VPN</span>
         </div>
+        <RouterLink
+          v-if="showUpdatesPill"
+          :to="{ name: 'settings', params: { section: 'updates' } }"
+          class="metric-pill is-updates"
+          title="Open Settings → Updates"
+        >
+          <span class="pulse-dot"></span>
+          <span class="metric-val font-mono">{{ updatesPillLabel }}</span>
+        </RouterLink>
         <div v-if="transcodingAvailable" class="metric-pill hide-narrow" title="Hardware transcoding available">
           <span class="metric-label">GPU</span>
           <span class="metric-val font-mono">HW</span>
@@ -383,6 +448,7 @@ onUnmounted(() => {
           :system-info="systemInfo"
           :host-arch="hostArch"
           @session="onSettingsSession"
+          @updates="fetchUpdateStatus"
         />
         <HomepagePanel
           v-else-if="currentView === 'home'"

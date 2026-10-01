@@ -110,11 +110,24 @@ const combinedServices = computed(() => {
       arm64: cat.arm64_supported,
       popularity: cat.popularity ?? 0,
       helpUrl: cat.help_url || '',
-      updateAvailable: !!(props.updateStatus.available || []).find((row) => row.name === cat.name),
-      latestVersion: ((props.updateStatus.available || []).find((row) => row.name === cat.name) || {}).latest_version
+      updateAvailable: !!(props.updateStatus.available || []).find(
+        (row) => row.kind !== 'appliance' && row.name === cat.name
+      ),
+      latestVersion: (
+        (props.updateStatus.available || []).find(
+          (row) => row.kind !== 'appliance' && row.name === cat.name
+        ) || {}
+      ).latest_version
     }
   })
 })
+
+const catalogUpdateCount = computed(
+  () => (props.updateStatus.available || []).filter((row) => row.kind !== 'appliance').length
+)
+const applianceUpdate = computed(
+  () => (props.updateStatus.available || []).find((row) => row.kind === 'appliance')
+)
 
 const CATEGORY_LABELS = {
   downloading: 'Downloading',
@@ -588,7 +601,8 @@ onUnmounted(() => {
               <span v-if="updateStatus.last_check_at || (updateStatus.available || []).length">
                 Last update check {{ formatUpdateWhen(updateStatus.last_check_at) }}
                 · last apply {{ formatUpdateWhen(updateStatus.last_apply_at) }}
-                · {{ (updateStatus.available || []).length }} waiting
+                · {{ catalogUpdateCount }} waiting
+                <span v-if="applianceUpdate"> · appliance image update</span>
               </span>
               <span v-if="backupStatus.schedule">
                 · last backup {{ formatUpdateWhen(backupStatus.last_backup_at) }}

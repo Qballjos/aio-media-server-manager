@@ -11,6 +11,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from applications.catalog import ApplicationCatalog
+from core.appliance_update import APPLIANCE_NAME, check_appliance_image, running_appliance_identity
 from core.installer.github import GitHubRateLimitError, GitHubReleaseClient
 from core.maintenance import pause_reason, update_in_progress
 from core.settings import Settings, settings
@@ -23,6 +24,17 @@ CHECK_SCHEDULES = frozenset({"off", "daily", "weekly", "monthly"})
 APPLY_SCHEDULES = CHECK_SCHEDULES | {"same"}
 _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 _STATE_NAME = "update_schedule.json"
+
+
+def _empty_state() -> dict[str, Any]:
+    return {
+        "last_check_at": None,
+        "last_apply_at": None,
+        "last_error": "",
+        "available": [],
+        "last_results": [],
+        "appliance": running_appliance_identity(),
+    }
 
 
 def _zone(tz_name: str) -> ZoneInfo:
@@ -96,23 +108,11 @@ class UpdateScheduler:
 
     def load_state(self) -> dict[str, Any]:
         if not self.state_file.is_file():
-            return {
-                "last_check_at": None,
-                "last_apply_at": None,
-                "last_error": "",
-                "available": [],
-                "last_results": [],
-            }
+            return _empty_state()
         try:
             data = json.loads(self.state_file.read_text(encoding="utf-8"))
         except Exception:
-            return {
-                "last_check_at": None,
-                "last_apply_at": None,
-                "last_error": "",
-                "available": [],
-                "last_results": [],
-            }
+            return _empty_state()
         if not isinstance(data, dict):
             data = {}
         data.setdefault("last_check_at", None)
@@ -120,6 +120,7 @@ class UpdateScheduler:
         data.setdefault("last_error", "")
         data.setdefault("available", [])
         data.setdefault("last_results", [])
+        data.setdefault("appliance", running_appliance_identity())
         return data
 
     def save_state(self, data: dict[str, Any]) -> None:
@@ -171,6 +172,8 @@ class UpdateScheduler:
             "last_apply_at": state.get("last_apply_at"),
             "last_error": state.get("last_error") or "",
             "available": state.get("available") or [],
+            "appliance": state.get("appliance") or running_appliance_identity(),
+            "notify_enabled": check != "off",
         }
 
     def _skip_reason(self, plugin, supervisor: ProcessSupervisor) -> str | None:
@@ -195,6 +198,8 @@ class UpdateScheduler:
                     continue
                 info = self.updater.update_available(plugin)
                 if info.get("update_available"):
+                    info["kind"] = "catalog"
+                    info["display_name"] = plugin.manifest.display_name
                     available.append(info)
         except GitHubRateLimitError as exc:
             state = self.load_state()
@@ -202,12 +207,16 @@ class UpdateScheduler:
             state["last_check_at"] = now_ts
             self.save_state(state)
             raise
+        appliance = check_appliance_image(self.updater.github)
+        if appliance.get("update_available"):
+            available.append(appliance)
         state = self.load_state()
         state["last_check_at"] = now_ts
         state["last_error"] = ""
         state["available"] = available
+        state["appliance"] = appliance
         self.save_state(state)
-        return {"checked_at": now_ts, "available": available, "skipped": skipped}
+        return {"checked_at": now_ts, "available": available, "skipped": skipped, "appliance": appliance}
 
     async def apply_available(self, names: list[str] | None = None) -> dict[str, Any]:
         self._refresh_github()
@@ -220,7 +229,17 @@ class UpdateScheduler:
         with update_in_progress():
             for item in targets:
                 name = item.get("name")
-                if not name or (wanted is not None and name not in wanted):
+                if not name or (wanted is not None and str(name).lower() not in wanted):
+                    continue
+                if item.get("kind") == "appliance" or str(name).lower() == APPLIANCE_NAME:
+                    results.append(
+                        {
+                            "name": name,
+                            "status": "skipped",
+                            "reason": "appliance_host_pull",
+                            "detail": item.get("apply_hint"),
+                        }
+                    )
                     continue
                 if not catalog.has(name):
                     continue

@@ -152,6 +152,31 @@ class GitHubReleaseClient:
         data = resp.json()
         return data if isinstance(data, list) else []
 
+    def get_commit(self, repo: str, ref: str = "main") -> dict[str, Any]:
+        """Fetch a commit payload for a repository ref ('owner/repo', 'main')."""
+        clean_ref = (ref or "main").strip() or "main"
+        url = f"https://api.github.com/repos/{repo}/commits/{clean_ref}"
+        resp = self._request_with_retries(url)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Cannot get commit {clean_ref} for {repo} (status {resp.status_code})")
+        data = resp.json()
+        return data if isinstance(data, dict) else {}
+
+    def compare_commits(self, repo: str, base: str, head: str = "main") -> dict[str, Any]:
+        """Compare two refs. Status is head relative to base: ahead, behind, identical, diverged."""
+        clean_base = (base or "").strip()
+        clean_head = (head or "main").strip() or "main"
+        if not clean_base:
+            raise RuntimeError("Cannot compare commits without a base SHA")
+        url = f"https://api.github.com/repos/{repo}/compare/{clean_base}...{clean_head}"
+        resp = self._request_with_retries(url)
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Cannot compare {clean_base}...{clean_head} for {repo} (status {resp.status_code})"
+            )
+        data = resp.json()
+        return data if isinstance(data, dict) else {}
+
     def select_asset(
         self,
         release: dict[str, Any],

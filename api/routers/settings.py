@@ -27,7 +27,10 @@ def _public_updates() -> dict[str, Any]:
     from core.update_schedule import scheduler
 
     status = scheduler.public_status()
-    status["message"] = "Check GitHub on a schedule. Apply can notify only, match the check, or run on its own cadence."
+    status["message"] = (
+        "Check GitHub on a schedule. Catalog apply can notify only, match the check, "
+        "or run on its own cadence. Appliance image updates are notified only."
+    )
     return status
 
 

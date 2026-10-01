@@ -48,6 +48,8 @@ docker compose up -d
 
 Open `http://<host>:8080`. Create the administrator (username, **email**, password), then complete or skip the stack wizard ([Usage](../docs/USAGE.md)). If you already ran an older compose that only published `8080`, merge the current `ports:` list and `docker compose up -d --force-recreate`.
 
+With **Settings → Updates** check schedule on, the manager notifies when GHCR `:latest` has moved (header pill + toast). Pull and recreate on the host as above; the container cannot replace its own image.
+
 Upgrading from a compose file without `/backups`: create the host folder, add `- /path/to/backups:/backups` under `volumes:`, and recreate the container. New backups go to `/backups`. Older ones in `/config/backups` stay listed and restorable, and you can delete them once you have fresh backups.
 
 Optional `GITHUB_TOKEN` (or Settings → Updates) raises GitHub API limits for catalog installs and scheduled update checks. Do not commit the token; the example compose leaves it commented.

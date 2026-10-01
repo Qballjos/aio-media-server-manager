@@ -129,7 +129,7 @@ Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `rec
 
 **Catalog Update** on a card always runs stop → snapshot → install → health check → rollback. The last three pre-update snapshots per app are kept under `/backups/app-snapshots/<app>/`.
 
-**Settings → Updates** schedules GitHub checks (off / daily / weekly / monthly) and optionally applies them (off = notify only, same as check, or a separate cadence). Time of day uses the host timezone from **Settings → System**. The job skips apps that are not installed or in a crash loop, respects `GITHUB_TOKEN` / Settings → Updates (GitHub token), and pauses while the wizard is open or an install is running. Last check / last apply timestamps appear on Catalog and in Settings.
+**Settings → Updates** schedules GitHub checks (off / daily / weekly / monthly) and optionally applies catalog apps (off = notify only, same as check, or a separate cadence). When **Check schedule** is on, the header shows an Updates pill and a one-time toast for anything waiting — catalog apps and a newer appliance image. The manager cannot replace its own container; Settings lists the host `docker pull ghcr.io/qballjos/aio-media-server-manager:latest` and recreate step. Time of day uses the host timezone from **Settings → System**. The job skips apps that are not installed or in a crash loop, respects `GITHUB_TOKEN` / Settings → Updates (GitHub token), and pauses while the wizard is open or an install is running. Last check / last apply timestamps appear on Catalog and in Settings.
 
 ## 8. Settings
 
@@ -139,7 +139,7 @@ The **Settings** nav item is the admin page for the appliance (separate from per
 |---------|----------------|
 | Account | Username, email, password (current password required) |
 | System | Timezone, log level, PUID/PGID, host CPU/RAM, storage paths (read-only) |
-| Updates | Catalog check/apply schedules, Check now, optional GitHub token |
+| Updates | Catalog and appliance check, apply schedules, Check now, optional GitHub token |
 | Backups | Schedule, retention, backup now, verify, per-app restore, download/upload, delete |
 | Network | VPN (enable, protocol, config, kill switch) and Cloudflare Tunnel (token, trusted proxies) |
 | Homepage | Jellyfin and Seerr API keys for Home widgets, plus widget debug |
