@@ -358,7 +358,9 @@ def test_dns_for_netns_prefers_profile_then_public_fallback(tmp_path: Path, monk
 
 def test_wireguard_covers_default_route_and_sanitize():
     from core.vpn import (
+        parse_wireguard_endpoint,
         parse_wireguard_tunnel_address,
+        rewrite_wireguard_endpoint_host_port,
         sanitize_wireguard_runtime,
         wireguard_covers_default_route,
     )
@@ -366,15 +368,61 @@ def test_wireguard_covers_default_route_and_sanitize():
     full = (
         "[Interface]\nPrivateKey = x\nAddress = 10.64.1.2/32\nDNS = 1.1.1.1\n"
         "PostUp = iptables -A FORWARD -j ACCEPT\n\n"
-        "[Peer]\nAllowedIPs = 0.0.0.0/0, ::/0\n"
+        "[Peer]\nEndpoint = vpn.example:51820\nAllowedIPs = 0.0.0.0/0, ::/0\n"
     )
     assert wireguard_covers_default_route(full)
     assert parse_wireguard_tunnel_address(full) == "10.64.1.2"
+    assert parse_wireguard_endpoint(full) == ("vpn.example", 51820)
+    relayed = rewrite_wireguard_endpoint_host_port(full, "10.200.200.1", 51820)
+    assert "Endpoint = 10.200.200.1:51820" in relayed
     cleaned = sanitize_wireguard_runtime(full)
     assert "DNS" not in cleaned
     assert "PostUp" not in cleaned
     assert "AllowedIPs" in cleaned
     assert not wireguard_covers_default_route("[Peer]\nAllowedIPs = 10.0.0.0/8\n")
+
+
+def test_vpn_endpoint_relay_forwards_datagrams():
+    import socket
+    import threading
+    import time
+    from core.vpn_relay import WgEndpointRelay
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server.bind(("127.0.0.1", 0))
+    server_port = server.getsockname()[1]
+    got: dict[str, bytes] = {}
+
+    def serve() -> None:
+        data, addr = server.recvfrom(256)
+        got["data"] = data
+        got["addr"] = addr[0].encode()
+        server.sendto(b"pong", addr)
+
+    threading.Thread(target=serve, daemon=True).start()
+
+    listen = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    listen.bind(("127.0.0.1", 0))
+    listen_port = listen.getsockname()[1]
+    listen.close()
+
+    relay = WgEndpointRelay()
+    assert relay.ensure(
+        listen_host="127.0.0.1",
+        listen_port=listen_port,
+        dest_host="127.0.0.1",
+        dest_port=server_port,
+    )
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    client.settimeout(3)
+    client.sendto(b"ping", ("127.0.0.1", listen_port))
+    reply, _ = client.recvfrom(256)
+    assert reply == b"pong"
+    time.sleep(0.05)
+    assert got.get("data") == b"ping"
+    client.close()
+    relay.stop()
+    server.close()
 
 
 def test_write_netns_resolv_is_idempotent(tmp_path: Path, monkeypatch):
