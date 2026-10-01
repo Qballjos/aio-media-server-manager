@@ -92,6 +92,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         git \
         ffmpeg \
         iproute2 \
+        util-linux \
         openvpn \
         wireguard-tools \
         iptables \
@@ -118,7 +119,11 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
     && ln -sf /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
     && corepack enable \
-    && chmod +x /usr/bin/wireguard-go
+    && chmod +x /usr/bin/wireguard-go \
+    && groupadd -g 910 ammvpn \
+    && useradd -u 910 -g 910 -M -d /tmp/ammvpn -s /usr/sbin/nologin ammvpn \
+    && mkdir -p /tmp/ammvpn \
+    && chown 910:910 /tmp/ammvpn
 
 RUN set -eux; \
     case "${TARGETARCH:-amd64}" in \

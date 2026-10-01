@@ -15,6 +15,8 @@ from core.settings import Settings
 from core.transcoding import probe_transcoding
 from core.vpn import (
     TORRENT_NETNS,
+    VPN_APP_GID,
+    VPN_APP_UID,
     VPN_TUNNELED_APPS,
     VpnIsolationError,
     VpnManager,
@@ -136,33 +138,36 @@ def test_vpn_status_without_tunnel(tmp_path: Path, monkeypatch):
     assert cmd[0] == "qbittorrent-nox"
 
 
-def test_vpn_wraps_without_netns_so_start_fails_closed(tmp_path: Path, monkeypatch):
+def test_vpn_wraps_wireguard_with_setpriv_uid(tmp_path: Path, monkeypatch):
     cfg = Settings(
         config_dir=tmp_path / "config",
         download_dir=tmp_path / "dl",
         media_dir=tmp_path / "media",
         vpn_enabled=True,
-        vpn_enforce=False,
+        vpn_protocol="wireguard",
     )
     mgr = VpnManager(cfg)
     monkeypatch.setattr(mgr, "_is_linux", lambda: True)
-    monkeypatch.setattr(mgr, "_netns_exists", lambda: False)
-    monkeypatch.setattr("core.vpn.shutil.which", lambda name: "/sbin/ip" if name == "ip" else None)
+    monkeypatch.setattr(mgr, "_ensure_vpn_app_user", lambda: None)
+    monkeypatch.setattr(
+        "core.vpn.shutil.which",
+        lambda name: "/usr/bin/setpriv" if name == "setpriv" else None,
+    )
     wrapped = mgr.wrap_torrent_command(["qbittorrent-nox"])
-    assert wrapped[:4] == ["ip", "netns", "exec", TORRENT_NETNS]
+    assert wrapped[:4] == ["setpriv", f"--reuid={VPN_APP_UID}", f"--regid={VPN_APP_GID}", "--clear-groups"]
+    assert "qbittorrent-nox" in wrapped
 
 
-def test_vpn_wraps_when_linux_netns_exists(tmp_path: Path, monkeypatch):
+def test_vpn_wraps_openvpn_with_netns(tmp_path: Path, monkeypatch):
     cfg = Settings(
         config_dir=tmp_path / "config",
         download_dir=tmp_path / "dl",
         media_dir=tmp_path / "media",
         vpn_enabled=True,
-        vpn_enforce=True,
+        vpn_protocol="openvpn",
     )
     mgr = VpnManager(cfg)
     monkeypatch.setattr(mgr, "_is_linux", lambda: True)
-    monkeypatch.setattr(mgr, "_netns_exists", lambda: True)
     monkeypatch.setattr("core.vpn.shutil.which", lambda name: "/sbin/ip" if name == "ip" else None)
     wrapped = mgr.wrap_isolated_command(["Prowlarr", "-nobrowser"])
     assert wrapped[:4] == ["ip", "netns", "exec", TORRENT_NETNS]
@@ -659,18 +664,22 @@ def test_flaresolverr_start_command_wraps_on_linux(tmp_path: Path, monkeypatch):
         download_dir=tmp_path / "dl",
         media_dir=tmp_path / "media",
         vpn_enabled=True,
+        vpn_protocol="wireguard",
     )
     mgr = VpnManager(cfg)
     monkeypatch.setattr(mgr, "_is_linux", lambda: True)
-    monkeypatch.setattr(mgr, "_netns_exists", lambda: True)
-    monkeypatch.setattr("core.vpn.shutil.which", lambda name: "/sbin/ip" if name == "ip" else None)
+    monkeypatch.setattr(mgr, "_ensure_vpn_app_user", lambda: None)
+    monkeypatch.setattr(
+        "core.vpn.shutil.which",
+        lambda name: "/usr/bin/setpriv" if name == "setpriv" else None,
+    )
     monkeypatch.setattr(vpn_mod, "vpn_manager", mgr)
     app = FlaresolverrApp(base_config_dir=tmp_path, base_install_dir=tmp_path)
     exe = tmp_path / "flaresolverr"
     exe.write_text("x", encoding="utf-8")
     exe.chmod(0o755)
     cmd = app.build_start_command(exe)
-    assert cmd[:4] == ["ip", "netns", "exec", TORRENT_NETNS]
+    assert cmd[:4] == ["setpriv", f"--reuid={VPN_APP_UID}", f"--regid={VPN_APP_GID}", "--clear-groups"]
 
 
 def test_qbittorrent_start_command_not_netns_on_non_linux(tmp_path: Path):

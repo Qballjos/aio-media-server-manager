@@ -1,17 +1,17 @@
 """
 core/vpn.py — Optional VPN isolation for BitTorrent, Prowlarr, and Flaresolverr.
 
-Usenet (SABnzbd/NZBGet) always stays on the host network. When VPN is enabled
-on Linux, qBittorrent / Prowlarr / Flaresolverr run inside ``amm-torrent``.
-WireGuard handshake UDP is userspace-relayed via the host veth so Synology can
-reach the provider without iptables MASQUERADE/DNAT. Local WebUIs are published
-via a TCP proxy in the main netns.
+Usenet (SABnzbd/NZBGet) always stays on the host network. WireGuard runs in the
+container's main network namespace (the pattern that works on Synology). Only
+qBittorrent / Prowlarr / Flaresolverr are forced through wg0 via UID policy
+routing — no nested netns and no iptables NAT.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import pwd
 import shutil
 import subprocess
 import time
@@ -29,16 +29,20 @@ PROVIDERS = ("privadovpn", "mullvad", "protonvpn", "airvpn", "ivpn", "custom")
 TORRENT_NETNS = "amm-torrent"
 VPN_TUNNELED_APPS = frozenset({"qbittorrent", "prowlarr", "flaresolverr"})
 MAX_VPN_CONFIG_BYTES = 256 * 1024
+# WireGuard app isolation (main netns + policy routing). Matches Synology-safe VPN containers.
+VPN_APP_USER = "ammvpn"
+VPN_APP_UID = 910
+VPN_APP_GID = 910
 _VETH_HOST = "amm-veth-h"
 _VETH_NS = "amm-veth-n"
 _NS_HOST_IP = "10.200.200.1"
 _NS_PEER_IP = "10.200.200.2"
-# Reachable from amm-torrent for Prowlarr → Sonarr/Radarr (main netns listeners).
 TORRENT_BRIDGE_HOST = _NS_HOST_IP
 _DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191}
 _FALLBACK_DNS = ("1.1.1.1", "9.9.9.9")
 _KS_CHAIN = "AMM-KS"
 _VPN_TABLE = 200
+_VPN_UID_RULE_PRIORITY = 100
 _VPN_RULE_PRIORITY = 100
 _VPN_LOCAL_RULE_PRIORITY = 99
 
@@ -363,7 +367,7 @@ class VpnManager:
     def status(self) -> dict[str, Any]:
         tunnel_up = self._tunnel_up()
         netns = self._netns_exists()
-        isolated = bool(self.settings.vpn_enabled and netns and tunnel_up)
+        isolated = bool(self.settings.vpn_enabled and tunnel_up)
         supervisor = ProcessSupervisor.get()
         running: dict[str, bool] = {}
         unprotected: list[str] = []
@@ -398,140 +402,117 @@ class VpnManager:
             "endpoint_hosts": self._endpoint_hosts(),
             "endpoint_ips": list(self._cached_underlay_ips or []),
             "webui_proxy_ports": vpn_webui_proxy.listening_ports(),
-            "handshake_ok": self._wireguard_handshake_fresh() if tunnel_up else False,
+            "handshake_ok": self._wireguard_handshake_fresh() if self.settings.vpn_protocol == "wireguard" else tunnel_up,
+            "isolation_mode": self.isolation_mode(),
+            "vpn_app_uid": VPN_APP_UID if self.uses_uid_isolation() else None,
         }
         return payload
+
+    def isolation_mode(self) -> str:
+        if not self.settings.vpn_enabled or not self._is_linux():
+            return "off"
+        if self.settings.vpn_protocol == "wireguard":
+            return "uid"
+        return "netns"
+
+    def uses_uid_isolation(self) -> bool:
+        return self.isolation_mode() == "uid"
+
+    def uses_netns_isolation(self) -> bool:
+        return self.isolation_mode() == "netns"
 
     def wrap_torrent_command(self, cmd: list[str]) -> list[str]:
         return self.wrap_isolated_command(cmd)
 
     def wrap_isolated_command(self, cmd: list[str]) -> list[str]:
-        """Run the process inside amm-torrent when VPN is enabled.
-
-        Always prefix on Linux so a missing netns fails closed instead of leaking
-        onto the house WAN.
-        """
+        """Force tunneled apps through the VPN without nested NAT on Synology."""
         if not self.settings.vpn_enabled:
             return cmd
         if not self._is_linux():
             return cmd
+        if self.settings.vpn_protocol == "wireguard":
+            if shutil.which("setpriv") is None:
+                logger.error("setpriv not found; cannot isolate torrent apps onto WireGuard.")
+                return cmd
+            self._ensure_vpn_app_user()
+            home = f"/tmp/{VPN_APP_USER}"
+            return [
+                "setpriv",
+                f"--reuid={VPN_APP_UID}",
+                f"--regid={VPN_APP_GID}",
+                "--clear-groups",
+                "--",
+                "env",
+                f"HOME={home}",
+                f"USER={VPN_APP_USER}",
+                f"LOGNAME={VPN_APP_USER}",
+                *cmd,
+            ]
         if shutil.which("ip") is None:
             return cmd
         return ["ip", "netns", "exec", TORRENT_NETNS, *cmd]
 
     def assert_can_start_tunneled_app(self, name: str) -> None:
-        """Kill switch only applies while the VPN switch is on.
-
-        VPN off → qBittorrent / Prowlarr / Flaresolverr may start on the house network.
-        VPN on (Linux) → they may start only when the tunnel namespace is up.
-        """
+        """Kill switch only applies while the VPN switch is on."""
         if name not in VPN_TUNNELED_APPS:
             return
         if not self.settings.vpn_enabled:
             return
         if not self._is_linux():
-            logger.warning("VPN is enabled but network namespaces are Linux-only.")
+            logger.warning("VPN is enabled but isolation is Linux-only.")
             return
-        if self._netns_exists() and self._tunnel_up():
+        if self.tunneled_apps_allowed():
+            self.prepare_tunneled_app(name)
             return
         raise VpnIsolationError(
-            f"Refusing to start '{name}' off-VPN: the tunnel must be up "
-            f"(netns {TORRENT_NETNS} with WireGuard/OpenVPN) while VPN is enabled. "
-            "Turn the VPN switch off in Settings → Network to run on the house network."
+            f"Refusing to start '{name}' off-VPN: WireGuard must have a live handshake "
+            "while VPN is enabled. Turn the VPN switch off in Settings → Network to run "
+            "on the house network."
         )
 
     def tunneled_apps_allowed(self) -> bool:
-        """True when VPN is off (house network OK) or the Linux tunnel is up."""
+        """True when VPN is off (house network OK) or the tunnel data plane is up."""
         if not self.settings.vpn_enabled:
             return True
         if not self._is_linux():
             return True
-        return self._netns_exists() and self._tunnel_up()
+        return self._tunnel_up()
+
+    def prepare_tunneled_app(self, name: str) -> None:
+        """Ensure config/data paths are writable by the VPN app UID."""
+        if not self.uses_uid_isolation():
+            return
+        self._ensure_vpn_app_user()
+        paths: list[Path] = []
+        try:
+            from applications.catalog import ApplicationCatalog
+
+            if ApplicationCatalog(app_settings=self.settings).has(name):
+                app = ApplicationCatalog(app_settings=self.settings).get(name)
+                paths.append(Path(app.config_dir))
+        except Exception:
+            logger.debug("Could not resolve config dir for %s", name, exc_info=True)
+        paths.append(Path(self.settings.download_dir))
+        for path in paths:
+            self._chown_tree(path)
 
     def start(self) -> dict[str, Any]:
         if not self.config_path.is_file():
             return self._fail(f"VPN config missing: {self.config_path}")
         self._cached_underlay_ips = None
+        proto = self.settings.vpn_protocol
+
+        if proto == "wireguard":
+            return self._start_wireguard_uid()
+
+        # OpenVPN: legacy netns path (may not work on Synology without NAT).
         if self._is_linux():
             self._cached_underlay_ips = self._resolve_underlay_ips()
-            if not self._cached_underlay_ips:
-                return self._fail(
-                    "Could not resolve the VPN Endpoint to an IP from the house network. "
-                    "Check DNS on the NAS or use a numeric Endpoint in the profile."
-                )
             self._drop_stale_netns()
             self._ensure_resolvconf_shim()
             ns_error = self._ensure_netns()
             if ns_error:
                 return self._fail(ns_error)
-        proto = self.settings.vpn_protocol
-        up_conf = self.config_path
-        if proto == "wireguard":
-            try:
-                raw = self.config_path.read_text(encoding="utf-8", errors="replace")
-            except OSError as exc:
-                return self._fail(f"Could not read WireGuard config: {exc}")
-            if not wireguard_covers_default_route(raw):
-                return self._fail(
-                    "WireGuard AllowedIPs must include 0.0.0.0/0 so indexers and DNS "
-                    "can use the tunnel. Split-tunnel profiles are not supported."
-                )
-            endpoint = parse_wireguard_endpoint(raw)
-            if not endpoint:
-                return self._fail("WireGuard profile is missing an Endpoint = host:port line.")
-            endpoint_host, endpoint_port = endpoint
-            real_ip = (self._cached_underlay_ips or [endpoint_host])[0]
-            exe = shutil.which("wg-quick")
-            if not exe:
-                return self._fail("wireguard tools are not installed on this host.")
-            try:
-                up_conf = self._prepared_wireguard_config(relay_port=endpoint_port)
-            except OSError as exc:
-                return self._fail(f"Could not prepare WireGuard config: {exc}")
-            # Userspace UDP relay avoids Synology MASQUERADE (missing/broken nft NAT).
-            if self._is_linux() and not vpn_endpoint_relay.ensure(
-                listen_host=_NS_HOST_IP,
-                listen_port=endpoint_port,
-                dest_host=real_ip,
-                dest_port=endpoint_port,
-            ):
-                return self._fail(
-                    f"Could not bind the WireGuard UDP relay on {_NS_HOST_IP}:{endpoint_port}."
-                )
-            # Clear leftovers from older main-netns WG attempts.
-            self._wireguard_down_main(up_conf)
-            self._clear_main_wireguard_routing()
-            env = os.environ.copy()
-            env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-            wg_go = shutil.which("wireguard-go")
-            if wg_go:
-                env["WG_QUICK_USERSPACE_IMPLEMENTATION"] = wg_go
-            cmd = self.wrap_isolated_command([exe, "up", str(up_conf)]) if self._is_linux() else [exe, "up", str(up_conf)]
-            try:
-                subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60, env=env)
-            except subprocess.CalledProcessError as exc:
-                vpn_endpoint_relay.stop()
-                return self._fail(vpn_start_failure_detail(exc.returncode, exc.stderr or "", exc.stdout or ""))
-            except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-                vpn_endpoint_relay.stop()
-                return self._fail(str(exc))
-            self._active_wg_conf = up_conf
-            self._last_error = ""
-            if self._is_linux():
-                self._add_tunnel_default_routes()
-                self._apply_netns_kill_switch()
-                self._forward_local_ports()
-                self._write_netns_resolv(self._dns_for_netns())
-                if not self._wait_for_wireguard_handshake():
-                    self._wireguard_down_netns(up_conf)
-                    vpn_endpoint_relay.stop()
-                    return self._fail(
-                        "WireGuard interface is up but no handshake completed. "
-                        "Check the profile, endpoint reachability, and NAS outbound UDP."
-                    )
-            return {"status": "started", **self.status()}
-
-        # OpenVPN still runs inside amm-torrent (needs /dev/net/tun in that ns).
         exe = shutil.which("openvpn")
         if not exe:
             return self._fail("openvpn is not installed on this host.")
@@ -552,6 +533,86 @@ class VpnManager:
         except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
             return self._fail(str(exc))
 
+    def _start_wireguard_uid(self) -> dict[str, Any]:
+        """WireGuard in main netns + UID policy routing (Synology-safe, no iptables NAT)."""
+        try:
+            raw = self.config_path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            return self._fail(f"Could not read WireGuard config: {exc}")
+        if not wireguard_covers_default_route(raw):
+            return self._fail(
+                "WireGuard AllowedIPs must include 0.0.0.0/0 so indexers and DNS "
+                "can use the tunnel. Split-tunnel profiles are not supported."
+            )
+        self._cached_underlay_ips = self._resolve_underlay_ips()
+        if not self._cached_underlay_ips:
+            return self._fail(
+                "Could not resolve the VPN Endpoint to an IP from the house network. "
+                "Check DNS on the NAS or use a numeric Endpoint in the profile."
+            )
+        if shutil.which("setpriv") is None:
+            return self._fail("setpriv (util-linux) is required for WireGuard app isolation.")
+        self._ensure_vpn_app_user()
+
+        # Tear down leftover nested-netns / relay experiments from older builds.
+        vpn_endpoint_relay.stop()
+        vpn_webui_proxy.stop_all()
+        self._clear_uid_wireguard_routing()
+        self._clear_main_wireguard_routing()
+        if self._is_linux():
+            self._teardown_netns()
+
+        exe = shutil.which("wg-quick")
+        if not exe:
+            return self._fail("wireguard tools are not installed on this host.")
+        try:
+            up_conf = self._prepared_wireguard_config()
+        except OSError as exc:
+            return self._fail(f"Could not prepare WireGuard config: {exc}")
+        self._wireguard_down_main(up_conf)
+        env = os.environ.copy()
+        env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        wg_go = shutil.which("wireguard-go")
+        if wg_go:
+            env["WG_QUICK_USERSPACE_IMPLEMENTATION"] = wg_go
+        try:
+            subprocess.run(
+                [exe, "up", str(up_conf)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=env,
+            )
+        except subprocess.CalledProcessError as exc:
+            return self._fail(vpn_start_failure_detail(exc.returncode, exc.stderr or "", exc.stdout or ""))
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            return self._fail(str(exc))
+
+        self._active_wg_conf = up_conf
+        route_error = self._apply_uid_wireguard_routing()
+        if route_error:
+            self._wireguard_down_main(up_conf)
+            self._clear_uid_wireguard_routing()
+            return self._fail(route_error)
+        if not self._wait_for_wireguard_handshake():
+            self._wireguard_down_main(up_conf)
+            self._clear_uid_wireguard_routing()
+            return self._fail(
+                "WireGuard interface is up but no handshake completed. "
+                "Check the Privado profile, endpoint UDP reachability from the NAS, "
+                "and that outbound UDP is not blocked."
+            )
+        self._last_error = ""
+        for name in sorted(VPN_TUNNELED_APPS):
+            self.prepare_tunneled_app(name)
+        logger.info(
+            "WireGuard up in main netns; torrent apps use uid %s via routing table %s",
+            VPN_APP_UID,
+            _VPN_TABLE,
+        )
+        return {"status": "started", **self.status()}
+
     def _fail(self, detail: str) -> dict[str, Any]:
         self._last_error = (detail or "VPN start failed.")[:2000]
         logger.error("VPN start failed: %s", self._last_error)
@@ -567,14 +628,194 @@ class VpnManager:
                 if self._active_wg_conf and self._active_wg_conf.is_file()
                 else self.config_path
             )
-            self._wireguard_down_netns(down_conf)
             self._wireguard_down_main(down_conf)
+            self._wireguard_down_netns(down_conf)
         self._active_wg_conf = None
         self._cached_underlay_ips = None
         if self._is_linux():
+            self._clear_uid_wireguard_routing()
             self._clear_main_wireguard_routing()
             self._teardown_netns()
         return {"status": "stopped", **self.status()}
+
+    def _ensure_vpn_app_user(self) -> None:
+        home = Path(f"/tmp/{VPN_APP_USER}")
+        try:
+            home.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        try:
+            pwd.getpwnam(VPN_APP_USER)
+        except KeyError:
+            cmd = [
+                "useradd",
+                "-u",
+                str(VPN_APP_UID),
+                "-g",
+                str(VPN_APP_GID) if self._group_exists(VPN_APP_GID) else "nogroup",
+                "-M",
+                "-d",
+                str(home),
+                "-s",
+                "/usr/sbin/nologin",
+                VPN_APP_USER,
+            ]
+            # Prefer creating the group first.
+            subprocess.run(
+                ["groupadd", "-g", str(VPN_APP_GID), VPN_APP_USER],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            cmd = [
+                "useradd",
+                "-u",
+                str(VPN_APP_UID),
+                "-g",
+                str(VPN_APP_GID),
+                "-M",
+                "-d",
+                str(home),
+                "-s",
+                "/usr/sbin/nologin",
+                VPN_APP_USER,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0 and "already exists" not in (result.stderr or "").lower():
+                logger.warning("Could not create %s user: %s", VPN_APP_USER, (result.stderr or "")[:200])
+        try:
+            os.chown(home, VPN_APP_UID, VPN_APP_GID)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _group_exists(gid: int) -> bool:
+        import grp
+
+        try:
+            grp.getgrgid(gid)
+            return True
+        except KeyError:
+            return False
+
+    def _chown_tree(self, path: Path) -> None:
+        if not path.exists():
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                return
+        try:
+            os.chown(path, VPN_APP_UID, VPN_APP_GID)
+        except OSError as exc:
+            logger.debug("chown %s failed: %s", path, exc)
+            return
+        if not path.is_dir():
+            return
+        for root, dirs, files in os.walk(path):
+            for name in dirs + files:
+                target = Path(root) / name
+                try:
+                    os.chown(target, VPN_APP_UID, VPN_APP_GID)
+                except OSError:
+                    pass
+
+    def _apply_uid_wireguard_routing(self) -> str | None:
+        ifaces = self._main_tunnel_interface_names()
+        if not ifaces:
+            return "WireGuard came up but no wg interface was found."
+        wg = ifaces[0]
+        result = self._ip(["route", "replace", "default", "dev", wg, "table", str(_VPN_TABLE)])
+        if result.returncode != 0:
+            return f"Could not install WireGuard default route: {(result.stderr or '')[:180]}"
+        # Localhost / link-local always from main table for the VPN UID.
+        self._ip(
+            [
+                "rule",
+                "add",
+                "uidrange",
+                f"{VPN_APP_UID}-{VPN_APP_UID}",
+                "lookup",
+                "main",
+                "suppress_prefixlength",
+                "0",
+                "priority",
+                str(_VPN_UID_RULE_PRIORITY - 1),
+            ]
+        )
+        rule = self._ip(
+            [
+                "rule",
+                "add",
+                "uidrange",
+                f"{VPN_APP_UID}-{VPN_APP_UID}",
+                "lookup",
+                str(_VPN_TABLE),
+                "priority",
+                str(_VPN_UID_RULE_PRIORITY),
+            ]
+        )
+        if rule.returncode != 0 and "File exists" not in (rule.stderr or ""):
+            # suppress_prefixlength may be unsupported; fall back to a single rule.
+            self._ip(
+                [
+                    "rule",
+                    "del",
+                    "uidrange",
+                    f"{VPN_APP_UID}-{VPN_APP_UID}",
+                    "lookup",
+                    "main",
+                    "suppress_prefixlength",
+                    "0",
+                    "priority",
+                    str(_VPN_UID_RULE_PRIORITY - 1),
+                ]
+            )
+            rule = self._ip(
+                [
+                    "rule",
+                    "add",
+                    "uidrange",
+                    f"{VPN_APP_UID}-{VPN_APP_UID}",
+                    "lookup",
+                    str(_VPN_TABLE),
+                    "priority",
+                    str(_VPN_UID_RULE_PRIORITY),
+                ]
+            )
+            if rule.returncode != 0 and "File exists" not in (rule.stderr or ""):
+                return f"Could not install UID routing rule: {(rule.stderr or '')[:180]}"
+        # Ensure VPN UID can still reach loopback services (Arr on 127.0.0.1).
+        self._ip(["route", "replace", "127.0.0.0/8", "dev", "lo", "table", str(_VPN_TABLE)])
+        return None
+
+    def _clear_uid_wireguard_routing(self) -> None:
+        self._ip(
+            [
+                "rule",
+                "del",
+                "uidrange",
+                f"{VPN_APP_UID}-{VPN_APP_UID}",
+                "lookup",
+                str(_VPN_TABLE),
+                "priority",
+                str(_VPN_UID_RULE_PRIORITY),
+            ]
+        )
+        self._ip(
+            [
+                "rule",
+                "del",
+                "uidrange",
+                f"{VPN_APP_UID}-{VPN_APP_UID}",
+                "lookup",
+                "main",
+                "suppress_prefixlength",
+                "0",
+                "priority",
+                str(_VPN_UID_RULE_PRIORITY - 1),
+            ]
+        )
+        self._ip(["route", "flush", "table", str(_VPN_TABLE)])
 
     def _wireguard_down_main(self, conf: Path | None = None) -> None:
         target = conf if conf and conf.is_file() else self.config_path
@@ -759,8 +1000,8 @@ class VpnManager:
         rewritten = ensure_wireguard_table_off(
             sanitize_wireguard_runtime(rewrite_wireguard_endpoints(raw, self._endpoint_ip_map()))
         )
-        if relay_port is not None:
-            rewritten = rewrite_wireguard_endpoint_host_port(rewritten, _NS_HOST_IP, relay_port)
+        # relay_port kept for API compatibility with older call sites; unused in UID mode.
+        _ = relay_port
         runtime_dir = Path("/run/amm-vpn")
         try:
             runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -1302,31 +1543,6 @@ class VpnManager:
                 (result.stderr or "")[:200],
             )
 
-    def refresh_local_forwards(self) -> None:
-        """Re-bind WebUI proxies / endpoint relay while the tunnel is up."""
-        if not self.settings.vpn_enabled or not self._is_linux():
-            vpn_webui_proxy.stop_all()
-            vpn_endpoint_relay.stop()
-            return
-        if not self.tunneled_apps_allowed():
-            return
-        if self.settings.vpn_protocol == "wireguard":
-            try:
-                raw = self.config_path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                raw = ""
-            endpoint = parse_wireguard_endpoint(raw)
-            if endpoint and self._cached_underlay_ips:
-                _host, port = endpoint
-                vpn_endpoint_relay.ensure(
-                    listen_host=_NS_HOST_IP,
-                    listen_port=port,
-                    dest_host=self._cached_underlay_ips[0],
-                    dest_port=port,
-                )
-        self._forward_local_ports()
-        self._write_netns_resolv(self._dns_for_netns())
-
     def _main_tunnel_interface_names(self) -> list[str]:
         result = self._ip(["-o", "link", "show", "up"])
         names: list[str] = []
@@ -1368,12 +1584,12 @@ class VpnManager:
             )
 
     def _wireguard_handshake_fresh(self, max_age_seconds: int = 180) -> bool:
-        """True when wg inside amm-torrent reports a recent peer handshake."""
-        if not shutil.which("wg") or not self._netns_exists():
+        """True when wg in the main netns reports a recent peer handshake."""
+        if not shutil.which("wg"):
             return False
         try:
             out = subprocess.run(
-                ["ip", "netns", "exec", TORRENT_NETNS, "wg", "show", "all", "latest-handshakes"],
+                ["wg", "show", "all", "latest-handshakes"],
                 capture_output=True,
                 text=True,
                 timeout=3,
@@ -1404,12 +1620,30 @@ class VpnManager:
         return self._wireguard_handshake_fresh()
 
     def _tunnel_up(self) -> bool:
-        """True when the tunnel data plane is usable inside amm-torrent."""
-        if not self._is_linux() or not self._netns_exists():
+        """True when the tunnel data plane is usable for torrent apps."""
+        if not self._is_linux():
             return False
         if self.settings.vpn_protocol == "wireguard":
-            return bool(self._tunnel_interface_names()) and self._wireguard_handshake_fresh()
+            return bool(self._main_tunnel_interface_names()) and self._wireguard_handshake_fresh()
+        if not self._netns_exists():
+            return False
         return bool(self._tunnel_interface_names())
+
+    def refresh_local_forwards(self) -> None:
+        """Keep UID routes / netns proxies healthy while VPN is up."""
+        if not self.settings.vpn_enabled or not self._is_linux():
+            vpn_webui_proxy.stop_all()
+            vpn_endpoint_relay.stop()
+            return
+        if not self.tunneled_apps_allowed():
+            return
+        if self.uses_uid_isolation():
+            vpn_webui_proxy.stop_all()
+            vpn_endpoint_relay.stop()
+            self._apply_uid_wireguard_routing()
+            return
+        self._forward_local_ports()
+        self._write_netns_resolv(self._dns_for_netns())
 
     def _netns_bind_path(self) -> Path:
         return Path(f"/var/run/netns/{TORRENT_NETNS}")
