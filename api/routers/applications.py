@@ -191,18 +191,32 @@ async def restart_application(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
     supervisor = ProcessSupervisor.get()
-    if supervisor.status(name).value == "stopped":
-        # If stopped, simply start it
-        cmd = plugin.start_command()
-        await supervisor.start(
-            name=name,
-            cmd=cmd,
-            cwd=plugin.working_directory(),
-            env=plugin.extra_env(),
-            log_dir=settings.config_dir / "logs",
-        )
-    else:
-        await supervisor.restart(name)
+    if name in VPN_TUNNELED_APPS and not vpn_manager.tunneled_apps_allowed():
+        if supervisor.status(name).value == "running":
+            try:
+                await supervisor.stop(name)
+            except Exception as exc:
+                logger.warning("Error stopping '%s' for VPN isolation: %s", name, exc)
+        try:
+            vpn_manager.assert_can_start_tunneled_app(name)
+        except VpnIsolationError as err:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
+
+    try:
+        if supervisor.status(name).value == "stopped":
+            # If stopped, simply start it
+            cmd = plugin.start_command()
+            await supervisor.start(
+                name=name,
+                cmd=cmd,
+                cwd=plugin.working_directory(),
+                env=plugin.extra_env(),
+                log_dir=settings.config_dir / "logs",
+            )
+        else:
+            await supervisor.restart(name)
+    except VpnIsolationError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
 
     return {
         "status": "restarted",
@@ -407,14 +421,19 @@ async def patch_application_settings(
     )
     if should_restart:
         await supervisor.stop(name)
-        await supervisor.start(
-            name=name,
-            cmd=plugin.start_command(),
-            cwd=plugin.working_directory(),
-            env=plugin.extra_env(),
-            log_dir=settings.config_dir / "logs",
-        )
-        restarted = True
+        try:
+            if name in VPN_TUNNELED_APPS:
+                vpn_manager.assert_can_start_tunneled_app(name)
+            await supervisor.start(
+                name=name,
+                cmd=plugin.start_command(),
+                cwd=plugin.working_directory(),
+                env=plugin.extra_env(),
+                log_dir=settings.config_dir / "logs",
+            )
+            restarted = True
+        except VpnIsolationError as err:
+            logger.warning("Left '%s' stopped after settings change: %s", name, err)
 
     payload = _application_settings(plugin, request)
     payload["restarted"] = restarted

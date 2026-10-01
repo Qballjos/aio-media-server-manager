@@ -75,9 +75,12 @@ def create_app() -> FastAPI:
             result = await asyncio.to_thread(vpn_manager.start)
             if result.get("status") == "error" or not result.get("tunnel_up"):
                 logger.warning(
-                    "VPN did not come up; qBittorrent/Prowlarr stay stopped. %s",
+                    "VPN did not come up; qBittorrent, Prowlarr, and Flaresolverr stay stopped. %s",
                     result.get("detail") or result.get("status"),
                 )
+                from core.integrations.lifecycle import enforce_vpn_isolation
+
+                await enforce_vpn_isolation()
 
         supervisor = ProcessSupervisor.get()
         boot_catalog = ApplicationCatalog()
@@ -114,8 +117,10 @@ def create_app() -> FastAPI:
             from core.integrations.lifecycle import schedule_full_wiring
 
             asyncio.create_task(schedule_full_wiring(wait_for_apps=True))
+        from core.integrations.lifecycle import vpn_isolation_loop
         from core.update_schedule import scheduler_loop
 
+        asyncio.create_task(vpn_isolation_loop())
         asyncio.create_task(scheduler_loop())
         yield
         logger.info("FastAPI application shutting down.")

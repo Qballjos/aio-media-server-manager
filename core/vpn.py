@@ -187,6 +187,43 @@ def rewrite_wireguard_endpoints(text: str, resolved: dict[str, str]) -> str:
     return "".join(lines)
 
 
+def ensure_wireguard_table_off(text: str) -> str:
+    """Stop wg-quick from running iptables-restore (nft addrtype fails in Docker/NAS netns)."""
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    in_interface = False
+    saw_table = False
+
+    def _flush_table() -> None:
+        nonlocal saw_table
+        if in_interface and not saw_table:
+            if out and not str(out[-1]).endswith("\n"):
+                out[-1] = str(out[-1]) + "\n"
+            out.append("Table = off\n")
+            saw_table = True
+
+    for raw in lines:
+        stripped = raw.split("#", 1)[0].strip()
+        lower = stripped.lower()
+        if lower.startswith("[") and lower.endswith("]"):
+            _flush_table()
+            in_interface = lower == "[interface]"
+            saw_table = False
+            out.append(raw)
+            continue
+        if in_interface and lower.startswith("table"):
+            newline = "\n" if raw.endswith("\n") else ""
+            prefix, sep, _rest = raw.partition("=")
+            if not sep:
+                prefix, sep, _rest = raw.partition(" ")
+            out.append(f"{prefix}{sep} off{newline}")
+            saw_table = True
+            continue
+        out.append(raw)
+    _flush_table()
+    return "".join(out)
+
+
 def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
     detail = (stderr or stdout or "").strip()
     lower = detail.lower()
@@ -195,6 +232,18 @@ def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
             "wg-quick needs resolvconf for DNS= in the WireGuard profile. "
             "The appliance should install a shim automatically; if this persists, "
             "remove the DNS line or install openresolv."
+        )
+        return f"{hint} {detail}".strip()[:2000]
+    if (
+        "iptables-restore" in lower
+        or "addrtype" in lower
+        or "rule set generation id" in lower
+    ):
+        hint = (
+            "wg-quick's iptables NAT step failed inside the torrent namespace "
+            "(this NAS kernel has no nft addrtype/comment). The appliance sets "
+            "Table = off and adds the default route itself — recreate the container "
+            "from a current image."
         )
         return f"{hint} {detail}".strip()[:2000]
     if returncode == 127 or "command not found" in lower:
@@ -274,6 +323,11 @@ class VpnManager:
         return ["ip", "netns", "exec", TORRENT_NETNS, *cmd]
 
     def assert_can_start_tunneled_app(self, name: str) -> None:
+        """Kill switch only applies while the VPN switch is on.
+
+        VPN off → qBittorrent / Prowlarr / Flaresolverr may start on the house network.
+        VPN on (Linux) → they may start only when the tunnel namespace is up.
+        """
         if name not in VPN_TUNNELED_APPS:
             return
         if not self.settings.vpn_enabled:
@@ -285,8 +339,17 @@ class VpnManager:
             return
         raise VpnIsolationError(
             f"Refusing to start '{name}' off-VPN: the tunnel must be up "
-            f"(netns {TORRENT_NETNS} with WireGuard/OpenVPN) while VPN is enabled."
+            f"(netns {TORRENT_NETNS} with WireGuard/OpenVPN) while VPN is enabled. "
+            "Turn the VPN switch off in Settings → Network to run on the house network."
         )
+
+    def tunneled_apps_allowed(self) -> bool:
+        """True when VPN is off (house network OK) or the Linux tunnel is up."""
+        if not self.settings.vpn_enabled:
+            return True
+        if not self._is_linux():
+            return True
+        return self._netns_exists() and self._tunnel_up()
 
     def start(self) -> dict[str, Any]:
         if not self.config_path.is_file():
@@ -325,6 +388,7 @@ class VpnManager:
             self._active_wg_conf = up_conf if proto == "wireguard" else None
             self._last_error = ""
             if self._is_linux():
+                self._add_tunnel_default_routes()
                 self._forward_local_ports()
                 self._apply_netns_kill_switch()
                 self._write_netns_resolv(self._profile_dns_servers() or list(_FALLBACK_DNS))
@@ -345,8 +409,14 @@ class VpnManager:
             down_conf = self._active_wg_conf if self._active_wg_conf and self._active_wg_conf.is_file() else self.config_path
             if down_conf.is_file():
                 down = ["wg-quick", "down", str(down_conf)]
+                # Settings may already clear vpn_enabled before stop(); still tear the
+                # tunnel down inside the netns while it exists.
+                if self._is_linux() and self._netns_exists() and shutil.which("ip"):
+                    cmd = ["ip", "netns", "exec", TORRENT_NETNS, *down]
+                else:
+                    cmd = down
                 subprocess.run(
-                    self.wrap_isolated_command(down) if self._is_linux() else down,
+                    cmd,
                     capture_output=True,
                     text=True,
                     timeout=30,
@@ -492,7 +562,9 @@ class VpnManager:
 
     def _prepared_wireguard_config(self) -> Path:
         raw = self.config_path.read_text(encoding="utf-8", errors="replace")
-        rewritten = rewrite_wireguard_endpoints(raw, self._endpoint_ip_map())
+        rewritten = ensure_wireguard_table_off(
+            rewrite_wireguard_endpoints(raw, self._endpoint_ip_map())
+        )
         runtime_dir = Path("/run/amm-vpn")
         try:
             runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -689,6 +761,34 @@ class VpnManager:
                 (result.stderr or "")[:200],
             )
 
+    def _tunnel_interface_names(self) -> list[str]:
+        result = self._ip(["netns", "exec", TORRENT_NETNS, "ip", "-o", "link", "show", "up"])
+        names: list[str] = []
+        for line in (result.stdout or "").splitlines():
+            parts = line.split(":", 2)
+            if len(parts) < 2:
+                continue
+            name = parts[1].strip().split("@", 1)[0]
+            if name.startswith("wg") or name.startswith("tun"):
+                names.append(name)
+        return names
+
+    def _add_tunnel_default_routes(self) -> None:
+        """wg-quick Table=off does not install 0.0.0.0/0; we do it inside amm-torrent."""
+        names = self._tunnel_interface_names()
+        if not names:
+            logger.warning("VPN interface came up but no wg/tun device was found in %s.", TORRENT_NETNS)
+            return
+        for name in names:
+            v4 = self._ip(
+                ["netns", "exec", TORRENT_NETNS, "ip", "-4", "route", "replace", "default", "dev", name]
+            )
+            if v4.returncode != 0:
+                logger.warning("Could not add IPv4 default via %s: %s", name, (v4.stderr or "")[:200])
+            self._ip(
+                ["netns", "exec", TORRENT_NETNS, "ip", "-6", "route", "replace", "default", "dev", name]
+            )
+
     def _tunnel_up(self) -> bool:
         """True only when a WireGuard/OpenVPN iface is up *inside* amm-torrent."""
         if not self._is_linux() or not self._netns_exists():
@@ -705,15 +805,7 @@ class VpnManager:
                     return True
             except (OSError, subprocess.TimeoutExpired):
                 pass
-        result = self._ip(["netns", "exec", TORRENT_NETNS, "ip", "-o", "link", "show", "up"])
-        for line in (result.stdout or "").splitlines():
-            parts = line.split(":", 2)
-            if len(parts) < 2:
-                continue
-            name = parts[1].strip().split("@", 1)[0]
-            if name.startswith("wg") or name.startswith("tun"):
-                return True
-        return False
+        return bool(self._tunnel_interface_names())
 
     def _netns_bind_path(self) -> Path:
         return Path(f"/var/run/netns/{TORRENT_NETNS}")

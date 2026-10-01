@@ -18,7 +18,7 @@ const props = defineProps({
   systemInfo: { type: Object, default: null },
   hostArch: { type: String, default: '' }
 })
-const emit = defineEmits(['session', 'updates'])
+const emit = defineEmits(['session', 'updates', 'vpn'])
 const route = useRoute()
 const section = computed(() => resolveSettingsSection(route.params.section))
 const loading = ref(false)
@@ -49,7 +49,6 @@ const form = ref({
   backup_weekday: 0,
   backup_day_of_month: 1,
   vpn_enabled: false,
-  vpn_enforce: false,
   vpn_provider: 'privadovpn',
   vpn_protocol: 'wireguard',
   vpn_config_path: '',
@@ -68,6 +67,7 @@ const form = ref({
 })
 const snapshot = ref({})
 const vpnLive = ref({})
+const vpnBusy = ref(false)
 const tunnelLive = ref({})
 const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
@@ -93,6 +93,42 @@ async function installPwaFromSettings() {
 function toggleHomepageWidgetDebug() {
   widgetDebug.value = !widgetDebug.value
   writeHomepageWidgetDebug(widgetDebug.value)
+}
+
+const jellyfinKey = computed(() => snapshot.value.homepage_keys?.jellyfin || { configured: jellyfinConfigured.value })
+const seerrKey = computed(() => snapshot.value.homepage_keys?.seerr || { configured: seerrConfigured.value })
+
+function credentialChip(status) {
+  const s = status || {}
+  if (s.working) return { label: 'Working', cls: 'is-on' }
+  if (s.configured && s.running) return { label: 'Saved, not working', cls: 'is-bad' }
+  if (s.configured && s.installed && !s.running) return { label: 'Saved · app stopped', cls: 'is-warn' }
+  if (s.configured) return { label: 'Saved', cls: 'is-on' }
+  if (s.running) return { label: 'Running, no key', cls: 'is-warn' }
+  return { label: 'Not saved', cls: 'is-off' }
+}
+
+async function refreshSettings() {
+  try {
+    const res = await apiRequest('/api/settings')
+    if (res.ok) applySettingsPayload(await readJson(res))
+  } catch (err) {
+    console.error('Settings refresh error:', err)
+  }
+}
+
+async function saveHomepageKey(field) {
+  const value = String(form.value[field] || '').trim()
+  if (!value) {
+    error.value = 'Paste a key to save it, or use Clear key.'
+    notice.value = ''
+    return
+  }
+  await patchSettings({ [field]: value })
+}
+
+async function clearHomepageKey(field) {
+  await patchSettings({ [field]: '' })
 }
 
 const metrics = computed(() => props.systemInfo?.metrics || {})
@@ -136,7 +172,6 @@ function applySettingsPayload(data) {
   const vpn = data.vpn || {}
   vpnLive.value = vpn
   form.value.vpn_enabled = !!vpn.enabled
-  form.value.vpn_enforce = !!vpn.enforce
   form.value.vpn_provider = vpn.provider || 'privadovpn'
   form.value.vpn_protocol = vpn.protocol || 'wireguard'
   form.value.vpn_config_path = vpn.config_path || ''
@@ -147,9 +182,9 @@ function applySettingsPayload(data) {
   form.value.cloudflare_tunnel_token = ''
   githubConfigured.value = !!data.github_token_configured
   form.value.github_token = ''
-  jellyfinConfigured.value = !!data.jellyfin_api_key_configured
+  jellyfinConfigured.value = !!(data.homepage_keys?.jellyfin?.configured ?? data.jellyfin_api_key_configured)
   form.value.jellyfin_api_key = ''
-  seerrConfigured.value = !!data.seerr_api_key_configured
+  seerrConfigured.value = !!(data.homepage_keys?.seerr?.configured ?? data.seerr_api_key_configured)
   form.value.seerr_api_key = ''
   const updates = data.updates || {}
   form.value.update_check_schedule = updates.check_schedule || 'off'
@@ -212,28 +247,87 @@ async function patchSettings(payload) {
     const data = await readJson(res)
     if (!res.ok) {
       error.value = apiError(data, 'Could not save settings.')
-      return
+      return false
     }
     applySettingsPayload(data)
-    notice.value = (data.notes && data.notes.join(' ')) || 'Saved.'
+    const notes = (data.notes && data.notes.join(' ')) || ''
+    if (Object.prototype.hasOwnProperty.call(payload, 'vpn_enabled')) {
+      emit('vpn', data.vpn)
+      if (payload.vpn_enabled && !data.vpn?.tunnel_up) {
+        error.value = notes || data.vpn?.last_error || 'VPN tunnel did not come up.'
+      } else {
+        notice.value = notes || (payload.vpn_enabled ? 'VPN started.' : 'VPN stopped.')
+      }
+    } else {
+      notice.value = notes || 'Saved.'
+    }
     if (Object.prototype.hasOwnProperty.call(payload, 'update_check_schedule')) emit('updates')
+    return true
   } catch (err) {
     error.value = err.message || 'Could not save settings.'
+    return false
   } finally {
     saving.value = false
   }
 }
 
+async function toggleVpn() {
+  if (saving.value || vpnBusy.value) return
+  saving.value = true
+  const next = !form.value.vpn_enabled
+  form.value.vpn_enabled = next
+  const ok = await patchSettings({ vpn_enabled: next })
+  if (!ok) form.value.vpn_enabled = !next
+}
+
 async function saveVpn() {
   const payload = {
-    vpn_enabled: form.value.vpn_enabled,
-    vpn_enforce: !!form.value.vpn_enabled,
     vpn_provider: form.value.vpn_provider,
     vpn_protocol: form.value.vpn_protocol,
     vpn_config_path: form.value.vpn_config_path
   }
   if (form.value.vpn_config_text) payload.vpn_config_text = form.value.vpn_config_text
+  if (form.value.vpn_enabled) payload.vpn_enabled = true
   await patchSettings(payload)
+}
+
+async function controlVpn(action) {
+  if (vpnBusy.value || saving.value) return
+  if (!['start', 'stop', 'restart'].includes(action)) return
+  vpnBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await apiRequest(`/api/vpn/${action}`, { method: 'POST' })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, `Could not ${action} VPN.`)
+      return
+    }
+    vpnLive.value = data
+    form.value.vpn_enabled = !!data.enabled
+    emit('vpn', data)
+    const apps = (data.started_apps || []).join(', ')
+    if (action === 'start' || action === 'restart') {
+      if (data.tunnel_up) {
+        notice.value = apps
+          ? `VPN ${action === 'restart' ? 'restarted' : 'started'}. Started ${apps} on the tunnel.`
+          : `VPN ${action === 'restart' ? 'restarted' : 'started'}.`
+      } else {
+        error.value = data.detail || data.last_error || 'VPN tunnel did not come up.'
+      }
+    } else if (data.enabled) {
+      notice.value = 'VPN tunnel stopped. Kill switch stays on until you turn Enable VPN off.'
+    } else {
+      notice.value = apps
+        ? `VPN stopped. Started ${apps} on the house network.`
+        : 'VPN stopped.'
+    }
+  } catch (err) {
+    error.value = err.message || `Could not ${action} VPN.`
+  } finally {
+    vpnBusy.value = false
+  }
 }
 
 async function saveAccount() {
@@ -562,9 +656,10 @@ function formatWhen(ts) {
   return new Date(ms).toLocaleString()
 }
 
-watch(section, () => {
+watch(section, (s, prev) => {
   error.value = ''
   notice.value = ''
+  if (prev && (s === 'network' || s === 'homepage')) refreshSettings()
 })
 
 onMounted(() => {
@@ -979,23 +1074,47 @@ onBeforeUnmount(() => {
           <h3>VPN</h3>
           <p>qBittorrent, Prowlarr, and Flaresolverr. Usenet always bypasses the tunnel.</p>
         </div>
-        <p class="share-meta">Tunnel {{ vpnLive.tunnel_up ? 'up' : 'down' }} · config {{ vpnLive.config_present ? 'present' : 'missing' }}</p>
+        <p class="share-meta">{{ vpnLive.enabled ? 'VPN is on' : 'VPN is off' }}{{ vpnLive.provider ? ` · ${vpnLive.provider}` : '' }}{{ vpnLive.protocol ? ` · ${vpnLive.protocol}` : '' }}</p>
+        <div class="setting-status">
+          <span class="setting-chip" :class="vpnLive.enabled ? 'is-on' : 'is-off'">{{ vpnLive.enabled ? 'Enabled' : 'Off' }}</span>
+          <span class="setting-chip" :class="vpnLive.config_present ? 'is-on' : 'is-warn'">{{ vpnLive.config_present ? 'Config saved' : 'No config' }}</span>
+          <span class="setting-chip" :class="vpnLive.tunnel_up ? 'is-on' : (vpnLive.enabled ? 'is-bad' : 'is-off')">{{ vpnLive.tunnel_up ? 'Tunnel up' : 'Tunnel down' }}</span>
+        </div>
+        <p v-if="vpnLive.config_present" class="share-meta font-mono">{{ vpnLive.config_path }}</p>
+        <div class="share-row" style="margin: 0.75rem 0 1rem;">
+          <button
+            type="button"
+            class="ui-btn ui-btn-primary"
+            :disabled="saving || vpnBusy || !vpnLive.config_present || !!vpnLive.tunnel_up"
+            @click="controlVpn('start')"
+          >{{ vpnBusy ? 'Working…' : 'Start' }}</button>
+          <button
+            type="button"
+            class="ui-btn ui-btn-ghost"
+            :disabled="saving || vpnBusy || (!vpnLive.tunnel_up && !vpnLive.enabled)"
+            @click="controlVpn('stop')"
+          >Stop</button>
+          <button
+            type="button"
+            class="ui-btn ui-btn-ghost"
+            :disabled="saving || vpnBusy || !vpnLive.config_present"
+            @click="controlVpn('restart')"
+          >Restart</button>
+        </div>
         <form class="form-stack" @submit.prevent="saveVpn">
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
               <strong>Enable VPN</strong>
-              <span>Starts or stops the tunnel when you save.</span>
+              <span>On: kill switch — qBittorrent, Prowlarr, and Flaresolverr only run when the tunnel is up. Off: those apps can start on the house network. Use Start / Stop / Restart for the tunnel.</span>
             </div>
-            <button type="button" class="ui-switch" role="switch" :aria-checked="form.vpn_enabled ? 'true' : 'false'" @click="form.vpn_enabled = !form.vpn_enabled">
-              <span class="ui-switch-thumb"></span>
-            </button>
-          </div>
-          <div class="ui-switch-row">
-            <div class="ui-switch-copy">
-              <strong>Kill switch</strong>
-              <span>Always on while VPN is enabled. Prowlarr and qBittorrent only use the tunnel; if it is down they stay stopped and cannot use the house WAN.</span>
-            </div>
-            <button type="button" class="ui-switch" role="switch" :aria-checked="form.vpn_enabled ? 'true' : 'false'" disabled>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="form.vpn_enabled ? 'true' : 'false'"
+              :disabled="saving || vpnBusy"
+              @click="toggleVpn"
+            >
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
@@ -1054,15 +1173,27 @@ onBeforeUnmount(() => {
           <h3>Jellyfin API key</h3>
           <p>
             Home → Recently added uses this key. Create one in Jellyfin Dashboard → API Keys
-            (or paste the access token). Leave blank and save to clear it.
+            (or paste the access token). Paste a new key to replace it.
           </p>
         </div>
-        <p class="share-meta">{{ jellyfinConfigured ? 'A Jellyfin API key is saved.' : 'No Jellyfin API key saved yet.' }}</p>
-        <form class="form-stack" @submit.prevent="patchSettings({ jellyfin_api_key: form.jellyfin_api_key })">
+        <div class="setting-status">
+          <span class="setting-chip" :class="credentialChip(jellyfinKey).cls">{{ credentialChip(jellyfinKey).label }}</span>
+        </div>
+        <p class="share-meta">{{ jellyfinKey.detail || (jellyfinKey.configured ? 'A Jellyfin API key is saved.' : 'No Jellyfin API key saved yet.') }}</p>
+        <form class="form-stack" @submit.prevent="saveHomepageKey('jellyfin_api_key')">
           <label class="ui-field">API key
-            <input v-model="form.jellyfin_api_key" type="password" class="ui-input font-mono" autocomplete="off" />
+            <input
+              v-model="form.jellyfin_api_key"
+              type="password"
+              class="ui-input font-mono"
+              autocomplete="off"
+              :placeholder="jellyfinKey.configured ? 'Saved — paste a new key to replace' : 'Paste API key'"
+            />
           </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
+          <div class="share-row">
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
+            <button v-if="jellyfinKey.configured" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="clearHomepageKey('jellyfin_api_key')">Clear key</button>
+          </div>
         </form>
       </div>
       <div class="glass-card settings-card">
@@ -1070,15 +1201,27 @@ onBeforeUnmount(() => {
           <h3>Seerr API key</h3>
           <p>
             Home search and requests use this key. The manager reads it from Seerr's settings.json when it can;
-            otherwise copy it from Seerr Settings → General. Leave blank and save to clear it.
+            otherwise copy it from Seerr Settings → General. Paste a new key to replace it.
           </p>
         </div>
-        <p class="share-meta">{{ seerrConfigured ? 'A Seerr API key is saved.' : 'No Seerr API key saved yet.' }}</p>
-        <form class="form-stack" @submit.prevent="patchSettings({ seerr_api_key: form.seerr_api_key })">
+        <div class="setting-status">
+          <span class="setting-chip" :class="credentialChip(seerrKey).cls">{{ credentialChip(seerrKey).label }}</span>
+        </div>
+        <p class="share-meta">{{ seerrKey.detail || (seerrKey.configured ? 'A Seerr API key is saved.' : 'No Seerr API key saved yet.') }}</p>
+        <form class="form-stack" @submit.prevent="saveHomepageKey('seerr_api_key')">
           <label class="ui-field">API key
-            <input v-model="form.seerr_api_key" type="password" class="ui-input font-mono" autocomplete="off" />
+            <input
+              v-model="form.seerr_api_key"
+              type="password"
+              class="ui-input font-mono"
+              autocomplete="off"
+              :placeholder="seerrKey.configured ? 'Saved — paste a new key to replace' : 'Paste API key'"
+            />
           </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
+          <div class="share-row">
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
+            <button v-if="seerrKey.configured" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="clearHomepageKey('seerr_api_key')">Clear key</button>
+          </div>
         </form>
       </div>
       <div class="glass-card settings-card">
@@ -1306,6 +1449,43 @@ onBeforeUnmount(() => {
   color: #94a3b8;
   font-size: 0.85rem;
   margin-top: 0.55rem;
+}
+.setting-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.65rem 0 0.35rem;
+}
+.setting-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.55);
+  color: #cbd5e1;
+}
+.setting-chip.is-on {
+  color: #bbf7d0;
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(6, 78, 59, 0.45);
+}
+.setting-chip.is-warn {
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(120, 53, 15, 0.4);
+}
+.setting-chip.is-bad {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(127, 29, 29, 0.45);
+}
+.setting-chip.is-off {
+  color: #94a3b8;
 }
 .share-box {
   margin-top: 1rem;

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any, Optional
@@ -15,7 +16,7 @@ from core.crypto import secret_store
 from core.integrations.credentials import set_application_api_key
 from core.settings import settings
 from core.supervisor import ProcessSupervisor, ProcessState
-from core.vpn import vpn_manager, PROVIDERS, save_vpn_config_text
+from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager, PROVIDERS, save_vpn_config_text
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
@@ -38,6 +39,80 @@ def _public_backups() -> dict[str, Any]:
     from core.backup_jobs import backup_jobs
 
     return backup_jobs.public_status()
+
+
+def _homepage_key_status(name: str) -> dict[str, Any]:
+    """Saved vs working status for Settings → Homepage keys. Never returns the secret."""
+    from applications.catalog import ApplicationCatalog
+    from core.supervisor import ProcessState, ProcessSupervisor
+
+    key = (secret_store.get_secret(f"{name}_api_key") or "").strip()
+    catalog = ApplicationCatalog()
+    installed = False
+    running = False
+    port = 0
+    config_dir = None
+    if catalog.has(name):
+        plugin = catalog.get(name)
+        installed = bool(plugin.is_installed())
+        port = int(plugin.port or 0)
+        config_dir = plugin.config_dir
+        state = ProcessSupervisor.get().status(name)
+        running = getattr(state, "value", state) == ProcessState.RUNNING.value
+    if not key and name == "seerr":
+        from core.integrations.seerr import read_seerr_api_key
+
+        key = (read_seerr_api_key(config_dir) or "").strip()
+    configured = bool(key)
+    working = False
+    detail = "No API key saved."
+    if configured and not installed:
+        detail = "Saved. App is not installed."
+    elif configured and not running:
+        detail = "Saved. App is stopped."
+    elif configured and running:
+        working, probe = _probe_homepage_key(name, key, port)
+        detail = "Working." if working else (probe or "Saved, but the app did not accept the key.")
+    elif running:
+        detail = "App is running, but no API key is saved."
+    return {
+        "configured": configured,
+        "installed": installed,
+        "running": running,
+        "working": working,
+        "detail": detail,
+    }
+
+
+def _probe_homepage_key(name: str, key: str, port: int) -> tuple[bool, str]:
+    if not port:
+        return False, "Saved, but the app port is unknown."
+    try:
+        import requests
+    except Exception:
+        return False, "Saved."
+    try:
+        if name == "jellyfin":
+            from core.integrations.jellyfin import jellyfin_auth_headers
+
+            resp = requests.get(
+                f"http://127.0.0.1:{port}/System/Info",
+                headers=jellyfin_auth_headers(key),
+                timeout=2.0,
+            )
+        elif name == "seerr":
+            resp = requests.get(
+                f"http://127.0.0.1:{port}/api/v1/settings/main",
+                headers={"X-Api-Key": key, "Content-Type": "application/json"},
+                timeout=2.0,
+            )
+        else:
+            return False, "Saved."
+        if resp.status_code < 400:
+            return True, "Working."
+        return False, f"Saved, but the app rejected the key (HTTP {resp.status_code})."
+    except Exception:
+        return False, "Saved, but the app did not answer."
 
 
 def _ensure_authenticated(request: Request) -> str:
@@ -110,6 +185,8 @@ def public_settings() -> dict[str, Any]:
             }
     except Exception as exc:
         logger.debug("storage summary failed: %s", exc)
+    jellyfin_key = _homepage_key_status("jellyfin")
+    seerr_key = _homepage_key_status("seerr")
     return {
         "timezone": settings.timezone,
         "log_level": settings.log_level,
@@ -125,8 +202,9 @@ def public_settings() -> dict[str, Any]:
         "trusted_proxies": settings.trusted_proxies,
         "root_path": settings.root_path,
         "github_token_configured": bool(token),
-        "jellyfin_api_key_configured": bool(secret_store.get_secret("jellyfin_api_key")),
-        "seerr_api_key_configured": bool(secret_store.get_secret("seerr_api_key")),
+        "homepage_keys": {"jellyfin": jellyfin_key, "seerr": seerr_key},
+        "jellyfin_api_key_configured": jellyfin_key["configured"],
+        "seerr_api_key_configured": seerr_key["configured"],
         "vpn": vpn_manager.status(),
         "cloudflare_tunnel": cloudflare_tunnel.status(),
         "storage": storage,
@@ -165,8 +243,8 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         settings.backup_retention = body.backup_retention
     if body.vpn_enabled is not None:
         settings.vpn_enabled = body.vpn_enabled
-        if body.vpn_enabled:
-            settings.vpn_enforce = True
+        # Kill switch tracks the VPN switch: on = fail-closed, off = house network.
+        settings.vpn_enforce = bool(body.vpn_enabled)
     if body.vpn_enforce is not None and not settings.vpn_enabled:
         settings.vpn_enforce = body.vpn_enforce
     if body.vpn_provider is not None:
@@ -259,24 +337,29 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
 
         stopped = await stop_tunneled_apps()
-        result = vpn_manager.start()
+        result = await asyncio.to_thread(vpn_manager.start)
         if result.get("status") == "error":
-            notes.append(f"VPN start failed: {result.get('detail') or 'unknown error'}")
-            notes.append("qBittorrent and Prowlarr are stopped so they cannot leak.")
+            notes.append(f"VPN start failed: {result.get('detail') or 'unknown error'}.")
+            notes.append("qBittorrent, Prowlarr, and Flaresolverr are stopped so they cannot leak.")
         elif result.get("tunnel_up"):
             started = await start_tunneled_apps(stopped)
             notes.append("VPN started.")
             if started:
                 notes.append("Started " + ", ".join(started) + " on the tunnel.")
         else:
-            notes.append("VPN start ran but the tunnel is still down. qBittorrent and Prowlarr stay stopped.")
+            notes.append(
+                "VPN start ran but the tunnel is still down. "
+                "qBittorrent, Prowlarr, and Flaresolverr stay stopped."
+            )
     elif body.vpn_enabled is False:
         from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
 
         stopped = await stop_tunneled_apps()
-        vpn_manager.stop()
-        started = await start_tunneled_apps(stopped)
-        notes.append("VPN stopped.")
+        await asyncio.to_thread(vpn_manager.stop)
+        # Isolation may already have stopped tunneled apps while the tunnel was down.
+        # With VPN off they may run on the house network again.
+        started = await start_tunneled_apps(stopped or None)
+        notes.append("VPN stopped. Kill switch is off — qBittorrent, Prowlarr, and Flaresolverr can use the house network.")
         if started:
             notes.append("Started " + ", ".join(started) + " on the house network.")
 
@@ -301,6 +384,8 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
                 await supervisor.stop(name)
                 if catalog.has(name):
                     plugin = catalog.get(name)
+                    if name in VPN_TUNNELED_APPS:
+                        vpn_manager.assert_can_start_tunneled_app(name)
                     await supervisor.start(
                         name=name,
                         cmd=plugin.start_command(),
@@ -312,7 +397,10 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
                     await supervisor.restart(name)
                 restarted.append(name)
             except Exception as exc:
-                logger.warning("Could not restart %s after settings change: %s", name, exc)
+                if isinstance(exc, VpnIsolationError):
+                    logger.warning("Left '%s' stopped after settings change: %s", name, exc)
+                else:
+                    logger.warning("Could not restart %s after settings change: %s", name, exc)
         notes.append("Restarted child processes after PUID/PGID change." if restarted else "No running children to restart.")
 
     payload = public_settings()

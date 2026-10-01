@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.app import create_app
@@ -17,6 +18,7 @@ from core.vpn import (
     VPN_TUNNELED_APPS,
     VpnIsolationError,
     VpnManager,
+    ensure_wireguard_table_off,
     parse_vpn_dns_servers,
     parse_vpn_underlay_hosts,
     rewrite_wireguard_endpoints,
@@ -188,6 +190,97 @@ def test_vpn_kill_switch_blocks_tunneled_apps_when_vpn_is_on(tmp_path: Path, mon
     mgr.assert_can_start_tunneled_app("sabnzbd")
     assert "flaresolverr" in VPN_TUNNELED_APPS
     assert mgr.status()["kill_switch"] is True
+    assert mgr.tunneled_apps_allowed() is False
+
+
+def test_tunneled_apps_allowed_when_vpn_off_or_tunnel_up(tmp_path: Path, monkeypatch):
+    off = VpnManager(
+        Settings(
+            config_dir=tmp_path / "config",
+            download_dir=tmp_path / "dl",
+            media_dir=tmp_path / "media",
+            vpn_enabled=False,
+        )
+    )
+    assert off.tunneled_apps_allowed() is True
+    for name in VPN_TUNNELED_APPS:
+        off.assert_can_start_tunneled_app(name)
+    assert off.wrap_isolated_command(["qbittorrent-nox"]) == ["qbittorrent-nox"]
+    mgr = VpnManager(
+        Settings(
+            config_dir=tmp_path / "config",
+            download_dir=tmp_path / "dl",
+            media_dir=tmp_path / "media",
+            vpn_enabled=True,
+        )
+    )
+    monkeypatch.setattr(mgr, "_is_linux", lambda: True)
+    monkeypatch.setattr(mgr, "_netns_exists", lambda: True)
+    monkeypatch.setattr(mgr, "_tunnel_up", lambda: True)
+    assert mgr.tunneled_apps_allowed() is True
+
+
+def test_kill_switch_lifts_when_vpn_switch_turns_off(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_is_linux", lambda: True)
+    monkeypatch.setattr(mgr, "_netns_exists", lambda: False)
+    monkeypatch.setattr(mgr, "_tunnel_up", lambda: False)
+    for name in VPN_TUNNELED_APPS:
+        try:
+            mgr.assert_can_start_tunneled_app(name)
+            raise AssertionError(f"expected block for {name}")
+        except VpnIsolationError:
+            pass
+    cfg.vpn_enabled = False
+    assert mgr.tunneled_apps_allowed() is True
+    assert mgr.status()["kill_switch"] is False
+    for name in VPN_TUNNELED_APPS:
+        mgr.assert_can_start_tunneled_app(name)
+    assert mgr.wrap_isolated_command(["prowlarr"]) == ["prowlarr"]
+
+
+@pytest.mark.asyncio
+async def test_enforce_vpn_isolation_stops_qbittorrent(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from core.integrations import lifecycle as lifecycle_mod
+
+    stopped: list[str] = []
+    supervisor = MagicMock()
+    supervisor.status.side_effect = lambda name: MagicMock(
+        value="running" if name == "qbittorrent" else "stopped"
+    )
+
+    async def fake_stop(name: str) -> None:
+        stopped.append(name)
+
+    supervisor.stop = fake_stop
+    catalog = MagicMock()
+    catalog.has.return_value = False
+    monkeypatch.setattr(lifecycle_mod.vpn_manager, "tunneled_apps_allowed", lambda: False)
+    monkeypatch.setattr(lifecycle_mod.ProcessSupervisor, "get", staticmethod(lambda: supervisor))
+    monkeypatch.setattr("applications.catalog.ApplicationCatalog", lambda: catalog)
+
+    result = await lifecycle_mod.enforce_vpn_isolation()
+    assert result == ["qbittorrent"]
+    assert stopped == ["qbittorrent"]
+
+
+@pytest.mark.asyncio
+async def test_enforce_vpn_isolation_noop_when_allowed(monkeypatch):
+    from core.integrations.lifecycle import enforce_vpn_isolation
+
+    monkeypatch.setattr(
+        "core.integrations.lifecycle.vpn_manager.tunneled_apps_allowed",
+        lambda: True,
+    )
+    assert await enforce_vpn_isolation() == []
 
 
 def test_save_vpn_config_text_writes_default_path(tmp_path: Path):
@@ -222,6 +315,16 @@ def test_rewrite_wireguard_endpoints_pins_hostname():
     assert "vpn.example.com" not in out
 
 
+def test_ensure_wireguard_table_off_inserts_and_replaces():
+    added = ensure_wireguard_table_off("[Interface]\nPrivateKey = x\nAddress = 10.0.0.2/32\n\n[Peer]\n")
+    assert "Table = off" in added
+    assert added.index("Table = off") < added.index("[Peer]")
+    replaced = ensure_wireguard_table_off("[Interface]\nTable = auto\nPrivateKey = x\n")
+    assert "Table = auto" not in replaced
+    assert "Table = off" in replaced
+    assert replaced.count("Table =") == 1
+
+
 def test_bootstrap_ips_include_public_dns_not_vpn_only_dns(tmp_path: Path, monkeypatch):
     cfg = Settings(
         config_dir=tmp_path / "config",
@@ -252,6 +355,17 @@ def test_vpn_start_failure_explains_missing_resolvconf():
     )
     assert "resolvconf" in text.lower()
     assert "DNS" in text
+
+
+def test_vpn_start_failure_explains_nft_iptables_restore():
+    text = vpn_start_failure_detail(
+        1,
+        "[#] iptables-restore -n\niptables-restore v1.8.9 (nf_tables): "
+        "Could not fetch rule set generation id: Invalid argument\n",
+        "",
+    )
+    assert "Table = off" in text
+    assert "iptables-restore" in text.lower()
 
 
 def test_host_veth_guard_allows_established_webui_replies(tmp_path: Path, monkeypatch):

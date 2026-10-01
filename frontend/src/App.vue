@@ -224,6 +224,11 @@ function onSettingsSession(data) {
   if (data?.username) authStatus.value.username = data.username
 }
 
+function onSettingsVpn(vpn) {
+  if (vpn) vpnLive.value = vpn
+  else fetchVpnStatus()
+}
+
 async function fetchUpdateStatus() {
   try {
     const [res, bak] = await Promise.all([apiRequest('/api/updates/status'), apiRequest('/api/backups')])
@@ -449,6 +454,7 @@ onUnmounted(() => {
           :host-arch="hostArch"
           @session="onSettingsSession"
           @updates="fetchUpdateStatus"
+          @vpn="onSettingsVpn"
         />
         <HomepagePanel
           v-else-if="currentView === 'home'"

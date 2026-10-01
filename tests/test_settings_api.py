@@ -126,3 +126,197 @@ def test_settings_saves_pasted_vpn_config(tmp_path: Path, monkeypatch):
         headers=headers,
     )
     assert bad.status_code == 422
+
+
+def test_settings_vpn_switch_starts_and_stops(tmp_path: Path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        settings_api.vpn_manager,
+        "start",
+        lambda: calls.append("start") or {"status": "started", "tunnel_up": True, "enabled": True},
+    )
+    monkeypatch.setattr(
+        settings_api.vpn_manager,
+        "stop",
+        lambda: calls.append("stop") or {"status": "stopped", "tunnel_up": False, "enabled": False},
+    )
+    monkeypatch.setattr(
+        "core.integrations.lifecycle.stop_tunneled_apps",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "core.integrations.lifecycle.start_tunneled_apps",
+        AsyncMock(return_value=[]),
+    )
+
+    on = client.patch("/api/settings", json={"vpn_enabled": True}, headers=headers)
+    assert on.status_code == 200
+    assert cfg.vpn_enabled is True
+    assert cfg.vpn_enforce is True
+    assert "start" in calls
+    assert any("VPN started" in note for note in on.json().get("notes", []))
+
+    off = client.patch("/api/settings", json={"vpn_enabled": False}, headers=headers)
+    assert off.status_code == 200
+    assert cfg.vpn_enabled is False
+    assert cfg.vpn_enforce is False
+    assert "stop" in calls
+    notes = " ".join(off.json().get("notes", []))
+    assert "VPN stopped" in notes
+    assert "Kill switch is off" in notes
+
+
+def test_vpn_api_stop_keeps_kill_switch_when_enabled(tmp_path: Path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from api.routers import vpn as vpn_api
+
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    cfg.vpn_enabled = True
+    cfg.vpn_enforce = True
+    cfg.save()
+    monkeypatch.setattr(vpn_api, "vpn_manager", settings_api.vpn_manager)
+    monkeypatch.setattr(
+        settings_api.vpn_manager,
+        "stop",
+        lambda: {"status": "stopped", "tunnel_up": False, "enabled": True},
+    )
+    monkeypatch.setattr(
+        "core.integrations.lifecycle.stop_tunneled_apps",
+        AsyncMock(return_value=["qbittorrent"]),
+    )
+    enforce = AsyncMock(return_value=["qbittorrent"])
+    start_apps = AsyncMock(return_value=["qbittorrent"])
+    monkeypatch.setattr("core.integrations.lifecycle.enforce_vpn_isolation", enforce)
+    monkeypatch.setattr("core.integrations.lifecycle.start_tunneled_apps", start_apps)
+
+    res = client.post("/api/vpn/stop", headers=headers)
+    assert res.status_code == 200
+    assert cfg.vpn_enabled is True
+    assert cfg.vpn_enforce is True
+    assert res.json().get("started_apps") == []
+    enforce.assert_awaited()
+    start_apps.assert_not_awaited()
+
+
+def test_vpn_api_restart_keeps_enabled(tmp_path: Path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from api.routers import vpn as vpn_api
+
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    cfg.vpn_enabled = True
+    cfg.vpn_enforce = True
+    cfg.save()
+    calls: list[str] = []
+    monkeypatch.setattr(vpn_api, "vpn_manager", settings_api.vpn_manager)
+    monkeypatch.setattr(
+        settings_api.vpn_manager,
+        "stop",
+        lambda: calls.append("stop") or {"status": "stopped", "tunnel_up": False},
+    )
+    monkeypatch.setattr(
+        settings_api.vpn_manager,
+        "start",
+        lambda: calls.append("start") or {"status": "started", "tunnel_up": True, "enabled": True},
+    )
+    monkeypatch.setattr(
+        "core.integrations.lifecycle.stop_tunneled_apps",
+        AsyncMock(return_value=["prowlarr"]),
+    )
+    monkeypatch.setattr(
+        "core.integrations.lifecycle.start_tunneled_apps",
+        AsyncMock(return_value=["prowlarr"]),
+    )
+
+    res = client.post("/api/vpn/restart", headers=headers)
+    assert res.status_code == 200
+    assert cfg.vpn_enabled is True
+    assert calls == ["stop", "start"]
+    body = res.json()
+    assert body.get("status") == "restarted"
+    assert body.get("started_apps") == ["prowlarr"]
+
+
+def test_settings_vpn_switch_keeps_enabled_when_start_fails(tmp_path: Path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    monkeypatch.setattr(
+        settings_api.vpn_manager,
+        "start",
+        lambda: {
+            "status": "error",
+            "detail": "VPN config missing: /config/vpn/wg0.conf",
+            "tunnel_up": False,
+            "enabled": True,
+        },
+    )
+    monkeypatch.setattr(
+        "core.integrations.lifecycle.stop_tunneled_apps",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "core.integrations.lifecycle.start_tunneled_apps",
+        AsyncMock(return_value=[]),
+    )
+
+    res = client.patch("/api/settings", json={"vpn_enabled": True}, headers=headers)
+    assert res.status_code == 200
+    assert cfg.vpn_enabled is True
+    notes = " ".join(res.json().get("notes") or [])
+    assert "VPN start failed" in notes
+    assert "cannot leak" in notes
+
+
+def test_settings_reports_applied_vpn_and_homepage_keys(tmp_path: Path, monkeypatch):
+    from core.crypto import SecretStore
+    from core.integrations import credentials as credentials_mod
+
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    store = SecretStore(cfg=cfg)
+    monkeypatch.setattr(settings_api, "secret_store", store)
+    monkeypatch.setattr(credentials_mod, "secret_store", store)
+
+    empty = client.get("/api/settings", headers=headers)
+    assert empty.status_code == 200
+    body = empty.json()
+    assert body["vpn"]["enabled"] is False
+    assert body["homepage_keys"]["jellyfin"]["configured"] is False
+    assert body["homepage_keys"]["seerr"]["configured"] is False
+    assert body["homepage_keys"]["jellyfin"]["working"] is False
+
+    saved = client.patch(
+        "/api/settings",
+        json={"jellyfin_api_key": "jf-test-key-abcdefghijklmnopqrstuvwxyz"},
+        headers=headers,
+    )
+    assert saved.status_code == 200
+    jelly = saved.json()["homepage_keys"]["jellyfin"]
+    assert jelly["configured"] is True
+    assert saved.json()["jellyfin_api_key_configured"] is True
+    assert "Saved" in jelly["detail"] or jelly["working"] is True
+
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(
+        settings_api.vpn_manager,
+        "start",
+        lambda: {"status": "started", "tunnel_up": True, "enabled": True},
+    )
+    monkeypatch.setattr("core.integrations.lifecycle.stop_tunneled_apps", AsyncMock(return_value=[]))
+    monkeypatch.setattr("core.integrations.lifecycle.start_tunneled_apps", AsyncMock(return_value=[]))
+    on = client.patch("/api/settings", json={"vpn_enabled": True}, headers=headers)
+    assert on.status_code == 200
+    assert on.json()["vpn"]["enabled"] is True
+    again = client.get("/api/settings", headers=headers)
+    assert again.json()["vpn"]["enabled"] is True
+    assert again.json()["homepage_keys"]["jellyfin"]["configured"] is True

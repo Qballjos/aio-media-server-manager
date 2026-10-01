@@ -141,3 +141,51 @@ def test_reclaim_leftover_processes(tmp_path: Path):
         if proc.poll() is None:
             proc.kill()
             proc.wait(timeout=3)
+
+
+@pytest.mark.asyncio
+async def test_supervisor_refuses_qbittorrent_when_vpn_blocks(tmp_path: Path, monkeypatch):
+    from core.vpn import VpnIsolationError
+
+    def refuse(name: str) -> None:
+        if name in {"qbittorrent", "prowlarr", "flaresolverr"}:
+            raise VpnIsolationError(f"Refusing {name}")
+
+    monkeypatch.setattr("core.vpn.vpn_manager.assert_can_start_tunneled_app", refuse)
+    supervisor = ProcessSupervisor.get()
+    with pytest.raises(VpnIsolationError):
+        await supervisor.start(
+            name="qbittorrent",
+            cmd=["python3", "-c", "import time; time.sleep(30)"],
+            restart_policy=RestartPolicy.NEVER,
+            log_dir=tmp_path / "logs",
+        )
+    assert supervisor.status("qbittorrent") == ProcessState.STOPPED
+    supervisor.forget("qbittorrent")
+
+
+@pytest.mark.asyncio
+async def test_restart_watcher_does_not_bring_qbittorrent_back_off_vpn(
+    tmp_path: Path, monkeypatch
+):
+    from core.vpn import VpnIsolationError
+
+    supervisor = ProcessSupervisor.get()
+    await supervisor.start(
+        name="qbittorrent",
+        cmd=["python3", "-c", "import time; time.sleep(30)"],
+        restart_policy=RestartPolicy.ON_FAILURE,
+        log_dir=tmp_path / "logs",
+    )
+    def refuse(_name: str) -> None:
+        raise VpnIsolationError("blocked")
+
+    monkeypatch.setattr("core.vpn.vpn_manager.assert_can_start_tunneled_app", refuse)
+    await supervisor.stop("qbittorrent")
+    entry = supervisor._entries["qbittorrent"]
+    entry.state = ProcessState.FAILED
+    entry.exit_code = 1
+    entry.next_restart_at = 0
+    await asyncio.sleep(1.5)
+    assert entry.state == ProcessState.STOPPED
+    supervisor.forget("qbittorrent")

@@ -80,21 +80,69 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
     return report
 
 
+def _reclaim_tunneled_command(cmd: list[str]) -> list[str]:
+    """Strip `ip netns exec <ns>` so leftover host-network copies still match."""
+    if len(cmd) >= 5 and cmd[0] == "ip" and cmd[1] == "netns" and cmd[2] == "exec":
+        return list(cmd[4:])
+    return list(cmd)
+
+
 async def stop_tunneled_apps() -> list[str]:
     """Stop qBittorrent, Prowlarr, and Flaresolverr so they cannot leak on the house WAN."""
+    from applications.catalog import ApplicationCatalog
+    from core.supervisor import reclaim_leftover_processes
+
+    catalog = ApplicationCatalog()
     supervisor = ProcessSupervisor.get()
     stopped: list[str] = []
     for name in sorted(VPN_TUNNELED_APPS):
         state = supervisor.status(name)
         value = getattr(state, "value", state)
-        if value != "running":
+        if value == "running":
+            try:
+                await supervisor.stop(name)
+                stopped.append(name)
+            except Exception as exc:
+                logger.warning("Could not stop tunneled app %s: %s", name, exc)
+        if not catalog.has(name):
+            continue
+        plugin = catalog.get(name)
+        if not plugin.is_installed():
             continue
         try:
-            await supervisor.stop(name)
+            cmd = plugin.start_command()
+        except Exception:
+            continue
+        killed = reclaim_leftover_processes(cmd)
+        killed += reclaim_leftover_processes(_reclaim_tunneled_command(cmd))
+        if killed and name not in stopped:
             stopped.append(name)
-        except Exception as exc:
-            logger.warning("Could not stop tunneled app %s: %s", name, exc)
     return stopped
+
+
+async def enforce_vpn_isolation() -> list[str]:
+    """If VPN is on without a tunnel, stop qBittorrent/Prowlarr/Flaresolverr."""
+    if vpn_manager.tunneled_apps_allowed():
+        return []
+    stopped = await stop_tunneled_apps()
+    if stopped:
+        logger.error(
+            "Stopped %s because VPN is enabled but the tunnel is down.",
+            ", ".join(stopped),
+        )
+    return stopped
+
+
+async def vpn_isolation_loop(interval: float = 5.0) -> None:
+    """Keep tunneled apps off the house WAN if the tunnel drops after they started."""
+    while True:
+        try:
+            await enforce_vpn_isolation()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("VPN isolation check failed: %s", exc)
+        await asyncio.sleep(interval)
 
 
 async def start_tunneled_apps(names: list[str] | None = None) -> list[str]:

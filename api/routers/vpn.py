@@ -17,6 +17,17 @@ def _ensure_authenticated(request: Request) -> None:
         auth_manager.authenticate_request(request)
 
 
+def _persist_vpn_policy(*, enabled: bool) -> None:
+    from core.settings import settings
+
+    settings.vpn_enabled = enabled
+    settings.vpn_enforce = enabled
+    try:
+        settings.save()
+    except Exception:
+        pass
+
+
 @router.get("/status")
 async def vpn_status(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
@@ -25,24 +36,52 @@ async def vpn_status(request: Request) -> dict[str, Any]:
 
 @router.post("/start")
 async def vpn_start(request: Request) -> dict[str, Any]:
+    """Enable VPN policy and bring the tunnel up."""
     _ensure_authenticated(request)
-    from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
+    from core.integrations.lifecycle import enforce_vpn_isolation, start_tunneled_apps, stop_tunneled_apps
 
+    _persist_vpn_policy(enabled=True)
     stopped = await stop_tunneled_apps()
     result = vpn_manager.start()
     if result.get("tunnel_up"):
         result["started_apps"] = await start_tunneled_apps(stopped)
     else:
+        await enforce_vpn_isolation()
         result["started_apps"] = []
     return result
 
 
 @router.post("/stop")
 async def vpn_stop(request: Request) -> dict[str, Any]:
+    """Bring the tunnel down. Kill switch stays on while VPN remains enabled."""
     _ensure_authenticated(request)
-    from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
+    from core.integrations.lifecycle import enforce_vpn_isolation, start_tunneled_apps, stop_tunneled_apps
+    from core.settings import settings
 
     stopped = await stop_tunneled_apps()
     result = vpn_manager.stop()
-    result["started_apps"] = await start_tunneled_apps(stopped)
+    if settings.vpn_enabled:
+        await enforce_vpn_isolation()
+        result["started_apps"] = []
+    else:
+        result["started_apps"] = await start_tunneled_apps(stopped or None)
+    return result
+
+
+@router.post("/restart")
+async def vpn_restart(request: Request) -> dict[str, Any]:
+    """Bounce the tunnel while keeping VPN enabled (kill switch stays on)."""
+    _ensure_authenticated(request)
+    from core.integrations.lifecycle import enforce_vpn_isolation, start_tunneled_apps, stop_tunneled_apps
+
+    _persist_vpn_policy(enabled=True)
+    stopped = await stop_tunneled_apps()
+    vpn_manager.stop()
+    result = vpn_manager.start()
+    if result.get("tunnel_up"):
+        result["started_apps"] = await start_tunneled_apps(stopped)
+    else:
+        await enforce_vpn_isolation()
+        result["started_apps"] = []
+    result["status"] = "restarted" if result.get("tunnel_up") else result.get("status") or "error"
     return result

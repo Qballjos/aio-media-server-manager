@@ -14,7 +14,7 @@ const authStatus = ref({
 const authReady = ref(false)
 const authStatusError = ref('')
 const authForm = ref({
-  username: 'admin',
+  username: '',
   email: '',
   password: '',
   confirmPassword: '',
@@ -72,7 +72,7 @@ async function handleSetup() {
     const { res, data } = await apiJson('/api/auth/setup', {
       method: 'POST',
       body: JSON.stringify({
-        username: authForm.value.username,
+        username: authForm.value.username.trim() || 'admin',
         email: authForm.value.email.trim(),
         password: authForm.value.password,
       }),
@@ -102,7 +102,7 @@ async function handleLogin() {
     const { res, data } = await apiJson('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({
-        username: authForm.value.username,
+        username: authForm.value.username.trim(),
         password: authForm.value.password,
       }),
     })
@@ -170,6 +170,7 @@ onMounted(() => {
                 type="text"
                 placeholder="admin"
                 required
+                autocomplete="username"
                 class="ui-input font-mono"
               />
               </label>
@@ -248,6 +249,7 @@ onMounted(() => {
                 placeholder="admin"
                 required
                 autofocus
+                autocomplete="username"
                 class="ui-input font-mono"
               />
               </label>

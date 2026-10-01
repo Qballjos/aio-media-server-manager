@@ -519,7 +519,7 @@ onUnmounted(() => {
             </label>
             <label class="ui-field">
               <span>Usenet username</span>
-              <input v-model="selections.usenet_username" class="ui-input font-mono" />
+              <input v-model="selections.usenet_username" class="ui-input font-mono" placeholder="username" autocomplete="off" />
             </label>
             <label class="ui-field">
               <span>Usenet password</span>

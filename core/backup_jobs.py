@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Optional
 from core.backup_manager import MANAGER_SECTION, BackupManager
 from core.maintenance import backup_in_progress, pause_reason
 from core.settings import Settings, settings
+from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +184,8 @@ class BackupJobs:
                 for app_name in to_stop:
                     try:
                         plugin = fresh.get(app_name)
+                        if plugin.name in VPN_TUNNELED_APPS:
+                            vpn_manager.assert_can_start_tunneled_app(plugin.name)
                         await supervisor.start(
                             name=plugin.name,
                             cmd=plugin.start_command(),
@@ -192,7 +195,10 @@ class BackupJobs:
                         )
                         restarted.append(app_name)
                     except Exception as exc:
-                        logger.warning("Could not restart %s after restore: %s", app_name, exc)
+                        if isinstance(exc, VpnIsolationError):
+                            logger.warning("Left %s stopped after restore: %s", app_name, exc)
+                        else:
+                            logger.warning("Could not restart %s after restore: %s", app_name, exc)
                         failed.append(app_name)
             await asyncio.to_thread(self.manager.prune)
         result["safety_backup"] = safety["name"]

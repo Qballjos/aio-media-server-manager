@@ -20,6 +20,7 @@ from core.backup_manager import BackupManager
 from core.installer.github import GitHubReleaseClient
 from core.settings import Settings, settings
 from core.supervisor import ProcessSupervisor
+from core.vpn import VpnIsolationError
 
 logger = logging.getLogger(__name__)
 
@@ -73,13 +74,24 @@ class ApplicationUpdater:
             result = plugin.install()
             healthy = True
             if start_after and plugin.manifest.daemon:
-                await supervisor.start(
-                    name=plugin.name,
-                    cmd=plugin.start_command(),
-                    cwd=plugin.working_directory(),
-                    env=plugin.extra_env(),
-                    log_dir=self.settings.config_dir / "logs",
-                )
+                try:
+                    await supervisor.start(
+                        name=plugin.name,
+                        cmd=plugin.start_command(),
+                        cwd=plugin.working_directory(),
+                        env=plugin.extra_env(),
+                        log_dir=self.settings.config_dir / "logs",
+                    )
+                except VpnIsolationError as exc:
+                    logger.warning("Updated '%s' but left it stopped: %s", plugin.name, exc)
+                    return {
+                        "status": "updated",
+                        "name": plugin.name,
+                        "version": result.version,
+                        "snapshot": str(snapshot),
+                        "healthy": False,
+                        "start_error": str(exc),
+                    }
                 healthy = self._wait_healthy(plugin)
                 if not healthy:
                     raise RuntimeError("Post-update health check failed.")

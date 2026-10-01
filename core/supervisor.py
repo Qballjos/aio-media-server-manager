@@ -291,7 +291,11 @@ class ProcessSupervisor:
 
     async def _do_start(self, entry: ProcessEntry) -> None:
         """Low-level start (must be called with self._lock held)."""
+        from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager
+
         spec = entry.spec
+        if spec.name in VPN_TUNNELED_APPS:
+            vpn_manager.assert_can_start_tunneled_app(spec.name)
         entry.state = ProcessState.STARTING
         logger.info("Starting process '%s': %s", spec.name, " ".join(spec.cmd))
 
@@ -555,7 +559,21 @@ class ProcessSupervisor:
                             _RESTART_MAX_ATTEMPTS,
                             delay,
                         )
-                        await self._do_start(entry)
+                        try:
+                            await self._do_start(entry)
+                        except Exception as exc:
+                            from core.vpn import VpnIsolationError
+
+                            if isinstance(exc, VpnIsolationError):
+                                logger.warning(
+                                    "Not auto-restarting '%s' off-VPN: %s",
+                                    entry.spec.name,
+                                    exc,
+                                )
+                                entry.state = ProcessState.STOPPED
+                                entry.process = None
+                                continue
+                            raise
         except asyncio.CancelledError:
             pass
 

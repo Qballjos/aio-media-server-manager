@@ -671,6 +671,14 @@ textarea.ui-input {
   line-height: 1.45;
 }
 
+.ui-input::placeholder,
+.wizard-input::placeholder,
+.input-control::placeholder,
+textarea.ui-input::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
 .ui-input:focus,
 .wizard-input:focus,
 .input-control:focus {

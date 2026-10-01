@@ -303,9 +303,19 @@ def _rewrite_login_and_restart(config_dir, username: str, password: str) -> bool
     supervisor = ProcessSupervisor.get()
 
     async def _cycle() -> None:
+        from core.vpn import VpnIsolationError, vpn_manager
+
         if supervisor.status("qbittorrent").value == "running":
             await supervisor.stop("qbittorrent")
         _persist_webui(plugin.config_dir, username=username, password=password)
+        try:
+            vpn_manager.assert_can_start_tunneled_app("qbittorrent")
+        except VpnIsolationError as exc:
+            logger.warning(
+                "qBittorrent WebUI login saved; leaving it stopped until the VPN tunnel is up: %s",
+                exc,
+            )
+            return
         await supervisor.start(
             name="qbittorrent",
             cmd=plugin.start_command(),
