@@ -12,6 +12,8 @@ import json
 import logging
 import os
 import stat
+import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -40,6 +42,7 @@ class SecretStore:
         self._custom_storage_path = storage_path
         self._fernet: Optional[Fernet] = None
         self._memory_data: dict[str, str] = {}
+        self._lock = threading.RLock()
         if key_path is not None:
             try:
                 self._ensure_cipher()
@@ -56,6 +59,10 @@ class SecretStore:
 
     def _ensure_cipher(self) -> Fernet:
         """Load or generate the master encryption key with 0600 permissions."""
+        with self._lock:
+            return self._ensure_cipher_locked()
+
+    def _ensure_cipher_locked(self) -> Fernet:
         if self._fernet is not None:
             return self._fernet
 
@@ -125,65 +132,92 @@ class SecretStore:
         """Save raw encrypted dictionary to disk with 0600 permissions, keeping in-memory copy."""
         self._memory_data = dict(data)
         path = self.storage_path
+        tmp: Path | None = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(".tmp")
-            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-            mode = stat.S_IRUSR | stat.S_IWUSR  # 0600
-            fd = os.open(str(tmp), flags, mode)
-            with open(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            tmp.replace(path)
+            fd, tmp_name = tempfile.mkstemp(
+                prefix=f"{path.name}.",
+                suffix=".tmp",
+                dir=str(path.parent),
+            )
+            tmp = Path(tmp_name)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(str(tmp), str(path))
+            tmp = None
+            try:
+                os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+            except OSError:
+                pass
+            try:
+                dir_fd = os.open(str(path.parent), os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+            except OSError:
+                pass
         except OSError as e:
             logger.warning("Could not save secrets to %s: %s. Using in-memory fallback.", path, e)
-
+            if tmp is not None:
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     def reload(self) -> None:
         """Drop the cached key and in-memory copy so the next call reads disk (after a restore)."""
-        self._fernet = None
-        self._memory_data = {}
+        with self._lock:
+            self._fernet = None
+            self._memory_data = {}
 
     def save_secret(self, name: str, value: str) -> None:
         """Encrypt and store a named secret."""
-        encrypted_val = self.encrypt(value)
-        data = self._load_raw()
-        data[name] = encrypted_val
-        self._save_raw(data)
+        with self._lock:
+            encrypted_val = self.encrypt(value)
+            data = self._load_raw()
+            data[name] = encrypted_val
+            self._save_raw(data)
         logger.debug("Saved encrypted secret '%s'", name)
 
     def get_secret(self, name: str, default: Optional[str] = None) -> Optional[str]:
         """Retrieve and decrypt a named secret."""
-        data = self._load_raw()
-        if name not in data:
-            return default
-        try:
-            return self.decrypt(data[name])
-        except Exception:
-            return default
+        with self._lock:
+            data = self._load_raw()
+            if name not in data:
+                return default
+            try:
+                return self.decrypt(data[name])
+            except Exception:
+                return default
 
     def delete_secret(self, name: str) -> bool:
         """Remove a named secret. Returns True if removed."""
-        data = self._load_raw()
-        if name in data:
-            del data[name]
-            self._save_raw(data)
-            return True
-        return False
+        with self._lock:
+            data = self._load_raw()
+            if name in data:
+                del data[name]
+                self._save_raw(data)
+                return True
+            return False
 
     def list_secrets(self, mask: bool = True) -> dict[str, str]:
         """
         List all stored secrets. If mask is True, values are masked (e.g. ab****yz).
         If mask is False, decrypted plaintexts are returned.
         """
-        data = self._load_raw()
-        result: dict[str, str] = {}
-        for k, encrypted_val in data.items():
-            try:
-                decrypted = self.decrypt(encrypted_val)
-                result[k] = mask_secret(decrypted) if mask else decrypted
-            except Exception:
-                result[k] = "[DECRYPTION_ERROR]"
-        return result
+        with self._lock:
+            data = self._load_raw()
+            result: dict[str, str] = {}
+            for k, encrypted_val in data.items():
+                try:
+                    decrypted = self.decrypt(encrypted_val)
+                    result[k] = mask_secret(decrypted) if mask else decrypted
+                except Exception:
+                    result[k] = "[DECRYPTION_ERROR]"
+            return result
 
 
 # Global singleton secret store

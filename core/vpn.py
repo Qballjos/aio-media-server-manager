@@ -150,7 +150,15 @@ def parse_vpn_underlay_hosts(text: str) -> list[str]:
 
 def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
     detail = (stderr or stdout or "").strip()
-    if returncode == 127 or "command not found" in detail.lower():
+    lower = detail.lower()
+    if "resolvconf" in lower and "command not found" in lower:
+        hint = (
+            "wg-quick needs resolvconf for DNS= in the WireGuard profile. "
+            "The appliance should install a shim automatically; if this persists, "
+            "remove the DNS line or install openresolv."
+        )
+        return f"{hint} {detail}".strip()[:2000]
+    if returncode == 127 or "command not found" in lower:
         hint = (
             "WireGuard kernel module is not available and wg-quick could not run "
             "wireguard-go. Recreate the container from a current image, load WireGuard "
@@ -241,6 +249,8 @@ class VpnManager:
         if not self.config_path.is_file():
             return {"status": "error", "detail": f"VPN config missing: {self.config_path}"}
         if self._is_linux():
+            self._drop_stale_netns()
+            self._ensure_resolvconf_shim()
             ns_error = self._ensure_netns()
             if ns_error:
                 return {"status": "error", "detail": ns_error, **self.status()}
@@ -297,7 +307,9 @@ class VpnManager:
     def _ensure_netns(self) -> str | None:
         if shutil.which("ip") is None:
             return "iproute2 (`ip`) is required for VPN isolation."
+        self._drop_stale_netns()
         if not self._netns_exists():
+            Path("/var/run/netns").mkdir(parents=True, exist_ok=True)
             result = self._ip(["netns", "add", TORRENT_NETNS])
             if result.returncode != 0 and "File exists" not in (result.stderr or ""):
                 return result.stderr.strip() or "Failed to create network namespace."
@@ -368,6 +380,19 @@ class VpnManager:
     def _apply_host_veth_guard(self) -> None:
         """Forward only VPN handshake packets from amm-torrent; drop any other WAN leak."""
         dests = self._underlay_ips()
+        established = [
+            "FORWARD",
+            "-i",
+            _VETH_HOST,
+            "-m",
+            "conntrack",
+            "--ctstate",
+            "ESTABLISHED,RELATED",
+            "-j",
+            "ACCEPT",
+        ]
+        if self._host_iptables(["-C", *established]).returncode != 0:
+            self._host_iptables(["-I", "FORWARD", "1", *established[1:]])
         for dest in dests:
             accept = ["FORWARD", "-i", _VETH_HOST, "-d", dest, "-j", "ACCEPT"]
             if self._host_iptables(["-C", *accept]).returncode != 0:
@@ -482,8 +507,9 @@ class VpnManager:
             )
         self._host_iptables(["-D", "FORWARD", "-i", _VETH_HOST, "-j", "DROP"])
         self._ip(["link", "delete", _VETH_HOST])
-        if self._netns_exists():
+        if self._netns_bind_path().exists():
             self._ip(["netns", "delete", TORRENT_NETNS])
+            self._unlink_netns_bind()
 
     def _forward_local_ports(self) -> None:
         iptables = shutil.which("iptables")
@@ -491,35 +517,53 @@ class VpnManager:
             logger.warning("iptables not found; VPN WebUIs may be unreachable on 127.0.0.1.")
             return
         subprocess.run(
+            ["sysctl", "-w", "net.ipv4.ip_forward=1"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        subprocess.run(
             ["sysctl", "-w", "net.ipv4.conf.all.route_localnet=1"],
             capture_output=True,
             text=True,
             timeout=5,
         )
         for port in self._webui_ports().values():
-            rule = [
-                iptables,
-                "-t",
-                "nat",
-                "-C",
-                "OUTPUT",
-                "-o",
-                "lo",
-                "-p",
-                "tcp",
-                "--dport",
-                str(port),
-                "-j",
-                "DNAT",
-                "--to-destination",
-                f"{_NS_PEER_IP}:{port}",
-            ]
-            exists = subprocess.run(rule, capture_output=True, text=True, timeout=5)
-            if exists.returncode == 0:
-                continue
-            add = list(rule)
-            add[4] = "-A"
-            subprocess.run(add, capture_output=True, text=True, timeout=5)
+            dest = f"{_NS_PEER_IP}:{port}"
+            dnat = ["-p", "tcp", "--dport", str(port), "-j", "DNAT", "--to-destination", dest]
+            self._ensure_nat("PREROUTING", dnat)
+            self._ensure_nat("OUTPUT", ["-d", "127.0.0.1", *dnat])
+            self._ensure_nat("OUTPUT", ["-o", "lo", *dnat])
+        masq = ["-d", f"{_NS_PEER_IP}/32", "-p", "tcp", "-j", "MASQUERADE"]
+        self._ensure_nat("POSTROUTING", masq)
+        inbound = [
+            "FORWARD",
+            "-o",
+            _VETH_HOST,
+            "-d",
+            _NS_PEER_IP,
+            "-p",
+            "tcp",
+            "-j",
+            "ACCEPT",
+        ]
+        if self._host_iptables(["-C", *inbound]).returncode != 0:
+            result = self._host_iptables(["-I", "FORWARD", "1", *inbound[1:]])
+            if result.returncode != 0:
+                logger.warning("VPN WebUI forward rule failed: %s", (result.stderr or "")[:200])
+
+    def _ensure_nat(self, chain: str, spec: list[str]) -> None:
+        check = ["-t", "nat", "-C", chain, *spec]
+        if self._host_iptables(check).returncode == 0:
+            return
+        result = self._host_iptables(["-t", "nat", "-A", chain, *spec])
+        if result.returncode != 0:
+            logger.warning(
+                "VPN WebUI NAT %s %s failed: %s",
+                chain,
+                " ".join(spec),
+                (result.stderr or "")[:200],
+            )
 
     def _tunnel_up(self) -> bool:
         """True only when a WireGuard/OpenVPN iface is up *inside* amm-torrent."""
@@ -547,8 +591,51 @@ class VpnManager:
                 return True
         return False
 
+    def _netns_bind_path(self) -> Path:
+        return Path(f"/var/run/netns/{TORRENT_NETNS}")
+
     def _netns_exists(self) -> bool:
-        return Path(f"/var/run/netns/{TORRENT_NETNS}").exists()
+        if not self._netns_bind_path().exists():
+            return False
+        result = self._ip(["netns", "exec", TORRENT_NETNS, "true"])
+        return result.returncode == 0
+
+    def _unlink_netns_bind(self) -> None:
+        path = self._netns_bind_path()
+        if not path.exists():
+            return
+        subprocess.run(["umount", str(path)], capture_output=True, text=True, timeout=5)
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Could not remove stale netns bind %s: %s", path, exc)
+
+    def _drop_stale_netns(self) -> None:
+        if not self._netns_bind_path().exists():
+            return
+        if self._netns_exists():
+            return
+        logger.warning("Dropping stale torrent netns %s", TORRENT_NETNS)
+        self._ip(["netns", "delete", TORRENT_NETNS])
+        self._unlink_netns_bind()
+
+    @staticmethod
+    def _ensure_resolvconf_shim() -> None:
+        if shutil.which("resolvconf"):
+            return
+        dest = Path("/usr/local/sbin/resolvconf")
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(
+                "#!/bin/sh\n"
+                "# wg-quick requires resolvconf when the profile has DNS=.\n"
+                "# AMM already writes /etc/netns/<ns>/resolv.conf.\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            dest.chmod(0o755)
+        except OSError as exc:
+            logger.warning("Could not install resolvconf shim at %s: %s", dest, exc)
 
     @staticmethod
     def _is_linux() -> bool:

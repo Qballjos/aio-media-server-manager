@@ -194,7 +194,24 @@ class DiagnosticsStore:
             "library": LibraryLayout.from_settings(settings).as_dict(),
             "errors": self.recent_errors(100),
             "recyclarr": self._recyclarr_debug(),
+            "vpn": self._vpn_debug(),
         }
+
+    def _vpn_debug(self) -> dict[str, Any]:
+        try:
+            import shutil
+
+            from core.vpn import vpn_manager
+
+            payload = dict(vpn_manager.status())
+            payload["wireguard_go"] = shutil.which("wireguard-go")
+            payload["wg_quick"] = shutil.which("wg-quick")
+            payload["openvpn"] = shutil.which("openvpn")
+            payload["iproute"] = shutil.which("ip")
+            payload["iptables"] = shutil.which("iptables")
+            return payload
+        except Exception as exc:
+            return {"error": str(exc)}
 
     def _recyclarr_debug(self) -> dict[str, Any]:
         try:
@@ -263,6 +280,10 @@ class DiagnosticsStore:
             )
         else:
             rec_block += "No last-sync.json (sync has not been run yet).\n"
+        vpn = report.get("vpn") or {}
+        vpn_block = json.dumps(vpn, indent=2, default=str)
+        if vpn.get("error"):
+            vpn_block = f"error={vpn.get('error')}\n{vpn_block}"
         log_blocks = []
         for name, lines in (report.get("process_logs") or {}).items():
             if not lines:
@@ -294,6 +315,8 @@ class DiagnosticsStore:
   <table><thead><tr><th>name</th><th>installed</th><th>version</th></tr></thead><tbody>{app_rows}</tbody></table>
   <h2>Processes</h2>
   <table><thead><tr><th>name</th><th>state</th><th>pid</th></tr></thead><tbody>{proc_rows}</tbody></table>
+  <h2>VPN</h2>
+  {_pre(vpn_block)}
   <h2>Recyclarr</h2>
   {_pre(rec_block)}
   <h2>Recent process logs</h2>

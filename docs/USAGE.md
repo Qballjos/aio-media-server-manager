@@ -113,7 +113,7 @@ Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `rec
 
 ## 6. VPN and remote access
 
-- Upload or paste a WireGuard (`.conf`) or OpenVPN (`.ovpn`) profile in the wizard or **Settings → Network**. It is written under `/config/vpn/` (`wg0.conf` or `client.ovpn`) with mode `600`. You can still point at an existing path. **qBittorrent**, **Prowlarr**, and **Flaresolverr** are tunneled. Usenet clients stay on the normal network. While VPN is enabled, those apps cannot use the house WAN: traffic must leave through the tunnel, and they are stopped if the tunnel is down. The top bar shows a **VPN** pill next to the clock (green when the tunnel is up, red when it is down). DNS for those apps is `/etc/netns/amm-torrent/resolv.conf` (from the profile’s `DNS` line, otherwise `1.1.1.1`). Docker’s `127.0.0.11` resolver is not used inside the tunnel. On NAS kernels without a WireGuard module (common on Synology), `wg-quick` uses **wireguard-go** in userspace. OpenVPN needs `/dev/net/tun` (privileged compose already provides it).
+- Upload or paste a WireGuard (`.conf`) or OpenVPN (`.ovpn`) profile in the wizard or **Settings → Network**. It is written under `/config/vpn/` (`wg0.conf` or `client.ovpn`) with mode `600`. You can still point at an existing path. **qBittorrent**, **Prowlarr**, and **Flaresolverr** are tunneled. Usenet clients stay on the normal network. While VPN is enabled, those apps cannot use the house WAN: traffic must leave through the tunnel, and they are stopped if the tunnel is down. The top bar shows a **VPN** pill next to the clock (green when the tunnel is up, red when it is down). DNS for those apps is `/etc/netns/amm-torrent/resolv.conf` (from the profile’s `DNS` line, otherwise `1.1.1.1`). Docker’s `127.0.0.11` resolver is not used inside the tunnel. Compose may ship `AMM_VPN_ENABLED=false` as a safe default; after you enable VPN in the wizard or Settings, that choice in `amm_config.json` survives a container restart. On NAS kernels without a WireGuard module (common on Synology), `wg-quick` uses **wireguard-go** in userspace. OpenVPN needs `/dev/net/tun` (privileged compose already provides it).
 - Optional [Cloudflare Tunnel](../deploy/CLOUDFLARE.md) can be toggled from **Settings → Network** or `AMM_CLOUDFLARE_TUNNEL_*`. `cloudflared` runs inside this appliance.
 
 ## 7. Backups and updates
@@ -143,7 +143,7 @@ The **Settings** nav item is the admin page for the appliance (separate from per
 | Backups | Schedule, retention, backup now, verify, per-app restore, download/upload, delete |
 | Network | VPN (enable, protocol, config, kill switch) and Cloudflare Tunnel (token, trusted proxies) |
 | Homepage | Jellyfin and Seerr API keys for Home widgets, plus widget debug |
-| Diagnostics | Error ring and time-limited support share URL (`/debug/{token}`). Host dumps and `/api/system` process logs use the same switch; `curl` from localhost on the appliance always works. |
+| Diagnostics | Error ring and time-limited support share URL (`/debug/{token}`), including VPN tunnel status. Host dumps and `/api/system` process logs use the same switch; `curl` from localhost on the appliance always works. |
 
 Do not leave the support share URL on after you finish a support conversation. Cloudflare Tunnel and VPN start only after first-run, so the wizard is LAN-only.
 

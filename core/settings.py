@@ -48,6 +48,18 @@ _PERSISTED_KEYS = (
     "backup_weekday",
     "backup_day_of_month",
 )
+# Wizard / Settings values in amm_config.json beat compose defaults such as
+# AMM_VPN_ENABLED=false, otherwise a restart silently turns VPN off.
+_FILE_WINS_KEYS = frozenset(
+    {
+        "vpn_enabled",
+        "vpn_enforce",
+        "vpn_provider",
+        "vpn_protocol",
+        "vpn_config_path",
+    }
+)
+
 _PERSISTED_ENV = {
     "timezone": ("AMM_TIMEZONE",),
     "log_level": ("AMM_LOG_LEVEL",),
@@ -411,7 +423,9 @@ class Settings(BaseSettings):
         for key in _PERSISTED_KEYS:
             if key not in data:
                 continue
-            if any(os.environ.get(name) for name in _PERSISTED_ENV.get(key, ())):
+            if key not in _FILE_WINS_KEYS and any(
+                os.environ.get(name) for name in _PERSISTED_ENV.get(key, ())
+            ):
                 continue
             value = data[key]
             if key == "vpn_config_path" and value:

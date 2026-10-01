@@ -70,3 +70,32 @@ def test_secret_store_reload(tmp_path: Path):
     # Load from a new instance using the same files
     store2 = SecretStore(key_path=key_file, storage_path=enc_file)
     assert store2.get_secret("db_pass") == "super_secret_db_pass_999"
+
+
+def test_secret_store_concurrent_saves(tmp_path: Path):
+    import threading
+
+    key_file = tmp_path / "concurrent.key"
+    enc_file = tmp_path / "concurrent.enc"
+    store = SecretStore(key_path=key_file, storage_path=enc_file)
+    errors: list[BaseException] = []
+
+    def worker(index: int) -> None:
+        try:
+            store.save_secret(f"key_{index}", f"value-{index}-secret")
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(24)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert enc_file.is_file()
+    leftover = list(tmp_path.glob("concurrent.enc.*.tmp"))
+    assert leftover == []
+    reloaded = SecretStore(key_path=key_file, storage_path=enc_file)
+    for index in range(24):
+        assert reloaded.get_secret(f"key_{index}") == f"value-{index}-secret"

@@ -68,6 +68,11 @@ def test_debug_share_url_is_token_gated(tmp_path: Path, monkeypatch):
     assert any("example failure" in item["message"] for item in body["errors"])
     assert "recyclarr" in body
     assert body["recyclarr"].get("daemon") is False
+    assert "vpn" in body
+    assert "enabled" in body["vpn"]
+    assert "tunnel_up" in body["vpn"]
+    assert "tunneled_apps" in body["vpn"]
+    assert b"<h2>VPN</h2>" in html.content
 
     revoked = client.delete("/api/diagnostics/share")
     assert revoked.status_code == 200

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -215,6 +216,113 @@ def test_vpn_start_failure_explains_missing_wireguard_go():
     text = vpn_start_failure_detail(127, "", "")
     assert "wireguard-go" in text
     assert "OpenVPN" in text
+
+
+def test_vpn_start_failure_explains_missing_resolvconf():
+    text = vpn_start_failure_detail(
+        127,
+        "[#] resolvconf -a wg0 -m 0 -x\n/usr/bin/wg-quick: line 32: resolvconf: command not found\n",
+        "",
+    )
+    assert "resolvconf" in text.lower()
+    assert "DNS" in text
+
+
+def test_host_veth_guard_allows_established_webui_replies(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+    )
+    mgr = VpnManager(cfg)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(mgr, "_underlay_ips", lambda: [])
+
+    def fake_iptables(args: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(list(args))
+        return subprocess.CompletedProcess(args, 1, "", "")
+
+    monkeypatch.setattr(mgr, "_host_iptables", fake_iptables)
+    mgr._apply_host_veth_guard()
+    blob = " ".join(" ".join(item) for item in calls)
+    assert "ESTABLISHED,RELATED" in blob
+    assert any(item[:3] == ["-I", "FORWARD", "1"] for item in calls)
+
+
+def test_forward_local_ports_dnat_published_and_loopback(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+    )
+    mgr = VpnManager(cfg)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(mgr, "_webui_ports", lambda: {"qbittorrent": 8081, "prowlarr": 9696})
+    monkeypatch.setattr(
+        "core.vpn.shutil.which",
+        lambda name: "/sbin/iptables" if name == "iptables" else None,
+    )
+    monkeypatch.setattr("core.vpn.subprocess.run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))
+
+    def fake_iptables(args: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(list(args))
+        return subprocess.CompletedProcess(args, 1, "", "")
+
+    monkeypatch.setattr(mgr, "_host_iptables", fake_iptables)
+    mgr._forward_local_ports()
+    blob = " ".join(" ".join(item) for item in calls)
+    assert "PREROUTING" in blob
+    assert "127.0.0.1" in blob
+    assert "8081" in blob
+    assert "9696" in blob
+    assert "MASQUERADE" in blob
+
+
+def test_stale_netns_file_is_not_ready(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+    )
+    mgr = VpnManager(cfg)
+    bind = tmp_path / "amm-torrent"
+    bind.write_text("", encoding="utf-8")
+    monkeypatch.setattr(mgr, "_netns_bind_path", lambda: bind)
+    monkeypatch.setattr(
+        mgr,
+        "_ip",
+        lambda args: subprocess.CompletedProcess(args, 1, "", "Peer netns reference is invalid."),
+    )
+    assert mgr._netns_exists() is False
+
+
+def test_persisted_vpn_enabled_beats_compose_env(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AMM_VPN_ENABLED", "false")
+    monkeypatch.setenv("AMM_VPN_ENFORCE", "false")
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=False,
+        vpn_enforce=False,
+    )
+    cfg.initialise()
+    cfg.vpn_enabled = True
+    cfg.vpn_enforce = True
+    cfg.save()
+    reloaded = Settings(
+        config_dir=cfg.config_dir,
+        download_dir=cfg.download_dir,
+        media_dir=cfg.media_dir,
+        vpn_enabled=False,
+        vpn_enforce=False,
+    )
+    reloaded.initialise()
+    assert reloaded.vpn_enabled is True
+    assert reloaded.vpn_enforce is True
 
 
 def test_flaresolverr_start_command_wraps_on_linux(tmp_path: Path, monkeypatch):
