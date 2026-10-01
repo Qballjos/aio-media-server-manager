@@ -395,7 +395,8 @@ class VpnManager:
                 self._add_tunnel_default_routes()
                 self._forward_local_ports()
                 self._apply_netns_kill_switch()
-                self._write_netns_resolv(self._profile_dns_servers() or list(_FALLBACK_DNS))
+                self._purge_stale_dns_underlay()
+                self._write_netns_resolv(self._dns_for_netns())
             return {"status": "started", **self.status()}
         except subprocess.CalledProcessError as exc:
             return self._fail(vpn_start_failure_detail(exc.returncode, exc.stderr or "", exc.stdout or ""))
@@ -556,14 +557,24 @@ class VpnManager:
         return []
 
     def _bootstrap_ips(self) -> list[str]:
-        """Handshake endpoints plus public DNS. Skip VPN-only DNS (e.g. 198.18.x)."""
-        ips = list(self._underlay_ips())
-        seen = set(ips)
-        for dns in _FALLBACK_DNS:
-            if dns not in seen:
-                seen.add(dns)
-                ips.append(dns)
-        return ips
+        """Handshake endpoints that must use the house underlay.
+
+        Do **not** pin public DNS (1.1.1.1 / 9.9.9.9) via the veth here: on
+        Synology and similar hosts NAT/MASQUERADE into the underlay fails, so
+        DNS must ride the tunnel default route instead.
+        """
+        return list(self._underlay_ips())
+
+    def _dns_for_netns(self) -> list[str]:
+        """Nameservers for amm-torrent (always reachable via the tunnel default)."""
+        servers: list[str] = []
+        seen: set[str] = set()
+        for host in self._profile_dns_servers() + list(_FALLBACK_DNS):
+            if host in seen or host.startswith("127."):
+                continue
+            seen.add(host)
+            servers.append(host)
+        return servers or list(_FALLBACK_DNS)
 
     def _prepared_wireguard_config(self) -> Path:
         raw = self.config_path.read_text(encoding="utf-8", errors="replace")
@@ -632,9 +643,32 @@ class VpnManager:
                     ]
                 )
             self._ip(["netns", "exec", TORRENT_NETNS, "ip", "route", "replace", dest, "via", _NS_HOST_IP])
+        # Older builds pinned public DNS via the underlay; drop those so queries use wg0.
+        self._purge_stale_dns_underlay()
         drop = ["FORWARD", "-i", _VETH_HOST, "-j", "DROP"]
         if self._host_iptables(["-C", *drop]).returncode != 0:
             self._host_iptables(["-A", *drop])
+
+    def _purge_stale_dns_underlay(self) -> None:
+        """Remove underlay routes/NAT for public DNS left by older VPN setups."""
+        for dest in _FALLBACK_DNS:
+            self._host_iptables(["-D", "FORWARD", "-i", _VETH_HOST, "-d", dest, "-j", "ACCEPT"])
+            self._host_iptables(
+                [
+                    "-t",
+                    "nat",
+                    "-D",
+                    "POSTROUTING",
+                    "-s",
+                    f"{_NS_PEER_IP}/32",
+                    "-d",
+                    dest,
+                    "-j",
+                    "MASQUERADE",
+                ]
+            )
+            if self._netns_exists():
+                self._ip(["netns", "exec", TORRENT_NETNS, "ip", "route", "del", dest])
 
     def _apply_netns_kill_switch(self) -> None:
         """Drop any non-tunnel WAN from Prowlarr/qBittorrent/Flaresolverr."""
@@ -818,6 +852,8 @@ class VpnManager:
         if not self.tunneled_apps_allowed():
             return
         self._forward_local_ports()
+        self._purge_stale_dns_underlay()
+        self._write_netns_resolv(self._dns_for_netns())
 
     def _tunnel_interface_names(self) -> list[str]:
         result = self._ip(["netns", "exec", TORRENT_NETNS, "ip", "-o", "link", "show", "up"])

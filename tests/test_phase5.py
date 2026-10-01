@@ -325,7 +325,7 @@ def test_ensure_wireguard_table_off_inserts_and_replaces():
     assert replaced.count("Table =") == 1
 
 
-def test_bootstrap_ips_include_public_dns_not_vpn_only_dns(tmp_path: Path, monkeypatch):
+def test_bootstrap_ips_are_underlay_endpoints_only(tmp_path: Path, monkeypatch):
     cfg = Settings(
         config_dir=tmp_path / "config",
         download_dir=tmp_path / "dl",
@@ -335,10 +335,25 @@ def test_bootstrap_ips_include_public_dns_not_vpn_only_dns(tmp_path: Path, monke
     mgr = VpnManager(cfg)
     monkeypatch.setattr(mgr, "_underlay_ips", lambda: ["203.0.113.10"])
     ips = mgr._bootstrap_ips()
-    assert ips[0] == "203.0.113.10"
-    assert "1.1.1.1" in ips
-    assert "9.9.9.9" in ips
-    assert "198.18.0.2" not in ips
+    assert ips == ["203.0.113.10"]
+    assert "1.1.1.1" not in ips
+    assert "9.9.9.9" not in ips
+
+
+def test_dns_for_netns_prefers_profile_then_public_fallback(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_profile_dns_servers", lambda: ["10.64.0.1", "127.0.0.11"])
+    servers = mgr._dns_for_netns()
+    assert servers[0] == "10.64.0.1"
+    assert "127.0.0.11" not in servers
+    assert "1.1.1.1" in servers
+    assert "9.9.9.9" in servers
 
 
 def test_vpn_start_failure_explains_missing_wireguard_go():
