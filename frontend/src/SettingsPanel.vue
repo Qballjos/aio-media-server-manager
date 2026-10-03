@@ -1269,7 +1269,7 @@ onBeforeUnmount(() => {
                 </td>
               </tr>
               <tr v-if="!storageRows.length">
-                <td colspan="3" class="share-idle">Open Settings from this appliance (localhost) or turn on Diagnostics → Support share to load storage details.</td>
+                <td colspan="3" class="share-idle">Storage details unavailable. Check that config, downloads, and media mounts are readable, then reload Settings.</td>
               </tr>
             </tbody>
           </table>

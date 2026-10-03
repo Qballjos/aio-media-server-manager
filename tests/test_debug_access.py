@@ -77,7 +77,8 @@ def test_session_without_debug_switch_gets_operational_info_only():
     resp = client.get("/api/system/info", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
-    assert data["debug"] is False
+    # Do not send debug:false — older Host health UIs used that as a sticky banner.
+    assert "debug" not in data
     assert "vpn" in data
     assert "transcoding" in data
     assert "metrics" in data

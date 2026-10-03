@@ -178,6 +178,17 @@ def create_app() -> FastAPI:
     app.include_router(cloudflare_tunnel_router.router)
     app.include_router(diagnostics_router.router)
 
+    @app.middleware("http")
+    async def _no_cache_spa_shell(request, call_next):
+        """Keep index.html fresh so browsers pick up new hashed JS after updates."""
+        response = await call_next(request)
+        path = request.url.path or "/"
+        content_type = response.headers.get("content-type", "")
+        if path == "/" or path.endswith(".html") or "text/html" in content_type:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+        return response
+
     # Mount frontend dist if built
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
     if frontend_dist.is_dir():

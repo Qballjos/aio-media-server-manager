@@ -30,8 +30,9 @@ router = APIRouter(prefix="/api/system", tags=["System"])
 
 
 def _operational_status() -> dict:
+    # Omit debug:false — older Host health UIs treated that as a permanent
+    # "turn on Support share" banner even though metrics are already included.
     return {
-        "debug": False,
         "transcoding": probe_transcoding(),
         "vpn": vpn_manager.status(),
         "cloudflare_tunnel": cloudflare_tunnel.status(),
