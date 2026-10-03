@@ -239,6 +239,8 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
     _ensure_authenticated(request)
     notes: list[str] = []
     restart_needed = False
+    # Capture before mutation so re-saving vpn_enabled=true does not bounce tunneled apps.
+    vpn_was_enabled = bool(settings.vpn_enabled)
 
     if body.timezone is not None:
         _apply_timezone(body.timezone)
@@ -347,7 +349,7 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not save settings: {exc}") from exc
 
-    if body.vpn_enabled is True:
+    if body.vpn_enabled is True and not vpn_was_enabled:
         from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
 
         stopped = await stop_tunneled_apps()
@@ -365,7 +367,9 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
                 "VPN start ran but the tunnel is still down. "
                 "qBittorrent, Prowlarr, and Flaresolverr stay stopped."
             )
-    elif body.vpn_enabled is False:
+    elif body.vpn_enabled is True and vpn_was_enabled:
+        notes.append("VPN settings saved. Tunnel left running; use Restart if you changed the profile.")
+    elif body.vpn_enabled is False and vpn_was_enabled:
         from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
 
         stopped = await stop_tunneled_apps()
@@ -376,6 +380,8 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         notes.append("VPN stopped. Kill switch is off — qBittorrent, Prowlarr, and Flaresolverr can use the house network.")
         if started:
             notes.append("Started " + ", ".join(started) + " on the house network.")
+    elif body.vpn_enabled is False and not vpn_was_enabled:
+        notes.append("VPN already off.")
 
     if body.cloudflare_tunnel_enabled is True:
         result = await cloudflare_tunnel.start()

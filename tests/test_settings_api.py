@@ -168,6 +168,18 @@ def test_settings_vpn_switch_starts_and_stops(tmp_path: Path, monkeypatch):
     assert "start" in calls
     assert any("VPN started" in note for note in on.json().get("notes", []))
 
+    # Re-saving while already enabled must not bounce the tunnel / kill apps.
+    calls.clear()
+    again = client.patch(
+        "/api/settings",
+        json={"vpn_enabled": True, "vpn_provider": "privadovpn"},
+        headers=headers,
+    )
+    assert again.status_code == 200
+    assert "start" not in calls
+    assert "stop" not in calls
+    assert any("left running" in note.lower() for note in again.json().get("notes", []))
+
     off = client.patch("/api/settings", json={"vpn_enabled": False}, headers=headers)
     assert off.status_code == 200
     assert cfg.vpn_enabled is False

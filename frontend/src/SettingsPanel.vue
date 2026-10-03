@@ -453,13 +453,14 @@ async function toggleVpn() {
 }
 
 async function saveVpn() {
+  // Do not resend vpn_enabled here — that would stop qBittorrent/Prowlarr and
+  // bounce the tunnel. Enable/disable is only via the switch (toggleVpn).
   const payload = {
     vpn_provider: form.value.vpn_provider,
     vpn_protocol: form.value.vpn_protocol,
     vpn_config_path: form.value.vpn_config_path
   }
   if (form.value.vpn_config_text) payload.vpn_config_text = form.value.vpn_config_text
-  if (form.value.vpn_enabled) payload.vpn_enabled = true
   await patchSettings(payload)
 }
 
