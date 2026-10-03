@@ -780,6 +780,9 @@ class VpnManager:
             return self._fail(str(exc))
 
         self._active_wg_conf = up_conf
+        # Teardown may have probed interfaces while none existed; drop that miss.
+        self._wg_ifaces_cache = None
+        self._wg_ifaces_cache_at = 0.0
         route_error = self._apply_uid_wireguard_routing()
         if route_error:
             self._wireguard_down_main(up_conf)
@@ -1781,18 +1784,47 @@ class VpnManager:
         now = time.monotonic()
         if self._wg_ifaces_cache is not None and (now - self._wg_ifaces_cache_at) < 2.0:
             return list(self._wg_ifaces_cache)
-        result = self._ip(["-o", "link", "show", "up"])
-        names: list[str] = []
-        for line in (result.stdout or "").splitlines():
-            parts = line.split(":", 2)
-            if len(parts) < 2:
-                continue
-            name = parts[1].strip().split("@", 1)[0]
-            if name.startswith("wg") or name.startswith("tun"):
-                names.append(name)
-        self._wg_ifaces_cache = names
-        self._wg_ifaces_cache_at = now
+        names = self._discover_main_tunnel_interfaces()
+        # Never cache a miss — teardown probes before wg-quick up and would
+        # hide the interface for the next 2s ("no wg interface was found").
+        if names:
+            self._wg_ifaces_cache = names
+            self._wg_ifaces_cache_at = now
         return list(names)
+
+    def _discover_main_tunnel_interfaces(self) -> list[str]:
+        names: list[str] = []
+        wg = shutil.which("wg")
+        if wg:
+            try:
+                out = subprocess.run(
+                    [wg, "show", "interfaces"],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                    check=False,
+                )
+                if out.returncode == 0:
+                    for token in (out.stdout or "").split():
+                        if token and token not in names:
+                            names.append(token)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        if names:
+            return names
+        # Prefer "up", then any link — userspace wg can briefly report DOWN.
+        for args in (["-o", "link", "show", "up"], ["-o", "link", "show"]):
+            result = self._ip(args)
+            for line in (result.stdout or "").splitlines():
+                parts = line.split(":", 2)
+                if len(parts) < 2:
+                    continue
+                name = parts[1].strip().split("@", 1)[0]
+                if (name.startswith("wg") or name.startswith("tun")) and name not in names:
+                    names.append(name)
+            if names:
+                break
+        return names
 
     def _tunnel_interface_names(self) -> list[str]:
         result = self._ip(["netns", "exec", TORRENT_NETNS, "ip", "-o", "link", "show", "up"])

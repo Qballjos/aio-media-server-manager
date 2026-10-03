@@ -164,6 +164,30 @@ def test_vpn_wraps_wireguard_with_setpriv_uid(tmp_path: Path, monkeypatch):
     assert "qbittorrent-nox" in wrapped
 
 
+def test_main_tunnel_interface_names_does_not_cache_empty(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+        vpn_protocol="wireguard",
+    )
+    mgr = VpnManager(cfg)
+    calls = {"n": 0}
+
+    def fake_discover():
+        calls["n"] += 1
+        return [] if calls["n"] == 1 else ["wg0"]
+
+    monkeypatch.setattr(mgr, "_discover_main_tunnel_interfaces", fake_discover)
+    assert mgr._main_tunnel_interface_names() == []
+    assert mgr._main_tunnel_interface_names() == ["wg0"]
+    assert calls["n"] == 2
+    # Positive result is cached.
+    assert mgr._main_tunnel_interface_names() == ["wg0"]
+    assert calls["n"] == 2
+
+
 def test_vpn_wraps_openvpn_with_netns(tmp_path: Path, monkeypatch):
     cfg = Settings(
         config_dir=tmp_path / "config",
