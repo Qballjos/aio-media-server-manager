@@ -2102,7 +2102,6 @@ class VpnManager:
         except ImportError:
             return []
         from applications.catalog import ApplicationCatalog
-        from core.supervisor import reclaim_leftover_processes
 
         catalog = ApplicationCatalog(app_settings=self.settings)
         leaked: list[str] = []
@@ -2159,7 +2158,8 @@ class VpnManager:
                         proc.kill()
                 except (psutil.Error, OSError):
                     continue
-            reclaim_leftover_processes([token_path])
+            # Do not call reclaim_leftover_processes here — it is UID-blind and would
+            # SIGTERM the correctly isolated VPN UID processes every isolation tick.
             if found_wrong_uid:
                 leaked.append(name)
         return leaked

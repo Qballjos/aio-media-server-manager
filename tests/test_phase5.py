@@ -843,3 +843,76 @@ def test_trusted_proxy_setting(tmp_path: Path):
     assert cfg.root_path == "/amm"
     serial = cfg.as_serialisable_dict()
     assert serial["vpn_enabled"] is False
+
+
+def test_reclaim_clearnet_spares_vpn_uid_processes(tmp_path: Path, monkeypatch):
+    """Isolation must not SIGTERM correctly setpriv-wrapped apps (crash-loop bug)."""
+    from types import SimpleNamespace
+
+    import psutil
+
+    from core.vpn import VpnManager
+
+    exe = tmp_path / "apps" / "qbittorrent" / "qbittorrent-nox"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("#!/bin/sh\n", encoding="utf-8")
+    exe.chmod(0o755)
+
+    plugin = SimpleNamespace(
+        is_installed=lambda: True,
+        executable_path=lambda: exe,
+    )
+
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+        vpn_protocol="wireguard",
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "uses_uid_isolation", lambda: True)
+    monkeypatch.setattr(
+        "applications.catalog.ApplicationCatalog.has",
+        lambda self, name: name == "qbittorrent",
+    )
+    monkeypatch.setattr(
+        "applications.catalog.ApplicationCatalog.get",
+        lambda self, name: plugin,
+    )
+
+    class _Proc:
+        def __init__(self, pid: int, uid: int, cmdline: list[str]) -> None:
+            self.info = {
+                "pid": pid,
+                "cmdline": cmdline,
+                "uids": SimpleNamespace(real=uid),
+            }
+            self.terminate_calls = 0
+
+        def terminate(self) -> None:
+            self.terminate_calls += 1
+
+        def wait(self, timeout: float | None = None) -> None:
+            return None
+
+        def kill(self) -> None:
+            return None
+
+        def uids(self):
+            return self.info["uids"]
+
+    good = _Proc(4242, VPN_APP_UID, ["setpriv", f"--reuid={VPN_APP_UID}", "--", str(exe)])
+    bad = _Proc(4243, 1026, [str(exe), "--profile=/tmp"])
+
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs=None: [good, bad])
+
+    def _boom(cmd):
+        raise AssertionError("UID-blind reclaim must not run from reclaim_clearnet")
+
+    monkeypatch.setattr("core.supervisor.reclaim_leftover_processes", _boom)
+
+    leaked = mgr.reclaim_clearnet_tunneled_processes()
+    assert leaked == ["qbittorrent"]
+    assert good.terminate_calls == 0
+    assert bad.terminate_calls == 1
