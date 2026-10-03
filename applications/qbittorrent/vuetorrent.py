@@ -34,7 +34,8 @@ def vuetorrent_enabled(*, app_settings=None) -> bool:
 
 
 def ui_ready(config_dir: Path) -> bool:
-    return (vuetorrent_dir(config_dir) / "index.html").is_file()
+    # qBittorrent serves alt UI from <RootFolder>/public/… — index.html must live there.
+    return (vuetorrent_dir(config_dir) / "public" / "index.html").is_file()
 
 
 def ensure_vuetorrent(config_dir: Path, *, app_settings=None) -> bool:
@@ -91,16 +92,20 @@ def install_vuetorrent(config_dir: Path, *, app_settings=None) -> dict[str, Any]
     staging = Path(tempfile.mkdtemp(prefix="amm-vuetorrent-"))
     try:
         ArchiveExtractor.extract(archive_path, staging, strip_single_wrapper=True)
-        root = _find_index_root(staging)
+        root = _find_ui_root(staging)
         if target.exists():
             shutil.rmtree(target)
         shutil.copytree(root, target)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 
-    if not (target / "index.html").is_file():
-        raise RuntimeError("VueTorrent zip did not contain index.html.")
+    if not (target / "public" / "index.html").is_file():
+        raise RuntimeError(
+            "VueTorrent zip layout is invalid (expected public/index.html under the UI root)."
+        )
     _make_webui_readable(target)
+    # Prefer VPN uid when WireGuard isolation is on; otherwise PUID/PGID.
+    _chown_for_qbittorrent(target)
     meta = {"repo": VUETORRENT_REPO, "version": version, "asset": name}
     (target / _META_NAME).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     logger.info("Installed VueTorrent %s at %s", version, target)
@@ -134,27 +139,58 @@ def _download(url: str, destination: Path, *, token: str | None) -> None:
 
 
 def _make_webui_readable(root: Path) -> None:
-    """qBittorrent runs as PUID/PGID and needs to read every VueTorrent asset."""
+    """Ensure every VueTorrent asset is world-readable (qBittorrent may run as VPN uid)."""
     for path in [root, *root.rglob("*")]:
         try:
             mode = path.stat().st_mode
             path.chmod(mode | (0o755 if path.is_dir() else 0o644))
         except OSError:
             continue
+
+
+def _chown_for_qbittorrent(root: Path) -> None:
     try:
-        uid = int(settings.puid)
-        gid = int(settings.pgid)
+        from core.vpn import VPN_APP_UID, vpn_manager
+
+        if vpn_manager.settings.vpn_enabled and vpn_manager.uses_uid_isolation():
+            uid = VPN_APP_UID
+            try:
+                gid = int(settings.pgid)
+            except (TypeError, ValueError):
+                gid = uid
+        else:
+            uid = int(settings.puid)
+            gid = int(settings.pgid)
+    except Exception:
+        try:
+            uid = int(settings.puid)
+            gid = int(settings.pgid)
+        except Exception:
+            return
+    try:
         for path in [root, *root.rglob("*")]:
             os.chown(path, uid, gid)
     except Exception:
-        logger.debug("Could not chown VueTorrent files to PUID/PGID", exc_info=True)
+        logger.debug("Could not chown VueTorrent files to %s:%s", uid, gid, exc_info=True)
 
 
-def _find_index_root(extracted: Path) -> Path:
-    direct = extracted / "index.html"
+def _find_ui_root(extracted: Path) -> Path:
+    """Return the folder that contains ``public/index.html`` (qBittorrent RootFolder).
+
+    Pointing RootFolder at ``public/`` itself causes:
+    "Unacceptable file type, only regular file is allowed."
+    """
+    direct = extracted / "public" / "index.html"
     if direct.is_file():
         return extracted
-    matches = list(extracted.rglob("index.html"))
-    if not matches:
-        raise RuntimeError("VueTorrent archive has no index.html.")
-    return matches[0].parent
+    for child in sorted(extracted.iterdir()) if extracted.is_dir() else []:
+        if child.is_dir() and (child / "public" / "index.html").is_file():
+            return child
+    matches = list(extracted.rglob("public/index.html"))
+    if matches:
+        # …/<ui-root>/public/index.html → <ui-root>
+        return matches[0].parent.parent
+    raise RuntimeError(
+        "VueTorrent archive must contain public/index.html "
+        "(configure RootFolder as the parent of the public/ directory)."
+    )

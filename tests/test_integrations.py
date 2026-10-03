@@ -464,11 +464,34 @@ def test_qbittorrent_binds_vpn_interface_and_disables_ipv6(tmp_path: Path):
     assert "Session\\Interface=wg0" not in cleared
 
 
+def test_vuetorrent_ui_root_requires_public_folder(tmp_path: Path):
+    from applications.qbittorrent.vuetorrent import _find_ui_root, ui_ready, vuetorrent_dir
+
+    staging = tmp_path / "staging"
+    wrapped = staging / "vuetorrent"
+    public = wrapped / "public"
+    public.mkdir(parents=True)
+    (public / "index.html").write_text("<html></html>", encoding="utf-8")
+    (wrapped / "version.txt").write_text("1\n", encoding="utf-8")
+    assert _find_ui_root(staging) == wrapped
+    assert _find_ui_root(wrapped) == wrapped
+
+    # Wrong layout (index.html at RootFolder) must not count as ready.
+    bad = vuetorrent_dir(tmp_path / "qb-config")
+    bad.mkdir(parents=True)
+    (bad / "index.html").write_text("<html></html>", encoding="utf-8")
+    assert ui_ready(tmp_path / "qb-config") is False
+    good_public = bad / "public"
+    good_public.mkdir()
+    (good_public / "index.html").write_text("<html></html>", encoding="utf-8")
+    assert ui_ready(tmp_path / "qb-config") is True
+
+
 def test_qbittorrent_conf_quotes_vuetorrent_path_with_spaces(tmp_path: Path):
     profile = tmp_path / "AIO Media Server Manager" / "qbittorrent"
     ui = profile / "vuetorrent"
-    ui.mkdir(parents=True)
-    (ui / "index.html").write_text("<html></html>", encoding="utf-8")
+    (ui / "public").mkdir(parents=True)
+    (ui / "public" / "index.html").write_text("<html></html>", encoding="utf-8")
     conf = ensure_webui_localhost_access(profile, alternative_ui_root=ui)
     text = conf.read_text(encoding="utf-8")
     line = next(item for item in text.splitlines() if item.startswith("WebUI\\RootFolder="))
@@ -479,8 +502,8 @@ def test_qbittorrent_conf_quotes_vuetorrent_path_with_spaces(tmp_path: Path):
 
 def test_qbittorrent_conf_enables_vuetorrent(tmp_path: Path):
     ui = tmp_path / "vuetorrent"
-    ui.mkdir()
-    (ui / "index.html").write_text("<html></html>", encoding="utf-8")
+    (ui / "public").mkdir(parents=True)
+    (ui / "public" / "index.html").write_text("<html></html>", encoding="utf-8")
     conf = ensure_webui_localhost_access(tmp_path, alternative_ui_root=ui)
     text = conf.read_text(encoding="utf-8")
     assert "WebUI\\AlternativeUIEnabled=true" in text

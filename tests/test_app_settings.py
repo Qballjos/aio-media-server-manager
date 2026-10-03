@@ -115,8 +115,10 @@ def test_patch_qbittorrent_vuetorrent_switch(tmp_path: Path, monkeypatch: pytest
 
     def fake_install(config_dir, *, app_settings=None):
         root = vuetorrent_dir(config_dir)
-        root.mkdir(parents=True, exist_ok=True)
-        (root / "index.html").write_text("<html>vt</html>", encoding="utf-8")
+        public = root / "public"
+        public.mkdir(parents=True, exist_ok=True)
+        (public / "index.html").write_text("<html>vt</html>", encoding="utf-8")
+        (root / "version.txt").write_text("v2.test\n", encoding="utf-8")
         return {"version": "v2.test"}
 
     monkeypatch.setattr("applications.qbittorrent.vuetorrent.install_vuetorrent", fake_install)
