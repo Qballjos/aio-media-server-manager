@@ -172,11 +172,13 @@ def public_settings() -> dict[str, Any]:
         settings.github_token = token
     storage = {}
     try:
+        import psutil
+
         from core.storage import StorageManager
 
         info = StorageManager(settings).validate_all()
         for label, item in info.items():
-            storage[label] = {
+            entry = {
                 "path": str(item.path),
                 "exists": item.exists,
                 "writable": item.writable,
@@ -184,6 +186,16 @@ def public_settings() -> dict[str, Any]:
                 "hardlinks_supported": item.hardlinks_supported,
                 "is_network_fs": item.is_network_fs,
             }
+            try:
+                usage = psutil.disk_usage(str(item.path) if item.exists else "/")
+                entry["disk_total"] = usage.total
+                entry["disk_used"] = usage.used
+                entry["disk_percent"] = usage.percent
+            except Exception:
+                entry["disk_total"] = 0
+                entry["disk_used"] = 0
+                entry["disk_percent"] = 0
+            storage[label] = entry
     except Exception as exc:
         logger.debug("storage summary failed: %s", exc)
     jellyfin_key = _homepage_key_status("jellyfin")

@@ -123,9 +123,6 @@ onUnmounted(() => {
           <button type="button" class="btn-icon" title="Close" @click="closeHealthModal">×</button>
         </div>
         <div class="health-body">
-          <p v-if="info && info.debug === false" class="health-chart-meta">
-            Storage paths and full debug dumps stay off until Diagnostics → Support share is on (or you open the UI on localhost).
-          </p>
           <article class="health-chart-card">
             <div class="health-chart-head">
               <span>CPU</span>

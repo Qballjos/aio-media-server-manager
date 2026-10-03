@@ -1139,7 +1139,7 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Storage paths</h3>
-          <p>Filesystem format and capacity. Shown from localhost, or when Diagnostics support share is on. Edit mounts in docker-compose, not here.</p>
+          <p>Filesystem format and capacity for config, downloads, and media. Edit mounts in docker-compose, not here.</p>
         </div>
         <div class="storage-table-wrap">
           <table class="storage-table">

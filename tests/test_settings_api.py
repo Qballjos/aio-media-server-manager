@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from api.app import create_app
 from api.routers import settings as settings_api
 from core.auth import auth_manager
+from core import branding as branding_mod
 from core.settings import Settings
 from core import settings as settings_mod
 from core.vpn import VpnManager
@@ -26,6 +27,7 @@ def _client(tmp_path: Path, monkeypatch) -> tuple[TestClient, Settings]:
     monkeypatch.setattr(auth_manager, "_settings", test_settings)
     monkeypatch.setattr(settings_api, "settings", test_settings)
     monkeypatch.setattr(settings_mod, "settings", test_settings)
+    monkeypatch.setattr(branding_mod, "settings", test_settings)
     mgr = VpnManager(test_settings)
     monkeypatch.setattr(settings_api, "vpn_manager", mgr)
     monkeypatch.setattr(vpn_mod, "vpn_manager", mgr)
@@ -57,6 +59,12 @@ def test_settings_get_and_patch_general(tmp_path: Path, monkeypatch):
     assert data["bind_mounts_editable"] is False
     assert data["updates"]["check_schedule"] in {"off", "daily", "weekly", "monthly"}
     assert "github_token" not in data
+    assert "storage" in data
+    media = data["storage"].get("media_dir") or next(iter(data["storage"].values()), {})
+    assert "fs_type" in media
+    assert "disk_total" in media
+    assert "disk_used" in media
+    assert int(media["disk_total"] or 0) >= 0
 
     patched = client.patch(
         "/api/settings",

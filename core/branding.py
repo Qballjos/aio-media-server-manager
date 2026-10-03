@@ -70,14 +70,18 @@ _MIME_BY_EXT = {
 }
 
 
-def branding_dir() -> Path:
+def branding_dir(*, create: bool = True) -> Path:
     path = Path(settings.config_dir) / "branding"
-    path.mkdir(parents=True, exist_ok=True)
+    if create:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.debug("Could not create branding dir %s: %s", path, exc)
     return path
 
 
 def _meta_path() -> Path:
-    return branding_dir() / META_NAME
+    return branding_dir(create=False) / META_NAME
 
 
 def normalize_accent(value: str | None, *, allow_default_token: bool = False) -> str:
@@ -118,6 +122,7 @@ def _load_meta() -> dict[str, Any]:
 
 
 def _save_meta(meta: dict[str, Any]) -> None:
+    branding_dir(create=True)
     path = _meta_path()
     path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
 
