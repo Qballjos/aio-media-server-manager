@@ -56,7 +56,12 @@ def collect_metrics() -> dict[str, Any]:
         pass
     try:
         disk = psutil.disk_usage("/")
-        payload["disk"] = {"total": disk.total, "used": disk.used, "percent": disk.percent}
+        payload["disk"] = {
+            "total": disk.total,
+            "used": disk.used,
+            "free": disk.free,
+            "percent": disk.percent,
+        }
     except Exception:
         pass
     try:

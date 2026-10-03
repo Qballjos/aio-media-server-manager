@@ -14,6 +14,7 @@ const emptySnapshot = () => ({
   downloads: [],
   recent: [],
   requests: [],
+  trending: [],
   seerr: { available: false, url: null },
   widgets: [],
 })
@@ -47,6 +48,7 @@ const hasWidgets = computed(
     snapshot.value.downloads.length ||
     snapshot.value.recent.length ||
     snapshot.value.requests.length ||
+    snapshot.value.trending.length ||
     hasMediaServer.value ||
     hasCalendarSource.value ||
     snapshot.value.seerr.available,
@@ -106,6 +108,7 @@ async function loadSnapshot(force = false) {
         downloads: downloadsFresh.value ? snapshot.value.downloads : data.downloads || [],
         recent: data.recent || [],
         requests: data.requests || [],
+        trending: data.trending || [],
         widgets: mergeWidgetNotes(data.widgets || []),
         seerr: data.seerr || { available: false, url: null },
       }
@@ -263,6 +266,7 @@ const calView = ref(defaultCalView())
 const calFilter = ref('all')
 const recentRail = ref(null)
 const requestsRail = ref(null)
+const trendingRail = ref(null)
 
 function defaultCalView() {
   const width = typeof window === 'undefined' ? 1024 : window.innerWidth
@@ -298,7 +302,8 @@ function startOfWeek(value) {
 const calCursor = ref(startOfWeek(new Date()))
 
 function scrollRail(which, direction) {
-  const node = which === 'requests' ? requestsRail.value : recentRail.value
+  const node =
+    which === 'requests' ? requestsRail.value : which === 'trending' ? trendingRail.value : recentRail.value
   if (!node) return
   const step = Math.max(node.clientWidth * 0.72, 232)
   node.scrollBy({ left: direction * step, behavior: 'smooth' })
@@ -640,6 +645,47 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
+        <article v-if="snapshot.trending.length || snapshot.seerr.available || widgetDebug" class="home-widget glass-card home-widget-rail">
+          <div class="home-rail-head">
+            <h3>Trending</h3>
+            <div v-if="snapshot.trending.length" class="home-rail-nav">
+              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous trending" @click="scrollRail('trending', -1)">‹</button>
+              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next trending" @click="scrollRail('trending', 1)">›</button>
+            </div>
+          </div>
+          <div v-if="snapshot.trending.length" ref="trendingRail" class="home-rail">
+            <div v-for="(item, idx) in snapshot.trending" :key="idx" class="home-tile home-tile-trending">
+              <a
+                class="home-tile-link"
+                :href="item.url || snapshot.seerr.url || undefined"
+                :target="item.url || snapshot.seerr.url ? '_blank' : undefined"
+                rel="noopener noreferrer"
+              >
+                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                <span class="home-tile-title">{{ item.title }}</span>
+                <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
+                <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
+              </a>
+              <button
+                v-if="item.can_request"
+                type="button"
+                class="ui-btn ui-btn-primary home-tile-request"
+                :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
+                @click="requestTitle(item)"
+              >
+                {{ requestBusy === `${item.mediaType}-${item.mediaId}` ? 'Requesting…' : 'Request' }}
+              </button>
+            </div>
+          </div>
+          <p v-else class="home-muted">Trending titles appear when Seerr is running.</p>
+          <ul v-if="widgetDebug && notesFor('trending').length" class="home-debug">
+            <li v-for="(note, idx) in notesFor('trending')" :key="idx">
+              <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
+              <span>{{ note.source }} — {{ note.detail }}</span>
+            </li>
+          </ul>
+        </article>
         <article v-if="snapshot.calendar.length || hasCalendarSource || widgetDebug" class="home-widget glass-card home-widget-calendar">
           <div class="cal-head">
             <div class="cal-nav">
@@ -743,7 +789,7 @@ onUnmounted(() => {
         </article>
       </div>
       <p v-else class="home-muted">
-        Calendar, downloads, recently added, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.
+        Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.
         Turn on Widget debug in Settings → Homepage to see why a source is skipped or failing.
       </p>
     </template>
@@ -971,6 +1017,21 @@ onUnmounted(() => {
   text-decoration: none;
   min-width: 0;
   scroll-snap-align: start;
+}
+.home-tile-trending {
+  flex-basis: 7.25rem;
+}
+.home-tile-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.home-tile-request {
+  font-size: 0.72rem;
+  padding: 0.3rem 0.45rem;
 }
 .home-tile-poster,
 .home-tile-fallback {

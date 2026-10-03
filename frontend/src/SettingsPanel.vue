@@ -132,6 +132,13 @@ async function clearHomepageKey(field) {
 }
 
 const metrics = computed(() => props.systemInfo?.metrics || {})
+const diskRemaining = computed(() => {
+  const disk = metrics.value.disk || {}
+  if (disk.free != null) return Number(disk.free) || 0
+  const total = Number(disk.total) || 0
+  const used = Number(disk.used) || 0
+  return Math.max(0, total - used)
+})
 const storage = computed(() => snapshot.value.storage || props.systemInfo?.storage || {})
 const transcoding = computed(() => props.systemInfo?.transcoding || {})
 const storageRows = computed(() =>
@@ -816,6 +823,18 @@ onBeforeUnmount(() => {
             <dd class="font-mono">
               {{ formatBytes((metrics.memory?.total || 0) - (metrics.memory?.available || 0)) }}
               / {{ formatBytes(metrics.memory?.total) }}
+            </dd>
+          </div>
+          <div>
+            <dt>Disk</dt>
+            <dd class="font-mono">
+              <template v-if="metrics.disk?.total">
+                {{ formatBytes(metrics.disk.used) }} used
+                · {{ formatBytes(diskRemaining) }} free
+                / {{ formatBytes(metrics.disk.total) }}
+                <span v-if="metrics.disk.percent != null"> ({{ Math.round(metrics.disk.percent) }}%)</span>
+              </template>
+              <template v-else>—</template>
             </dd>
           </div>
           <div>

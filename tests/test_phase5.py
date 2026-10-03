@@ -38,6 +38,9 @@ def test_metrics_shape():
     assert "cpu_percent" in data
     assert "memory" in data
     assert "disk" in data
+    assert "free" in data["disk"]
+    assert "used" in data["disk"]
+    assert "total" in data["disk"]
     assert "network" in data
     assert isinstance(data["cpu_per_core"], list)
     assert isinstance(data["processes"], list)

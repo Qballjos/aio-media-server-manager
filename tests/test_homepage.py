@@ -183,12 +183,14 @@ def test_homepage_hides_uninstalled_and_cli_apps(tmp_path):
     assert snap["downloads"] == []
     assert snap["recent"] == []
     assert snap["requests"] == []
+    assert snap["trending"] == []
     assert snap["seerr"]["available"] is False
     notes = {(item["widget"], item["source"], item["state"]): item["detail"] for item in snap["widgets"]}
     assert notes[("calendar", "sonarr", "error")] == "running but no API key yet"
     assert notes[("calendar", "radarr", "skipped")] == "not installed"
     assert notes[("downloads", "sabnzbd", "skipped")] == "not installed"
     assert notes[("recent", "jellyfin", "skipped")] == "not installed"
+    assert notes[("trending", "seerr", "skipped")] == "not installed"
     assert notes[("search", "seerr", "skipped")] == "not installed"
 
 
@@ -415,7 +417,7 @@ def test_homepage_seerr_requests_row(tmp_path):
     catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
 
     def fake_fetch(url, **_kwargs):
-        if "/request" in url:
+        if "/request" in url and "/discover/" not in url:
             return (
                 {
                     "results": [
@@ -427,6 +429,8 @@ def test_homepage_seerr_requests_row(tmp_path):
                 },
                 None,
             )
+        if "/discover/trending" in url:
+            return ({"results": []}, None)
         if "/movie/42" in url:
             return ({"title": "Dune", "posterPath": "/x.jpg"}, None)
         return (None, "unexpected")
@@ -441,6 +445,57 @@ def test_homepage_seerr_requests_row(tmp_path):
     assert snap["requests"][0]["title"] == "Dune"
     assert snap["requests"][0]["detail"] == "Qballjos"
     assert "image.tmdb.org" in snap["requests"][0]["poster"]
+
+
+def test_homepage_seerr_trending_row(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+
+    def fake_fetch(url, **_kwargs):
+        if "/discover/trending" in url:
+            return (
+                {
+                    "results": [
+                        {
+                            "id": 99,
+                            "mediaType": "movie",
+                            "title": "Trending Hit",
+                            "posterPath": "/t.jpg",
+                            "releaseDate": "2026-01-15",
+                            "mediaInfo": {"status": 1},
+                        },
+                        {
+                            "id": 7,
+                            "mediaType": "tv",
+                            "name": "Hot Show",
+                            "posterPath": "/s.jpg",
+                            "firstAirDate": "2025-05-01",
+                            "mediaInfo": {"status": 5},
+                        },
+                        {"id": 3, "mediaType": "person", "name": "Someone"},
+                    ]
+                },
+                None,
+            )
+        if "/request" in url:
+            return ({"results": []}, None)
+        return (None, "unexpected")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        snap = homepage_snapshot("nas.local", force=True)
+    assert len(snap["trending"]) == 2
+    assert snap["trending"][0]["title"] == "Trending Hit"
+    assert snap["trending"][0]["detail"] == "2026"
+    assert snap["trending"][0]["can_request"] is True
+    assert snap["trending"][0]["mediaId"] == 99
+    assert "image.tmdb.org" in snap["trending"][0]["poster"]
+    assert snap["trending"][1]["title"] == "Hot Show"
+    assert snap["trending"][1]["can_request"] is False
+    assert snap["trending"][1]["status"] == "available"
 
 
 def test_homepage_widget_debug_http_error(tmp_path):

@@ -19,6 +19,11 @@ const info = computed(() => localInfo.value || props.systemInfo)
 const cpuPercent = computed(() => info.value?.metrics?.cpu_percent)
 const memPercent = computed(() => info.value?.metrics?.memory?.percent)
 const diskPercent = computed(() => info.value?.metrics?.disk?.percent)
+const diskFree = computed(() => {
+  const disk = info.value?.metrics?.disk || {}
+  if (disk.free != null) return Number(disk.free) || 0
+  return Math.max(0, (Number(disk.total) || 0) - (Number(disk.used) || 0))
+})
 
 function recordHealthSample(payload) {
   const metrics = payload?.metrics
@@ -153,7 +158,8 @@ onUnmounted(() => {
             </div>
             <p class="health-chart-meta">
               {{ formatBytes(info?.metrics?.disk?.used) }}
-              used of {{ formatBytes(info?.metrics?.disk?.total) }}
+              used · {{ formatBytes(diskFree) }} free
+              of {{ formatBytes(info?.metrics?.disk?.total) }}
             </p>
             <svg class="health-svg" :viewBox="`0 0 ${diskChart.w} ${diskChart.h}`" preserveAspectRatio="none" aria-hidden="true">
               <path :d="diskChart.fill" class="health-fill disk"></path>

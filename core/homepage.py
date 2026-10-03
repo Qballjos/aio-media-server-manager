@@ -124,6 +124,7 @@ def _launcher_shell(host: str) -> dict[str, Any]:
         "downloads": [],
         "recent": [],
         "requests": [],
+        "trending": [],
         "seerr": {
             "available": bool(seerr_running),
             "url": _web_url(host, _port(catalog, "seerr", 5055)) if seerr else None,
@@ -229,20 +230,23 @@ def _build_homepage_snapshot(host: str) -> dict[str, Any]:
     downloads: list[dict[str, Any]] = []
     recent: list[dict[str, Any]] = []
     requests_row: list[dict[str, Any]] = []
+    trending: list[dict[str, Any]] = []
 
     sonarr_notes: list[dict[str, Any]] = []
     radarr_notes: list[dict[str, Any]] = []
     jelly_notes: list[dict[str, Any]] = []
     plex_notes: list[dict[str, Any]] = []
     seerr_notes: list[dict[str, Any]] = []
+    trending_notes: list[dict[str, Any]] = []
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=9) as pool:
         fut_sonarr = pool.submit(_collect_sonarr_calendar, catalog, running, start, end, sonarr_notes)
         fut_radarr = pool.submit(_collect_radarr_calendar, catalog, running, start, end, radarr_notes)
         fut_downloads = pool.submit(_collect_download_queues, catalog, running)
         fut_jelly = pool.submit(_collect_jellyfin_recent, catalog, running, jelly_notes, host)
         fut_plex = pool.submit(_collect_plex_recent, catalog, running, plex_notes, host)
         fut_seerr = pool.submit(_collect_seerr_requests, catalog, running, seerr_notes, host)
+        fut_trending = pool.submit(_collect_seerr_trending, catalog, running, trending_notes, host)
         calendar.extend(fut_sonarr.result())
         calendar.extend(fut_radarr.result())
         dl_items, dl_notes = fut_downloads.result()
@@ -250,6 +254,7 @@ def _build_homepage_snapshot(host: str) -> dict[str, Any]:
         recent.extend(fut_jelly.result())
         recent.extend(fut_plex.result())
         requests_row.extend(fut_seerr.result())
+        trending.extend(fut_trending.result())
 
     calendar.sort(key=lambda item: (item.get("when") or "", item.get("title") or ""))
     recent.sort(key=_when_sort_key, reverse=True)
@@ -259,6 +264,7 @@ def _build_homepage_snapshot(host: str) -> dict[str, Any]:
     notes.extend(jelly_notes)
     notes.extend(plex_notes)
     notes.extend(seerr_notes)
+    notes.extend(trending_notes)
 
     seerr = catalog.has("seerr") and catalog.get("seerr").is_installed()
     seerr_running = seerr and "seerr" in running
@@ -279,6 +285,7 @@ def _build_homepage_snapshot(host: str) -> dict[str, Any]:
         "downloads": downloads[:40],
         "recent": recent[:24],
         "requests": requests_row[:16],
+        "trending": trending[:20],
         "seerr": {
             "available": bool(seerr_running),
             "url": _web_url(host, _port(catalog, "seerr", 5055)) if seerr else None,
@@ -1167,6 +1174,85 @@ def _collect_seerr_requests(
         error,
         "no requests yet",
     )
+
+
+def _collect_seerr_trending(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    notes: list[dict[str, Any]],
+    host: str,
+) -> list[dict[str, Any]]:
+    if not _source_ready(catalog, running, "seerr", "trending", notes, need_key=True):
+        return []
+    plugin = catalog.get("seerr")
+    key = get_application_api_key("seerr", plugin.config_dir) or ""
+    headers = {"Content-Type": "application/json", "X-Api-Key": key}
+    data, error = _fetch_json(
+        f"http://127.0.0.1:{plugin.port}/api/v1/discover/trending",
+        headers=headers,
+        params={"page": "1", "mediaType": "all", "timeWindow": "week"},
+    )
+    rows = data.get("results") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return _finish_source(
+            notes,
+            "trending",
+            "seerr",
+            [],
+            error or (None if isinstance(data, dict) else "unexpected trending payload"),
+            "no trending titles",
+        )
+    items = _seerr_trending_cards(plugin, rows, host)
+    return _finish_source(
+        notes,
+        "trending",
+        "seerr",
+        items,
+        error,
+        "no trending titles",
+    )
+
+
+def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        media_type = str(row.get("mediaType") or "").lower()
+        if media_type not in {"movie", "tv"}:
+            continue
+        try:
+            media_id = int(row.get("id") or 0)
+        except (TypeError, ValueError):
+            media_id = 0
+        if media_id <= 0:
+            continue
+        ident = (media_type, media_id)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        title = row.get("title") or row.get("name") or f"{media_type} {media_id}"
+        poster = row.get("posterPath") or ""
+        year = str(row.get("releaseDate") or row.get("firstAirDate") or "")[:4]
+        status = seerr_media_status(row)
+        path = f"tv/{media_id}" if media_type == "tv" else f"movie/{media_id}"
+        items.append(
+            {
+                "source": "seerr",
+                "title": title,
+                "detail": year or ("TV" if media_type == "tv" else "Movie"),
+                "poster": f"https://image.tmdb.org/t/p/w185{poster}" if poster else "",
+                "url": f"{_web_url(host, plugin.port)}/{path}",
+                "mediaType": media_type,
+                "mediaId": media_id,
+                "status": status,
+                "can_request": status in {"missing", "partial"},
+            }
+        )
+        if len(items) >= 20:
+            break
+    return items
 
 
 def _seerr_request_cards(
