@@ -28,6 +28,7 @@ const authStatus = ref({
   setup_required: false,
   authenticated: false,
   username: null,
+  avatar_url: null,
 })
 const catalogApps = ref([])
 const UPDATE_TOAST_KEY = 'amm-update-notice'
@@ -132,6 +133,7 @@ async function onAuthSession(data) {
     setup_required: false,
     authenticated: true,
     username: data.username,
+    avatar_url: data.avatar_url || null,
   }
   applySession(data)
   await Promise.all([refreshDashboard(), fetchWizardStatus()])
@@ -144,6 +146,7 @@ async function handleLogout() {
   clearSession()
   authStatus.value.authenticated = false
   authStatus.value.username = null
+  authStatus.value.avatar_url = null
   vpnLive.value = {}
   router.replace({ name: 'home' })
   showToast('Logged out successfully.', 'info')
@@ -223,6 +226,7 @@ async function onWizardDone() {
 function onSettingsSession(data) {
   applySession(data)
   if (data?.username) authStatus.value.username = data.username
+  if (data && 'avatar_url' in data) authStatus.value.avatar_url = data.avatar_url || null
 }
 
 function onSettingsVpn(vpn) {
@@ -423,7 +427,15 @@ onUnmounted(() => {
           Install
         </button>
         <div v-if="authStatus.authenticated" class="user-pill">
-          <span class="user-avatar">{{ authStatus.username?.[0]?.toUpperCase() || 'A' }}</span>
+          <span class="user-avatar" aria-hidden="true">
+            <img
+              v-if="authStatus.avatar_url"
+              :src="authStatus.avatar_url"
+              alt=""
+              class="user-avatar-img"
+            />
+            <template v-else>{{ authStatus.username?.[0]?.toUpperCase() || 'A' }}</template>
+          </span>
           <span class="user-name">{{ authStatus.username }}</span>
           <button @click="handleLogout" class="btn-logout" title="Log out">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

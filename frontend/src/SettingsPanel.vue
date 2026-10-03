@@ -85,6 +85,13 @@ const branding = ref({
   slots: {},
 })
 const brandUploading = ref('')
+const profileAvatar = ref({
+  avatar_url: null,
+  has_avatar: false,
+  recommended: '512 × 512 px (square)',
+  help: 'Shown in the top bar instead of your username initial.',
+})
+const avatarUploading = ref(false)
 const snapshot = ref({})
 const vpnLive = ref({})
 const vpnBusy = ref(false)
@@ -377,6 +384,7 @@ async function loadAll() {
       const me = await readJson(meRes)
       form.value.username = me.username || 'admin'
       form.value.email = me.email || ''
+      applyProfileAvatar(me)
     }
     if (setRes.ok) applySettingsPayload(await readJson(setRes))
     else error.value = 'Could not load settings.'
@@ -494,6 +502,67 @@ async function controlVpn(action) {
   }
 }
 
+function applyProfileAvatar(data) {
+  const payload = data || {}
+  profileAvatar.value = {
+    avatar_url: payload.avatar_url || null,
+    has_avatar: !!payload.has_avatar || !!payload.avatar_url,
+    recommended: payload.recommended || '512 × 512 px (square)',
+    help:
+      payload.help ||
+      'Shown in the top bar instead of your username initial.',
+  }
+}
+
+async function uploadProfileAvatar(event) {
+  const file = event?.target?.files?.[0]
+  if (!file) return
+  avatarUploading.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await apiRequest('/api/auth/avatar', {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not upload profile image.')
+      return
+    }
+    applyProfileAvatar(data)
+    emit('session', data)
+    notice.value = 'Profile image updated.'
+  } catch (err) {
+    error.value = err.message || 'Could not upload profile image.'
+  } finally {
+    avatarUploading.value = false
+    if (event?.target) event.target.value = ''
+  }
+}
+
+async function resetProfileAvatar() {
+  avatarUploading.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await apiRequest('/api/auth/avatar', { method: 'DELETE' })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not remove profile image.')
+      return
+    }
+    applyProfileAvatar(data)
+    emit('session', { ...data, avatar_url: null })
+    notice.value = 'Profile image removed.'
+  } catch (err) {
+    error.value = err.message || 'Could not remove profile image.'
+  } finally {
+    avatarUploading.value = false
+  }
+}
+
 async function saveAccount() {
   saving.value = true
   error.value = ''
@@ -516,6 +585,7 @@ async function saveAccount() {
     }
     form.value.current_password = ''
     form.value.new_password = ''
+    if (data.avatar_url !== undefined) applyProfileAvatar(data)
     emit('session', data)
     notice.value = 'Account updated.'
   } catch (err) {
@@ -1000,6 +1070,46 @@ onBeforeUnmount(() => {
           <span class="accent-badge">ACCOUNT</span>
           <h3>Administrator</h3>
           <p>Current password is required for any change. Email is used for Seerr wiring.</p>
+        </div>
+        <div class="brand-asset-list account-avatar-block">
+          <div class="brand-asset-row">
+            <div class="account-avatar-preview" aria-hidden="true">
+              <img
+                v-if="profileAvatar.has_avatar && profileAvatar.avatar_url"
+                :src="profileAvatar.avatar_url"
+                alt=""
+              />
+              <span v-else>{{ (form.username || 'A').charAt(0).toUpperCase() }}</span>
+            </div>
+            <div class="brand-asset-copy">
+              <strong>Profile image</strong>
+              <span>{{ profileAvatar.help }}</span>
+              <span class="brand-asset-size">Required / recommended: {{ profileAvatar.recommended }}</span>
+              <span class="share-idle">
+                {{ profileAvatar.has_avatar ? 'Custom image in use.' : 'Using your username initial.' }}
+              </span>
+            </div>
+            <div class="brand-asset-actions">
+              <label class="ui-btn ui-btn-ghost brand-upload-btn">
+                {{ avatarUploading ? 'Uploading…' : 'Upload' }}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  :disabled="avatarUploading"
+                  @change="uploadProfileAvatar($event)"
+                />
+              </label>
+              <button
+                v-if="profileAvatar.has_avatar"
+                type="button"
+                class="ui-btn ui-btn-ghost"
+                :disabled="avatarUploading"
+                @click="resetProfileAvatar"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
         </div>
         <form class="form-stack" @submit.prevent="saveAccount">
           <label class="ui-field">Username
@@ -1953,6 +2063,30 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 0.45rem;
   align-items: center;
+}
+.account-avatar-block {
+  margin-bottom: 1.25rem;
+}
+.account-avatar-preview {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.account-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .brand-upload-btn {
   position: relative;

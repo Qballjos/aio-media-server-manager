@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import tarfile
 from datetime import datetime
@@ -90,6 +91,27 @@ def test_backup_keeps_large_databases_and_skips_caches(tmp_path: Path):
     assert not any(n.startswith("apps/") for n in names)
     assert MANIFEST_NAME in names
     assert {"jellyfin", "sonarr", "qbittorrent"}.issubset(set(info["sections"]))
+
+
+def test_backup_skips_runtime_sockets_without_warning(tmp_path: Path):
+    cfg = _settings(tmp_path)
+    root = cfg.config_dir
+    sock_dir = root / "qbittorrent" / "qBittorrent" / "config"
+    sock_dir.mkdir(parents=True)
+    (sock_dir / "qBittorrent.conf").write_text("[Preferences]\n", encoding="utf-8")
+    # Named exclusion (qBittorrent runtime IPC).
+    (sock_dir / "ipc-socket").write_bytes(b"")
+    # Non-regular special file (FIFO) must also be skipped silently.
+    fifo_path = sock_dir / "runtime.pipe"
+    os.mkfifo(fifo_path)
+
+    info = BackupManager(cfg).create_backup()
+
+    names = set(_members(info["path"]))
+    assert "qbittorrent/qBittorrent/config/qBittorrent.conf" in names
+    assert "qbittorrent/qBittorrent/config/ipc-socket" not in names
+    assert "qbittorrent/qBittorrent/config/runtime.pipe" not in names
+    assert info.get("warnings") == []
 
 
 def test_sqlite_snapshot_includes_uncheckpointed_wal(tmp_path: Path):

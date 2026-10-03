@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import sqlite3
+import stat
 import tarfile
 import tempfile
 import time
@@ -65,8 +66,9 @@ _APP_SKIP_DIR_NAMES = {
     "jellyfin": {"metadata", "keyframes", "attachments", "subtitles"},
     "plex": {"media", "metadata", "codecs", "updates"},
 }
-_SKIP_FILE_NAMES = {"logs.db"}
-_SKIP_SUFFIXES = {".mkv", ".mp4", ".avi", ".m4v", ".iso", ".nzb", ".part", ".pid", ".lock", ".tmp"}
+# Runtime / rebuildable names that must never be archived.
+_SKIP_FILE_NAMES = {"logs.db", "ipc-socket"}
+_SKIP_SUFFIXES = {".mkv", ".mp4", ".avi", ".m4v", ".iso", ".nzb", ".part", ".pid", ".lock", ".tmp", ".sock"}
 
 ProgressFn = Callable[[int, int], None]
 
@@ -206,6 +208,12 @@ class BackupManager:
                 full = current / filename
                 rel = (rel_dir / filename).as_posix()
                 if full.is_symlink() or self.is_excluded(rel, excluded_top=excluded_top):
+                    continue
+                # Skip sockets, FIFOs, and device nodes (e.g. qBittorrent ipc-socket).
+                try:
+                    if not stat.S_ISREG(full.lstat().st_mode):
+                        continue
+                except OSError:
                     continue
                 section = self.section_for(rel, mapping)
                 if wanted is not None and section not in wanted:
