@@ -485,6 +485,10 @@ watch(
   }
 )
 watch(calView, (view) => {
+  if (view === 'day') {
+    goToday()
+    return
+  }
   if (view === 'week' || view === 'list') {
     calCursor.value = startOfWeek(calCursor.value)
   }
@@ -1007,9 +1011,17 @@ onUnmounted(() => {
   overflow-x: auto;
   padding-bottom: 0.35rem;
   scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.home-rail::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 .home-tile {
   flex: 0 0 7.25rem;
+  width: 7.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -1019,19 +1031,27 @@ onUnmounted(() => {
   scroll-snap-align: start;
 }
 .home-tile-trending {
-  flex-basis: 7.25rem;
+  flex: 0 0 7.25rem;
+  width: 7.25rem;
+  min-height: 16.5rem;
 }
 .home-tile-link {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
   color: inherit;
   text-decoration: none;
   min-width: 0;
+  flex: 1 1 auto;
 }
 .home-tile-request {
+  width: 100%;
+  margin-top: auto;
+  flex: 0 0 auto;
   font-size: 0.72rem;
-  padding: 0.3rem 0.45rem;
+  min-height: 1.85rem;
+  padding: 0.3rem 0.4rem;
+  white-space: nowrap;
 }
 .home-tile-poster,
 .home-tile-fallback {
@@ -1041,6 +1061,7 @@ onUnmounted(() => {
   object-fit: cover;
   background: var(--bg-surface-elevated);
   border: 1px solid var(--border-subtle);
+  flex: 0 0 auto;
 }
 .home-tile-fallback {
   display: grid;
@@ -1049,19 +1070,25 @@ onUnmounted(() => {
   font-weight: 600;
   color: var(--text-muted);
 }
-.home-tile-title,
-.home-tile-meta {
+.home-tile-title {
   font-size: 0.78rem;
   line-height: 1.25;
+  height: 2.5rem;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  word-break: break-word;
 }
 .home-tile-meta {
-  color: var(--text-muted);
-  -webkit-line-clamp: 1;
   font-size: 0.72rem;
+  line-height: 1.25;
+  height: 0.9rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
 }
 .cal-head {
   display: flex;
@@ -1092,8 +1119,9 @@ onUnmounted(() => {
   min-width: 9rem;
 }
 .cal-views .ui-btn.is-active {
-  border-color: var(--color-info);
-  color: var(--text-main);
+  border-color: rgba(var(--color-primary-rgb), 0.45);
+  background: rgba(var(--color-primary-rgb), 0.14);
+  color: var(--color-primary);
 }
 .cal {
   display: grid;
@@ -1108,6 +1136,13 @@ onUnmounted(() => {
 }
 .cal-mode-week {
   overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.cal-mode-week::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 .cal-mode-week .cal-weekdays,
 .cal-mode-week .cal-week {
@@ -1146,6 +1181,13 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.3rem;
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.cal-day::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 .cal-weeks.is-week .cal-day {
   min-height: 18rem;

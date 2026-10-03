@@ -79,12 +79,12 @@ function onFile(event) {
   gap: 0.75rem;
 }
 .vpn-file {
-  color: #cbd5e1;
+  color: var(--text-main);
   font-size: 0.85rem;
 }
 .vpn-hint {
   margin: 0;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.8rem;
   line-height: 1.4;
 }

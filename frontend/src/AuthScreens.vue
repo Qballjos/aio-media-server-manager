@@ -131,7 +131,7 @@ onMounted(() => {
 
 <template>
       <section v-if="!authReady" class="auth-card-wrapper animate-fade">
-        <p class="wizard-muted" style="text-align:center;color:#94a3b8;">Connecting to manager…</p>
+        <p class="wizard-muted" style="text-align:center;">Connecting to manager…</p>
       </section>
       <section v-else-if="authStatusError" class="auth-card-wrapper animate-fade">
         <div class="glass-card auth-card">

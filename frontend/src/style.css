@@ -12,6 +12,8 @@
   --pill-bg: rgba(30, 41, 59, 0.5);
   --modal-bg: #0f121b;
   --switch-track: rgba(71, 85, 105, 0.7);
+  --menu-bg: rgba(15, 23, 42, 0.96);
+  --overlay-soft: rgba(15, 23, 42, 0.55);
 
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.15);
@@ -62,6 +64,8 @@
   --pill-bg: rgba(241, 245, 249, 0.95);
   --modal-bg: #ffffff;
   --switch-track: rgba(148, 163, 184, 0.55);
+  --menu-bg: #ffffff;
+  --overlay-soft: rgba(241, 245, 249, 0.95);
 
   --border-subtle: rgba(15, 23, 42, 0.1);
   --border-strong: rgba(15, 23, 42, 0.16);
@@ -69,8 +73,8 @@
   --border-active: #ea580c;
 
   --text-main: #0f172a;
-  --text-muted: #64748b;
-  --text-dim: #94a3b8;
+  --text-muted: #475569;
+  --text-dim: #64748b;
   --text-heading: #0f172a;
   --brand-title-gradient: linear-gradient(90deg, #0f172a, #ea580c);
 
@@ -798,6 +802,12 @@ textarea.ui-input::placeholder {
   border-color: var(--border-strong);
 }
 
+.ui-btn-ghost.is-active {
+  background: rgba(var(--color-primary-rgb), 0.14);
+  border-color: rgba(var(--color-primary-rgb), 0.45);
+  color: var(--color-primary);
+}
+
 .ui-btn:disabled,
 .wizard-btn:disabled,
 .btn-primary:disabled,
@@ -909,14 +919,21 @@ textarea.ui-input::placeholder {
 
 .theme-option {
   appearance: none;
+  -webkit-appearance: none;
   border: 1px solid var(--border-subtle);
   background: var(--pill-bg);
   color: var(--text-muted);
   border-radius: 10px;
-  padding: 0.7rem 0.6rem;
-  font: inherit;
+  min-height: 2.6rem;
+  padding: 0.65rem 0.6rem;
+  margin: 0;
+  font-family: inherit;
   font-size: 0.85rem;
   font-weight: 600;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s, color 0.2s, box-shadow 0.2s;
 }

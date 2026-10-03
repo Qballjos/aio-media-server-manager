@@ -692,7 +692,7 @@ onUnmounted(() => {
   padding: clamp(1.25rem, 4vw, 2.25rem);
   background: rgba(19, 23, 34, 0.65);
   backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: 14px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
   position: relative;
@@ -719,7 +719,7 @@ onUnmounted(() => {
   object-fit: cover;
   display: block;
   margin-bottom: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-subtle);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 .wizard-badge {
@@ -737,11 +737,11 @@ onUnmounted(() => {
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0.25rem 0 0.5rem;
-  color: #fff;
+  color: var(--text-heading);
 }
 .wizard-header p,
 .wizard-muted {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.85rem;
   line-height: 1.4;
   margin: 0;
@@ -762,12 +762,12 @@ onUnmounted(() => {
   place-items: center;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #94a3b8;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(15, 23, 42, 0.6);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  background: var(--pill-bg);
 }
 .wizard-steps li.active {
-  color: #fff;
+  color: var(--color-primary-contrast);
   background: var(--gradient-primary);
   border-color: transparent;
   box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.35);
@@ -796,9 +796,9 @@ onUnmounted(() => {
   gap: 0.75rem;
   padding: 0.75rem 0.9rem;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
   cursor: pointer;
   font-size: 0.9rem;
   min-width: 0;
@@ -809,7 +809,7 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
 }
 .wizard-option:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--border-strong);
 }
 .wizard-option.selected {
   border-color: rgba(var(--color-primary-rgb), 0.45);
@@ -821,7 +821,7 @@ onUnmounted(() => {
   height: 36px;
   border-radius: 10px;
   background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -861,12 +861,12 @@ onUnmounted(() => {
   grid-template-columns: 7.5rem 1fr;
   gap: 0.6rem;
   padding: 0.75rem 0.9rem;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
 }
 .wizard-dl dt {
-  color: #64748b;
+  color: var(--text-dim);
   font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -874,7 +874,7 @@ onUnmounted(() => {
 }
 .wizard-dl dd {
   margin: 0;
-  color: #e2e8f0;
+  color: var(--text-main);
   font-size: 0.88rem;
   overflow-wrap: anywhere;
 }
@@ -891,13 +891,13 @@ onUnmounted(() => {
   gap: 0.4rem;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #cbd5e1;
+  color: var(--text-main);
 }
 .wizard-bar {
   height: 10px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--overlay-soft);
+  border: 1px solid var(--border-subtle);
   overflow: hidden;
 }
 .wizard-bar-fill {
@@ -932,8 +932,8 @@ onUnmounted(() => {
   gap: 0.75rem;
   padding: 0.65rem 0.8rem;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
   min-width: 0;
 }
 .wizard-install-name {
@@ -984,7 +984,7 @@ onUnmounted(() => {
 }
 .badge-inactive {
   background: rgba(71, 85, 105, 0.15);
-  color: #94a3b8;
+  color: var(--text-muted);
   border: 1px solid rgba(71, 85, 105, 0.2);
 }
 .wizard-actions {
@@ -1009,7 +1009,7 @@ onUnmounted(() => {
   height: 18px;
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  border-top-color: #fff;
+  border-top-color: var(--color-primary-contrast);
   animation: wizard-spin 0.8s linear infinite;
 }
 .spinner-sm {

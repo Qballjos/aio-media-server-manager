@@ -443,7 +443,7 @@ onUnmounted(() => {
         @session="onAuthSession"
       />
       <section v-else-if="!wizardStatusLoaded" class="auth-card-wrapper animate-fade">
-        <p class="wizard-muted" style="text-align:center;color:#94a3b8;">Loading setup…</p>
+        <p class="wizard-muted" style="text-align:center;">Loading setup…</p>
       </section>
       <WizardPanel
         v-else-if="!wizardCompleted"
