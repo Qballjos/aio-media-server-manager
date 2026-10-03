@@ -25,6 +25,7 @@ QB_RUNTIME_DEFAULTS = {
     "anonymous_mode": False,
     "dht": True,
     "pex": True,
+    # Local peer discovery can expose the LAN / house path — keep off.
     "lsd": False,
     "encryption": 0,
     "upnp": False,
@@ -245,14 +246,23 @@ class QBittorrentClient:
     def set_download_paths(self, save_path: str, incomplete_path: str) -> bool:
         """Set completed/incomplete folders and VPN-safe high-speed client defaults."""
         try:
-            payload = json.dumps(
-                {
-                    **QB_RUNTIME_DEFAULTS,
-                    "save_path": save_path,
-                    "temp_path": incomplete_path,
-                    "temp_path_enabled": True,
-                }
-            )
+            prefs: dict[str, Any] = {
+                **QB_RUNTIME_DEFAULTS,
+                "save_path": save_path,
+                "temp_path": incomplete_path,
+                "temp_path_enabled": True,
+            }
+            try:
+                from core.vpn import vpn_manager
+
+                if vpn_manager.settings.vpn_enabled:
+                    iface = vpn_manager.tunnel_interface_name() or ""
+                    # Prefer/require the WireGuard NIC so trackers never use eth0.
+                    prefs["current_network_interface"] = iface
+                    prefs["current_interface_address"] = ""
+            except Exception:
+                logger.debug("Could not resolve VPN interface for qBittorrent prefs", exc_info=True)
+            payload = json.dumps(prefs)
             resp = self.session.post(
                 f"{self.base_url}/app/setPreferences",
                 data={"json": payload},

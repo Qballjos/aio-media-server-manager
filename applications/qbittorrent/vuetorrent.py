@@ -29,11 +29,25 @@ def vuetorrent_dir(config_dir: Path) -> Path:
 
 
 def vuetorrent_enabled(*, app_settings=None) -> bool:
-    return app_option("qbittorrent", "vuetorrent", default=False, app_settings=app_settings)
+    # Default on: stock WebUI remains available by turning the setting off.
+    return app_option("qbittorrent", "vuetorrent", default=True, app_settings=app_settings)
 
 
 def ui_ready(config_dir: Path) -> bool:
     return (vuetorrent_dir(config_dir) / "index.html").is_file()
+
+
+def ensure_vuetorrent(config_dir: Path, *, app_settings=None) -> bool:
+    """Install VueTorrent when the option is on and files are missing.
+
+    Returns True when the alternative UI root is ready to use.
+    """
+    if not vuetorrent_enabled(app_settings=app_settings):
+        return False
+    if ui_ready(config_dir):
+        return True
+    install_vuetorrent(config_dir, app_settings=app_settings)
+    return ui_ready(config_dir)
 
 
 def installed_meta(config_dir: Path) -> dict[str, Any]:

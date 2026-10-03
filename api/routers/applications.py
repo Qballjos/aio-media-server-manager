@@ -270,8 +270,8 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         )
     elif plugin.name == "qbittorrent":
         notes.append(
-            "VueTorrent is an optional alternative WebUI. Turning it on downloads the latest zip "
-            "from GitHub and restarts qBittorrent. The WebAPI stays the same for *Arr."
+            "VueTorrent is the default WebUI (downloaded from GitHub on install/start). "
+            "Turn it off to use the stock qBittorrent UI. The WebAPI stays the same for *Arr."
         )
     elif plugin.name == "jellyfin":
         notes.append(
@@ -375,14 +375,14 @@ async def patch_application_settings(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="VueTorrent is only available for qBittorrent.",
             )
-        from applications.qbittorrent.vuetorrent import alternative_ui_root, install_vuetorrent, ui_ready
+        from applications.qbittorrent.vuetorrent import alternative_ui_root, ensure_vuetorrent
         from applications.qbittorrent.webui import ensure_webui_localhost_access
         from core.integrations.qbittorrent import target_webui_credentials
 
         try:
-            if body.vuetorrent and not ui_ready(plugin.config_dir):
-                await asyncio.to_thread(install_vuetorrent, plugin.config_dir)
             set_app_option("qbittorrent", "vuetorrent", bool(body.vuetorrent))
+            if body.vuetorrent:
+                await asyncio.to_thread(ensure_vuetorrent, plugin.config_dir)
             username, password = target_webui_credentials()
             ensure_webui_localhost_access(
                 plugin.config_dir,

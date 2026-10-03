@@ -167,6 +167,77 @@ def test_vpn_wraps_wireguard_with_setpriv_uid(tmp_path: Path, monkeypatch):
     assert "qbittorrent-nox" in wrapped
 
 
+def test_vpn_wrap_fails_closed_without_setpriv(tmp_path: Path, monkeypatch):
+    from core.vpn import unwrap_isolation_command
+
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+        vpn_protocol="wireguard",
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_is_linux", lambda: True)
+    monkeypatch.setattr("core.vpn.shutil.which", lambda name: None)
+    try:
+        mgr.wrap_torrent_command(["qbittorrent-nox"])
+        raise AssertionError("expected VpnIsolationError")
+    except VpnIsolationError:
+        pass
+
+    bare = unwrap_isolation_command(
+        [
+            "setpriv",
+            f"--reuid={VPN_APP_UID}",
+            "--regid=1000",
+            "--clear-groups",
+            "--",
+            "env",
+            "HOME=/tmp/ammvpn",
+            "USER=ammvpn",
+            "/config/apps/qbittorrent/qbittorrent-nox",
+            "--webui-port=8081",
+        ]
+    )
+    assert bare[0].endswith("qbittorrent-nox")
+    assert bare[-1] == "--webui-port=8081"
+
+
+def test_uid_routing_applies_ipv6_blackhole_and_output_ks(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+        vpn_protocol="wireguard",
+    )
+    mgr = VpnManager(cfg)
+    calls: list[list[str]] = []
+
+    def fake_ip(args):
+        calls.append(list(args))
+        from subprocess import CompletedProcess
+
+        return CompletedProcess(["ip", *args], 0, "", "")
+
+    def fake_iptables(args):
+        calls.append(["iptables", *args])
+        from subprocess import CompletedProcess
+
+        return CompletedProcess(["iptables", *args], 0, "", "")
+
+    monkeypatch.setattr(mgr, "_main_tunnel_interface_names", lambda: ["wg0"])
+    monkeypatch.setattr(mgr, "_ip", fake_ip)
+    monkeypatch.setattr(mgr, "_host_iptables", fake_iptables)
+    monkeypatch.setattr(mgr, "_host_ip6tables", fake_iptables)
+    assert mgr._apply_uid_wireguard_routing() is None
+    flat = [" ".join(c) for c in calls]
+    assert any("uidrange" in row and "blackhole" in row and "-6" in row for row in flat)
+    assert any("AMM-UID-KS" in row and "owner" in row for row in flat)
+    assert any("REJECT" in row for row in flat)
+
+
 def test_main_tunnel_interface_names_does_not_cache_empty(tmp_path: Path, monkeypatch):
     cfg = Settings(
         config_dir=tmp_path / "config",

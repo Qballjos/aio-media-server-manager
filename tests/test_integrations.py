@@ -18,7 +18,11 @@ from core.integrations.hooks import (
 )
 from core.integrations.nzbget import NZBGetClient
 from core.integrations.prowlarr import ProwlarrClient
-from applications.qbittorrent.webui import ensure_webui_localhost_access, qbittorrent_pbkdf2
+from applications.qbittorrent.webui import (
+    ensure_vpn_network_interface,
+    ensure_webui_localhost_access,
+    qbittorrent_pbkdf2,
+)
 from core.integrations.qbittorrent import QBittorrentClient
 from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient, write_bootstrap_ini
@@ -437,9 +441,27 @@ def test_qbittorrent_profile_bypasses_localhost_auth(tmp_path: Path):
     assert "Session\\LSDEnabled=false" in text
     assert "Session\\GlobalMaxRatio=-1" in text
     assert "Bittorrent\\Encryption=0" in text
+    assert "Connection\\InterfaceListenIPv6=false" in text
+    assert "Connection\\UPnP=false" in text
     nested = tmp_path / "qBittorrent" / "config" / "qBittorrent.conf"
     assert nested.is_file()
     assert "10.200.200.0/24" in nested.read_text(encoding="utf-8")
+
+
+def test_qbittorrent_binds_vpn_interface_and_disables_ipv6(tmp_path: Path):
+    ensure_webui_localhost_access(tmp_path)
+    ensure_vpn_network_interface(tmp_path, "wg0")
+    text = (tmp_path / "qBittorrent" / "qBittorrent.conf").read_text(encoding="utf-8")
+    assert "Session\\Interface=wg0" in text
+    assert "Session\\InterfaceName=wg0" in text
+    assert "Connection\\Interface=wg0" in text
+    assert "Connection\\InterfaceName=wg0" in text
+    assert "Connection\\InterfaceListenIPv6=false" in text
+    ensure_vpn_network_interface(tmp_path, None)
+    cleared = (tmp_path / "qBittorrent" / "qBittorrent.conf").read_text(encoding="utf-8")
+    assert "Session\\Interface=\n" in cleared or "Session\\Interface=\r\n" in cleared or "Session\\Interface=" in cleared
+    assert "Session\\InterfaceName=" in cleared
+    assert "Session\\Interface=wg0" not in cleared
 
 
 def test_qbittorrent_conf_quotes_vuetorrent_path_with_spaces(tmp_path: Path):

@@ -660,10 +660,19 @@ def reclaim_leftover_processes(cmd: Sequence[str] | None) -> int:
 def _reclaim_token(cmd: Sequence[str] | None) -> str:
     if not cmd:
         return ""
+    bare = list(cmd)
     try:
-        path = Path(cmd[0]).resolve()
+        from core.vpn import unwrap_isolation_command
+
+        bare = unwrap_isolation_command(bare) or bare
+    except Exception:
+        bare = list(cmd)
+    if not bare:
+        return ""
+    try:
+        path = Path(bare[0]).resolve()
     except OSError:
-        path = Path(cmd[0])
+        path = Path(bare[0])
     parent = path.parent
     if parent.name in {"bin", "Scripts"} and parent.parent.name == "venv":
         return str(parent.parent.parent)

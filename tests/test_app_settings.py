@@ -49,9 +49,12 @@ def test_qbittorrent_vuetorrent_option_roundtrip(tmp_path: Path):
         install_dir=tmp_path / "apps",
     )
     cfg.initialise()
-    assert app_option("qbittorrent", "vuetorrent", app_settings=cfg) is False
+    # VueTorrent is on by default when the preference has never been set.
+    assert app_option("qbittorrent", "vuetorrent", default=True, app_settings=cfg) is True
+    set_app_option("qbittorrent", "vuetorrent", False, app_settings=cfg)
+    assert app_option("qbittorrent", "vuetorrent", default=True, app_settings=cfg) is False
     set_app_option("qbittorrent", "vuetorrent", True, app_settings=cfg)
-    assert app_option("qbittorrent", "vuetorrent", app_settings=cfg) is True
+    assert app_option("qbittorrent", "vuetorrent", default=True, app_settings=cfg) is True
 
 
 def test_patch_application_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -121,7 +124,7 @@ def test_patch_qbittorrent_vuetorrent_switch(tmp_path: Path, monkeypatch: pytest
     client = TestClient(create_app())
     resp = client.get("/api/applications/qbittorrent/settings")
     assert resp.status_code == 200
-    assert resp.json()["vuetorrent"] is False
+    assert resp.json()["vuetorrent"] is True
 
     resp = client.patch(
         "/api/applications/qbittorrent/settings",
@@ -131,3 +134,10 @@ def test_patch_qbittorrent_vuetorrent_switch(tmp_path: Path, monkeypatch: pytest
     body = resp.json()
     assert body["vuetorrent"] is True
     assert body["vuetorrent_installed"] is True
+
+    resp = client.patch(
+        "/api/applications/qbittorrent/settings",
+        json={"vuetorrent": False, "restart": False},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["vuetorrent"] is False

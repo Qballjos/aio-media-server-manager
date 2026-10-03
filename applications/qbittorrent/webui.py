@@ -20,11 +20,14 @@ _WEBUI_LOCAL_DEFAULTS = {
 _PREFERENCES_CLIENT_DEFAULTS = {
     "Connection\\UPnP": "false",
     "Connection\\PortRangeMin": "6881",
+    # Never listen/announce on IPv6 — house IPv6 is a common VPN bypass.
+    "Connection\\InterfaceListenIPv6": "false",
     "Connection\\GlobalDLLimit": "-1",
     "Connection\\GlobalUPLimit": "-1",
     "Downloads\\PreAllocation": "true",
     "Downloads\\UseIncompleteExtension": "true",
     "Queueing\\QueueingEnabled": "false",
+    # DHT/PeX are fine once traffic is bound to wg; LSD finds LAN peers (leak risk).
     "Bittorrent\\DHT": "true",
     "Bittorrent\\PeX": "true",
     "Bittorrent\\LSD": "false",
@@ -33,6 +36,7 @@ _PREFERENCES_CLIENT_DEFAULTS = {
     "Advanced\\AnonymousMode": "false",
     "Advanced\\AnnounceToAllTrackers": "true",
     "Advanced\\osCache": "true",
+    "Advanced\\listenOnIPv6Address": "false",
 }
 
 _BITTORRENT_SESSION_DEFAULTS = {
@@ -56,6 +60,32 @@ _BITTORRENT_SESSION_DEFAULTS = {
     "Session\\MultiConnectionsPerIp": "true",
     "Session\\IgnoreSlowTorrentsForQueueing": "true",
 }
+
+
+def ensure_vpn_network_interface(profile_dir: Path, iface: str | None) -> None:
+    """Bind qBittorrent's BitTorrent sockets to the VPN interface (or clear the bind)."""
+    name = (iface or "").strip()
+    session = {
+        "Session\\Interface": name,
+        "Session\\InterfaceName": name,
+        "Session\\InterfaceAddress": "",
+    }
+    preferences = {
+        "Connection\\Interface": name,
+        "Connection\\InterfaceName": name,
+        "Connection\\InterfaceAddress": "",
+        "Connection\\InterfaceListenIPv6": "false",
+        "Advanced\\listenOnIPv6Address": "false",
+        "Advanced\\networkInterface": name,
+        "Advanced\\networkInterfaceName": name,
+    }
+    for conf in qbit_conf_paths(profile_dir):
+        conf.parent.mkdir(parents=True, exist_ok=True)
+        text = conf.read_text(encoding="utf-8") if conf.is_file() else ""
+        lines = text.splitlines()
+        lines = _upsert_ini_section(lines, "[BitTorrent]", session)
+        lines = _upsert_ini_section(lines, "[Preferences]", preferences)
+        conf.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def qbit_conf_paths(profile_dir: Path) -> tuple[Path, Path]:

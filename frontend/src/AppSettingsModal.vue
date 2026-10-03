@@ -316,9 +316,9 @@ watch(
             <div class="ui-switch-copy">
               <strong>VueTorrent WebUI</strong>
               <span>
-                Use
+                On by default. Uses
                 <a href="https://github.com/VueTorrent/VueTorrent" target="_blank" rel="noopener noreferrer">VueTorrent</a>
-                instead of the stock qBittorrent WebUI. *Arr still uses the same WebAPI.
+                instead of the stock qBittorrent WebUI. Turn off for the stock UI. *Arr still uses the same WebAPI.
               </span>
               <span v-if="settingsMeta.vuetorrent_version" class="settings-hint">
                 Installed {{ settingsMeta.vuetorrent_version }}

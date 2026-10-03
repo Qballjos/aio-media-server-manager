@@ -41,10 +41,33 @@ TORRENT_BRIDGE_HOST = _NS_HOST_IP
 _DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191}
 _FALLBACK_DNS = ("1.1.1.1", "9.9.9.9")
 _KS_CHAIN = "AMM-KS"
+_UID_KS_CHAIN = "AMM-UID-KS"
 _VPN_TABLE = 200
 _VPN_UID_RULE_PRIORITY = 100
 _VPN_RULE_PRIORITY = 100
 _VPN_LOCAL_RULE_PRIORITY = 99
+_VPN_UID_V6_BLACKHOLE_PRIORITY = 98
+
+
+def unwrap_isolation_command(cmd: list[str] | None) -> list[str]:
+    """Strip setpriv / netns / env wrappers so reclaim can match the real binary."""
+    out = list(cmd or [])
+    if len(out) >= 4 and out[0] == "ip" and out[1] == "netns" and out[2] == "exec":
+        out = out[4:]
+    if out and Path(out[0]).name == "setpriv":
+        if "--" in out:
+            out = out[out.index("--") + 1 :]
+        else:
+            idx = 1
+            while idx < len(out) and out[idx].startswith("-"):
+                idx += 1
+            out = out[idx:]
+    if out and Path(out[0]).name == "env":
+        idx = 1
+        while idx < len(out) and "=" in out[idx] and not out[idx].startswith("-"):
+            idx += 1
+        out = out[idx:]
+    return out
 
 
 class VpnIsolationError(RuntimeError):
@@ -499,8 +522,12 @@ class VpnManager:
             return cmd
         if self.settings.vpn_protocol == "wireguard":
             if shutil.which("setpriv") is None:
-                logger.error("setpriv not found; cannot isolate torrent apps onto WireGuard.")
-                return cmd
+                # Fail closed: never start torrent apps on the house WAN.
+                logger.error("setpriv not found; refusing to start tunneled apps without WireGuard UID isolation.")
+                raise VpnIsolationError(
+                    "setpriv (util-linux) is required to isolate qBittorrent/Prowlarr/Flaresolverr "
+                    "onto WireGuard. Install util-linux or turn VPN off in Settings → Network."
+                )
             self._ensure_vpn_app_user()
             home = f"/tmp/{VPN_APP_USER}"
             gid = self._vpn_app_gid()
@@ -517,7 +544,9 @@ class VpnManager:
                 *cmd,
             ]
         if shutil.which("ip") is None:
-            return cmd
+            raise VpnIsolationError(
+                "iproute2 (`ip`) is required for OpenVPN network-namespace isolation."
+            )
         return ["ip", "netns", "exec", TORRENT_NETNS, *cmd]
 
     def assert_can_start_tunneled_app(self, name: str) -> None:
@@ -1021,9 +1050,97 @@ class VpnManager:
                 return f"Could not install UID routing rule: {(rule.stderr or '')[:180]}"
         # Ensure VPN UID can still reach loopback services (Arr on 127.0.0.1).
         self._ip(["route", "replace", "127.0.0.0/8", "dev", "lo", "table", str(_VPN_TABLE)])
+        # IPv4 policy routing does not cover IPv6 — blackhole IPv6 for the VPN UID
+        # so Happy Eyeballs / DHT cannot leak the house address.
+        self._apply_uid_ipv6_blackhole()
+        self._apply_uid_output_kill_switch(wg)
         return None
 
+    def _apply_uid_ipv6_blackhole(self) -> None:
+        """Block all IPv6 from the VPN UID (IPv4 tunnel only)."""
+        self._ip(
+            [
+                "-6",
+                "rule",
+                "del",
+                "uidrange",
+                f"{VPN_APP_UID}-{VPN_APP_UID}",
+                "blackhole",
+                "priority",
+                str(_VPN_UID_V6_BLACKHOLE_PRIORITY),
+            ]
+        )
+        result = self._ip(
+            [
+                "-6",
+                "rule",
+                "add",
+                "uidrange",
+                f"{VPN_APP_UID}-{VPN_APP_UID}",
+                "blackhole",
+                "priority",
+                str(_VPN_UID_V6_BLACKHOLE_PRIORITY),
+            ]
+        )
+        if result.returncode == 0 or "File exists" in (result.stderr or ""):
+            return
+        # Fallback: blackhole default in table 200 + uid lookup.
+        self._ip(["-6", "route", "replace", "blackhole", "default", "table", str(_VPN_TABLE)])
+        fallback = self._ip(
+            [
+                "-6",
+                "rule",
+                "add",
+                "uidrange",
+                f"{VPN_APP_UID}-{VPN_APP_UID}",
+                "lookup",
+                str(_VPN_TABLE),
+                "priority",
+                str(_VPN_UID_RULE_PRIORITY),
+            ]
+        )
+        if fallback.returncode != 0 and "File exists" not in (fallback.stderr or ""):
+            logger.warning(
+                "Could not install IPv6 blackhole for VPN uid %s: %s",
+                VPN_APP_UID,
+                (result.stderr or fallback.stderr or "")[:180],
+            )
+
+    def _apply_uid_output_kill_switch(self, wg_iface: str) -> None:
+        """Reject clear-net OUTPUT from the VPN UID (defense in depth beyond policy routing)."""
+        for helper in (self._host_iptables, self._host_ip6tables):
+            helper(["-N", _UID_KS_CHAIN])
+            helper(["-F", _UID_KS_CHAIN])
+            helper(["-A", _UID_KS_CHAIN, "-o", "lo", "-j", "RETURN"])
+            helper(["-A", _UID_KS_CHAIN, "-o", "wg+", "-j", "RETURN"])
+            helper(["-A", _UID_KS_CHAIN, "-o", "tun+", "-j", "RETURN"])
+            if wg_iface and wg_iface not in {"wg+", "tun+"}:
+                helper(["-A", _UID_KS_CHAIN, "-o", wg_iface, "-j", "RETURN"])
+            reject = helper(
+                ["-A", _UID_KS_CHAIN, "-j", "REJECT", "--reject-with", "icmp-net-unreachable"]
+            )
+            if reject.returncode != 0:
+                # ip6tables may want icmp6-adm-prohibited
+                helper(["-A", _UID_KS_CHAIN, "-j", "REJECT"])
+            jump = ["OUTPUT", "-m", "owner", "--uid-owner", str(VPN_APP_UID), "-j", _UID_KS_CHAIN]
+            if helper(["-C", *jump]).returncode != 0:
+                result = helper(["-I", "OUTPUT", "1", *jump[1:]])
+                if result.returncode != 0:
+                    logger.warning(
+                        "VPN UID OUTPUT kill switch unavailable (%s). "
+                        "Install iptables owner match (xt_owner) for leak protection.",
+                        (result.stderr or "")[:160],
+                    )
+
+    def _clear_uid_output_kill_switch(self) -> None:
+        jump = ["OUTPUT", "-m", "owner", "--uid-owner", str(VPN_APP_UID), "-j", _UID_KS_CHAIN]
+        for helper in (self._host_iptables, self._host_ip6tables):
+            helper(["-D", *jump])
+            helper(["-F", _UID_KS_CHAIN])
+            helper(["-X", _UID_KS_CHAIN])
+
     def _clear_uid_wireguard_routing(self) -> None:
+        self._clear_uid_output_kill_switch()
         self._ip(
             [
                 "rule",
@@ -1050,7 +1167,33 @@ class VpnManager:
                 str(_VPN_UID_RULE_PRIORITY - 1),
             ]
         )
+        self._ip(
+            [
+                "-6",
+                "rule",
+                "del",
+                "uidrange",
+                f"{VPN_APP_UID}-{VPN_APP_UID}",
+                "blackhole",
+                "priority",
+                str(_VPN_UID_V6_BLACKHOLE_PRIORITY),
+            ]
+        )
+        self._ip(
+            [
+                "-6",
+                "rule",
+                "del",
+                "uidrange",
+                f"{VPN_APP_UID}-{VPN_APP_UID}",
+                "lookup",
+                str(_VPN_TABLE),
+                "priority",
+                str(_VPN_UID_RULE_PRIORITY),
+            ]
+        )
         self._ip(["route", "flush", "table", str(_VPN_TABLE)])
+        self._ip(["-6", "route", "flush", "table", str(_VPN_TABLE)])
 
     def _wireguard_down_main(self, conf: Path | None = None) -> None:
         target = conf if conf and conf.is_file() else self.config_path
@@ -1116,6 +1259,15 @@ class VpnManager:
             return subprocess.CompletedProcess(args, 1, "", "iptables not found")
         try:
             return subprocess.run([iptables, *args], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return subprocess.CompletedProcess(args, 1, "", str(exc))
+
+    def _host_ip6tables(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+        ip6tables = shutil.which("ip6tables")
+        if ip6tables is None:
+            return subprocess.CompletedProcess(args, 1, "", "ip6tables not found")
+        try:
+            return subprocess.run([ip6tables, *args], capture_output=True, text=True, timeout=5)
         except (OSError, subprocess.TimeoutExpired) as exc:
             return subprocess.CompletedProcess(args, 1, "", str(exc))
 
@@ -1928,6 +2080,89 @@ class VpnManager:
             return
         self._forward_local_ports()
         self._write_netns_resolv(self._dns_for_netns())
+
+    def tunnel_interface_name(self) -> str | None:
+        """Primary WireGuard/tun device used for torrent isolation, if any."""
+        if self.settings.vpn_protocol == "wireguard":
+            names = self._main_tunnel_interface_names()
+            return names[0] if names else None
+        names = self._tunnel_interface_names()
+        return names[0] if names else None
+
+    def reclaim_clearnet_tunneled_processes(self) -> list[str]:
+        """Kill tunneled-app processes that are not running as the VPN UID.
+
+        Leftover house-network copies (started before VPN, or after a failed
+        reclaim) are the most common real-world IP leak with WireGuard UID mode.
+        """
+        if not self.uses_uid_isolation():
+            return []
+        try:
+            import psutil
+        except ImportError:
+            return []
+        from applications.catalog import ApplicationCatalog
+        from core.supervisor import reclaim_leftover_processes
+
+        catalog = ApplicationCatalog(app_settings=self.settings)
+        leaked: list[str] = []
+        for name in sorted(VPN_TUNNELED_APPS):
+            if not catalog.has(name):
+                continue
+            plugin = catalog.get(name)
+            if not plugin.is_installed():
+                continue
+            exe = plugin.executable_path()
+            if exe is None:
+                continue
+            token_path = str(exe)
+            exe_name = exe.name
+            mine = {os.getpid(), os.getppid()}
+            found_wrong_uid = False
+            try:
+                processes = list(psutil.process_iter(["pid", "cmdline", "uids"]))
+            except (psutil.Error, PermissionError, OSError):
+                processes = []
+            for proc in processes:
+                pid = proc.info.get("pid")
+                if not pid or pid in mine:
+                    continue
+                cmdline = proc.info.get("cmdline") or []
+                joined = " ".join(cmdline)
+                if token_path not in joined and exe_name not in joined:
+                    continue
+                # Ignore unrelated processes that only mention the name in args.
+                if not any(token_path in part or part.endswith(exe_name) for part in cmdline):
+                    continue
+                uids = proc.info.get("uids")
+                real_uid = getattr(uids, "real", None) if uids is not None else None
+                if real_uid is None:
+                    try:
+                        real_uid = proc.uids().real
+                    except (psutil.Error, AttributeError):
+                        continue
+                if int(real_uid) == VPN_APP_UID:
+                    continue
+                found_wrong_uid = True
+                try:
+                    logger.error(
+                        "Killing clearnet %s PID %s (uid %s; expected VPN uid %s)",
+                        name,
+                        pid,
+                        real_uid,
+                        VPN_APP_UID,
+                    )
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=3)
+                    except psutil.TimeoutExpired:
+                        proc.kill()
+                except (psutil.Error, OSError):
+                    continue
+            reclaim_leftover_processes([token_path])
+            if found_wrong_uid:
+                leaked.append(name)
+        return leaked
 
     def _netns_bind_path(self) -> Path:
         return Path(f"/var/run/netns/{TORRENT_NETNS}")

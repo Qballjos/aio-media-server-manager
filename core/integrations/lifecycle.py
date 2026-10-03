@@ -81,10 +81,10 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
 
 
 def _reclaim_tunneled_command(cmd: list[str]) -> list[str]:
-    """Strip `ip netns exec <ns>` so leftover host-network copies still match."""
-    if len(cmd) >= 5 and cmd[0] == "ip" and cmd[1] == "netns" and cmd[2] == "exec":
-        return list(cmd[4:])
-    return list(cmd)
+    """Strip setpriv / netns / env wrappers so leftover host-network copies still match."""
+    from core.vpn import unwrap_isolation_command
+
+    return unwrap_isolation_command(cmd)
 
 
 async def stop_tunneled_apps() -> list[str]:
@@ -128,6 +128,20 @@ async def enforce_vpn_isolation() -> list[str]:
             vpn_manager.refresh_local_forwards()
         except Exception as exc:
             logger.debug("VPN WebUI forward refresh failed: %s", exc)
+        # Kill any leftover clearnet copies that bypass WireGuard UID routing.
+        try:
+            leaked = vpn_manager.reclaim_clearnet_tunneled_processes()
+        except Exception as exc:
+            logger.warning("Clearnet tunneled-process reclaim failed: %s", exc)
+            leaked = []
+        if leaked:
+            restarted = await start_tunneled_apps(leaked)
+            if restarted:
+                logger.warning(
+                    "Restarted %s under VPN isolation after clearing a house-network process.",
+                    ", ".join(restarted),
+                )
+            return leaked
         return []
     stopped = await stop_tunneled_apps()
     if stopped:

@@ -67,7 +67,7 @@ Typical *Arr deployments become a Compose file per application: Sonarr, Radarr, 
 
 **Operations.** `config` / `downloads` / `media` with `PUID` / `PGID` and hardlink checks. Optional WireGuard or OpenVPN isolation for qBittorrent, Prowlarr, and Flaresolverr (Usenet stays off the tunnel). Optional VAAPI / QSV / NVIDIA transcoding. Optional Cloudflare Tunnel (`cloudflared` inside this appliance). Configuration backups with verify, per-app restore, and a schedule.
 
-**Open UI.** Each catalog card opens `http://<host>:<app-port>`. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent can use the stock WebUI or [VueTorrent](https://github.com/VueTorrent/VueTorrent) from Catalog → qBittorrent → Settings (same port and WebAPI).
+**Open UI.** Each catalog card opens `http://<host>:<app-port>`. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent uses [VueTorrent](https://github.com/VueTorrent/VueTorrent) by default (same port and WebAPI); Catalog → qBittorrent → Settings can switch back to the stock WebUI.
 
 ---
 
@@ -79,7 +79,7 @@ Seventeen applications are defined. Install only what you select. Entries that c
 |------|----------------|
 | Indexers | Prowlarr, Flaresolverr (x86_64) |
 | Automation | Sonarr, Radarr, Lidarr |
-| Downloaders | SABnzbd, NZBGet, qBittorrent (optional VueTorrent WebUI) |
+| Downloaders | SABnzbd, NZBGet, qBittorrent (VueTorrent WebUI by default) |
 | Media servers | Jellyfin, Plex (may share the same libraries) |
 | Requests | Seerr, Shelfmark |
 | Books | Grimmory |
