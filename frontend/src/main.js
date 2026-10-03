@@ -4,7 +4,9 @@ import './dashboard.css'
 import App from './App.vue'
 import { router } from './router'
 import { initPwaInstall } from './pwaInstall.js'
+import { initTheme } from './theme.js'
 
+initTheme()
 initPwaInstall()
 
 if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {

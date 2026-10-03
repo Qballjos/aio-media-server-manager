@@ -13,6 +13,11 @@ import {
   promptInstall,
   subscribePwaInstall,
 } from './pwaInstall.js'
+import {
+  THEME_OPTIONS,
+  getThemePreference,
+  setThemePreference,
+} from './theme.js'
 
 const props = defineProps({
   systemInfo: { type: Object, default: null },
@@ -76,12 +81,19 @@ const widgetDebug = ref(false)
 const pwaStandalone = ref(false)
 const pwaCanInstall = ref(false)
 const pwaIos = ref(false)
+const themePreference = ref(getThemePreference())
 let stopPwa = null
 
 function refreshPwaInstall() {
   pwaStandalone.value = isStandaloneDisplay()
   pwaCanInstall.value = canPromptInstall()
   pwaIos.value = isIosDevice()
+}
+
+function chooseTheme(pref) {
+  setThemePreference(pref)
+  themePreference.value = getThemePreference()
+  notice.value = `Theme set to ${themePreference.value}.`
 }
 
 async function installPwaFromSettings() {
@@ -706,6 +718,26 @@ onBeforeUnmount(() => {
     <p v-if="notice" class="share-meta">{{ notice }}</p>
 
     <template v-if="section === 'account'">
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <span class="accent-badge">APPEARANCE</span>
+          <h3>Theme</h3>
+          <p>Dark, light, or follow the system preference. Saved in this browser.</p>
+        </div>
+        <div class="theme-picker" role="group" aria-label="Color theme">
+          <button
+            v-for="item in THEME_OPTIONS"
+            :key="item[0]"
+            type="button"
+            class="theme-option"
+            :class="{ 'is-active': themePreference === item[0] }"
+            :aria-pressed="themePreference === item[0]"
+            @click="chooseTheme(item[0])"
+          >
+            {{ item[1] }}
+          </button>
+        </div>
+      </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">ACCOUNT</span>
@@ -1334,11 +1366,11 @@ onBeforeUnmount(() => {
   font-size: 1.25rem;
   font-weight: 700;
   margin: 0;
-  color: #fff;
+  color: var(--text-heading);
 }
 .section-subtitle {
   font-size: 0.82rem;
-  color: #64748b;
+  color: var(--text-dim);
   margin: 0.2rem 0 0;
 }
 .settings-nav {
@@ -1347,9 +1379,9 @@ onBeforeUnmount(() => {
   gap: 0.45rem;
 }
 .settings-nav-btn {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
   padding: 0.4rem 0.85rem;
   border-radius: 999px;
   font-size: 0.8rem;
@@ -1358,9 +1390,9 @@ onBeforeUnmount(() => {
   text-decoration: none;
 }
 .settings-nav-btn.active {
-  color: #e0f2fe;
-  background: rgba(14, 165, 233, 0.18);
-  border-color: rgba(56, 189, 248, 0.45);
+  color: var(--color-primary-soft);
+  background: rgba(var(--color-primary-rgb), 0.16);
+  border-color: rgba(var(--color-primary-rgb), 0.45);
 }
 .settings-card {
   padding: 1.4rem 1.5rem;
@@ -1369,10 +1401,10 @@ onBeforeUnmount(() => {
 .settings-card-head h3 {
   margin: 0.4rem 0 0.35rem;
   font-size: 1.05rem;
-  color: #fff;
+  color: var(--text-heading);
 }
 .settings-card-head p {
-  color: #94a3b8;
+  color: var(--text-muted);
   margin: 0 0 1rem;
   max-width: min(62ch, 100%);
 }
@@ -1383,8 +1415,8 @@ onBeforeUnmount(() => {
   letter-spacing: 0.08em;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
-  background: rgba(99, 102, 241, 0.2);
-  color: #a5b4fc;
+  background: rgba(var(--color-primary-rgb), 0.18);
+  color: var(--color-primary-soft);
 }
 .form-stack {
   display: flex;
@@ -1401,12 +1433,12 @@ onBeforeUnmount(() => {
 .info-grid div {
   padding: 0.75rem 0.85rem;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
   min-width: 0;
 }
 .info-grid dt {
-  color: #64748b;
+  color: var(--text-dim);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -1414,7 +1446,7 @@ onBeforeUnmount(() => {
 }
 .info-grid dd {
   margin: 0.3rem 0 0;
-  color: #e2e8f0;
+  color: var(--text-main);
   font-size: 0.9rem;
   overflow-wrap: anywhere;
 }
@@ -1549,7 +1581,7 @@ onBeforeUnmount(() => {
 .backup-progress span {
   display: block;
   height: 100%;
-  background: var(--color-primary, #6366f1);
+  background: var(--color-primary, #f97316);
   transition: width 0.3s ease;
 }
 .backup-upload {
