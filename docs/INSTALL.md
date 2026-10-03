@@ -79,7 +79,7 @@ The manager UI listens on **8080**. Child applications bind in the same containe
 
 ## Environment
 
-Copy [`.env.example`](../.env.example) for a native install. Compose bind-mounts `$HOME/aio-media-manager` as `/data` and sets `PUID` / `PGID`, `TZ`, and the in-container `/data` paths. Values you change in **Settings** (timezone, log level, PUID, VPN, update schedules) persist in `/config/amm_config.json`. Environment variables still win for bind mounts and most compose pins; VPN enable/protocol/profile from Settings survive even when compose sets `AMM_VPN_ENABLED=false`.
+Copy [`.env.example`](../.env.example) for a native install. Compose bind-mounts `$HOME/aio-media-manager` as `/data` and sets `PUID` / `PGID`, `TZ`, and the in-container `/data` paths. Values you change in **Settings** (timezone, log level, PUID, VPN, update schedules) persist in `/config/amm_config.json`. Branding from **Settings → Visuals** (title, accent color, custom icons) is stored under `/config/branding/`. Environment variables still win for bind mounts and most compose pins; VPN enable/protocol/profile from Settings survive even when compose sets `AMM_VPN_ENABLED=false`.
 
 | Variable | Purpose |
 |----------|---------|

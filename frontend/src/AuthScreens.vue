@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { apiError, apiJson, applySession } from './api.js'
+import { brandLogoUrl, brandTitle } from './branding.js'
 import { useToasts } from './useToasts.js'
 
 const emit = defineEmits(['status', 'session'])
@@ -149,8 +150,8 @@ onMounted(() => {
           <div class="card-glow"></div>
           <div class="card-header-accent">
             <img
-              src="/logo-aio-media-manager.png"
-              alt="AIO Media Server Manager"
+              :src="brandLogoUrl"
+              :alt="brandTitle"
               class="auth-logo"
             />
             <span class="accent-badge">SETUP</span>
@@ -227,8 +228,8 @@ onMounted(() => {
           <div class="card-glow"></div>
           <div class="card-header-accent">
             <img
-              src="/logo-aio-media-manager.png"
-              alt="AIO Media Server Manager"
+              :src="brandLogoUrl"
+              :alt="brandTitle"
               class="auth-logo"
             />
             <span class="accent-badge">SIGN IN</span>

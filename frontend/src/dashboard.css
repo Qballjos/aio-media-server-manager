@@ -89,12 +89,6 @@
   overflow-wrap: anywhere;
 }
 
-.brand-tagline {
-  font-size: 0.75rem;
-  color: var(--text-dim);
-  font-weight: 400;
-}
-
 .nav-metrics {
   display: flex;
   align-items: center;
@@ -1429,10 +1423,6 @@
 
 @media (max-width: 720px) {
   .hide-compact {
-    display: none;
-  }
-
-  .brand-tagline {
     display: none;
   }
 

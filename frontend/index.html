@@ -15,16 +15,43 @@
     <script>
       (function () {
         try {
+          var root = document.documentElement
           var pref = localStorage.getItem('amm-theme') || 'dark'
           var theme = pref
           if (pref === 'system') {
             theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
           }
           if (theme !== 'light') theme = 'dark'
-          document.documentElement.setAttribute('data-theme', theme)
-          document.documentElement.style.colorScheme = theme
+          root.setAttribute('data-theme', theme)
+          root.style.colorScheme = theme
           var meta = document.querySelector('meta[name="theme-color"]')
           if (meta) meta.setAttribute('content', theme === 'light' ? '#f4f6fb' : '#0b0f17')
+
+          var accent = localStorage.getItem('amm-accent') || ''
+          if (/^#[0-9a-fA-F]{6}$/.test(accent)) {
+            var n = parseInt(accent.slice(1), 16)
+            var r = (n >> 16) & 255
+            var g = (n >> 8) & 255
+            var b = n & 255
+            var mix = function (from, to, amount) { return Math.round(from + (to - from) * amount) }
+            var hex = function (rr, gg, bb) {
+              return '#' + [rr, gg, bb].map(function (v) {
+                return Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')
+              }).join('')
+            }
+            var hover = hex(mix(r, 0, 0.18), mix(g, 0, 0.18), mix(b, 0, 0.18))
+            var soft = hex(mix(r, 255, 0.28), mix(g, 255, 0.28), mix(b, 255, 0.28))
+            var rgb = r + ', ' + g + ', ' + b
+            root.style.setProperty('--color-primary', accent.toLowerCase())
+            root.style.setProperty('--color-primary-hover', hover)
+            root.style.setProperty('--color-primary-soft', soft)
+            root.style.setProperty('--color-primary-rgb', rgb)
+            root.style.setProperty('--gradient-primary', 'linear-gradient(135deg, ' + hover + ' 0%, ' + soft + ' 100%)')
+            root.style.setProperty('--border-active', accent.toLowerCase())
+            root.style.setProperty('--border-hover', 'rgba(' + rgb + ', 0.35)')
+            root.style.setProperty('--shadow-glow', '0 0 20px rgba(' + rgb + ', 0.28)')
+            root.style.setProperty('--glow-orb', 'rgba(' + rgb + ', 0.18)')
+          }
         } catch (e) {}
       })()
     </script>

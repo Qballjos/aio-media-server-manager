@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from api.routers import applications as applications_router
 from api.routers import auth as auth_router
 from api.routers import backups as backups_router
+from api.routers import branding as branding_router
 from api.routers import catalog as catalog_router
 from api.routers import diagnostics as diagnostics_router
 from api.routers import health as health_router
@@ -169,6 +170,7 @@ def create_app() -> FastAPI:
     app.include_router(logs_router.router)
     app.include_router(system_router.router)
     app.include_router(settings_router.router)
+    app.include_router(branding_router.router)
     app.include_router(updates_router.router)
     app.include_router(wizard_router.router)
     app.include_router(backups_router.router)

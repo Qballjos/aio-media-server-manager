@@ -19,6 +19,7 @@ import {
 } from './api.js'
 import { useToasts } from './useToasts.js'
 import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInstall.js'
+import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
 
 const { toasts, showToast } = useToasts()
 const showPwaInstall = ref(false)
@@ -312,6 +313,7 @@ async function installPwa() {
 let stopPwa = null
 
 onMounted(() => {
+  loadBranding()
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
   stopClock = startGuardedInterval(() => {
@@ -335,14 +337,13 @@ onUnmounted(() => {
       <div class="nav-brand">
         <div class="logo-orb">
           <img
-            src="/logo-aio-media-manager.png"
-            alt="AIO Media Server Manager"
+            :src="brandHeaderUrl"
+            :alt="brandTitle"
             class="brand-logo"
           />
         </div>
         <div class="brand-titles">
-          <h1 class="brand-name">AIO Media Server Manager</h1>
-          <span class="brand-tagline">One appliance</span>
+          <h1 class="brand-name">{{ brandTitle }}</h1>
         </div>
       </div>
 

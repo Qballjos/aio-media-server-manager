@@ -5,9 +5,12 @@ import App from './App.vue'
 import { router } from './router'
 import { initPwaInstall } from './pwaInstall.js'
 import { initTheme } from './theme.js'
+import { initAccentFromCache, loadBranding } from './branding.js'
 
 initTheme()
+initAccentFromCache()
 initPwaInstall()
+loadBranding()
 
 if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

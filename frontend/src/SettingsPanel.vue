@@ -18,6 +18,11 @@ import {
   getThemePreference,
   setThemePreference,
 } from './theme.js'
+import {
+  ACCENT_PRESETS,
+  DEFAULT_ACCENT,
+  applyBranding,
+} from './branding.js'
 
 const props = defineProps({
   systemInfo: { type: Object, default: null },
@@ -68,8 +73,18 @@ const form = ref({
   update_apply_schedule: 'off',
   update_time: '04:00',
   update_weekday: 0,
-  update_day_of_month: 1
+  update_day_of_month: 1,
+  brand_title: 'AIO Media Server Manager',
+  accent_color: DEFAULT_ACCENT,
 })
+const branding = ref({
+  title: 'AIO Media Server Manager',
+  accent_color: DEFAULT_ACCENT,
+  default_accent: DEFAULT_ACCENT,
+  accent_custom: false,
+  slots: {},
+})
+const brandUploading = ref('')
 const snapshot = ref({})
 const vpnLive = ref({})
 const vpnBusy = ref(false)
@@ -94,6 +109,135 @@ function chooseTheme(pref) {
   setThemePreference(pref)
   themePreference.value = getThemePreference()
   notice.value = `Theme set to ${themePreference.value}.`
+}
+
+function applyBrandingPayload(data) {
+  const payload = data || {}
+  branding.value = {
+    title: payload.title || 'AIO Media Server Manager',
+    accent_color: payload.accent_color || DEFAULT_ACCENT,
+    default_accent: payload.default_accent || DEFAULT_ACCENT,
+    accent_custom: !!payload.accent_custom,
+    slots: payload.slots || {},
+  }
+  form.value.brand_title = branding.value.title
+  form.value.accent_color = branding.value.accent_color
+  applyBranding(payload)
+}
+
+function normalizeAccentInput(value) {
+  let text = String(value || '').trim()
+  if (!text) return DEFAULT_ACCENT
+  if (!text.startsWith('#')) text = `#${text}`
+  return text.toLowerCase()
+}
+
+async function saveBrandTitle() {
+  saving.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await apiRequest('/api/branding', {
+      method: 'PATCH',
+      body: JSON.stringify({ title: form.value.brand_title }),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not save title.')
+      return
+    }
+    applyBrandingPayload(data)
+    notice.value = 'Brand title saved.'
+  } catch (err) {
+    error.value = err.message || 'Could not save title.'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveAccentColor(next) {
+  const raw = String(next != null ? next : (form.value.accent_color || '')).trim()
+  const reset = !raw || raw.toLowerCase() === 'default'
+  let accent = DEFAULT_ACCENT
+  if (!reset) {
+    accent = normalizeAccentInput(raw)
+    if (!/^#[0-9a-f]{6}$/.test(accent)) {
+      error.value = 'Accent must be a hex color like #f97316.'
+      return
+    }
+  }
+  form.value.accent_color = accent
+  saving.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await apiRequest('/api/branding', {
+      method: 'PATCH',
+      body: JSON.stringify({ accent_color: reset ? 'default' : accent }),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not save accent color.')
+      return
+    }
+    applyBrandingPayload(data)
+    notice.value = reset ? 'Accent color reset to default.' : 'Accent color saved.'
+  } catch (err) {
+    error.value = err.message || 'Could not save accent color.'
+  } finally {
+    saving.value = false
+  }
+}
+
+function resetAccentColor() {
+  return saveAccentColor('default')
+}
+
+async function uploadBrandSlot(slot, event) {
+  const file = event?.target?.files?.[0]
+  if (!file) return
+  brandUploading.value = slot
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await apiRequest(`/api/branding/${slot}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not upload image.')
+      return
+    }
+    applyBrandingPayload(data)
+    notice.value = `${branding.value.slots?.[slot]?.label || 'Image'} updated.`
+  } catch (err) {
+    error.value = err.message || 'Could not upload image.'
+  } finally {
+    brandUploading.value = ''
+    if (event?.target) event.target.value = ''
+  }
+}
+
+async function resetBrandSlot(slot) {
+  brandUploading.value = slot
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await apiRequest(`/api/branding/${slot}`, { method: 'DELETE' })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not reset image.')
+      return
+    }
+    applyBrandingPayload(data)
+    notice.value = `${data.slots?.[slot]?.label || 'Image'} reset to default.`
+  } catch (err) {
+    error.value = err.message || 'Could not reset image.'
+  } finally {
+    brandUploading.value = ''
+  }
 }
 
 async function installPwaFromSettings() {
@@ -216,6 +360,7 @@ function applySettingsPayload(data) {
   form.value.backup_time = bak.time || '03:30'
   form.value.backup_weekday = bak.weekday ?? 0
   form.value.backup_day_of_month = bak.day_of_month || 1
+  if (data.branding) applyBrandingPayload(data.branding)
 }
 
 async function loadAll() {
@@ -678,7 +823,7 @@ function formatWhen(ts) {
 watch(section, (s, prev) => {
   error.value = ''
   notice.value = ''
-  if (prev && (s === 'network' || s === 'homepage')) refreshSettings()
+  if (prev && (s === 'network' || s === 'homepage' || s === 'visuals')) refreshSettings()
 })
 
 onMounted(() => {
@@ -717,11 +862,11 @@ onBeforeUnmount(() => {
     <div v-if="error" class="ui-alert ui-alert-error">{{ error }}</div>
     <p v-if="notice" class="share-meta">{{ notice }}</p>
 
-    <template v-if="section === 'account'">
+    <template v-if="section === 'visuals'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <span class="accent-badge">APPEARANCE</span>
-          <h3>Theme</h3>
+          <span class="accent-badge">THEME</span>
+          <h3>Color mode</h3>
           <p>Dark, light, or follow the system preference. Saved in this browser.</p>
         </div>
         <div class="theme-picker" role="group" aria-label="Color theme">
@@ -738,6 +883,118 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <span class="accent-badge">ACCENT</span>
+          <h3>Accent color</h3>
+          <p>Highlight color for buttons, switches, and active states. Saved on this appliance for every browser.</p>
+        </div>
+        <div class="accent-picker">
+          <label class="accent-swatch-input" title="Pick a color">
+            <input
+              v-model="form.accent_color"
+              type="color"
+              @change="saveAccentColor(form.accent_color)"
+            />
+          </label>
+          <label class="ui-field accent-hex-field">Hex
+            <input
+              v-model="form.accent_color"
+              class="ui-input font-mono"
+              maxlength="7"
+              placeholder="#f97316"
+              @change="saveAccentColor(form.accent_color)"
+            />
+          </label>
+          <button type="button" class="ui-btn ui-btn-primary" :disabled="saving" @click="saveAccentColor(form.accent_color)">
+            {{ saving ? 'Saving…' : 'Save accent' }}
+          </button>
+          <button
+            v-if="branding.accent_custom"
+            type="button"
+            class="ui-btn ui-btn-ghost"
+            :disabled="saving"
+            @click="resetAccentColor"
+          >
+            Reset
+          </button>
+        </div>
+        <div class="accent-presets" role="group" aria-label="Accent presets">
+          <button
+            v-for="item in ACCENT_PRESETS"
+            :key="item[0]"
+            type="button"
+            class="accent-preset"
+            :class="{ 'is-active': form.accent_color === item[0] }"
+            :style="{ '--preset': item[0] }"
+            :title="item[1]"
+            :aria-label="item[1]"
+            @click="saveAccentColor(item[0])"
+          ></button>
+        </div>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <span class="accent-badge">BRANDING</span>
+          <h3>Name and icons</h3>
+          <p>Rename the header title and replace the header icon, login logo, and favicon. Images are stored on this appliance.</p>
+        </div>
+        <form class="form-stack" @submit.prevent="saveBrandTitle">
+          <label class="ui-field">Header title
+            <input
+              v-model="form.brand_title"
+              class="ui-input"
+              maxlength="64"
+              required
+              placeholder="AIO Media Server Manager"
+            />
+          </label>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">
+            {{ saving ? 'Saving…' : 'Save title' }}
+          </button>
+        </form>
+        <div class="brand-asset-list">
+          <div
+            v-for="(slot, key) in branding.slots"
+            :key="key"
+            class="brand-asset-row"
+          >
+            <img :src="slot.url" :alt="slot.label" class="brand-asset-preview" />
+            <div class="brand-asset-copy">
+              <strong>{{ slot.label }}</strong>
+              <span>{{ slot.help }}</span>
+              <span class="brand-asset-size">Required / recommended: {{ slot.recommended }}</span>
+              <span class="share-idle">{{ slot.custom ? 'Custom image in use.' : 'Using the built-in default.' }}</span>
+            </div>
+            <div class="brand-asset-actions">
+              <label class="ui-btn ui-btn-ghost brand-upload-btn">
+                {{ brandUploading === key ? 'Uploading…' : 'Upload' }}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/x-icon,.ico"
+                  :disabled="brandUploading === key"
+                  @change="uploadBrandSlot(key, $event)"
+                />
+              </label>
+              <button
+                v-if="slot.custom"
+                type="button"
+                class="ui-btn ui-btn-ghost"
+                :disabled="brandUploading === key"
+                @click="resetBrandSlot(key)"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+          <p v-if="!Object.keys(branding.slots || {}).length" class="share-idle">
+            Loading branding options…
+          </p>
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="section === 'account'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">ACCOUNT</span>
@@ -1630,6 +1887,119 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
   font-size: 0.78rem;
   color: #cbd5e1;
+}
+.brand-asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+.brand-asset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1rem;
+  align-items: flex-start;
+  padding: 0.9rem;
+  border-radius: 12px;
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
+}
+.brand-asset-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.brand-asset-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+.brand-asset-copy strong {
+  color: var(--text-heading);
+  font-size: 0.92rem;
+}
+.brand-asset-copy span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.brand-asset-size {
+  color: var(--color-primary-soft) !important;
+  font-weight: 600;
+}
+.brand-asset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+.brand-upload-btn {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.brand-upload-btn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.accent-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+.accent-swatch-input {
+  width: 3rem;
+  height: 2.6rem;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: var(--pill-bg);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.accent-swatch-input input {
+  width: 140%;
+  height: 140%;
+  margin: -20%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+}
+.accent-hex-field {
+  flex: 1 1 8rem;
+  min-width: 8rem;
+  max-width: 12rem;
+  margin: 0;
+}
+.accent-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.9rem;
+}
+.accent-preset {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background: var(--preset);
+  cursor: pointer;
+  padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+.accent-preset.is-active {
+  border-color: var(--text-heading);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.35);
 }
 @media (max-width: 640px) {
   .settings-card {

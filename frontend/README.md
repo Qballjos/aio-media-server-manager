@@ -18,15 +18,17 @@ npm run dev      # http://127.0.0.1:5173 — proxies /api and /health to the con
 npm run build    # production assets → dist/ (also built inside the Docker image)
 ```
 
-Routes are hash-based (`#/home`, `#/catalog`, `#/settings/backups`) so refresh keeps the screen. Catalog search and filters live in the query string.
+Routes are hash-based (`#/home`, `#/catalog`, `#/settings/visuals`, `#/settings/backups`) so refresh keeps the screen. Catalog search and filters live in the query string.
 
 | Module | Role |
 |--------|------|
 | `App.vue` | Shell: header, auth gate, polling |
 | `HomepagePanel.vue` | Home Dashboard |
 | `CatalogView.vue` | Catalog grid |
-| `SettingsPanel.vue` | Appliance settings |
+| `SettingsPanel.vue` | Appliance settings (including Visuals) |
+| `theme.js` | Dark / light / system preference (`localStorage`) |
+| `branding.js` | Title, accent color, and custom image URLs from `/api/branding` |
 | `api.js` | Shared fetch helper (CSRF, bearer token, JSON vs binary, FastAPI errors) |
-| `style.css` | Shared `ui-*` controls (match the first-run wizard) |
+| `style.css` | Shared `ui-*` controls and theme CSS variables |
 
 See the repository [README](../README.md) and [docs/USAGE.md](../docs/USAGE.md).

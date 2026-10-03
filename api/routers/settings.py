@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
+from core import branding as branding_mod
 from core.cloudflare_tunnel import cloudflare_tunnel
 from core.crypto import secret_store
 from core.integrations.credentials import set_application_api_key
@@ -211,6 +212,7 @@ def public_settings() -> dict[str, Any]:
         "bind_mounts_editable": False,
         "updates": _public_updates(),
         "backups": _public_backups(),
+        "branding": branding_mod.public_branding(),
     }
 
 

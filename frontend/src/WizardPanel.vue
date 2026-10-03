@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
+import { brandLogoUrl, brandTitle } from './branding.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 
 const emit = defineEmits(['done'])
@@ -379,8 +380,8 @@ onUnmounted(() => {
       <div class="wizard-glow"></div>
       <div class="wizard-header">
         <img
-          src="/logo-aio-media-manager.png"
-          alt="AIO Media Server Manager"
+          :src="brandLogoUrl"
+          :alt="brandTitle"
           class="wizard-logo"
         />
         <span class="wizard-badge">FIRST-RUN SETUP</span>

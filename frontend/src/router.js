@@ -5,6 +5,7 @@ const emptyView = { name: 'EmptyView', render: () => null }
 /** Canonical Settings hashes (`#/settings/<id>`). */
 export const SETTINGS_SECTIONS = [
   'account',
+  'visuals',
   'system',
   'updates',
   'backups',
@@ -23,10 +24,14 @@ export const SETTINGS_ALIASES = {
   remote: 'network',
   integrations: 'homepage',
   debug: 'diagnostics',
+  theming: 'visuals',
+  appearance: 'visuals',
+  branding: 'visuals',
 }
 
 export const SETTINGS_NAV = [
   ['account', 'Account'],
+  ['visuals', 'Visuals'],
   ['system', 'System'],
   ['updates', 'Updates'],
   ['backups', 'Backups'],

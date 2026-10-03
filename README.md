@@ -63,6 +63,8 @@ Typical *Arr deployments become a Compose file per application: Sonarr, Radarr, 
 
 **Home.** Launcher plus calendar, downloads, recently added, and Seerr search. Widget diagnostics live under **Settings → Homepage** (empty tiles explained; API keys never shown).
 
+**Visuals.** Dark / light / system theme, accent color, custom header title, and replaceable header icon, login logo, and favicon under **Settings → Visuals**.
+
 **Operations.** `config` / `downloads` / `media` with `PUID` / `PGID` and hardlink checks. Optional WireGuard or OpenVPN isolation for qBittorrent, Prowlarr, and Flaresolverr (Usenet stays off the tunnel). Optional VAAPI / QSV / NVIDIA transcoding. Optional Cloudflare Tunnel (`cloudflared` inside this appliance). Configuration backups with verify, per-app restore, and a schedule.
 
 **Open UI.** Each catalog card opens `http://<host>:<app-port>`. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent can use the stock WebUI or [VueTorrent](https://github.com/VueTorrent/VueTorrent) from Catalog → qBittorrent → Settings (same port and WebAPI).

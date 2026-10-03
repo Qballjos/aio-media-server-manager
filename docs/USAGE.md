@@ -16,7 +16,7 @@ The manager is a **progressive web app**. After you sign in, you can pin it like
 - **Android (Chrome):** menu → **Install app**. Chromium shows an **Install** control in the header when the browser allows it. HTTPS is required for that prompt (Cloudflare Tunnel or a reverse proxy). On `http://nas-ip:8080` use the browser menu if Install appears.
 - **Settings → Account** repeats these steps.
 
-The home-screen icon is named **AIO Media** and opens Home / Catalog / Settings without the browser chrome.
+The home-screen icon defaults to **AIO Media** and opens Home / Catalog / Settings without the browser chrome. You can change the title, favicon, and icons under **Settings → Visuals**.
 
 ## 2. First-run wizard
 
@@ -133,17 +133,32 @@ Recyclarr is a one-shot CLI. Auto-Wire and **Sync** on the catalog card run `rec
 
 ## 8. Settings
 
-The **Settings** nav item is the admin page for the appliance (separate from per-app catalog cards), at `#/settings/account` (and `#/settings/backups`, `#/settings/network`, …). Older hashes such as `#/settings/vpn` still redirect. Bind mounts and the manager listen address stay in compose/env.
+The **Settings** nav item is the admin page for the appliance (separate from per-app catalog cards), at `#/settings/account` (and `#/settings/visuals`, `#/settings/backups`, `#/settings/network`, …). Older hashes such as `#/settings/vpn`, `#/settings/theming`, and `#/settings/appearance` still redirect. Bind mounts and the manager listen address stay in compose/env.
 
 | Section | What it does |
 |---------|----------------|
-| Account | Username, email, password (current password required) |
+| Account | Username, email, password (current password required); install-as-app help for phones/tablets |
+| Visuals | Dark / light / system color mode (per browser); accent color; header title; header icon, login logo, and favicon uploads |
 | System | Timezone, log level, PUID/PGID, host CPU/RAM, storage paths (read-only) |
 | Updates | Catalog and appliance check, apply schedules, Check now, optional GitHub token |
 | Backups | Schedule, retention, backup now, verify, per-app restore, download/upload, delete |
 | Network | VPN (enable = kill switch; Start/Stop/Restart tunnel; disable = house network for qBittorrent/Prowlarr/Flaresolverr; protocol, config) and Cloudflare Tunnel (token, trusted proxies) |
 | Homepage | Jellyfin and Seerr API keys for Home widgets, plus widget debug |
 | Diagnostics | Error ring and time-limited support share URL (`/debug/{token}`), including VPN tunnel status. Host dumps and `/api/system` process logs use the same switch; `curl` from localhost on the appliance always works. |
+
+### Visuals
+
+**Settings → Visuals** (`#/settings/visuals`) controls how the manager looks:
+
+- **Color mode** — Dark, Light, or System. Stored in this browser only (`localStorage`).
+- **Accent color** — Highlight color for buttons, switches, and active states. Pick with the color control, hex field, or presets. Saved on the appliance under `/config/branding/` so every browser sees the same accent. Reset restores the default orange (`#f97316`).
+- **Header title** — Renames the top-bar title and browser tab title (max 64 characters).
+- **Images** — Upload and reset custom assets (PNG/WebP/JPEG/GIF; favicon also ICO). Recommended sizes are shown in the UI:
+  - Header icon: **512 × 512 px** square (shown at 44 × 44)
+  - Logo (login / setup): **512 × 512 px** square (shown ~72 × 72)
+  - Favicon: **32 × 32** or **64 × 64 px** square (180 × 180 also works for home-screen icons)
+
+Custom title, accent, and images live in `/config/branding/` and are included with configuration backups.
 
 Do not leave the support share URL on after you finish a support conversation. Cloudflare Tunnel and VPN start only after first-run, so the wizard is LAN-only.
 
