@@ -113,13 +113,16 @@ def test_patch_qbittorrent_vuetorrent_switch(tmp_path: Path, monkeypatch: pytest
     cat_mod.catalog._settings = settings
     refresh_live_catalogs()
 
+    installs: list[str] = []
+
     def fake_install(config_dir, *, app_settings=None):
+        installs.append("install")
         root = vuetorrent_dir(config_dir)
         public = root / "public"
         public.mkdir(parents=True, exist_ok=True)
-        (public / "index.html").write_text("<html>vt</html>", encoding="utf-8")
-        (root / "version.txt").write_text("v2.test\n", encoding="utf-8")
-        return {"version": "v2.test"}
+        (public / "index.html").write_text(f"<html>vt{len(installs)}</html>", encoding="utf-8")
+        (root / "version.txt").write_text(f"v2.test.{len(installs)}\n", encoding="utf-8")
+        return {"version": f"v2.test.{len(installs)}"}
 
     monkeypatch.setattr("applications.qbittorrent.vuetorrent.install_vuetorrent", fake_install)
 
@@ -128,6 +131,7 @@ def test_patch_qbittorrent_vuetorrent_switch(tmp_path: Path, monkeypatch: pytest
     assert resp.status_code == 200
     assert resp.json()["vuetorrent"] is True
 
+    # Already default-on with no files yet → first enable path installs.
     resp = client.patch(
         "/api/applications/qbittorrent/settings",
         json={"vuetorrent": True, "restart": False},
@@ -136,6 +140,24 @@ def test_patch_qbittorrent_vuetorrent_switch(tmp_path: Path, monkeypatch: pytest
     body = resp.json()
     assert body["vuetorrent"] is True
     assert body["vuetorrent_installed"] is True
+    assert len(installs) == 1
+
+    # Still on + no update flag → do not reinstall.
+    resp = client.patch(
+        "/api/applications/qbittorrent/settings",
+        json={"vuetorrent": True, "restart": False},
+    )
+    assert resp.status_code == 200
+    assert len(installs) == 1
+
+    # Explicit update replaces files.
+    resp = client.patch(
+        "/api/applications/qbittorrent/settings",
+        json={"vuetorrent_update": True, "restart": False},
+    )
+    assert resp.status_code == 200, resp.text
+    assert len(installs) == 2
+    assert resp.json()["vuetorrent"] is True
 
     resp = client.patch(
         "/api/applications/qbittorrent/settings",
@@ -143,3 +165,11 @@ def test_patch_qbittorrent_vuetorrent_switch(tmp_path: Path, monkeypatch: pytest
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["vuetorrent"] is False
+
+    # Turning back on force-reinstalls latest.
+    resp = client.patch(
+        "/api/applications/qbittorrent/settings",
+        json={"vuetorrent": True, "restart": False},
+    )
+    assert resp.status_code == 200
+    assert len(installs) == 3

@@ -59,7 +59,7 @@ The manager UI listens on **8080**. Child applications bind in the same containe
 | Application | Default port |
 |-------------|--------------|
 | Manager UI | 8080 |
-| qBittorrent | 8081 |
+| qBittorrent | 8081 (VueTorrent WebUI by default under `/config/qbittorrent/vuetorrent`) |
 | Shelfmark | 8084 |
 | SABnzbd | 8085 |
 | Jellyfin | 8096 |

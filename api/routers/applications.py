@@ -38,6 +38,7 @@ class AppSettingsPatch(BaseModel):
     port: int | None = None
     autostart: bool | None = None
     vuetorrent: bool | None = None
+    vuetorrent_update: bool | None = None
     api_key: str | None = None
     restart: bool = True
 
@@ -271,7 +272,8 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
     elif plugin.name == "qbittorrent":
         notes.append(
             "VueTorrent is the default WebUI (downloaded from GitHub on install/start). "
-            "Turn it off to use the stock qBittorrent UI. The WebAPI stays the same for *Arr."
+            "Turn it off for the stock UI, or use Update VueTorrent to replace files with the latest release. "
+            "The WebAPI stays the same for *Arr."
         )
     elif plugin.name == "jellyfin":
         notes.append(
@@ -347,7 +349,13 @@ async def patch_application_settings(
         plugin = catalog.get(name)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if body.port is None and body.autostart is None and body.vuetorrent is None and body.api_key is None:
+    if (
+        body.port is None
+        and body.autostart is None
+        and body.vuetorrent is None
+        and body.vuetorrent_update is None
+        and body.api_key is None
+    ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No settings to change.")
 
     taken = {item.name: item.port for item in catalog.all_plugins()}
@@ -369,20 +377,32 @@ async def patch_application_settings(
         plugin.apply_listen_port(body.port)
 
     vuetorrent_changed = False
-    if body.vuetorrent is not None:
+    if body.vuetorrent is not None or body.vuetorrent_update:
         if plugin.name != "qbittorrent":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="VueTorrent is only available for qBittorrent.",
             )
-        from applications.qbittorrent.vuetorrent import alternative_ui_root, ensure_vuetorrent
+        from applications.qbittorrent.vuetorrent import (
+            alternative_ui_root,
+            ensure_vuetorrent,
+            vuetorrent_enabled,
+        )
         from applications.qbittorrent.webui import ensure_webui_localhost_access
         from core.integrations.qbittorrent import target_webui_credentials
 
         try:
-            set_app_option("qbittorrent", "vuetorrent", bool(body.vuetorrent))
-            if body.vuetorrent:
-                await asyncio.to_thread(ensure_vuetorrent, plugin.config_dir)
+            previously_on = vuetorrent_enabled()
+            enable = previously_on if body.vuetorrent is None else bool(body.vuetorrent)
+            if body.vuetorrent_update:
+                enable = True
+            set_app_option("qbittorrent", "vuetorrent", enable)
+            if enable:
+                # Fresh enable or explicit update → replace files with latest release.
+                force = bool(body.vuetorrent_update) or not previously_on
+                await asyncio.to_thread(
+                    ensure_vuetorrent, plugin.config_dir, force=force
+                )
             username, password = target_webui_credentials()
             ensure_webui_localhost_access(
                 plugin.config_dir,

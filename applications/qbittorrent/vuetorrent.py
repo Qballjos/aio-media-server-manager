@@ -38,14 +38,17 @@ def ui_ready(config_dir: Path) -> bool:
     return (vuetorrent_dir(config_dir) / "public" / "index.html").is_file()
 
 
-def ensure_vuetorrent(config_dir: Path, *, app_settings=None) -> bool:
+def ensure_vuetorrent(config_dir: Path, *, app_settings=None, force: bool = False) -> bool:
     """Install VueTorrent when the option is on and files are missing.
+
+    With ``force=True``, replace the existing tree with the latest GitHub release
+    (used for explicit updates / turning the feature back on).
 
     Returns True when the alternative UI root is ready to use.
     """
     if not vuetorrent_enabled(app_settings=app_settings):
         return False
-    if ui_ready(config_dir):
+    if ui_ready(config_dir) and not force:
         return True
     install_vuetorrent(config_dir, app_settings=app_settings)
     return ui_ready(config_dir)

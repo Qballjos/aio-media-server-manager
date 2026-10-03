@@ -76,7 +76,15 @@ Process status on Catalog refreshes about every 5 seconds while that page is ope
 
 qBittorrent on localhost is allowed without the WebUI login prompt. **Open UI** from another LAN machine uses the manager username and password (seeded into `qBittorrent.conf` before start). Restart qBittorrent once after upgrading if an older run already created a temporary WebUI password. Auto-Wire applies VPN-safe client defaults (encryption preferred, LSD off, high connection limits, unlimited ratio/seed time so Sonarr/Radarr/Lidarr own seeding).
 
-**VueTorrent:** Installed by default with qBittorrent ([VueTorrent](https://github.com/VueTorrent/VueTorrent) zip into the config dir, alternative WebUI folder). Same listen port (`8081` by default) and the same WebAPI, so *Arr download clients keep working. Catalog → qBittorrent → Settings → **VueTorrent WebUI** can turn it off for the stock UI (files stay on disk). If Open UI fails, turn VueTorrent off, save (qBittorrent restarts on the stock UI), then enable it again.
+**VueTorrent:** Installed by default with qBittorrent ([VueTorrent](https://github.com/VueTorrent/VueTorrent)). Files live under `/config/qbittorrent/vuetorrent` with `public/index.html` inside that folder. qBittorrent’s alternative WebUI **RootFolder** must be `/config/qbittorrent/vuetorrent` (the parent of `public/`), not `…/public`. Same listen port (`8081` by default) and the same WebAPI, so *Arr download clients keep working.
+
+Catalog → qBittorrent → Settings:
+
+- **VueTorrent WebUI** — on by default; turn off for the stock UI (files stay on disk). Turning it back **on** re-downloads the latest GitHub release and overwrites the `vuetorrent` folder.
+- **Update VueTorrent** — same re-download/overwrite while leaving the switch on; qBittorrent is restarted afterward.
+- VueTorrent is **not** covered by Catalog **Update** (that only updates `qbittorrent-nox`).
+
+If Open UI shows *Unacceptable file type, only regular file is allowed*, the layout is wrong or RootFolder points at `public/`. Use **Update VueTorrent**, or turn VueTorrent off, save, then enable it again.
 
 Bazarr runs on the bundled **Python 3.13** interpreter (not the manager’s 3.14), with Pillow and the rest of its requirements. Recreate the container from a current image if Bazarr previously failed with `PIL` / `ModuleNotFoundError`. Form login uses the manager username and password (Bazarr stores an MD5 hex of the password in YAML; type the same plaintext you used in the wizard).
 

@@ -26,6 +26,7 @@ const settingsLoading = ref(false)
 const settingsError = ref('')
 
 const actionLoading = ref({})
+const vuetorrentUpdating = ref(false)
 
 async function loadSettings(service) {
   settingsError.value = ''
@@ -74,6 +75,36 @@ function closeAppSettings() {
   recyclarrMeta.value = null
   settingsError.value = ''
   emit('close')
+}
+
+async function updateVueTorrent() {
+  if (!settingsApp.value || settingsApp.value.name !== 'qbittorrent') return
+  vuetorrentUpdating.value = true
+  settingsError.value = ''
+  try {
+    const res = await apiRequest(`/api/applications/qbittorrent/settings`, {
+      method: 'PATCH',
+      body: JSON.stringify({ vuetorrent: true, vuetorrent_update: true, restart: true }),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      settingsError.value = apiError(data, 'Could not update VueTorrent.')
+      return
+    }
+    settingsForm.value.vuetorrent = true
+    settingsMeta.value = data
+    showToast(
+      data.vuetorrent_version
+        ? `VueTorrent updated to ${data.vuetorrent_version}`
+        : 'VueTorrent updated',
+      'success'
+    )
+    emit('saved')
+  } catch (err) {
+    settingsError.value = err.message || 'Could not update VueTorrent.'
+  } finally {
+    vuetorrentUpdating.value = false
+  }
 }
 
 async function saveAppSettings() {
@@ -318,17 +349,28 @@ watch(
               <span>
                 On by default. Uses
                 <a href="https://github.com/VueTorrent/VueTorrent" target="_blank" rel="noopener noreferrer">VueTorrent</a>
-                instead of the stock qBittorrent WebUI. Turn off for the stock UI. *Arr still uses the same WebAPI.
+                instead of the stock qBittorrent WebUI. Turn off for the stock UI. Turning back on re-downloads the latest release. *Arr still uses the same WebAPI.
               </span>
               <span v-if="settingsMeta.vuetorrent_version" class="settings-hint">
                 Installed {{ settingsMeta.vuetorrent_version }}
               </span>
+              <button
+                v-if="settingsForm.vuetorrent"
+                type="button"
+                class="ui-btn ui-btn-ghost"
+                style="margin-top: 0.4rem; align-self: flex-start"
+                :disabled="vuetorrentUpdating || settingsLoading"
+                @click="updateVueTorrent"
+              >
+                {{ vuetorrentUpdating ? 'Updating VueTorrent…' : 'Update VueTorrent' }}
+              </button>
             </div>
             <button
               type="button"
               class="ui-switch"
               role="switch"
               :aria-checked="settingsForm.vuetorrent ? 'true' : 'false'"
+              :disabled="vuetorrentUpdating"
               @click="settingsForm.vuetorrent = !settingsForm.vuetorrent"
             >
               <span class="ui-switch-thumb"></span>
