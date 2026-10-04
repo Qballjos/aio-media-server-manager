@@ -1,28 +1,31 @@
 name: CI
 
-# Image builds live in docker.yml (skipped on docs-only edits).
-# Pages builds live in docs.yml (runs on docs-only edits).
+# Tests for application code. Docs/wiki → docs.yml. Images → docker.yml.
 on:
   push:
     branches: [main]
     tags: ["v*"]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "mkdocs.yml"
-      - "requirements-docs.txt"
-      - "scripts/prepare-docs-site.sh"
-      - ".github/workflows/docs.yml"
-      - "logo-aio-media-manager.png"
+    paths:
+      - "main.py"
+      - "pyproject.toml"
+      - "poetry.lock"
+      - "api/**"
+      - "applications/**"
+      - "core/**"
+      - "frontend/**"
+      - "tests/**"
+      - ".github/workflows/ci.yml"
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - "mkdocs.yml"
-      - "requirements-docs.txt"
-      - "scripts/prepare-docs-site.sh"
-      - ".github/workflows/docs.yml"
-      - "logo-aio-media-manager.png"
+    paths:
+      - "main.py"
+      - "pyproject.toml"
+      - "poetry.lock"
+      - "api/**"
+      - "applications/**"
+      - "core/**"
+      - "frontend/**"
+      - "tests/**"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
 
 permissions:
