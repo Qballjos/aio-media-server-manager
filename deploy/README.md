@@ -8,10 +8,11 @@ AIO Media Server Manager is **one process tree** — typically **one container**
 |------|--------|
 | Docker (recommended) | [DOCKER.md](DOCKER.md) |
 | Native Linux / LXC | [LINUX.md](LINUX.md) |
-| Unraid | [UNRAID.md](UNRAID.md) |
+| Unraid | [UNRAID.md](UNRAID.md), [`unraid/`](unraid/) (CA template + profile) |
 | Synology Container Manager | [SYNOLOGY.md](SYNOLOGY.md), [`synology/`](synology/) |
 | TrueNAS SCALE | [TRUENAS.md](TRUENAS.md) |
 | Optional Cloudflare Tunnel | [CLOUDFLARE.md](CLOUDFLARE.md) |
+| Secure published apps with Access | [CLOUDFLARE_ACCESS.md](CLOUDFLARE_ACCESS.md) |
 
 Overview: [docs/INSTALL.md](../docs/INSTALL.md) · first-run: [docs/USAGE.md](../docs/USAGE.md)
 

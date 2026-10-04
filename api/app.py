@@ -27,6 +27,7 @@ from api.routers import system as system_router
 from api.routers import updates as updates_router
 from api.routers import wizard as wizard_router
 from api.routers import vpn as vpn_router
+from api.routers import cloudflare_hostnames as cloudflare_hostnames_router
 from api.routers import cloudflare_tunnel as cloudflare_tunnel_router
 from core.settings import settings
 
@@ -176,6 +177,7 @@ def create_app() -> FastAPI:
     app.include_router(backups_router.router)
     app.include_router(vpn_router.router)
     app.include_router(cloudflare_tunnel_router.router)
+    app.include_router(cloudflare_hostnames_router.router)
     app.include_router(diagnostics_router.router)
 
     @app.middleware("http")

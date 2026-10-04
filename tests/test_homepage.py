@@ -79,6 +79,30 @@ def test_month_calendar_span_is_monday_to_sunday():
     assert end.weekday() == 6
 
 
+def test_homepage_public_urls_use_subdomains(tmp_path, monkeypatch):
+    from core.public_hostnames import save_hostnames
+    from core.settings import settings as live_settings
+
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        public_app_base_domain="example.com",
+    )
+    save_hostnames({"sonarr": {"subdomain": "tv", "enabled": True}}, app_settings=cfg)
+    monkeypatch.setattr("core.app_web_url.settings", cfg)
+    monkeypatch.setattr("core.public_hostnames.settings", cfg)
+    monkeypatch.setattr(live_settings, "public_app_base_domain", "example.com")
+    monkeypatch.setattr(live_settings, "config_dir", cfg.config_dir)
+
+    catalog = FakeCatalog([_plugin("sonarr", 8989, tmp_path)])
+    with patch("core.homepage.ApplicationCatalog", return_value=catalog), patch(
+        "core.homepage._running_names", return_value={"sonarr"}
+    ), patch("core.homepage._process_states", return_value={}):
+        snap = homepage_snapshot("media.example.com", force=True, scheme="https")
+    assert snap["apps"][0]["url"] == "https://tv.example.com"
+
+
 def test_homepage_snapshot_reuses_memory_cache(tmp_path):
     catalog = FakeCatalog([_plugin("sonarr", 8989, tmp_path)])
     calls = {"n": 0}

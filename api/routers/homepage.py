@@ -29,7 +29,8 @@ def _ensure_authenticated(request: Request) -> None:
 async def get_homepage(request: Request, refresh: bool = False) -> dict[str, Any]:
     _ensure_authenticated(request)
     host = request.url.hostname or "127.0.0.1"
-    return await asyncio.to_thread(homepage_snapshot, host, force=refresh)
+    scheme = request.url.scheme or "http"
+    return await asyncio.to_thread(homepage_snapshot, host, force=refresh, scheme=scheme)
 
 
 @router.get("/downloads", summary="Live download queues")

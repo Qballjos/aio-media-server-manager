@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { catalogQueryFromState, catalogStateFromQuery, sameCatalogQuery } from './catalogQuery.js'
+import { appWebUrl } from './appWebUrl.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { formatUpdateWhen, formatUptime } from './format.js'
 import { useToasts } from './useToasts.js'
@@ -87,7 +88,7 @@ const combinedServices = computed(() => {
 
   return props.catalogApps.filter((cat) => cat.current_arch_supported !== false).map(cat => {
     const live = appMap.get(cat.name)
-    const host = window.location.hostname || 'localhost'
+    const port = live?.port || cat.port || cat.default_port
     return {
       name: cat.name,
       displayName: cat.display_name,
@@ -95,11 +96,19 @@ const combinedServices = computed(() => {
       category: cat.category,
       iconSrc: appIconSrc(cat.name),
       tier: cat.tier,
-      port: live?.port || cat.port || cat.default_port,
+      port,
       defaultPort: cat.default_port,
       installed: cat.installed || (live && live.installed) || false,
       installedVersion: cat.installed_version || (live && live.version),
-      webUrl: `http://${host}:${live?.port || cat.port || cat.default_port}`,
+      webUrl: appWebUrl({
+        appName: cat.name,
+        port,
+        baseDomain: props.systemInfo?.public_app_base_domain || '',
+        subdomain: (() => {
+          const row = (props.systemInfo?.public_app_hostnames || {})[cat.name]
+          return row && row.enabled ? row.subdomain : ''
+        })(),
+      }),
       state: live ? live.state : (cat.installed ? 'stopped' : 'not_installed'),
       pid: live ? live.pid : null,
       uptime: live ? live.uptime_seconds : null,

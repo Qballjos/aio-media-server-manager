@@ -1,15 +1,29 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { apiError, apiRequest, readJson } from './api.js'
+import { appWebUrl } from './appWebUrl.js'
 import { useToasts } from './useToasts.js'
 
 const props = defineProps({
   service: { type: Object, default: null },
+  systemInfo: { type: Object, default: null },
 })
 const emit = defineEmits(['close', 'saved'])
 const { showToast } = useToasts()
 
 const settingsApp = computed(() => props.service)
+const openUiUrl = computed(() => {
+  const service = props.service
+  if (!service?.name || !service?.port) return ''
+  if (service.webUrl) return service.webUrl
+  const row = (props.systemInfo?.public_app_hostnames || {})[service.name]
+  return appWebUrl({
+    appName: service.name,
+    port: service.port,
+    baseDomain: props.systemInfo?.public_app_base_domain || '',
+    subdomain: row && row.enabled ? row.subdomain : '',
+  })
+})
 const settingsForm = ref({
   port: 0,
   autostart: true,
@@ -171,12 +185,24 @@ async function saveAppSettings() {
       settingsError.value = apiError(data, 'Could not save settings.')
       return
     }
-    showToast(
-      data.restarted
-        ? `Saved ${data.display_name} and restarted on port ${data.port}`
-        : `Saved ${data.display_name} settings`,
-      'success'
-    )
+    const sync = data.cloudflare_tunnel_sync
+    let msg = data.restarted
+      ? `Saved ${data.display_name} and restarted on port ${data.port}`
+      : `Saved ${data.display_name} settings`
+    if (sync && !sync.skipped) {
+      if (sync.ok) {
+        msg += ` · Cloudflare tunnel updated (${sync.hostname || 'hostname'})`
+        showToast(msg, 'success')
+      } else {
+        showToast(msg, 'success')
+        showToast(sync.detail || 'Cloudflare tunnel port sync failed.', 'error')
+      }
+    } else if (sync?.skipped && sync.detail && /API token/i.test(sync.detail)) {
+      showToast(msg, 'success')
+      showToast(sync.detail, 'error')
+    } else {
+      showToast(msg, 'success')
+    }
     closeAppSettings()
     emit('saved')
   } catch (err) {
@@ -308,6 +334,10 @@ watch(
             >
               Reset
             </button>
+          </p>
+          <p v-if="openUiUrl" class="settings-hint">
+            Open UI:
+            <a :href="openUiUrl" target="_blank" rel="noopener noreferrer" class="link-btn font-mono">{{ openUiUrl }}</a>
           </p>
           <div v-if="settingsMeta?.daemon !== false" class="ui-switch-row">
             <div class="ui-switch-copy">

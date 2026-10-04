@@ -22,8 +22,10 @@ def test_tunnel_status_without_token(tmp_path: Path):
     status = mgr.status()
     assert status["enabled"] is True
     assert status["token_present"] is False
+    assert status["token_saved"] is False
     assert "token" not in status
     assert status["connected"] is False
+    assert "token missing" in status["summary"].lower()
     assert mgr.command() is None
 
 

@@ -13,7 +13,7 @@ The ARM64 image does not install Chromium, Xvfb, or fonts-liberation. Flaresolve
 |----------|--------|
 | Docker / Compose (recommended) | [deploy/DOCKER.md](../deploy/DOCKER.md) |
 | Native Linux / LXC / systemd | [deploy/LINUX.md](../deploy/LINUX.md) |
-| Unraid | [deploy/UNRAID.md](../deploy/UNRAID.md) |
+| Unraid | [deploy/UNRAID.md](../deploy/UNRAID.md) · CA template in [`deploy/unraid/`](../deploy/unraid/) |
 | Synology DSM (Container Manager) | [deploy/SYNOLOGY.md](../deploy/SYNOLOGY.md) |
 | TrueNAS SCALE | [deploy/TRUENAS.md](../deploy/TRUENAS.md) |
 | Cloudflare Tunnel (optional) | [deploy/CLOUDFLARE.md](../deploy/CLOUDFLARE.md) |

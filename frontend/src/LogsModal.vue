@@ -218,7 +218,7 @@ onUnmounted(() => {
             v-for="(line, idx) in filteredLogLines"
             :key="idx"
             class="log-line"
-            :style="/error|fatal|fail|exception/i.test(line) ? 'color: #f87171;' : ''"
+            :class="{ 'is-error': /error|fatal|fail|exception/i.test(line) }"
           >
             <span class="line-num">{{ idx + 1 }}</span>
             <span class="line-content">{{ line }}</span>

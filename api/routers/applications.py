@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from applications.catalog import ApplicationCatalog, refresh_live_catalogs
 from core.app_prefs import AppPrefsError, autostart_for, set_app_option, update_app_prefs
+from core.app_web_url import app_web_ui_url_for_request
 from core.auth import auth_manager
 from core.settings import settings
 from core.supervisor import ProcessSupervisor
@@ -96,7 +97,9 @@ async def list_applications(request: Request) -> dict[str, Any]:
                 "is_crash_loop": is_crash_loop,
                 "recent_crashes": recent_crashes,
                 "health_url": plugin.health_check_url(),
-                "web_ui_url": f"http://{request.url.hostname}:{plugin.port}",
+                "web_ui_url": app_web_ui_url_for_request(
+                    request, app_name=plugin.name, port=plugin.port
+                ),
                 "daemon": plugin.manifest.daemon,
             }
         )
@@ -285,8 +288,9 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         )
     elif plugin.manifest.daemon:
         notes.append(
-            "Open UI uses http://<host>:<port>. If you change the port, publish it in compose "
-            "(or use host networking) and recreate the container."
+            "Open UI uses http://<host>:<port> on LAN, or https://<subdomain>.<domain> over Cloudflare. "
+            "If this app is published on the tunnel and you change the listen port, AIO updates the "
+            "tunnel service and recreates the DNS CNAME when a Cloudflare API token is saved."
         )
     else:
         notes.append("This is a CLI/sync tool, not a background WebUI service.")
@@ -373,8 +377,36 @@ async def patch_application_settings(
 
     refresh_live_catalogs()
     plugin = catalog.get(name)
+    tunnel_sync: dict[str, Any] | None = None
     if body.port is not None:
         plugin.apply_listen_port(body.port)
+        try:
+            from core.cloudflare_api import (
+                CloudflareApiError,
+                api_token_configured,
+                sync_published_app_port,
+            )
+            from core.public_hostnames import load_hostnames
+
+            published = load_hostnames().get(name) or {}
+            if published.get("last_published"):
+                if api_token_configured():
+                    tunnel_sync = await sync_published_app_port(name, int(body.port))
+                else:
+                    tunnel_sync = {
+                        "ok": False,
+                        "skipped": True,
+                        "detail": (
+                            "Port saved. Add a Cloudflare API token and publish again "
+                            "so the tunnel points at the new port."
+                        ),
+                    }
+        except CloudflareApiError as exc:
+            logger.warning("Cloudflare port sync for %s failed: %s", name, exc)
+            tunnel_sync = {"ok": False, "detail": str(exc)}
+        except Exception as exc:
+            logger.warning("Cloudflare port sync for %s failed: %s", name, exc)
+            tunnel_sync = {"ok": False, "detail": str(exc)}
 
     vuetorrent_changed = False
     if body.vuetorrent is not None or body.vuetorrent_update:
@@ -458,6 +490,8 @@ async def patch_application_settings(
     payload = _application_settings(plugin, request)
     payload["restarted"] = restarted
     payload["status"] = "updated"
+    if tunnel_sync is not None:
+        payload["cloudflare_tunnel_sync"] = tunnel_sync
     return payload
 
 

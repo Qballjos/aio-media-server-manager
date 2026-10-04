@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>aio-media-manager</Name>
+  <Repository>ghcr.io/qballjos/aio-media-server-manager:latest</Repository>
+  <Registry>https://ghcr.io/qballjos/aio-media-server-manager</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>true</Privileged>
+  <Support>https://github.com/Qballjos/aio-media-server-manager/issues</Support>
+  <Project>https://github.com/Qballjos/aio-media-server-manager</Project>
+  <Overview>
+    One-container media appliance. The manager UI plus Sonarr, Radarr, Prowlarr, download clients, Jellyfin/Plex, and related tools run as supervised processes inside this container — not as separate Unraid apps.
+  </Overview>
+  <Description>
+    [b]AIO Media Server Manager[/b] is a single appliance for the *Arr stack.[br][br]
+    Install [b]only this container[/b]. Do not also install Community Applications templates for Sonarr, Radarr, qBittorrent, etc. — those apps are started from the Catalog inside the manager.[br][br]
+    [b]Before first start[/b] create host folders (SSH as root):[br]
+    [code]mkdir -p /mnt/user/appdata/aio-media-manager/vpn /mnt/user/backups/aio-media-manager /mnt/user/aio-media-manager/{downloads,media}
+chown -R 99:100 /mnt/user/appdata/aio-media-manager /mnt/user/backups/aio-media-manager /mnt/user/aio-media-manager[/code][br][br]
+    Open [b]http://TOWER:8080[/b] and complete the wizard.[br][br]
+    Privileged mode plus NET_ADMIN/SYS_MODULE are required for optional WireGuard torrent isolation. For hardlinks, prefer a single disk/cache path for the Data mount (not two FUSE shares). Docs: https://github.com/Qballjos/aio-media-server-manager/blob/main/deploy/UNRAID.md
+  </Description>
+  <Category>MediaServer:Video MediaApp:Video Downloaders:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/unraid/templates/aio-media-manager.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/frontend/public/logo-aio-media-manager.png</Icon>
+  <Readme>https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/UNRAID.md</Readme>
+  <ExtraParams>--cap-add=NET_ADMIN --cap-add=SYS_MODULE</ExtraParams>
+  <Requires>Create appdata, data, and backups folders before first start (see Description). Privileged container for VPN isolation.</Requires>
+  <Config Name="Manager WebUI" Target="8080" Default="8080" Mode="tcp" Description="AIO Media Server Manager UI" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="qBittorrent" Target="8081" Default="8081" Mode="tcp" Description="qBittorrent WebUI (VueTorrent by default)" Type="Port" Display="always" Required="false" Mask="false">8081</Config>
+  <Config Name="Shelfmark" Target="8084" Default="8084" Mode="tcp" Description="Shelfmark WebUI" Type="Port" Display="advanced" Required="false" Mask="false">8084</Config>
+  <Config Name="SABnzbd" Target="8085" Default="8085" Mode="tcp" Description="SABnzbd WebUI" Type="Port" Display="always" Required="false" Mask="false">8085</Config>
+  <Config Name="Jellyfin" Target="8096" Default="8096" Mode="tcp" Description="Jellyfin WebUI" Type="Port" Display="always" Required="false" Mask="false">8096</Config>
+  <Config Name="Flaresolverr" Target="8191" Default="8191" Mode="tcp" Description="Flaresolverr (x86_64 only)" Type="Port" Display="advanced" Required="false" Mask="false">8191</Config>
+  <Config Name="Seerr" Target="5055" Default="5055" Mode="tcp" Description="Seerr requests UI" Type="Port" Display="always" Required="false" Mask="false">5055</Config>
+  <Config Name="Grimmory" Target="6060" Default="6060" Mode="tcp" Description="Grimmory WebUI" Type="Port" Display="advanced" Required="false" Mask="false">6060</Config>
+  <Config Name="Bazarr" Target="6767" Default="6767" Mode="tcp" Description="Bazarr WebUI" Type="Port" Display="always" Required="false" Mask="false">6767</Config>
+  <Config Name="NZBGet" Target="6789" Default="6789" Mode="tcp" Description="NZBGet WebUI" Type="Port" Display="advanced" Required="false" Mask="false">6789</Config>
+  <Config Name="Profilarr" Target="6868" Default="6868" Mode="tcp" Description="Profilarr WebUI" Type="Port" Display="advanced" Required="false" Mask="false">6868</Config>
+  <Config Name="Radarr" Target="7878" Default="7878" Mode="tcp" Description="Radarr WebUI" Type="Port" Display="always" Required="false" Mask="false">7878</Config>
+  <Config Name="Lidarr" Target="8686" Default="8686" Mode="tcp" Description="Lidarr WebUI" Type="Port" Display="always" Required="false" Mask="false">8686</Config>
+  <Config Name="Sonarr" Target="8989" Default="8989" Mode="tcp" Description="Sonarr WebUI" Type="Port" Display="always" Required="false" Mask="false">8989</Config>
+  <Config Name="Prowlarr" Target="9696" Default="9696" Mode="tcp" Description="Prowlarr WebUI" Type="Port" Display="always" Required="false" Mask="false">9696</Config>
+  <Config Name="NeutArr" Target="9705" Default="9705" Mode="tcp" Description="NeutArr WebUI" Type="Port" Display="advanced" Required="false" Mask="false">9705</Config>
+  <Config Name="Plex" Target="32400" Default="32400" Mode="tcp" Description="Plex Media Server" Type="Port" Display="always" Required="false" Mask="false">32400</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/aio-media-manager" Mode="rw" Description="App settings, VPN profile, and child-app config" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/aio-media-manager</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/aio-media-manager" Mode="rw" Description="User share for downloads/ and media/ (same filesystem for hardlinks). Prefer /mnt/cache/... or a single disk path when possible." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/aio-media-manager</Config>
+  <Config Name="Backups" Target="/backups" Default="/mnt/user/backups/aio-media-manager" Mode="rw" Description="Configuration backups. Prefer array storage, not cache-only." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/backups/aio-media-manager</Config>
+  <Config Name="Intel/AMD GPU" Target="/dev/dri" Default="" Mode="rw" Description="Optional. Map host /dev/dri for hardware transcoding. Leave empty if the device does not exist." Type="Device" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="Unraid nobody user (99). Match the owner of your data folders." Type="Variable" Display="always" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Unraid users group (100)." Type="Variable" Display="always" Required="true" Mask="false">100</Config>
+  <Config Name="Timezone" Target="TZ" Default="UTC" Mode="" Description="IANA timezone, e.g. Europe/Amsterdam" Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
+  <Config Name="Download dir" Target="AMM_DOWNLOAD_DIR" Default="/data/downloads" Mode="" Description="In-container downloads path (keep under /data)" Type="Variable" Display="advanced" Required="true" Mask="false">/data/downloads</Config>
+  <Config Name="Media dir" Target="AMM_MEDIA_DIR" Default="/data/media" Mode="" Description="In-container media library path (keep under /data)" Type="Variable" Display="advanced" Required="true" Mask="false">/data/media</Config>
+  <Config Name="GitHub token" Target="GITHUB_TOKEN" Default="" Mode="" Description="Optional. Raises GitHub API rate limits for catalog installs/updates. You can also set this later in Settings → Updates." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+</Container>

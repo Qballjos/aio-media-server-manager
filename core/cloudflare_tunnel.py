@@ -42,11 +42,20 @@ class CloudflareTunnelManager:
             return path
         return None
 
-    def token_present(self) -> bool:
-        if self.settings.cloudflare_tunnel_token:
-            return True
+    def read_token(self) -> str:
+        token = (self.settings.cloudflare_tunnel_token or "").strip()
+        if token:
+            return token
         path = self.token_file
-        return path.is_file() and path.stat().st_size > 0
+        if path.is_file():
+            try:
+                return path.read_text(encoding="utf-8").strip()
+            except OSError:
+                return ""
+        return ""
+
+    def token_present(self) -> bool:
+        return bool(self.read_token())
 
     def binary_path(self) -> str | None:
         return shutil.which("cloudflared")
@@ -66,18 +75,36 @@ class CloudflareTunnelManager:
             return False
 
     def status(self) -> dict[str, Any]:
-        running = self._process_state() == ProcessState.RUNNING.value
+        process = self._process_state()
+        running = process == ProcessState.RUNNING.value
         ready = self._metrics_ready() if running else False
+        has_token = self.token_present()
         return {
             "enabled": self.settings.cloudflare_tunnel_enabled,
-            "token_present": self.token_present(),
+            "token_present": has_token,
+            "token_saved": has_token,
             "token_file": str(self.token_file),
             "binary_present": bool(self.binary_path()),
-            "process": self._process_state(),
+            "process": process,
+            "running": running,
             "connected": ready,
             "metrics_addr": self.settings.cloudflare_tunnel_metrics_addr,
             "origin": f"http://127.0.0.1:{self.settings.api_port}",
+            "summary": self._summary(has_token=has_token, running=running, ready=ready),
         }
+
+    def _summary(self, *, has_token: bool, running: bool, ready: bool) -> str:
+        if not self.settings.cloudflare_tunnel_enabled:
+            return "Off"
+        if not has_token:
+            return "Enabled — token missing"
+        if not self.binary_path():
+            return "Enabled — cloudflared binary missing"
+        if ready:
+            return "Connected"
+        if running:
+            return "Connector running — waiting for Cloudflare"
+        return "Enabled — connector not running"
 
     def command(self) -> list[str] | None:
         exe = self.binary_path()

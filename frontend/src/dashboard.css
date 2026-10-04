@@ -176,6 +176,28 @@ button.metric-pill {
   box-shadow: 0 0 8px #f87171;
 }
 
+.metric-pill.is-cf-up {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.45);
+  text-decoration: none;
+}
+
+.metric-pill.is-cf-up .pulse-dot {
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+.metric-pill.is-cf-down {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.45);
+  text-decoration: none;
+}
+
+.metric-pill.is-cf-down .pulse-dot {
+  background: #f87171;
+  box-shadow: 0 0 8px #f87171;
+}
+
 .metric-pill.is-updates {
   color: #86efac;
   border-color: rgba(134, 239, 172, 0.4);
@@ -1260,14 +1282,16 @@ button.metric-pill {
 
 .log-modal {
   width: 100%;
-  max-width: 900px;
+  max-width: min(960px, 100%);
   height: min(80vh, 80dvh);
   max-height: calc(100dvh - 1.5rem);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--modal-bg);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-card);
+  color: var(--text-heading);
 }
 
 .modal-header {
@@ -1344,14 +1368,18 @@ button.metric-pill {
   border-color: var(--border-strong);
 }
 
+/* Always a dark terminal — do not use theme --text-main (unreadable in light mode). */
 .log-console {
   flex: 1;
-  background: #090a10;
-  padding: 1rem 1.25rem;
-  overflow-y: auto;
-  font-size: 0.8rem;
+  min-height: 12rem;
+  background: #0b1220;
+  padding: 0.85rem 1rem;
+  overflow: auto;
+  font-size: 0.8125rem;
   line-height: 1.55;
-  color: #fdba74;
+  color: #e2e8f0;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  -webkit-overflow-scrolling: touch;
 }
 
 .log-empty {
@@ -1359,26 +1387,41 @@ button.metric-pill {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #475569;
+  min-height: 10rem;
+  color: #94a3b8;
 }
 
 .log-line {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   min-width: 0;
+  padding: 0.05rem 0;
+}
+
+.log-line.is-error .line-content {
+  color: #fca5a5;
 }
 
 .line-num {
-  color: #334155;
+  color: #64748b;
   user-select: none;
-  min-width: 2.5rem;
+  flex: 0 0 2.75rem;
+  min-width: 2.75rem;
   text-align: right;
 }
 
 .line-content {
-  color: var(--text-main);
-  word-break: break-all;
+  color: #e2e8f0;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   white-space: pre-wrap;
+}
+
+.log-console ::selection {
+  background: rgba(249, 115, 22, 0.35);
+  color: #fff7ed;
 }
 
 /* Toast */

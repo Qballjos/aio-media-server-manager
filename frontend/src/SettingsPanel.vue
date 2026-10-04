@@ -23,6 +23,7 @@ import {
   DEFAULT_ACCENT,
   applyBranding,
 } from './branding.js'
+import { copyText } from './clipboard.js'
 
 const props = defineProps({
   systemInfo: { type: Object, default: null },
@@ -65,7 +66,9 @@ const form = ref({
   vpn_config_text: '',
   cloudflare_tunnel_enabled: false,
   cloudflare_tunnel_token: '',
+  cloudflare_api_token: '',
   trusted_proxies: '',
+  public_app_base_domain: '',
   github_token: '',
   jellyfin_api_key: '',
   seerr_api_key: '',
@@ -96,6 +99,10 @@ const snapshot = ref({})
 const vpnLive = ref({})
 const vpnBusy = ref(false)
 const tunnelLive = ref({})
+const hostnameRoutes = ref([])
+const apiTokenConfigured = ref(false)
+const hostnameBusy = ref(false)
+const hostnameMeta = ref({ tunnel_id: '', tunnel_account_id: '', tunnel_decode_error: '' })
 const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
 const seerrConfigured = ref(false)
@@ -280,6 +287,217 @@ async function refreshSettings() {
   }
 }
 
+async function refreshTunnelStatus() {
+  try {
+    const res = await apiRequest('/api/cloudflare/tunnel/status')
+    if (res.ok) tunnelLive.value = await readJson(res)
+  } catch (err) {
+    console.error('Cloudflare tunnel status error:', err)
+  }
+}
+
+async function pollTunnelUntilSettled(attempts = 8, delayMs = 1000) {
+  for (let i = 0; i < attempts; i += 1) {
+    await refreshTunnelStatus()
+    const t = tunnelLive.value || {}
+    if (!t.enabled) return
+    if (t.connected || (!t.token_present && !t.token_saved)) return
+    if (t.process && t.process !== 'running' && t.process !== 'starting' && i >= 2) return
+    await new Promise((r) => setTimeout(r, delayMs))
+  }
+}
+
+async function saveCloudflare() {
+  const ok = await patchSettings({
+    cloudflare_tunnel_enabled: form.value.cloudflare_tunnel_enabled,
+    cloudflare_tunnel_token: form.value.cloudflare_tunnel_token || undefined,
+    trusted_proxies: form.value.trusted_proxies,
+    public_app_base_domain: form.value.public_app_base_domain
+  })
+  if (!ok) return
+  await pollTunnelUntilSettled()
+  await refreshHostnames()
+  const t = tunnelLive.value || {}
+  if (form.value.cloudflare_tunnel_enabled && !t.connected) {
+    error.value = t.summary || 'Tunnel is enabled but not connected yet. Check cloudflared logs.'
+  } else if (form.value.cloudflare_tunnel_enabled && t.connected) {
+    notice.value = 'Cloudflare Tunnel connected. Token saved on disk.'
+  }
+}
+
+function hostnamePayload() {
+  const hostnames = {}
+  for (const row of hostnameRoutes.value || []) {
+    hostnames[row.name] = {
+      subdomain: String(row.subdomain || row.default_subdomain || row.name).trim().toLowerCase(),
+      enabled: !!row.enabled,
+    }
+  }
+  return hostnames
+}
+
+async function refreshHostnames() {
+  try {
+    const res = await apiRequest('/api/cloudflare/hostnames')
+    if (!res.ok) return
+    const data = await readJson(res)
+    hostnameRoutes.value = (data.routes || []).map((row) => ({ ...row }))
+    apiTokenConfigured.value = !!data.api_token_configured
+    hostnameMeta.value = {
+      tunnel_id: data.tunnel_id || '',
+      tunnel_account_id: data.tunnel_account_id || '',
+      tunnel_decode_error: data.tunnel_decode_error || '',
+    }
+    if (data.public_app_base_domain != null) {
+      form.value.public_app_base_domain = data.public_app_base_domain || ''
+    }
+  } catch (err) {
+    console.error('Hostname list error:', err)
+  }
+}
+
+async function saveHostnames() {
+  hostnameBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const body = {
+      hostnames: hostnamePayload(),
+      public_app_base_domain: form.value.public_app_base_domain,
+    }
+    if (form.value.cloudflare_api_token) {
+      body.cloudflare_api_token = form.value.cloudflare_api_token
+    }
+    const res = await apiRequest('/api/cloudflare/hostnames', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not save subdomains.')
+      return
+    }
+    hostnameRoutes.value = (data.routes || []).map((row) => ({ ...row }))
+    apiTokenConfigured.value = !!data.api_token_configured
+    form.value.cloudflare_api_token = ''
+    form.value.public_app_base_domain = data.public_app_base_domain || form.value.public_app_base_domain
+    notice.value = 'Subdomains saved. Open UI will use them on HTTPS / public access.'
+  } catch (err) {
+    error.value = err?.message || 'Could not save subdomains.'
+  } finally {
+    hostnameBusy.value = false
+  }
+}
+
+async function clearCloudflareApiToken() {
+  hostnameBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await apiRequest('/api/cloudflare/hostnames', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        hostnames: hostnamePayload(),
+        cloudflare_api_token: '',
+      }),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not clear API token.')
+      return
+    }
+    apiTokenConfigured.value = !!data.api_token_configured
+    form.value.cloudflare_api_token = ''
+    notice.value = 'Cloudflare API token cleared.'
+  } catch (err) {
+    error.value = err?.message || 'Could not clear API token.'
+  } finally {
+    hostnameBusy.value = false
+  }
+}
+
+async function publishHostnames() {
+  const enabled = (hostnameRoutes.value || []).filter((row) => row.enabled)
+  const count = enabled.length
+  const preview = enabled
+    .slice(0, 6)
+    .map((row) => previewHostnameUrl(row))
+    .filter((u) => u && u !== '—')
+    .join('\n')
+  const okConfirm = window.confirm(
+    [
+      count
+        ? `Publish ${count} hostname${count === 1 ? '' : 's'} to Cloudflare?`
+        : 'Disable previously published hostnames in the tunnel?',
+      preview ? `\n${preview}${count > 6 ? '\n…' : ''}` : '',
+      '\nThese URLs are reachable from the internet unless you add Cloudflare Access.',
+      'Dashboard-only routes you never published from AIO are left alone.',
+    ].join('\n'),
+  )
+  if (!okConfirm) return
+  hostnameBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    if (form.value.cloudflare_api_token) {
+      const saveRes = await apiRequest('/api/cloudflare/hostnames', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hostnames: hostnamePayload(),
+          public_app_base_domain: form.value.public_app_base_domain,
+          cloudflare_api_token: form.value.cloudflare_api_token,
+        }),
+      })
+      const saveData = await readJson(saveRes)
+      if (!saveRes.ok) {
+        error.value = apiError(saveData, 'Could not save API token before publish.')
+        return
+      }
+      form.value.cloudflare_api_token = ''
+      apiTokenConfigured.value = !!saveData.api_token_configured
+    }
+    const res = await apiRequest('/api/cloudflare/hostnames/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        hostnames: hostnamePayload(),
+        public_app_base_domain: form.value.public_app_base_domain,
+      }),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Publish to Cloudflare failed.')
+      return
+    }
+    await refreshHostnames()
+    const published = (data.published || []).length
+    const removed = (data.removed || []).length
+    const bits = [`Published ${published} hostname${published === 1 ? '' : 's'} to Cloudflare`]
+    if (removed) bits.push(`removed ${removed} from the tunnel`)
+    notice.value = `${bits.join('; ')}.${data.warning ? ` ${data.warning}` : ''}`
+  } catch (err) {
+    error.value = err?.message || 'Publish to Cloudflare failed.'
+  } finally {
+    hostnameBusy.value = false
+  }
+}
+
+function previewHostnameUrl(row) {
+  const base = String(form.value.public_app_base_domain || '')
+    .trim()
+    .replace(/^\.+|\.+$/g, '')
+    .toLowerCase()
+  const sub = String(row.subdomain || row.default_subdomain || row.name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+  if (!base || !sub) return '—'
+  return `https://${sub}.${base}`
+}
+
 async function saveHomepageKey(field) {
   const value = String(form.value[field] || '').trim()
   if (!value) {
@@ -339,6 +557,7 @@ function applySettingsPayload(data) {
   form.value.pgid = data.pgid || 1000
   form.value.backup_retention = data.backup_retention || 7
   form.value.trusted_proxies = data.trusted_proxies || ''
+  form.value.public_app_base_domain = data.public_app_base_domain || ''
   const vpn = data.vpn || {}
   vpnLive.value = vpn
   form.value.vpn_enabled = !!vpn.enabled
@@ -867,12 +1086,20 @@ async function setDebugEnabled(enabled) {
 
 async function copyUrl() {
   if (!share.value.url) return
+  error.value = ''
   try {
-    await navigator.clipboard.writeText(share.value.url)
+    await copyText(share.value.url)
     copied.value = true
+    notice.value = 'Support share URL copied.'
     setTimeout(() => { copied.value = false }, 2500)
   } catch (err) {
-    error.value = 'Copy failed. Select the URL manually.'
+    // Last resort: select the readonly field so the user can Cmd/Ctrl+C.
+    const field = document.getElementById('debug-share-url')
+    if (field && typeof field.select === 'function') {
+      field.focus()
+      field.select()
+    }
+    error.value = 'Copy failed. The URL is selected — press Cmd/Ctrl+C.'
   }
 }
 
@@ -895,6 +1122,10 @@ watch(section, (s, prev) => {
   error.value = ''
   notice.value = ''
   if (prev && (s === 'network' || s === 'homepage' || s === 'visuals')) refreshSettings()
+  if (s === 'network') {
+    refreshTunnelStatus()
+    refreshHostnames()
+  }
 })
 
 onMounted(() => {
@@ -1554,18 +1785,38 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Cloudflare Tunnel</h3>
-          <p>Token is stored on disk and never shown again. Trusted proxies are comma-separated IPs/CIDRs.</p>
+          <p>
+            In Cloudflare: Networking → Tunnels → create a Cloudflared tunnel → copy only the
+            <code>eyJ…</code> token from the install command (do not run that command on this NAS).
+            Paste it below, enable the tunnel, and Save. Token is stored on disk and never shown again.
+            Full walkthrough: project file <code>deploy/CLOUDFLARE.md</code>.
+          </p>
         </div>
-        <p class="share-meta">
-          Tunnel {{ tunnelLive.connected ? 'connected' : 'not connected' }}
-          · token {{ tunnelLive.token_present ? 'present' : 'missing' }}
-          · binary {{ tunnelLive.binary_present ? 'found' : 'not found' }}
+        <div class="setting-status" aria-live="polite">
+          <span class="setting-chip" :class="tunnelLive.enabled ? 'is-on' : 'is-off'">
+            {{ tunnelLive.enabled ? 'Enabled' : 'Off' }}
+          </span>
+          <span
+            class="setting-chip"
+            :class="(tunnelLive.token_saved || tunnelLive.token_present) ? 'is-on' : (tunnelLive.enabled ? 'is-bad' : 'is-warn')"
+          >
+            {{ (tunnelLive.token_saved || tunnelLive.token_present) ? 'Token saved' : 'No token' }}
+          </span>
+          <span
+            class="setting-chip"
+            :class="tunnelLive.connected ? 'is-on' : (tunnelLive.enabled ? (tunnelLive.running ? 'is-warn' : 'is-bad') : 'is-off')"
+          >
+            {{ tunnelLive.connected ? 'Tunnel up' : (tunnelLive.running ? 'Connecting…' : 'Tunnel down') }}
+          </span>
+          <span class="setting-chip" :class="tunnelLive.binary_present ? 'is-on' : 'is-bad'">
+            {{ tunnelLive.binary_present ? 'cloudflared ready' : 'cloudflared missing' }}
+          </span>
+        </div>
+        <p class="share-meta">{{ tunnelLive.summary || 'Status loads when you open Network.' }}</p>
+        <p v-if="tunnelLive.token_saved || tunnelLive.token_present" class="share-meta font-mono">
+          Stored at {{ tunnelLive.token_file || '/config/cloudflare/tunnel.token' }}
         </p>
-        <form class="form-stack" @submit.prevent="patchSettings({
-          cloudflare_tunnel_enabled: form.cloudflare_tunnel_enabled,
-          cloudflare_tunnel_token: form.cloudflare_tunnel_token || undefined,
-          trusted_proxies: form.trusted_proxies
-        })">
+        <form class="form-stack" @submit.prevent="saveCloudflare">
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
               <strong>Enable tunnel</strong>
@@ -1575,13 +1826,162 @@ onBeforeUnmount(() => {
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
-          <label class="ui-field">Tunnel token (leave blank to keep)
-            <input v-model="form.cloudflare_tunnel_token" type="password" class="ui-input font-mono" autocomplete="off" />
+          <label class="ui-field">
+            Tunnel token
+            <span class="ui-field-hint">
+              {{ (tunnelLive.token_saved || tunnelLive.token_present)
+                ? 'A token is already saved. Leave blank to keep it, or paste a new eyJ… token to replace it.'
+                : 'Paste the eyJ… token from Cloudflare. It is stored on disk and never shown again.' }}
+            </span>
+            <input
+              v-model="form.cloudflare_tunnel_token"
+              type="password"
+              class="ui-input font-mono"
+              autocomplete="off"
+              :placeholder="(tunnelLive.token_saved || tunnelLive.token_present) ? '•••• token saved — paste to replace' : 'eyJ…'"
+            />
           </label>
           <label class="ui-field">Trusted reverse-proxy IPs
-            <input v-model="form.trusted_proxies" class="ui-input font-mono" placeholder="10.0.0.1,10.0.0.0/8" />
+            <span class="ui-field-hint">
+              Leave empty for LAN-only or Cloudflare Tunnel (tunnel auto-trusts 127.0.0.1).
+              Only list IPs/CIDRs of a reverse proxy you run in front of this app (nginx, Caddy, …).
+              Comma-separated. Do not use Cloudflare edge IPs here.
+            </span>
+            <input v-model="form.trusted_proxies" class="ui-input font-mono" placeholder="172.17.0.1,10.0.0.0/8" />
+          </label>
+          <label class="ui-field">Public app domain (Open UI over tunnel)
+            <span class="ui-field-hint">
+              DNS zone for Catalog Open UI when you use HTTPS / Cloudflare, e.g. <code>example.com</code>
+              or <code>example.co.uk</code>
+              → links become <code>https://sonarr.example.com</code>.
+              Leave empty to derive from the current host
+              (<code>media.example.com</code> → <code>example.com</code>,
+              <code>media.example.co.uk</code> → <code>example.co.uk</code>).
+              LAN IP access still uses <code>http://nas-ip:port</code>.
+            </span>
+            <input
+              v-model="form.public_app_base_domain"
+              class="ui-input font-mono"
+              placeholder="example.com"
+              autocomplete="off"
+            />
           </label>
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save</button>
+        </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>Public subdomains</h3>
+          <p>
+            Choose a subdomain per app for Catalog Open UI. With a Cloudflare API token, this page can
+            create the tunnel routes and DNS CNAMEs for you — no Cloudflare dashboard hop required
+            after the initial tunnel + API token.
+            API token needs <strong>Account → Cloudflare Tunnel → Edit</strong> and
+            <strong>Zone → DNS → Edit</strong> on your domain.
+          </p>
+        </div>
+        <div class="setting-status" aria-live="polite">
+          <span class="setting-chip" :class="apiTokenConfigured ? 'is-on' : 'is-warn'">
+            {{ apiTokenConfigured ? 'API token saved' : 'API token optional' }}
+          </span>
+          <span
+            class="setting-chip"
+            :class="hostnameMeta.tunnel_id ? 'is-on' : 'is-warn'"
+          >
+            {{ hostnameMeta.tunnel_id ? 'Tunnel id ready' : 'Need connector token' }}
+          </span>
+        </div>
+        <p v-if="hostnameMeta.tunnel_decode_error" class="share-meta">{{ hostnameMeta.tunnel_decode_error }}</p>
+        <form class="form-stack" @submit.prevent="saveHostnames">
+          <label class="ui-field">
+            Cloudflare API token
+            <span class="ui-field-hint">
+              Different from the tunnel <code>eyJ…</code> connector token. Create under
+              My Profile → API Tokens. Leave blank to keep a saved token.
+            </span>
+            <input
+              v-model="form.cloudflare_api_token"
+              type="password"
+              class="ui-input font-mono"
+              autocomplete="off"
+              :placeholder="apiTokenConfigured ? '•••• token saved — paste to replace' : 'Cloudflare API token'"
+            />
+          </label>
+          <div class="hostname-table-wrap">
+            <table class="storage-table hostname-table">
+              <thead>
+                <tr>
+                  <th>Expose</th>
+                  <th>App</th>
+                  <th>Subdomain</th>
+                  <th>Public URL</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in hostnameRoutes" :key="row.name">
+                  <td>
+                    <button
+                      type="button"
+                      class="ui-switch"
+                      role="switch"
+                      :aria-checked="row.enabled ? 'true' : 'false'"
+                      :aria-label="`Expose ${row.display_name}`"
+                      @click="row.enabled = !row.enabled"
+                    >
+                      <span class="ui-switch-thumb"></span>
+                    </button>
+                  </td>
+                  <td>
+                    <strong>{{ row.display_name }}</strong>
+                    <span class="path-line">{{ row.name }} · port {{ row.port }}{{ row.installed ? '' : ' · not installed' }}</span>
+                  </td>
+                  <td>
+                    <input
+                      v-model="row.subdomain"
+                      class="ui-input font-mono"
+                      :placeholder="row.default_subdomain"
+                      autocomplete="off"
+                      :disabled="!row.enabled"
+                    />
+                  </td>
+                  <td class="font-mono hostname-preview">{{ previewHostnameUrl(row) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="share-row">
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving || hostnameBusy">
+              Save subdomains
+            </button>
+            <button
+              type="button"
+              class="ui-btn ui-btn-primary"
+              :disabled="saving || hostnameBusy || (!apiTokenConfigured && !form.cloudflare_api_token)"
+              @click="publishHostnames"
+            >
+              Publish to Cloudflare
+            </button>
+            <button
+              v-if="apiTokenConfigured"
+              type="button"
+              class="ui-btn ui-btn-ghost"
+              :disabled="saving || hostnameBusy"
+              @click="clearCloudflareApiToken"
+            >
+              Clear API token
+            </button>
+          </div>
+          <p class="share-meta">
+            Save updates Open UI links only. Publish writes enabled hostnames into your tunnel config
+            and creates proxied DNS CNAMEs under the public app domain.
+            Changing an exposed app’s listen port updates the tunnel service and recreates its DNS
+            CNAME automatically (API token required). Disabling an app removes its tunnel route but
+            leaves the DNS CNAME (safe no-op / 404). LAN browsing still uses
+            <code>http://nas-ip:port</code> even when a public domain is set.
+            For zones like <code>example.co.uk</code>, set Public app domain to that full zone.
+            Secure public hostnames with
+            <code>deploy/CLOUDFLARE_ACCESS.md</code>.
+          </p>
         </form>
       </div>
     </template>
@@ -1852,6 +2252,23 @@ onBeforeUnmount(() => {
   display: block;
   color: var(--text-dim);
   font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.hostname-table-wrap {
+  overflow-x: auto;
+  margin: 0.35rem 0 0.25rem;
+}
+.hostname-table th:first-child,
+.hostname-table td:first-child {
+  width: 4.5rem;
+}
+.hostname-table .ui-input {
+  min-width: 7rem;
+  max-width: 12rem;
+}
+.hostname-preview {
+  font-size: 0.8rem;
+  color: var(--text-muted);
   overflow-wrap: anywhere;
 }
 .share-row {

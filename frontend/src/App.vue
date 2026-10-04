@@ -49,6 +49,7 @@ const wizardStatusLoaded = ref(false)
 const wiringRunning = ref(false)
 const currentTime = ref(new Date().toLocaleTimeString())
 const vpnLive = ref({})
+const cloudflareLive = ref({})
 const showHealthModal = ref(false)
 const logApp = ref(null)
 const settingsService = ref(null)
@@ -70,6 +71,10 @@ const showVpnPill = computed(
   () => authStatus.value.authenticated && wizardCompleted.value && !!vpnLive.value.enabled,
 )
 const vpnTunnelUp = computed(() => !!vpnLive.value.tunnel_up)
+const showCloudflarePill = computed(
+  () => authStatus.value.authenticated && wizardCompleted.value && !!cloudflareLive.value.enabled,
+)
+const cloudflareUp = computed(() => !!cloudflareLive.value.connected)
 const availableUpdates = computed(() => updateStatus.value.available || [])
 const showUpdatesPill = computed(
   () =>
@@ -148,6 +153,7 @@ async function handleLogout() {
   authStatus.value.username = null
   authStatus.value.avatar_url = null
   vpnLive.value = {}
+  cloudflareLive.value = {}
   router.replace({ name: 'home' })
   showToast('Logged out successfully.', 'info')
 }
@@ -193,6 +199,7 @@ async function fetchSystemInfo() {
     if (res.ok) {
       systemInfo.value = await readJson(res)
       if (systemInfo.value?.vpn) vpnLive.value = systemInfo.value.vpn
+      if (systemInfo.value?.cloudflare_tunnel) cloudflareLive.value = systemInfo.value.cloudflare_tunnel
     }
   } catch (err) {
     console.error('System info fetch error:', err)
@@ -273,6 +280,7 @@ function pollSlowStatus() {
 function onHealthSystem(data) {
   systemInfo.value = data
   if (data?.vpn) vpnLive.value = data.vpn
+  if (data?.cloudflare_tunnel) cloudflareLive.value = data.cloudflare_tunnel
 }
 
 function openCatalog() {
@@ -365,6 +373,20 @@ onUnmounted(() => {
           <span class="pulse-dot"></span>
           <span class="metric-val font-mono">VPN</span>
         </div>
+        <RouterLink
+          v-if="showCloudflarePill"
+          :to="{ name: 'settings', params: { section: 'network' } }"
+          class="metric-pill"
+          :class="cloudflareUp ? 'is-cf-up' : 'is-cf-down'"
+          :title="cloudflareUp
+            ? (cloudflareLive.token_saved || cloudflareLive.token_present
+              ? 'Cloudflare Tunnel up · token saved'
+              : 'Cloudflare Tunnel up')
+            : (cloudflareLive.summary || 'Cloudflare Tunnel down — open Settings → Network')"
+        >
+          <span class="pulse-dot"></span>
+          <span class="metric-val font-mono">CF</span>
+        </RouterLink>
         <RouterLink
           v-if="showUpdatesPill"
           :to="{ name: 'settings', params: { section: 'updates' } }"
@@ -472,6 +494,7 @@ onUnmounted(() => {
         />
         <HomepagePanel
           v-else-if="currentView === 'home'"
+          :system-info="systemInfo"
           @manage="openCatalog"
         />
         <CatalogView
@@ -503,6 +526,7 @@ onUnmounted(() => {
     <AppSettingsModal
       v-if="settingsService"
       :service="settingsService"
+      :system-info="systemInfo"
       @close="settingsService = null"
       @saved="refreshDashboard"
     />

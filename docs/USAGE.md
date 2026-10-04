@@ -150,7 +150,7 @@ The **Settings** nav item is the admin page for the appliance (separate from per
 | System | Timezone, log level, PUID/PGID, host CPU/RAM, storage paths (read-only) |
 | Updates | Catalog and appliance check, apply schedules, Check now, optional GitHub token |
 | Backups | Schedule, retention, backup now, verify, per-app restore, download/upload, delete |
-| Network | VPN (enable = kill switch; Start/Stop/Restart tunnel; disable = house network for qBittorrent/Prowlarr/Flaresolverr; protocol, config) and Cloudflare Tunnel (token, trusted proxies) |
+| Network | VPN (enable = kill switch; Start/Stop/Restart tunnel; disable = house network for qBittorrent/Prowlarr/Flaresolverr; protocol, config) and Cloudflare Tunnel (token, trusted proxies). Step-by-step token guide: [deploy/CLOUDFLARE.md](../deploy/CLOUDFLARE.md) |
 | Homepage | Jellyfin and Seerr API keys for Home widgets, plus widget debug |
 | Diagnostics | Error ring and time-limited support share URL (`/debug/{token}`), including VPN tunnel status. Host dumps and `/api/system` process logs use the same switch; `curl` from localhost on the appliance always works. |
 

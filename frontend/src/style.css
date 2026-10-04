@@ -705,7 +705,14 @@ html {
   gap: 0.4rem;
   font-size: 0.8rem;
   font-weight: 500;
-  color: #cbd5e1;
+  color: var(--text-muted);
+}
+
+.ui-field-hint {
+  font-weight: 400;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-dim);
 }
 
 .ui-input,

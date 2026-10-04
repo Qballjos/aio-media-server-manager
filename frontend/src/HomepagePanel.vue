@@ -3,11 +3,50 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
+import { appWebUrl } from './appWebUrl.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug } from './homepageDebug.js'
 
+const props = defineProps({
+  systemInfo: { type: Object, default: null },
+})
 const emit = defineEmits(['manage'])
 const route = useRoute()
+
+function subdomainFor(appName) {
+  const row = (props.systemInfo?.public_app_hostnames || {})[appName]
+  return row && row.enabled ? row.subdomain : ''
+}
+
+/** Keep path/hash from the API link; swap host for LAN vs Cloudflare subdomains. */
+function publicAppUrl(appName, port, currentUrl = '') {
+  const base = appWebUrl({
+    appName,
+    port,
+    baseDomain: props.systemInfo?.public_app_base_domain || '',
+    subdomain: subdomainFor(appName),
+  })
+  if (!currentUrl) return base
+  try {
+    const old = new URL(currentUrl, window.location.origin)
+    const next = new URL(base)
+    return `${next.origin}${old.pathname}${old.search}${old.hash}`
+  } catch {
+    return base
+  }
+}
+
+function withPublicUrls(item, appName) {
+  if (!item || typeof item !== 'object') return item
+  const port = Number(
+    (snapshot.value.apps || []).find((app) => app.name === appName)?.port || 0,
+  )
+  if (!port && !item.url) return item
+  return {
+    ...item,
+    url: publicAppUrl(appName, port || item.port || 0, item.url || ''),
+  }
+}
 const emptySnapshot = () => ({
   apps: [],
   calendar: [],
@@ -78,13 +117,31 @@ const launcherGroups = computed(() => {
         apps: [],
       })
     }
-    groups.get(id).apps.push(app)
+    groups.get(id).apps.push({
+      ...app,
+      url: publicAppUrl(app.name, app.port, app.url || ''),
+    })
   }
   return [...groups.values()].sort((a, b) => {
     const ai = CATEGORY_ORDER.indexOf(a.id)
     const bi = CATEGORY_ORDER.indexOf(b.id)
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
   })
+})
+
+const recentItems = computed(() =>
+  (snapshot.value.recent || []).map((item) => withPublicUrls(item, item.source)),
+)
+const requestItems = computed(() =>
+  (snapshot.value.requests || []).map((item) => withPublicUrls(item, 'seerr')),
+)
+const trendingItems = computed(() =>
+  (snapshot.value.trending || []).map((item) => withPublicUrls(item, 'seerr')),
+)
+const seerrHomeUrl = computed(() => {
+  const seerr = snapshot.value.seerr || {}
+  const port = Number((snapshot.value.apps || []).find((app) => app.name === 'seerr')?.port || 5055)
+  return publicAppUrl('seerr', port, seerr.url || '')
 })
 
 function notesFor(widget) {
@@ -597,7 +654,7 @@ onUnmounted(() => {
           </div>
           <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail">
             <a
-              v-for="(item, idx) in snapshot.recent"
+              v-for="(item, idx) in recentItems"
               :key="idx"
               class="home-tile"
               :href="item.url || undefined"
@@ -628,11 +685,11 @@ onUnmounted(() => {
           </div>
           <div v-if="snapshot.requests.length" ref="requestsRail" class="home-rail">
             <a
-              v-for="(item, idx) in snapshot.requests"
+              v-for="(item, idx) in requestItems"
               :key="idx"
               class="home-tile"
-              :href="item.url || snapshot.seerr.url || undefined"
-              :target="item.url || snapshot.seerr.url ? '_blank' : undefined"
+              :href="item.url || seerrHomeUrl || undefined"
+              :target="item.url || seerrHomeUrl ? '_blank' : undefined"
               rel="noopener noreferrer"
             >
               <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
@@ -658,11 +715,11 @@ onUnmounted(() => {
             </div>
           </div>
           <div v-if="snapshot.trending.length" ref="trendingRail" class="home-rail">
-            <div v-for="(item, idx) in snapshot.trending" :key="idx" class="home-tile home-tile-trending">
+            <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
               <a
                 class="home-tile-link"
-                :href="item.url || snapshot.seerr.url || undefined"
-                :target="item.url || snapshot.seerr.url ? '_blank' : undefined"
+                :href="item.url || seerrHomeUrl || undefined"
+                :target="item.url || seerrHomeUrl ? '_blank' : undefined"
                 rel="noopener noreferrer"
               >
                 <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />

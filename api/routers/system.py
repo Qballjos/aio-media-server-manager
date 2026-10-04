@@ -19,6 +19,7 @@ from core.debug_access import can_view_debug, is_local_troubleshooting, require_
 from core.library_layout import LibraryLayout
 from core.log_redactor import redact_log_line
 from core.metrics import collect_metrics
+from core.public_hostnames import load_hostnames
 from core.settings import settings
 from core.storage import StorageManager
 from core.supervisor import ProcessSupervisor
@@ -38,6 +39,8 @@ def _operational_status() -> dict:
         "cloudflare_tunnel": cloudflare_tunnel.status(),
         # Safe for any logged-in admin session (Host health / Settings overview).
         "metrics": collect_metrics(),
+        "public_app_base_domain": settings.public_app_base_domain,
+        "public_app_hostnames": load_hostnames(),
     }
 
 

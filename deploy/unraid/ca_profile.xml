@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Community Applications repository profile.
+
+  For a public CA listing, put this file at the ROOT of the GitHub repository
+  you submit at https://ca.unraid.net/submit together with templates/*.xml
+
+  Recommended dedicated repo layout:
+    ca_profile.xml
+    templates/aio-media-manager.xml
+
+  Copy from deploy/unraid/ in the main project, or keep TemplateURL pointing
+  at the raw files under Qballjos/aio-media-server-manager (already set).
+-->
+<CommunityApplications>
+  <Profile>
+    Templates for **AIO Media Server Manager** — a single-container media appliance that runs the *Arr stack, downloaders, and media servers as supervised processes inside one Unraid Docker container. Install only this app; do not also add separate Sonarr/Radarr/qBittorrent Community Apps templates.
+  </Profile>
+  <Icon>https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/frontend/public/logo-aio-media-manager.png</Icon>
+  <WebPage>https://github.com/Qballjos/aio-media-server-manager</WebPage>
+  <Forum>https://github.com/Qballjos/aio-media-server-manager/issues</Forum>
+  <DonateLink>https://github.com/sponsors/Qballjos</DonateLink>
+  <DonateText>Sponsor on GitHub</DonateText>
+</CommunityApplications>

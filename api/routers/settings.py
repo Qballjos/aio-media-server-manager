@@ -137,6 +137,7 @@ class SettingsPatch(BaseModel):
     cloudflare_tunnel_enabled: Optional[bool] = None
     cloudflare_tunnel_token: Optional[str] = None
     trusted_proxies: Optional[str] = None
+    public_app_base_domain: Optional[str] = None
     github_token: Optional[str] = None
     jellyfin_api_key: Optional[str] = None
     seerr_api_key: Optional[str] = None
@@ -213,6 +214,7 @@ def public_settings() -> dict[str, Any]:
         "api_host": settings.api_host,
         "api_port": settings.api_port,
         "trusted_proxies": settings.trusted_proxies,
+        "public_app_base_domain": settings.public_app_base_domain,
         "root_path": settings.root_path,
         "github_token_configured": bool(token),
         "homepage_keys": {"jellyfin": jellyfin_key, "seerr": seerr_key},
@@ -290,6 +292,26 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         notes.append(f"Wrote VPN config to {dest}.")
     if body.trusted_proxies is not None:
         settings.trusted_proxies = body.trusted_proxies.strip()
+        notes.append(
+            "Trusted proxies saved. Recreate/restart the AIO container for proxy trust to apply "
+            "(it is read at process start)."
+        )
+    if body.public_app_base_domain is not None:
+        domain = body.public_app_base_domain.strip().strip(".").lower()
+        if domain.startswith("http://") or domain.startswith("https://"):
+            raise HTTPException(
+                status_code=422,
+                detail="public_app_base_domain is a DNS zone only (e.g. example.com), not a URL.",
+            )
+        settings.public_app_base_domain = domain
+        from core.homepage import clear_homepage_snapshot_cache
+
+        clear_homepage_snapshot_cache()
+        notes.append(
+            "Public app domain saved. Home and Catalog Open UI links use https://<app>."
+            + (domain or "<derived-host>")
+            + " when you are not on the LAN."
+        )
     if body.cloudflare_tunnel_enabled is not None:
         settings.cloudflare_tunnel_enabled = body.cloudflare_tunnel_enabled
     if body.cloudflare_tunnel_token:

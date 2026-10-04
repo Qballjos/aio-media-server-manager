@@ -99,6 +99,7 @@ Each catalog card includes a help control that opens that project's official doc
 | [Docker](deploy/DOCKER.md) | Primary deployment |
 | [Linux / LXC](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md) | Platform notes |
 | [Cloudflare Tunnel](deploy/CLOUDFLARE.md) | Remote access without inbound ports |
+| [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md) | Login gate in front of published app hostnames |
 | [Contributing](CONTRIBUTING.md) | Development workflow |
 
 ---

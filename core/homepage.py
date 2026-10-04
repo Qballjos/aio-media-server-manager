@@ -15,6 +15,7 @@ from urllib.parse import quote
 import requests
 
 from applications.catalog import ApplicationCatalog
+from core.app_web_url import app_web_ui_url
 from core.integrations.credentials import get_application_api_key
 from core.integrations.jellyfin import jellyfin_auth_headers
 from core.integrations.nzbget import NZBGetClient
@@ -85,18 +86,26 @@ def clear_homepage_snapshot_cache() -> None:
         _snapshots.clear()
 
 
-def homepage_snapshot(host: str, *, force: bool = False) -> dict[str, Any]:
-    ident = (host or "127.0.0.1").strip() or "127.0.0.1"
+def _cache_ident(host: str, scheme: str = "http") -> str:
+    h = (host or "127.0.0.1").strip() or "127.0.0.1"
+    s = (scheme or "http").split(":")[0].lower() or "http"
+    return f"{s}://{h}"
+
+
+def homepage_snapshot(host: str, *, force: bool = False, scheme: str = "http") -> dict[str, Any]:
+    host = (host or "127.0.0.1").strip() or "127.0.0.1"
+    scheme = (scheme or "http").split(":")[0].lower() or "http"
+    ident = _cache_ident(host, scheme)
     if force:
         with _lock_for(ident):
-            return _build_and_store(ident)
+            return _build_and_store(host, scheme)
 
     cached = _cached_copy(ident)
     if cached is not None:
         snap, age = cached
         if age < _CACHE_TTL:
             return snap
-        _schedule_refresh(ident)
+        _schedule_refresh(host, scheme)
         return snap
 
     with _lock_for(ident):
@@ -104,22 +113,22 @@ def homepage_snapshot(host: str, *, force: bool = False) -> dict[str, Any]:
         if cached is not None:
             snap, age = cached
             if age >= _CACHE_TTL:
-                _schedule_refresh(ident)
+                _schedule_refresh(host, scheme)
             return snap
         # Cold miss: return launcher immediately; fill widgets in the background.
-        shell = _launcher_shell(ident)
+        shell = _launcher_shell(host, scheme)
         _snapshots[ident] = _SnapshotEntry(shell, time.monotonic() - _CACHE_TTL)
-        _schedule_refresh(ident)
+        _schedule_refresh(host, scheme)
         return copy.deepcopy(shell)
 
 
-def _launcher_shell(host: str) -> dict[str, Any]:
+def _launcher_shell(host: str, scheme: str = "http") -> dict[str, Any]:
     catalog = ApplicationCatalog()
     running = _running_names()
     seerr = catalog.has("seerr") and catalog.get("seerr").is_installed()
     seerr_running = seerr and "seerr" in running
     return {
-        "apps": _launcher_apps(catalog, running, host),
+        "apps": _launcher_apps(catalog, running, host, scheme=scheme),
         "calendar": [],
         "downloads": [],
         "recent": [],
@@ -127,7 +136,9 @@ def _launcher_shell(host: str) -> dict[str, Any]:
         "trending": [],
         "seerr": {
             "available": bool(seerr_running),
-            "url": _web_url(host, _port(catalog, "seerr", 5055)) if seerr else None,
+            "url": (
+                _web_url("seerr", _port(catalog, "seerr", 5055), host, scheme) if seerr else None
+            ),
         },
         "widgets": [
             {
@@ -185,46 +196,49 @@ def _cached_copy(host: str) -> tuple[dict[str, Any], float] | None:
         return copy.deepcopy(entry.snapshot), age
 
 
-def _schedule_refresh(host: str) -> None:
+def _schedule_refresh(host: str, scheme: str = "http") -> None:
+    ident = _cache_ident(host, scheme)
     with _cache_guard:
-        entry = _snapshots.get(host)
+        entry = _snapshots.get(ident)
         if entry is None or entry.refreshing:
             return
         entry.refreshing = True
     threading.Thread(
         target=_refresh_snapshot,
-        args=(host,),
-        name=f"homepage-refresh-{host}",
+        args=(host, scheme),
+        name=f"homepage-refresh-{ident}",
         daemon=True,
     ).start()
 
 
-def _refresh_snapshot(host: str) -> None:
+def _refresh_snapshot(host: str, scheme: str = "http") -> None:
+    ident = _cache_ident(host, scheme)
     try:
-        with _lock_for(host):
-            _build_and_store(host)
+        with _lock_for(ident):
+            _build_and_store(host, scheme)
     except Exception as exc:
         logger.debug("Homepage background refresh failed: %s", exc)
         with _cache_guard:
-            entry = _snapshots.get(host)
+            entry = _snapshots.get(ident)
             if entry is not None:
                 entry.refreshing = False
 
 
-def _build_and_store(host: str) -> dict[str, Any]:
-    snapshot = _build_homepage_snapshot(host)
+def _build_and_store(host: str, scheme: str = "http") -> dict[str, Any]:
+    ident = _cache_ident(host, scheme)
+    snapshot = _build_homepage_snapshot(host, scheme)
     with _cache_guard:
-        _snapshots[host] = _SnapshotEntry(snapshot, time.monotonic())
+        _snapshots[ident] = _SnapshotEntry(snapshot, time.monotonic())
     return copy.deepcopy(snapshot)
 
 
-def _build_homepage_snapshot(host: str) -> dict[str, Any]:
+def _build_homepage_snapshot(host: str, scheme: str = "http") -> dict[str, Any]:
     catalog = ApplicationCatalog()
     running = _running_names()
     start, end = calendar_fetch_span()
     notes: list[dict[str, Any]] = []
 
-    apps = _launcher_apps(catalog, running, host)
+    apps = _launcher_apps(catalog, running, host, scheme=scheme)
 
     calendar: list[dict[str, Any]] = []
     downloads: list[dict[str, Any]] = []
@@ -243,10 +257,10 @@ def _build_homepage_snapshot(host: str) -> dict[str, Any]:
         fut_sonarr = pool.submit(_collect_sonarr_calendar, catalog, running, start, end, sonarr_notes)
         fut_radarr = pool.submit(_collect_radarr_calendar, catalog, running, start, end, radarr_notes)
         fut_downloads = pool.submit(_collect_download_queues, catalog, running)
-        fut_jelly = pool.submit(_collect_jellyfin_recent, catalog, running, jelly_notes, host)
-        fut_plex = pool.submit(_collect_plex_recent, catalog, running, plex_notes, host)
-        fut_seerr = pool.submit(_collect_seerr_requests, catalog, running, seerr_notes, host)
-        fut_trending = pool.submit(_collect_seerr_trending, catalog, running, trending_notes, host)
+        fut_jelly = pool.submit(_collect_jellyfin_recent, catalog, running, jelly_notes, host, scheme)
+        fut_plex = pool.submit(_collect_plex_recent, catalog, running, plex_notes, host, scheme)
+        fut_seerr = pool.submit(_collect_seerr_requests, catalog, running, seerr_notes, host, scheme)
+        fut_trending = pool.submit(_collect_seerr_trending, catalog, running, trending_notes, host, scheme)
         calendar.extend(fut_sonarr.result())
         calendar.extend(fut_radarr.result())
         dl_items, dl_notes = fut_downloads.result()
@@ -288,7 +302,9 @@ def _build_homepage_snapshot(host: str) -> dict[str, Any]:
         "trending": trending[:20],
         "seerr": {
             "available": bool(seerr_running),
-            "url": _web_url(host, _port(catalog, "seerr", 5055)) if seerr else None,
+            "url": (
+                _web_url("seerr", _port(catalog, "seerr", 5055), host, scheme) if seerr else None
+            ),
         },
         "widgets": notes,
     }
@@ -383,6 +399,8 @@ def _launcher_apps(
     running: set[str],
     host: str,
     processes: dict[str, dict[str, Any]] | None = None,
+    *,
+    scheme: str = "http",
 ) -> list[dict[str, Any]]:
     states = processes if processes is not None else _process_states()
     apps: list[dict[str, Any]] = []
@@ -402,7 +420,7 @@ def _launcher_apps(
                 "port": plugin.port,
                 "running": plugin.name in running,
                 "sick": sick,
-                "url": _web_url(host, plugin.port),
+                "url": _web_url(plugin.name, plugin.port, host, scheme),
             }
         )
     order = {name: index for index, name in enumerate(_LAUNCHER_CATEGORY_ORDER)}
@@ -415,9 +433,13 @@ def _launcher_apps(
     return apps
 
 
-def _web_url(host: str, port: int) -> str:
-    safe_host = (host or "127.0.0.1").split(":")[0] or "127.0.0.1"
-    return f"http://{safe_host}:{port}"
+def _web_url(app_name: str, port: int, host: str, scheme: str = "http") -> str:
+    return app_web_ui_url(
+        app_name=app_name,
+        port=port,
+        hostname=host,
+        scheme=scheme,
+    )
 
 
 def _port(catalog: ApplicationCatalog, name: str, fallback: int) -> int:
@@ -948,6 +970,7 @@ def _collect_jellyfin_recent(
     running: set[str],
     notes: list[dict[str, Any]],
     host: str,
+    scheme: str = "http",
 ) -> list[dict[str, Any]]:
     if not _source_ready(catalog, running, "jellyfin", "recent", notes, need_key=True):
         return []
@@ -984,7 +1007,7 @@ def _collect_jellyfin_recent(
                         "detail": _season_label(season),
                         "when": str(row.get("DateCreated") or "")[:16],
                         "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
-                        "url": f"{_web_url(host, plugin.port)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
+                        "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
                         "_kind": "season",
                         "_series_id": series_id,
                         "_season": season,
@@ -1005,7 +1028,7 @@ def _collect_jellyfin_recent(
                         "detail": " ".join(part for part in (ep, row.get("Name") or "") if part),
                         "when": str(row.get("DateCreated") or "")[:16],
                         "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
-                        "url": f"{_web_url(host, plugin.port)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
+                        "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
                         "_kind": "episode",
                         "_series_id": series_id,
                         "_season": season,
@@ -1023,7 +1046,7 @@ def _collect_jellyfin_recent(
                     "detail": str(row.get("ProductionYear") or "Movie"),
                     "when": str(row.get("DateCreated") or "")[:16],
                     "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
-                    "url": f"{_web_url(host, plugin.port)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
+                    "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
                     "_kind": "movie",
                 }
             )
@@ -1046,6 +1069,7 @@ def _collect_plex_recent(
     running: set[str],
     notes: list[dict[str, Any]],
     host: str,
+    scheme: str = "http",
 ) -> list[dict[str, Any]]:
     if not _source_ready(catalog, running, "plex", "recent", notes):
         return []
@@ -1083,7 +1107,7 @@ def _collect_plex_recent(
                         "detail": _season_label(season),
                         "when": str(row.get("addedAt") or row.get("originallyAvailableAt") or ""),
                         "poster": f"/api/homepage/art?source=plex&item_id={quote(poster_id, safe='')}" if poster_id else "",
-                        "url": f"{_web_url(host, plugin.port)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
+                        "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
                         "_kind": "season",
                         "_series_id": series_id,
                         "_season": season,
@@ -1105,7 +1129,7 @@ def _collect_plex_recent(
                         "detail": " ".join(part for part in (ep, row.get("title") or "") if part),
                         "when": str(row.get("addedAt") or row.get("originallyAvailableAt") or ""),
                         "poster": f"/api/homepage/art?source=plex&item_id={quote(poster_id, safe='')}" if poster_id else "",
-                        "url": f"{_web_url(host, plugin.port)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
+                        "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
                         "_kind": "episode",
                         "_series_id": series_id,
                         "_season": season,
@@ -1123,7 +1147,7 @@ def _collect_plex_recent(
                     "detail": str(row.get("year") or kind),
                     "when": str(row.get("addedAt") or row.get("originallyAvailableAt") or ""),
                     "poster": f"/api/homepage/art?source=plex&item_id={quote(poster_id, safe='')}" if poster_id else "",
-                    "url": f"{_web_url(host, plugin.port)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
+                    "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/web/index.html#!/server/library/metadata/{quote(item_key, safe='')}" if item_key else "",
                     "_kind": "movie" if kind == "movie" else kind or "movie",
                 }
             )
@@ -1144,6 +1168,7 @@ def _collect_seerr_requests(
     running: set[str],
     notes: list[dict[str, Any]],
     host: str,
+    scheme: str = "http",
 ) -> list[dict[str, Any]]:
     if not _source_ready(catalog, running, "seerr", "requests", notes, need_key=True):
         return []
@@ -1165,7 +1190,7 @@ def _collect_seerr_requests(
             error or (None if isinstance(data, dict) else "unexpected request payload"),
             "no requests yet",
         )
-    items = _seerr_request_cards(plugin, headers, rows[:16], host)
+    items = _seerr_request_cards(plugin, headers, rows[:16], host, scheme)
     return _finish_source(
         notes,
         "requests",
@@ -1181,6 +1206,7 @@ def _collect_seerr_trending(
     running: set[str],
     notes: list[dict[str, Any]],
     host: str,
+    scheme: str = "http",
 ) -> list[dict[str, Any]]:
     if not _source_ready(catalog, running, "seerr", "trending", notes, need_key=True):
         return []
@@ -1202,7 +1228,7 @@ def _collect_seerr_trending(
             error or (None if isinstance(data, dict) else "unexpected trending payload"),
             "no trending titles",
         )
-    items = _seerr_trending_cards(plugin, rows, host)
+    items = _seerr_trending_cards(plugin, rows, host, scheme)
     return _finish_source(
         notes,
         "trending",
@@ -1213,7 +1239,7 @@ def _collect_seerr_trending(
     )
 
 
-def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str) -> list[dict[str, Any]]:
+def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str, scheme: str = "http") -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     seen: set[tuple[str, int]] = set()
     for row in rows:
@@ -1243,7 +1269,7 @@ def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str) -> list[dict[
                 "title": title,
                 "detail": year or ("TV" if media_type == "tv" else "Movie"),
                 "poster": f"https://image.tmdb.org/t/p/w185{poster}" if poster else "",
-                "url": f"{_web_url(host, plugin.port)}/{path}",
+                "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
                 "mediaType": media_type,
                 "mediaId": media_id,
                 "status": status,
@@ -1260,6 +1286,7 @@ def _seerr_request_cards(
     headers: dict[str, str],
     rows: list[Any],
     host: str,
+    scheme: str = "http",
 ) -> list[dict[str, Any]]:
     jobs: list[tuple[dict[str, Any], str, int]] = []
     for row in rows:
@@ -1310,7 +1337,7 @@ def _seerr_request_cards(
                 "title": title,
                 "detail": requester,
                 "poster": info.get("poster") or "",
-                "url": f"{_web_url(host, plugin.port)}/{path}",
+                "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
                 "mediaType": media_type,
                 "mediaId": tmdb_id,
             }

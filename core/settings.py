@@ -32,6 +32,7 @@ _PERSISTED_KEYS = (
     "pgid",
     "backup_retention",
     "trusted_proxies",
+    "public_app_base_domain",
     "vpn_enabled",
     "vpn_enforce",
     "vpn_provider",
@@ -67,6 +68,7 @@ _PERSISTED_ENV = {
     "pgid": ("PGID", "AMM_PGID"),
     "backup_retention": ("AMM_BACKUP_RETENTION",),
     "trusted_proxies": ("AMM_TRUSTED_PROXIES",),
+    "public_app_base_domain": ("AMM_PUBLIC_APP_BASE_DOMAIN",),
     "vpn_enabled": ("AMM_VPN_ENABLED",),
     "vpn_enforce": ("AMM_VPN_ENFORCE",),
     "vpn_provider": ("AMM_VPN_PROVIDER",),
@@ -200,6 +202,15 @@ class Settings(BaseSettings):
         default="",
         description="Comma-separated proxy IPs/CIDRs. Empty disables forwarded-header trust.",
         validation_alias="AMM_TRUSTED_PROXIES",
+    )
+    public_app_base_domain: str = Field(
+        default="",
+        description=(
+            "DNS zone for Catalog Open UI links when not on the LAN "
+            "(e.g. example.com → https://sonarr.example.com). "
+            "Empty = derive from the current hostname on HTTPS."
+        ),
+        validation_alias="AMM_PUBLIC_APP_BASE_DOMAIN",
     )
     root_path: str = Field(
         default="",
@@ -375,6 +386,7 @@ class Settings(BaseSettings):
             "timezone": self.timezone,
             "github_token_configured": bool(self.github_token),
             "trusted_proxies": self.trusted_proxies,
+            "public_app_base_domain": self.public_app_base_domain,
             "root_path": self.root_path,
             "vpn_enabled": self.vpn_enabled,
             "vpn_enforce": self.vpn_enforce,
