@@ -13,7 +13,6 @@ from core.integrations.credentials import get_application_api_key, set_applicati
 from core.integrations.bazarr import BazarrClient
 from core.integrations.hooks import (
     write_neutarr_config,
-    write_profilarr_config,
     write_recyclarr_config,
 )
 from core.integrations.nzbget import NZBGetClient
@@ -612,6 +611,7 @@ def test_integration_endpoints():
     assert "libraries" in data["layout"]
     assert "tv" in data["layout"]["libraries"]
     assert "books" in data["layout"]["libraries"]
+    assert "audiobooks" not in data["layout"]["libraries"]
     assert "incomplete" in data["layout"]
 
 
@@ -735,20 +735,6 @@ def test_optimization_hooks(tmp_path: Path):
     assert "reset_unmatched_scores" in rec_text
     assert "custom_format_groups:" not in rec_text
     assert "plex-imdb" in rec_text
-    pro = write_profilarr_config(
-        tmp_path / "profilarr",
-        sonarr_url="http://127.0.0.1:8989",
-        sonarr_key="s",
-        radarr_url="http://127.0.0.1:7878",
-        radarr_key="r",
-        lidarr_url="http://127.0.0.1:8686",
-        lidarr_key="l",
-    )
-    assert pro.is_file()
-    pro_text = pro.read_text(encoding="utf-8")
-    assert "base_url: \"http://127.0.0.1:8989\"" in pro_text
-    assert "Lidarr (AMM)" in pro_text
-    assert "backup_before_sync: true" in pro_text
     neu = write_neutarr_config(
         tmp_path / "neutarr",
         sonarr_url="http://127.0.0.1:8989",

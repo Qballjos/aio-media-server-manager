@@ -23,6 +23,7 @@ DOWNLOAD_CATEGORIES: tuple[DownloadCategory, ...] = (
     DownloadCategory("radarr", "movies", "radarr"),
     DownloadCategory("anime", "anime", "sonarr"),
     DownloadCategory("lidarr", "music", "lidarr"),
+    DownloadCategory("books", "books", "shelfmark"),
 )
 
 LIBRARY_FOLDERS: tuple[str, ...] = ("tv", "movies", "anime", "music", "books", "comics")
@@ -77,7 +78,11 @@ class LibraryLayout:
 
     @property
     def bookdrop(self) -> Path:
-        return self.books / "bookdrop"
+        """Shared inbox for Shelfmark books/audiobooks and Grimmory import.
+
+        Same path as :meth:`complete_path` ``"books"`` / Shelfmark ``INGEST_DIR``.
+        """
+        return self.complete_path("books")
 
     @property
     def comics(self) -> Path:
@@ -117,7 +122,6 @@ class LibraryLayout:
             dirs.append(self.media_path(name))
             dirs.append(self.complete_path(name))
             dirs.append(self.torrent_path(name))
-        dirs.append(self.bookdrop)
         return dirs
 
     def as_dict(self) -> dict[str, str | dict[str, str]]:

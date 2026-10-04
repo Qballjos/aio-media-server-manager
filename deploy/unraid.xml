@@ -30,7 +30,6 @@
   <Config Name="Grimmory" Target="6060" Default="6060" Mode="tcp" Description="Grimmory" Type="Port" Display="advanced" Required="false" Mask="false">6060</Config>
   <Config Name="Bazarr" Target="6767" Default="6767" Mode="tcp" Description="Bazarr" Type="Port" Display="always" Required="false" Mask="false">6767</Config>
   <Config Name="NZBGet" Target="6789" Default="6789" Mode="tcp" Description="NZBGet" Type="Port" Display="advanced" Required="false" Mask="false">6789</Config>
-  <Config Name="Profilarr" Target="6868" Default="6868" Mode="tcp" Description="Profilarr" Type="Port" Display="advanced" Required="false" Mask="false">6868</Config>
   <Config Name="Radarr" Target="7878" Default="7878" Mode="tcp" Description="Radarr" Type="Port" Display="always" Required="false" Mask="false">7878</Config>
   <Config Name="Lidarr" Target="8686" Default="8686" Mode="tcp" Description="Lidarr" Type="Port" Display="always" Required="false" Mask="false">8686</Config>
   <Config Name="Sonarr" Target="8989" Default="8989" Mode="tcp" Description="Sonarr" Type="Port" Display="always" Required="false" Mask="false">8989</Config>

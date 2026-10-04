@@ -18,7 +18,6 @@ from core.integrations.bazarr import BazarrClient
 from core.integrations.credentials import get_application_api_key
 from core.integrations.hooks import (
     write_neutarr_config,
-    write_profilarr_config,
     write_recyclarr_config,
 )
 from core.recyclarr import run_sync
@@ -77,7 +76,6 @@ _STATUS_APPS = (
     "seerr",
     "bazarr",
     "recyclarr",
-    "profilarr",
     "neutarr",
 )
 
@@ -492,20 +490,6 @@ class IntegrationEngine:
                 steps.append(_step("recyclarr", "sync_trash", True, "not installed"))
         except Exception as exc:
             steps.append(_step("recyclarr", "write_trash_config", False, str(exc)))
-
-        try:
-            pro_path = write_profilarr_config(
-                self._catalog.get("profilarr").config_dir if self._catalog.has("profilarr") else self._settings.config_dir / "profilarr",
-                sonarr_url=sonarr_url,
-                sonarr_key=sonarr_key or "",
-                radarr_url=radarr_url,
-                radarr_key=radarr_key or "",
-                lidarr_url=lidarr_url if self._installed("lidarr") else "",
-                lidarr_key=lidarr_key or "",
-            )
-            steps.append(_step("profilarr", "write_starter_config", True, str(pro_path)))
-        except Exception as exc:
-            steps.append(_step("profilarr", "write_starter_config", False, str(exc)))
 
         try:
             neu_path = write_neutarr_config(

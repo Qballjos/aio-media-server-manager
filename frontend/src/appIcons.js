@@ -9,7 +9,6 @@ const ICON_FILES = {
   neutarr: 'neutarr.svg',
   nzbget: 'nzbget.svg',
   plex: 'plex.svg',
-  profilarr: 'profilarr.svg',
   prowlarr: 'prowlarr.svg',
   qbittorrent: 'qbittorrent.svg',
   radarr: 'radarr.svg',

@@ -218,7 +218,6 @@ def test_catalog_help_urls_and_icons():
         "neutarr": "neutarr.svg",
         "nzbget": "nzbget.svg",
         "plex": "plex.svg",
-        "profilarr": "profilarr.svg",
         "prowlarr": "prowlarr.svg",
         "qbittorrent": "qbittorrent.svg",
         "radarr": "radarr.svg",

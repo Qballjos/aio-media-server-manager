@@ -32,7 +32,6 @@ def test_phase4_catalog_plugins(catalog: ApplicationCatalog):
         "nzbget",
         "bazarr",
         "recyclarr",
-        "profilarr",
         "neutarr",
         "lidarr",
         "flaresolverr",
@@ -182,11 +181,30 @@ def test_grimmory_runner_starts_mariadb_as_root(catalog: ApplicationCatalog):
     assert "if ! _mariadb_up" in script
 
 
-def test_profilarr_serves_from_install_dir_with_lan_auth(tmp_path: Path):
-    from applications.extended import ProfilarrApp
+def test_grimmory_bookdrop_matches_shelfmark_ingest(tmp_path: Path, monkeypatch):
+    from applications.community import GrimmoryApp, ShelfmarkApp
+    from core.library_layout import LibraryLayout
+    from core import settings as settings_mod
 
-    app = ProfilarrApp(base_config_dir=tmp_path / "config", base_install_dir=tmp_path / "apps")
-    env = app.extra_env()
-    assert env["AUTH"] == "local"
-    assert env["APP_BASE_PATH"] == str(app.config_dir)
-    assert app.working_directory() == app.install_dir
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        install_dir=tmp_path / "apps",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        cache_dir=tmp_path / "cache",
+    )
+    monkeypatch.setattr(settings_mod, "settings", cfg)
+    monkeypatch.setattr("applications.community.default_settings", cfg)
+
+    grimmory = GrimmoryApp(base_config_dir=cfg.config_dir, base_install_dir=cfg.install_dir)
+    shelfmark = ShelfmarkApp(base_config_dir=cfg.config_dir, base_install_dir=cfg.install_dir)
+    layout = LibraryLayout.from_settings(cfg)
+    bookdrop = str(layout.bookdrop)
+    g_env = grimmory.extra_env()
+    s_env = shelfmark.extra_env()
+    assert g_env["APP_BOOKDROP_FOLDER"] == bookdrop
+    assert s_env["INGEST_DIR"] == bookdrop
+    assert s_env["DESTINATION"] == bookdrop
+    assert "DESTINATION_AUDIOBOOK" not in s_env
+    assert "QBITTORRENT_CATEGORY_AUDIOBOOK" not in s_env
+

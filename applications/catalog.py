@@ -15,7 +15,6 @@ from applications.extended import (
     LidarrApp,
     NeutarrApp,
     NzbgetApp,
-    ProfilarrApp,
     RecyclarrApp,
 )
 from applications.community import FlaresolverrApp, GrimmoryApp, ShelfmarkApp
@@ -36,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 _LIVE_CATALOGS: WeakSet[ApplicationCatalog] = WeakSet()
 
-# Seventeen catalog plugins. Do not add apps here without an explicit product decision.
+# Sixteen catalog plugins. Do not add apps here without an explicit product decision.
 PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
     ProwlarrApp,
     SonarrApp,
@@ -49,7 +48,6 @@ PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
     SeerrApp,
     BazarrApp,
     RecyclarrApp,
-    ProfilarrApp,
     NeutarrApp,
     LidarrApp,
     FlaresolverrApp,

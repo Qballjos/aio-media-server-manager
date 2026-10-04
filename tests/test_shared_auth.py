@@ -7,7 +7,6 @@ from core.crypto import SecretStore
 from core.integrations.local_auth import (
     patch_bazarr_auth_yaml,
     set_neutarr_login,
-    set_profilarr_login,
     set_servarr_forms_auth,
     sha256_hex,
 )
@@ -117,13 +116,6 @@ def test_patch_bazarr_auth_yaml_only_updates_auth_section(tmp_path: Path):
     assert re.search(r"(?m)^auth:\n(?:  .*\n)*  username: \"amm\"", text)
     assert bazarr_password_hash("SharedPass123!") in text
     assert text.count(bazarr_password_hash("SharedPass123!")) == 1
-
-
-@patch("core.integrations.local_auth.requests.post")
-def test_set_profilarr_login_accepts_register(mock_post):
-    mock_post.return_value = MagicMock(status_code=201)
-    assert set_profilarr_login(6868, "amm", "SharedPass123!") is True
-    assert mock_post.call_args.kwargs["json"]["password"] == "SharedPass123!"
 
 
 def test_set_neutarr_login_enables_lan_bypass(tmp_path: Path):

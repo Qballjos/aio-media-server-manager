@@ -30,7 +30,7 @@ sudo mkdir -p \
 
 `tank/backups/aio-media-manager` holds configuration backups. A separate dataset lets you snapshot or replicate it on its own schedule. Put it on another pool if you have one.
 
-TV, movies, anime, music, books, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
+TV, movies, anime, music, books, comics, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
 
 Set the owner to your media user (TrueNAS `apps` is often UID/GID `568`; confirm with `id apps` or `id`):
 

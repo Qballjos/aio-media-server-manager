@@ -62,7 +62,7 @@ RUN printf '%s\n' \
     && chmod +x /usr/local/bin/python3.13
 
 # Host packages vs catalog (both linux/amd64 and linux/arm64 unless noted):
-#   *Arr/.NET (Sonarr, Radarr, Lidarr, Prowlarr, Profilarr, NeutArr, Recyclarr):
+#   *Arr/.NET (Sonarr, Radarr, Lidarr, Prowlarr, NeutArr, Recyclarr):
 #     libicu*, libssl3, libgssapi-krb5-2, zlib1g, libsqlite3-0, sqlite3
 #   SABnzbd / NZBGet: unrar (non-free RAR 5), par2, p7zip-full, python3.13, build-essential
 #   Bazarr / Shelfmark / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,

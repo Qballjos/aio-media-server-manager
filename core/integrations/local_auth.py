@@ -102,16 +102,6 @@ def apply_shared_local_logins(
         )
         steps.append(_step("jellyfin", "set_shared_login", client.ensure_local_admin(username, password), username))
 
-    if installed("profilarr"):
-        steps.append(
-            _step(
-                "profilarr",
-                "set_shared_login",
-                set_profilarr_login(port_for("profilarr", 6868), username, password),
-                username,
-            )
-        )
-
     if installed("neutarr"):
         steps.append(
             _step(
@@ -123,30 +113,6 @@ def apply_shared_local_logins(
         )
 
     return steps
-
-
-def set_profilarr_login(port: int, username: str, password: str) -> bool:
-    """Create Profilarr's first local user so Open UI matches the manager login."""
-    payloads = (
-        {"username": username, "password": password},
-        {"user": username, "password": password},
-        {"email": username, "password": password},
-    )
-    paths = (
-        "/api/v1/auth/register",
-        "/api/v1/auth/setup",
-        "/api/v1/auth/signup",
-        "/api/auth/register",
-    )
-    for path in paths:
-        for body in payloads:
-            try:
-                resp = requests.post(f"http://127.0.0.1:{port}{path}", json=body, timeout=5.0)
-                if resp.status_code in (200, 201, 204, 409):
-                    return True
-            except Exception as exc:
-                logger.debug("Profilarr login seed %s failed: %s", path, exc)
-    return False
 
 
 def set_neutarr_login(config_dir: Path, username: str, password: str) -> bool:

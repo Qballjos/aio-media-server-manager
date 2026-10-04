@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import glob
 import os
 import shutil
 import subprocess
@@ -11,7 +10,6 @@ from applications.base import SimpleApplication
 from applications.install_helpers import child_python, create_venv, venv_bin, write_runner
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
 from core.installer import AppInstaller, InstallResult
-from core.installer.arch import linux_gnu_triple
 
 
 class LidarrApp(ArrApplication):
@@ -319,120 +317,6 @@ class RecyclarrApp(SimpleApplication):
         )
 
 
-class ProfilarrApp(SimpleApplication):
-    manifest = AppManifest(
-        name="profilarr",
-        display_name="Profilarr",
-        description="Quality profile management for the *Arr applications.",
-        github_repo="Dictionarry-Hub/profilarr",
-        upstream_url="https://github.com/Dictionarry-Hub/profilarr",
-        tier=AppTier.RECOMMENDED,
-        category=AppCategory.OPTIMIZATION,
-        default_port=6868,
-        executable_name="profilarr",
-        supported_architectures=("x86_64", "arm64"),
-        install_method=InstallMethod.GITHUB_RELEASE,
-        optional_dependencies=("sonarr", "radarr"),
-        health_path="/",
-    )
-
-    def extra_env(self) -> dict[str, str]:
-        sqlite = _sqlite_library()
-        env = {
-            "PORT": str(self.port),
-            "HOST": "0.0.0.0",
-            "TZ": "Etc/UTC",
-            "AUTH": "local",
-            "APP_BASE_PATH": str(self.config_dir),
-            "DENO_DIR": str(self.install_dir / "deno-cache"),
-        }
-        if sqlite:
-            env["DENO_SQLITE_PATH"] = sqlite
-        return env
-
-    def working_directory(self) -> Path | None:
-        return self.install_dir
-
-    def install(self) -> InstallResult:
-        self.require_host_arch()
-        installer = AppInstaller()
-        result = installer.install_from_github_source(
-            self.github_repo,
-            self.name,
-            "deno.jsonc",
-        )
-        deno = _ensure_deno(self.install_dir / "bin")
-        build_dir = self.install_dir / "dist" / "build"
-        env = {**os.environ, **self.extra_env(), "APP_BASE_PATH": "dist/build"}
-        subprocess.run(
-            [str(deno), "ci"],
-            cwd=self.install_dir,
-            check=True,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        subprocess.run(
-            [str(deno), "run", "-A", "vite", "build"],
-            cwd=self.install_dir,
-            check=True,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        compiled = self.install_dir / "profilarr"
-        target = linux_gnu_triple()
-        mod = self.install_dir / "dist" / "build" / "mod.ts"
-        if mod.is_file():
-            compile = subprocess.run(
-                [
-                    str(deno),
-                    "compile",
-                    "--no-check",
-                    "--allow-all",
-                    "--target",
-                    target,
-                    "--output",
-                    str(compiled),
-                    str(mod),
-                ],
-                cwd=self.install_dir,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
-            if compile.returncode != 0 or not compiled.is_file():
-                write_runner(
-                    compiled,
-                    [
-                        "#!/bin/sh",
-                        f'exec "{deno}" run --allow-all "{mod}" "$@"',
-                    ],
-                )
-        else:
-            write_runner(
-                compiled,
-                [
-                    "#!/bin/sh",
-                    f'cd "{self.install_dir}"',
-                    f'exec "{deno}" task preview "$@"',
-                ],
-            )
-        static_src = build_dir / "static"
-        if not static_src.is_dir() and (build_dir / "client").is_dir():
-            static_src = build_dir / "client"
-        static_dest = self.install_dir / "static"
-        if static_src.is_dir():
-            if static_dest.exists():
-                shutil.rmtree(static_dest)
-            shutil.copytree(static_src, static_dest)
-        server_js = build_dir / "server.js"
-        if server_js.is_file():
-            shutil.copy2(server_js, self.install_dir / "server.js")
-        self.post_install()
-        return result
-
-
 class NeutarrApp(SimpleApplication):
     manifest = AppManifest(
         name="neutarr",
@@ -503,37 +387,3 @@ class NeutarrApp(SimpleApplication):
         )
         self.post_install()
         return result
-
-
-def _sqlite_library() -> str | None:
-    matches = glob.glob("/usr/lib/*/libsqlite3.so.0") + glob.glob("/usr/lib/libsqlite3.so.0")
-    return matches[0] if matches else None
-
-
-def _ensure_deno(bin_dir: Path) -> Path:
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    deno = bin_dir / "deno"
-    if deno.is_file():
-        return deno
-    slug = linux_gnu_triple()
-    installer = AppInstaller()
-    cache = installer.settings.cache_dir / "downloads"
-    cache.mkdir(parents=True, exist_ok=True)
-    archive = cache / f"deno-{slug}.zip"
-    installer.download_file(
-        f"https://github.com/denoland/deno/releases/latest/download/deno-{slug}.zip",
-        archive,
-    )
-    from core.installer.extractor import ArchiveExtractor
-
-    staging = bin_dir / ".deno-extract"
-    if staging.exists():
-        shutil.rmtree(staging)
-    ArchiveExtractor.extract(archive, staging, strip_single_wrapper=True)
-    found = next(staging.rglob("deno"), None)
-    if found is None:
-        raise FileNotFoundError("Deno binary missing from official release zip.")
-    shutil.copy2(found, deno)
-    deno.chmod(deno.stat().st_mode | 0o755)
-    shutil.rmtree(staging, ignore_errors=True)
-    return deno

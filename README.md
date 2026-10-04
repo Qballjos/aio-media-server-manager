@@ -75,7 +75,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Shared local login.** The manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin, Seerr). Plex still uses a Plex account.
 
-**Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr, Profilarr, and NeutArr.
+**Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr.
 
 **Home.** Launcher plus calendar, downloads, recently added, and Seerr search. Widget diagnostics live under **Settings → Homepage** (empty tiles explained; API keys never shown).
 
@@ -89,7 +89,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 ## Application catalog
 
-Seventeen applications are defined. Install only what you select. Entries that cannot run on the current architecture are omitted from the catalog and the wizard.
+Sixteen applications are defined. Install only what you select. Entries that cannot run on the current architecture are omitted from the catalog and the wizard.
 
 | Role | Applications |
 |------|----------------|
@@ -100,7 +100,7 @@ Seventeen applications are defined. Install only what you select. Entries that c
 | Requests | Seerr, Shelfmark |
 | Books | Grimmory |
 | Subtitles | Bazarr |
-| Profiles | Recyclarr, Profilarr, NeutArr |
+| Profiles | Recyclarr, NeutArr |
 
 Each catalog card includes a help control that opens that project's official documentation.
 

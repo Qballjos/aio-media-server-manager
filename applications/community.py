@@ -7,8 +7,9 @@ import subprocess
 from pathlib import Path
 
 from applications.base import SimpleApplication
-from applications.install_helpers import create_venv, venv_bin, write_runner
+from applications.install_helpers import child_python, create_venv, venv_bin, write_runner
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
+from applications.shelfmark_mirrors import prepare_shelfmark_runtime, write_shelfmark_runner
 from core.installer import AppInstaller, InstallResult
 from core.library_layout import LibraryLayout
 from core.settings import settings as default_settings
@@ -81,8 +82,9 @@ class GrimmoryApp(SimpleApplication):
 
     def extra_env(self) -> dict[str, str]:
         layout = LibraryLayout.from_settings(default_settings)
-        bookdrop = layout.bookdrop
-        bookdrop.mkdir(parents=True, exist_ok=True)
+        # Shared inbox with Shelfmark (ebooks + audiobooks) → complete/books.
+        for path in (layout.bookdrop, layout.books, layout.comics):
+            path.mkdir(parents=True, exist_ok=True)
         mysql_port = 3307
         return {
             "SERVER_PORT": str(self.port),
@@ -90,7 +92,7 @@ class GrimmoryApp(SimpleApplication):
             "GROUP_ID": str(self.pgid),
             "TZ": "Etc/UTC",
             "APP_PATH_CONFIG": str(self.data_dir),
-            "APP_BOOKDROP_FOLDER": str(bookdrop),
+            "APP_BOOKDROP_FOLDER": str(layout.bookdrop),
             "DATABASE_URL": (
                 f"jdbc:mariadb://127.0.0.1:{mysql_port}/grimmory"
                 "?createDatabaseIfNotExist=true&connectionTimeZone=UTC"
@@ -174,13 +176,17 @@ class ShelfmarkApp(SimpleApplication):
 
     def extra_env(self) -> dict[str, str]:
         layout = LibraryLayout.from_settings(default_settings)
-        ingest = layout.complete_path("books")
-        ingest.mkdir(parents=True, exist_ok=True)
+        # Ebooks and audiobooks share the same Grimmory bookdrop inbox.
+        bookdrop = layout.bookdrop
+        bookdrop.mkdir(parents=True, exist_ok=True)
+        layout.books.mkdir(parents=True, exist_ok=True)
         env = {
             "FLASK_HOST": "0.0.0.0",
             "FLASK_PORT": str(self.port),
             "CONFIG_DIR": str(self.config_dir),
-            "INGEST_DIR": str(ingest),
+            "INGEST_DIR": str(bookdrop),
+            "DESTINATION": str(bookdrop),
+            "QBITTORRENT_CATEGORY": "books",
             "TZ": "Etc/UTC",
             "SEARCH_MODE": "universal",
             "USING_EXTERNAL_BYPASSER": "true",
@@ -189,6 +195,7 @@ class ShelfmarkApp(SimpleApplication):
             "PROWLARR_ENABLED": "true",
             "PROWLARR_URL": "http://127.0.0.1:9696",
             "BOOKLORE_HOST": "http://127.0.0.1:6060",
+            "AUDIOBOOK_LIBRARY_URL": "http://127.0.0.1:6060",
             "PYTHONPATH": str(self.install_dir),
         }
         try:
@@ -201,6 +208,10 @@ class ShelfmarkApp(SimpleApplication):
             pass
         return env
 
+    def start_command(self) -> list[str]:
+        prepare_shelfmark_runtime(self.config_dir, self.install_dir, port=self.port)
+        return super().start_command()
+
     def install(self) -> InstallResult:
         self.require_host_arch()
         installer = AppInstaller()
@@ -209,7 +220,7 @@ class ShelfmarkApp(SimpleApplication):
             self.name,
             "pyproject.toml",
         )
-        venv_dir = create_venv(self.install_dir)
+        venv_dir = create_venv(self.install_dir, python=child_python())
         pip = venv_bin(venv_dir, "pip")
         subprocess.run(
             [str(pip), "install", str(self.install_dir)],
@@ -228,17 +239,7 @@ class ShelfmarkApp(SimpleApplication):
                 if target.exists():
                     shutil.rmtree(target)
                 shutil.copytree(dist, target)
-        gunicorn = venv_bin(venv_dir, "gunicorn")
-        runner = self.install_dir / "run-shelfmark"
-        write_runner(
-            runner,
-            [
-                "#!/bin/sh",
-                f'cd "{self.install_dir}"',
-                f'export PYTHONPATH="{self.install_dir}"',
-                f'exec "{gunicorn}" --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker '
-                f'--workers 1 -t 300 -b 0.0.0.0:{self.port} shelfmark.main:app',
-            ],
-        )
+        write_shelfmark_runner(self.install_dir, port=self.port)
+        prepare_shelfmark_runtime(self.config_dir, self.install_dir, port=self.port)
         self.post_install()
         return result

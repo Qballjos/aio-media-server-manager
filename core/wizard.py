@@ -322,7 +322,6 @@ class WizardEngine:
                     [
                         {"id": "bazarr", "name": "Bazarr (Subtitles)"},
                         {"id": "recyclarr", "name": "Recyclarr (TRaSH Guides Sync)"},
-                        {"id": "profilarr", "name": "Profilarr (Profile Management)"},
                         {"id": "neutarr", "name": "NeutArr (Automation Optimizer)"},
                         {"id": "flaresolverr", "name": "Flaresolverr (Cloudflare bypass for indexers)"},
                         {"id": "grimmory", "name": "Grimmory (ebooks, comics, audiobooks)"},

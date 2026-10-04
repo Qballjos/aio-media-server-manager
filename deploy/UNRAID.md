@@ -35,7 +35,7 @@ chown -R 99:100 \
 
 `/mnt/user/backups/aio-media-manager` receives the configuration backups. Use a share that lives on the array (not only the cache pool), so a cache failure does not take the backups with it.
 
-TV, movies, anime, music, books, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
+TV, movies, anime, music, books, comics, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
 
 `99:100` is Unraid `nobody`/`users` (PUID 99, PGID 100). If you use a custom share user, run `id thatuser` and `chown` to that UID:GID instead.
 

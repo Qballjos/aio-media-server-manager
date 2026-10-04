@@ -76,7 +76,6 @@ The manager UI uses **8080**. Child apps listen inside the same container. Compo
 | <img src="../assets/app-icons/flaresolverr.png" alt="" class="aio-app-icon" /> Flaresolverr | 8191 (x86_64 only) |
 | <img src="../assets/app-icons/bazarr.svg" alt="" class="aio-app-icon" /> Bazarr | 6767 |
 | <img src="../assets/app-icons/nzbget.svg" alt="" class="aio-app-icon" /> NZBGet | 6789 |
-| <img src="../assets/app-icons/profilarr.svg" alt="" class="aio-app-icon" /> Profilarr | 6868 |
 | <img src="../assets/app-icons/lidarr.svg" alt="" class="aio-app-icon" /> Lidarr | 8686 |
 | <img src="../assets/app-icons/sonarr.svg" alt="" class="aio-app-icon" /> Sonarr | 8989 |
 | <img src="../assets/app-icons/radarr.svg" alt="" class="aio-app-icon" /> Radarr | 7878 |
