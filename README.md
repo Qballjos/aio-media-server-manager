@@ -40,6 +40,12 @@ You run **one** Docker container (or one native Linux service). AIO installs the
 
 <p align="center"><em>Catalog — install, start, Open UI, and per-app controls.</em></p>
 
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="Settings with account and appliance options" width="920" />
+</p>
+
+<p align="center"><em>Settings — account, system, network, backups, and more.</em></p>
+
 ---
 
 ## Why this exists

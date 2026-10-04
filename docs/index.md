@@ -40,6 +40,10 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 ![AIO Media Manager application catalog](screenshots/catalog.png)
 </div>
 
+<div class="aio-shot" markdown>
+![AIO Media Manager settings](screenshots/settings.png)
+</div>
+
 ## Start where you are
 
 <div class="grid cards" markdown>
