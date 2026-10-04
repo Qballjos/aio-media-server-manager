@@ -1,13 +1,13 @@
-# Synology Container Manager (Project)
+# Synology
 
-Deploy **one** AIO Container Manager **project**. Do not add extra project services or separate containers for Sonarr, Radarr, or download clients.
+Run AIO as **one** Container Manager **project**. Do not add extra services or separate Sonarr/Radarr/download containers next to it.
 
-Image: `ghcr.io/qballjos/aio-media-server-manager:latest`  
-Use a DSM build that can run `linux/amd64` or `linux/arm64` images.
+**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
+Your DSM needs to run `linux/amd64` or `linux/arm64` images.
 
-## Create the project over SSH
+## Create folders and the project (SSH)
 
-Enable SSH (Control Panel → Terminal & SNMP → Enable SSH service), then:
+Enable SSH (**Control Panel → Terminal & SNMP → Enable SSH service**), then:
 
 ```bash
 ssh admin@<nas-ip>

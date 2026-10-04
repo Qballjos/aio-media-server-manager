@@ -1,18 +1,18 @@
-# Unraid installation
+# Unraid
 
-Deploy **one** container. Do not add Community Applications templates for Sonarr, Radarr, or download clients alongside this appliance.
+Install **one** AIO container. Do not also add Community Applications templates for Sonarr, Radarr, or download clients — AIO runs those inside itself.
 
 **Templates in this repo**
 
 | File | Purpose |
 |------|---------|
-| [`unraid/templates/aio-media-manager.xml`](unraid/templates/aio-media-manager.xml) | Canonical Docker template (ports, paths, env) |
+| [`unraid/templates/aio-media-manager.xml`](unraid/templates/aio-media-manager.xml) | Docker template (ports, paths, env) |
 | [`unraid/ca_profile.xml`](unraid/ca_profile.xml) | Community Applications maintainer profile |
-| [`unraid.xml`](unraid.xml) | Same template at the older path (kept for compatibility) |
+| [`unraid.xml`](unraid.xml) | Older path for the same template (compatibility) |
 
 ## Create folders over SSH
 
-Enable SSH (Settings → Management Access), then:
+Enable SSH (**Settings → Management Access**), then:
 
 ```bash
 ssh root@<unraid-ip>

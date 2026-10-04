@@ -1,21 +1,18 @@
-# Docker installation
+# Docker
 
-Primary deployment. One container runs the manager and every supervised application.
+This is the usual way to run AIO: **one container** that starts the manager and every app you enable.
 
 **Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
-**Architectures:** `linux/amd64`, `linux/arm64`
+**Works on:** `linux/amd64` and `linux/arm64`  
+(On ARM, Flaresolverr is not available — it needs x86_64.)
 
-The ARM64 image omits Chromium/Xvfb (Flaresolverr is x86_64-only). Python 3.13, Node 22, JRE 25, MariaDB, and ffmpeg ship on both architectures.
+---
 
-## Create folders over SSH
-
-SSH into the machine that will run Docker:
+## 1. Create folders (over SSH)
 
 ```bash
 ssh user@host
 ```
-
-Create the bind-mount directories, then set ownership to the media user (`id` prints `PUID`/`PGID`). Downloads and media live in **your home** so the host file manager can see them:
 
 ```bash
 id
@@ -28,51 +25,76 @@ sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,backups}
 sudo chown -R "${PUID}:${PGID}" "${AMM_DATA_HOST}" /opt/aio-media-manager
 ```
 
-Use other paths if you already have libraries (for example `/srv/data/media` and `/srv/data/downloads`) by setting `AMM_DATA_HOST`. Keep downloads and media as subfolders of **one** host directory so hardlinks work. Two separate bind mounts, even on btrfs, often fail if they are different subvolumes.
+**Why these paths?**
 
-`backups` holds the configuration backups (mounted at `/backups`). Put it on a different disk or NAS share than `config` if you can, so a failed disk does not take both. Without a `/backups` mount the manager falls back to `/config/backups` and warns about it in Settings → Backups.
+- Downloads and media live under **your home** so the host file manager can see them.
+- Keep them as two folders under **one** parent so hardlinks work. Separate mounts on different disks (or different btrfs subvolumes) often force full copies.
+- Put **backups** on another disk than **config** when you can. Without a `/backups` mount, AIO falls back to `/config/backups` and warns in Settings.
 
-## Compose (recommended)
+Already have libraries elsewhere? Set `AMM_DATA_HOST` to that parent folder (it still needs `downloads` and `media` inside it).
+
+---
+
+## 2. Start with Compose (recommended)
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
 ```
 
-Point the volume paths in `docker-compose.yml` at the folders you created (`AMM_DATA_HOST` defaults to `$HOME/aio-media-manager`), and set `PUID`/`PGID` to the values from `id`. Set `TZ` to your IANA timezone (or change it later in Settings → System). If you run `sudo docker compose`, set `AMM_DATA_HOST` explicitly so data does not land in `/root`.
+Check `docker-compose.yml`:
+
+- Volume paths match the folders you created
+- `PUID` / `PGID` match `id`
+- `TZ` is your timezone (or set it later in Settings)
+
+If you use `sudo docker compose`, set `AMM_DATA_HOST` explicitly so data does not land in `/root`.
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-Open `http://<host>:8080`. Create the administrator (username, **email**, password), then complete or skip the stack wizard ([Usage](../docs/USAGE.md)). If you already ran an older compose that only published `8080`, merge the current `ports:` list and `docker compose up -d --force-recreate`.
+Open `http://YOUR-HOST:8080`, create the admin account, then follow [Using the dashboard](../docs/USAGE.md).
 
-With **Settings → Updates** check schedule on, the manager notifies when GHCR `:latest` has moved (header pill + toast). Pull and recreate on the host as above; the container cannot replace its own image.
+**Updating later:** pull again, then recreate:
 
-Upgrading from a compose file without `/backups`: create the host folder, add `- /path/to/backups:/backups` under `volumes:`, and recreate the container. New backups go to `/backups`. Older ones in `/config/backups` stay listed and restorable, and you can delete them once you have fresh backups.
+```bash
+docker compose pull
+docker compose up -d --force-recreate
+```
 
-Optional `GITHUB_TOKEN` (or Settings → Updates) raises GitHub API limits for catalog installs and scheduled update checks. Do not commit the token; the example compose leaves it commented.
+The container cannot replace its own image. Settings → Updates can *notify* you when `:latest` moved; you still pull on the host.
 
-To rebuild from this checkout instead of GHCR:
+**Older compose that only published port 8080?** Copy the current `ports:` list from this repo and recreate, or child **Open UI** links will fail on the LAN.
+
+**Adding `/backups` later:** create the host folder, add `- /path/to/backups:/backups` under `volumes:`, recreate. Old backups under `/config/backups` stay restorable until you remove them.
+
+Optional `GITHUB_TOKEN` (compose or Settings → Updates) raises GitHub API limits. Do not commit the token.
+
+### Build from this checkout
 
 ```bash
 docker compose up -d --build
 ```
 
-That still uses `./config` next to the compose file and `$HOME/aio-media-manager` for downloads + media. **For development testing** (isolated volumes, no `/dev/dri` required):
+### Dev / test environment
 
 ```bash
 ./scripts/test-env.sh up
 ```
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md). Intel/AMD transcoding on a host that has render nodes:
+See [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+### Hardware transcoding (Intel/AMD)
 
 ```bash
 docker compose -f docker-compose.yml -f compose.gpu.yml up -d
 ```
 
-## Plain Docker
+---
+
+## 3. Plain `docker run` (alternative)
 
 ```bash
 docker pull ghcr.io/qballjos/aio-media-server-manager:latest
@@ -97,34 +119,45 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   ghcr.io/qballjos/aio-media-server-manager:latest
 ```
 
-Add `-p` mappings for child WebUIs (the example above publishes the catalog defaults), or use `--network host` (then the manager is still on port 8080). Drop `--device /dev/dri` when the host has no Intel/AMD render node (Docker Desktop on a Mac, many VPS hosts).
+Drop `--device /dev/dri` if the host has no Intel/AMD GPU (Docker Desktop on a Mac, many VPS hosts). Or use `--network host` instead of listing every `-p`.
+
+Full port list: [Install → Ports](../docs/INSTALL.md#ports).
+
+---
 
 ## Private GHCR image
 
-If the package is not public yet:
+If pull fails because the package is private:
 
 ```bash
 echo "$GITHUB_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
 docker pull ghcr.io/qballjos/aio-media-server-manager:latest
 ```
 
-On GitHub: **Packages → aio-media-server-manager → Package settings → Change visibility → Public**.
+On GitHub you can also make the package public under **Packages → settings → Change visibility**.
 
-## VPN (qBittorrent, Prowlarr, Flaresolverr)
+---
+
+## Optional VPN
+
+For qBittorrent / Prowlarr / Flaresolverr traffic:
 
 ```bash
 sudo mkdir -p /opt/aio-media-manager/config/vpn
 sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager/config/vpn
-# copy wg0.conf or an OpenVPN profile into that directory over SSH/SCP
+# copy wg0.conf or an OpenVPN profile into that folder
 ```
 
-1. Set `AMM_VPN_ENABLED=true` (and `AMM_VPN_ENFORCE=true` if torrents must not run without a tunnel).
-2. Keep Usenet clients off the VPN; they stay on the container's normal network.
+1. Set `AMM_VPN_ENABLED=true` (and `AMM_VPN_ENFORCE=true` if torrents must not run without VPN).
+2. Leave Usenet clients off the VPN — they use the normal network.
 
 Privileged mode is required for network namespaces and `/dev/net/tun`.
 
-## Reverse proxy
+---
 
-The manager works at `http://server-ip:8080` with no proxy. If you put Traefik, Caddy, or Nginx in front, set `AMM_TRUSTED_PROXIES` to the proxy address and `AMM_ROOT_PATH` if the UI is not at `/`.
+## Reverse proxy or Cloudflare
 
-To expose the appliance with **Cloudflare Tunnel** (no inbound ports), see [CLOUDFLARE.md](CLOUDFLARE.md). `cloudflared` runs inside this container — do not add a second Compose service.
+- **No proxy needed** for home LAN use at `http://server-ip:8080`.
+- Your own Traefik/Caddy/Nginx: set `AMM_TRUSTED_PROXIES` and optionally `AMM_ROOT_PATH`.
+- **Cloudflare Tunnel** (no inbound ports): [CLOUDFLARE.md](CLOUDFLARE.md).  
+  `cloudflared` runs **inside** this container — do not add a second Cloudflare service.

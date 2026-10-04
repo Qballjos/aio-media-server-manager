@@ -1,43 +1,45 @@
 # AIO Media Server Manager
 
-**One Linux appliance for a complete Usenet and BitTorrent media stack.**
+One app that runs your whole media stack — downloads, automation, and streaming — from a single dashboard.
 
-Install, supervise, and wire every application as a process inside a single container (or native Linux service) — not a Compose file per app.
+You do **not** install Sonarr, Radarr, qBittorrent, and friends as separate containers. You install **this** once. It starts and manages those tools for you.
 
-<p align="center">
-  <img src="screenshots/dashboard.png" alt="Catalog dashboard" width="820" />
-</p>
+## Who this is for
 
-## Start here
+- You want a media server at home (NAS, Unraid, Linux box, etc.)
+- You would rather not wire up a big Docker Compose file by hand
+- You want one place to see status, start apps, and open each web UI
 
-| Guide | When to read it |
-|-------|-----------------|
-| [Installation](INSTALL.md) | Host folders, ports, and which platform guide to follow |
-| [Usage](USAGE.md) | First-run wizard, Home, Catalog, Auto-Wire, Settings |
-| [Docker](deploy/DOCKER.md) | Recommended deployment |
+## What you get
 
-## Platforms
+| Piece | What it does |
+|-------|----------------|
+| **Dashboard** | Overview of every app, quick links, health |
+| ***Arr apps** | Find and organize TV, movies, music, subtitles |
+| **Download clients** | Torrents and Usenet (when you enable them) |
+| **Players / requests** | Jellyfin, Plex, Seerr, and similar — when you turn them on |
+| **Optional VPN** | WireGuard or OpenVPN for the download path |
+| **Optional Cloudflare** | Reach apps from outside your home with HTTPS |
 
-| Platform | Guide |
-|----------|--------|
-| Docker / Compose | [DOCKER.md](deploy/DOCKER.md) |
-| Native Linux / LXC | [LINUX.md](deploy/LINUX.md) |
-| Unraid | [UNRAID.md](deploy/UNRAID.md) |
-| Synology | [SYNOLOGY.md](deploy/SYNOLOGY.md) |
-| TrueNAS SCALE | [TRUENAS.md](deploy/TRUENAS.md) |
+## Pick a path
 
-## Remote access
+| I want to… | Start here |
+|------------|------------|
+| Install for the first time | [Install](INSTALL.md) |
+| Learn the UI after it is running | [Using the dashboard](USAGE.md) |
+| Run with Docker | [Docker](deploy/DOCKER.md) |
+| Install on Unraid | [Unraid](deploy/UNRAID.md) |
+| Install on Synology | [Synology](deploy/SYNOLOGY.md) |
+| Install on TrueNAS | [TrueNAS](deploy/TRUENAS.md) |
+| Install without Docker (Linux / LXC) | [Linux](deploy/LINUX.md) |
+| Share apps on the internet safely | [Cloudflare Tunnel](deploy/CLOUDFLARE.md) → [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md) |
 
-| Topic | Guide |
-|-------|--------|
-| Cloudflare Tunnel | [CLOUDFLARE.md](deploy/CLOUDFLARE.md) |
-| Cloudflare Access (login gate) | [CLOUDFLARE_ACCESS.md](deploy/CLOUDFLARE_ACCESS.md) |
+## The one rule that matters
 
-## Project links
+**One AIO install = one container (or one native install).**  
+Do not add separate Sonarr/Radarr/qBittorrent containers next to it. That fights this design and usually breaks networking or duplicates config.
 
-- [GitHub repository](https://github.com/Qballjos/aio-media-server-manager)
-- [Container image (GHCR)](https://github.com/Qballjos/aio-media-server-manager/pkgs/container/aio-media-server-manager)
-- [Contributing](https://github.com/Qballjos/aio-media-server-manager/blob/main/CONTRIBUTING.md)
-- [Security advisories](https://github.com/Qballjos/aio-media-server-manager/security/advisories/new)
+## Source and image
 
-Published image: `ghcr.io/qballjos/aio-media-server-manager:latest` (`linux/amd64`, `linux/arm64`).
+- Code: [GitHub](https://github.com/Qballjos/aio-media-server-manager)
+- Docker image: `ghcr.io/qballjos/aio-media-server-manager:latest`

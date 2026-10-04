@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <strong>One Linux appliance for a complete Usenet and BitTorrent media stack.</strong><br />
-  Install, supervise, and wire every application as a process — not a container per app.
+  <strong>One install for your whole home media stack.</strong><br />
+  Sonarr, Radarr, download clients, and players run inside a single appliance — not a container per app.
 </p>
 
 <p align="center">
@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-informational" alt="linux/amd64 and linux/arm64">
 </p>
 
-You run **one** Docker container (or one native Linux service). The manager installs binaries, starts them under a process supervisor, configures folders and API wiring, and presents a single web UI. There is no per-app Compose stack and **no Debrid** functionality.
+You run **one** Docker container (or one native Linux service). AIO installs the apps you choose, starts them, wires folders and APIs together, and gives you one web dashboard. There is no per-app Compose stack and **no Debrid** functionality.
 
 ---
 
@@ -38,13 +38,13 @@ You run **one** Docker container (or one native Linux service). The manager inst
 
 ## Why this exists
 
-Typical *Arr deployments become a Compose file per application: Sonarr, Radarr, Prowlarr, qBittorrent, Jellyfin, and a dozen sidecars. This project treats that stack as **one appliance**.
+Most *Arr setups turn into a long Compose file: one container for Sonarr, one for Radarr, one for qBittorrent, and so on. This project treats the stack as **one appliance** you install once.
 
-| Included | Not included |
-|----------|----------------|
+| You get | You do not get |
+|---------|----------------|
 | One image, one process tree | A generator of per-app containers |
-| Automatic indexer, downloader, and library wiring | Debrid, Zurg, Riven, or cloud mounts |
-| First-run wizard for the stack you actually want | A second Docker network per service |
+| Automatic wiring between indexers, downloaders, and libraries | Debrid, Zurg, Riven, or cloud mounts |
+| A first-run wizard for the apps you actually want | A second Docker network per service |
 | `linux/amd64` and `linux/arm64` (NAS-friendly) | Kubernetes or extra brokers |
 
 ---
@@ -92,17 +92,17 @@ Each catalog card includes a help control that opens that project's official doc
 
 ## Documentation
 
-**Docs site:** [qballjos.github.io/aio-media-server-manager](https://qballjos.github.io/aio-media-server-manager/)  
-(MkDocs Material, published from this repo via GitHub Pages.)
+**Start here:** [qballjos.github.io/aio-media-server-manager](https://qballjos.github.io/aio-media-server-manager/)  
+(Plain-language guides, published from this repo with GitHub Pages.)
 
-| Guide | Contents |
-|-------|----------|
-| [Installation](docs/INSTALL.md) | Host folders, ports, platform index |
-| [Usage](docs/USAGE.md) | Wizard, Home, catalog, Auto-Wire, Settings |
-| [Docker](deploy/DOCKER.md) | Primary deployment |
-| [Linux / LXC](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md) | Platform notes |
-| [Cloudflare Tunnel](deploy/CLOUDFLARE.md) | Remote access without inbound ports |
-| [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md) | Login gate in front of published app hostnames |
+| Guide | What it covers |
+|-------|----------------|
+| [Install](docs/INSTALL.md) | Folders, ports, which platform guide to open |
+| [Using the dashboard](docs/USAGE.md) | First run, enabling apps, Open UI, common snags |
+| [Docker](deploy/DOCKER.md) | Recommended way to run AIO |
+| [Linux](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md) | Platform-specific steps |
+| [Cloudflare Tunnel](deploy/CLOUDFLARE.md) | Remote HTTPS without opening router ports |
+| [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md) | Login gate on those public URLs |
 | [Contributing](CONTRIBUTING.md) | Development workflow |
 
 Local preview: `bash scripts/prepare-docs-site.sh && pip install -r requirements-docs.txt && mkdocs serve`

@@ -1,14 +1,16 @@
-# Native Linux / LXC installation
+# Linux / LXC (no Docker)
 
-Use this when you want the appliance on Debian, Ubuntu, or a Proxmox LXC **without** Docker. Child apps are still processes under the manager, not extra systemd units.
+Use this on Debian, Ubuntu, or a Proxmox LXC when you prefer **not** to use Docker.  
+Sonarr and the rest still run as processes under AIO — you do not create a systemd unit per app.
 
-## Prerequisites
+## What you need
 
 - Python 3.11+
 - [Poetry](https://python-poetry.org/docs/#installation)
-- Node.js 22 (to build the dashboard once)
-- `ffmpeg` (transcoding / some media apps)
-- Optional VPN: `wireguard` or `openvpn`, plus `iproute2`; LXC needs `nesting=1` and `/dev/net/tun`
+- Node.js 22 (build the dashboard once)
+- `ffmpeg` (for transcoding / some media apps)
+- Optional VPN: `wireguard` or `openvpn`, plus `iproute2`  
+  On LXC: enable `nesting=1` and `/dev/net/tun`
 
 ## Create folders over SSH
 

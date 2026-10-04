@@ -1,12 +1,12 @@
 # TrueNAS SCALE
 
-Use a **single** custom app / Docker deployment. Do not deploy the *Arr stack as separate SCALE apps if you want this appliance model.
+Deploy AIO as **one** custom app / Docker install. Do not also install Sonarr, Radarr, and friends as separate SCALE apps if you want this all-in-one model.
 
-Image: `ghcr.io/qballjos/aio-media-server-manager:latest`
+**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`
 
-## Create datasets and folders over SSH
+## Create datasets and folders (SSH)
 
-Enable SSH (System → Services → SSH), then:
+Enable SSH (**System → Services → SSH**), then:
 
 ```bash
 ssh admin@<truenas-ip>

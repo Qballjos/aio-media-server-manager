@@ -1,5 +1,5 @@
 site_name: AIO Media Server Manager
-site_description: One Linux appliance for a complete Usenet and BitTorrent media stack.
+site_description: One install for your whole home media stack — downloads, automation, and streaming.
 site_url: https://qballjos.github.io/aio-media-server-manager/
 repo_url: https://github.com/Qballjos/aio-media-server-manager
 repo_name: Qballjos/aio-media-server-manager
@@ -60,8 +60,8 @@ extra:
 nav:
   - Home: index.md
   - Getting started:
-      - Installation: INSTALL.md
-      - Usage: USAGE.md
+      - Install: INSTALL.md
+      - Using the dashboard: USAGE.md
   - Deploy:
       - Overview: deploy/README.md
       - Docker: deploy/DOCKER.md
@@ -69,6 +69,6 @@ nav:
       - Unraid: deploy/UNRAID.md
       - Synology: deploy/SYNOLOGY.md
       - TrueNAS: deploy/TRUENAS.md
-  - Cloudflare:
-      - Tunnel: deploy/CLOUDFLARE.md
-      - Access: deploy/CLOUDFLARE_ACCESS.md
+  - Remote access:
+      - Cloudflare Tunnel: deploy/CLOUDFLARE.md
+      - Cloudflare Access: deploy/CLOUDFLARE_ACCESS.md

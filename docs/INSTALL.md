@@ -1,71 +1,76 @@
-# Installation
+# Install
 
-AIO Media Server Manager is **one appliance**. The manager and every *Arr app, downloader, and media server run as supervised processes inside it. Do not deploy a Compose service or NAS app per application.
+Get AIO running in three steps: create folders, start the app, open the dashboard.
 
-**Published image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
-**Architectures:** `linux/amd64`, `linux/arm64`
+## Before you start
 
-The ARM64 image does not install Chromium, Xvfb, or fonts-liberation. Flaresolverr is x86_64-only and is hidden on ARM hosts. Shared runtimes stay on both architectures: Python 3.13 (Bazarr / SABnzbd), Node 22 (Seerr), JRE 25 and MariaDB (Grimmory), ffmpeg (Jellyfin / Plex), git (Recyclarr / TRaSH Guides).
+1. **Pick where it will run** — Unraid, Synology, TrueNAS, plain Docker, or native Linux.
+2. **Plan two kinds of storage:**
+   - **Config** — settings and databases (small, back this up)
+   - **Downloads + media** — the big files (keep these on the **same** disk/share so hardlinks work)
+3. **Know your user ID** — on Linux/NAS, apps often run as a specific user (`PUID` / `PGID`). Match that to who owns your folders so you do not get permission errors.
 
-## Platform guides
+You only need **one** AIO container. Do not install Sonarr, Radarr, or download clients as separate apps alongside it.
 
-Published site: [qballjos.github.io/aio-media-server-manager](https://qballjos.github.io/aio-media-server-manager/).
+**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
+**Architectures:** `linux/amd64`, `linux/arm64` (Flaresolverr is x86_64-only and hidden on ARM)
 
-| Platform | Guide |
-|----------|--------|
-| Docker / Compose (recommended) | [deploy/DOCKER.md](../deploy/DOCKER.md) |
-| Native Linux / LXC / systemd | [deploy/LINUX.md](../deploy/LINUX.md) |
-| Unraid | [deploy/UNRAID.md](../deploy/UNRAID.md) · CA template in [`deploy/unraid/`](../deploy/unraid/) |
-| Synology DSM (Container Manager) | [deploy/SYNOLOGY.md](../deploy/SYNOLOGY.md) |
-| TrueNAS SCALE | [deploy/TRUENAS.md](../deploy/TRUENAS.md) |
-| Cloudflare Tunnel (optional) | [deploy/CLOUDFLARE.md](../deploy/CLOUDFLARE.md) |
+## Choose your platform
 
-When the process is up, open `http://<host>:8080` and follow [Usage](USAGE.md). After `docker compose pull`, recreate the container so published WebUI ports, the Python 3.13 child runtime (Bazarr), and Debian `unrar` (SABnzbd) match the current image.
+| Where you run it | Guide |
+|------------------|--------|
+| Docker (any host) | [Docker](deploy/DOCKER.md) |
+| Unraid | [Unraid](deploy/UNRAID.md) |
+| Synology | [Synology](deploy/SYNOLOGY.md) |
+| TrueNAS SCALE | [TrueNAS](deploy/TRUENAS.md) |
+| Debian / Ubuntu / Proxmox LXC (no Docker) | [Linux](deploy/LINUX.md) |
+| All options listed | [Deploy overview](deploy/README.md) |
 
-## Host directories
+Each platform guide starts with: open SSH → create folders → start AIO.
 
-SSH into the host and create the bind mounts. Keep **downloads and media in one folder under the login home** (same filesystem, and on btrfs the same subvolume) so *Arr can hardlink instead of copy and so the file manager can see the library.
+## Folders on the host
+
+SSH in, then create something like this (paths vary by platform — follow your guide):
 
 ```bash
 ssh user@host
 
 mkdir -p "$HOME/aio-media-manager/downloads" "$HOME/aio-media-manager/media"
 sudo mkdir -p /path/to/config /path/to/config/vpn /path/to/backups
+id   # note uid= (PUID) and gid= (PGID)
 sudo chown -R "$PUID:$PGID" "$HOME/aio-media-manager" /path/to/config /path/to/backups
-id   # use this if you do not yet know PUID/PGID
 ```
 
-Mount `/path/to/backups` at `/backups` for configuration archives. Ideally it sits on a different disk or share than `config`. Without that mount, backups fall back to `/config/backups`.
+Keep **downloads** and **media** as siblings under one folder so *Arr can hardlink. Mount a separate **backups** folder at `/backups` if you can (ideally another disk than config).
 
-The appliance then creates library layout inside those mounts, for example:
+Inside those mounts AIO lays out libraries such as `media/tv`, `media/movies`, and `downloads/complete`.
 
-- `media/{tv,movies,anime,music,books}`
-- `downloads/{complete,incomplete,torrents}/…`
-- `cache/transcode/{jellyfin,plex}`
+## After it starts
 
-Those paths are wired into Sonarr, Radarr, Lidarr, download clients, Jellyfin, and Plex.
+1. Open the dashboard: `http://YOUR-SERVER-IP:8080`  
+   (Use a different port if you mapped one.)
+2. Create the admin account (username, **email**, password).
+3. Follow [Using the dashboard](USAGE.md) to enable apps and open each web UI.
 
-## Requirements
+After `docker compose pull`, **recreate** the container (not only restart) so new ports and runtimes apply.
 
-- **Config** — small; manager and application settings
-- **Downloads and media** — sized for your library; keep them as siblings on one filesystem for hardlinks
-- **Backups** — configuration archives (not media); map `/backups` if possible
-- Media-user UID/GID (`id`) mapped as `PUID` / `PGID`
-- Optional: `/dev/dri` or NVIDIA devices for hardware transcoding
-- Optional: `NET_ADMIN` (or a privileged container) plus a WireGuard or OpenVPN profile if torrent traffic should use a VPN
+## Optional: reach apps from outside your home
 
-## Ports
+1. [Cloudflare Tunnel](deploy/CLOUDFLARE.md) — HTTPS without opening router ports  
+2. [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md) — login gate so strangers cannot open admin apps
 
-The manager UI listens on **8080**. Child applications bind in the same container. Compose, the Synology project file, Unraid XML, and the Docker run example publish their WebUI ports on the host so **Open UI** on the catalog works (`http://<host>:8989` for Sonarr, and so on). Host networking is an alternative if you prefer not to map each port. An older compose file that only mapped `8080` will leave child UIs unreachable until you copy the current `ports:` list and recreate.
+## Ports {#ports}
+
+The manager UI uses **8080**. Child apps listen inside the same container. Compose and NAS templates publish those ports on the host so **Open UI** works (`http://YOUR-IP:8989` for Sonarr, and so on). Host networking is an alternative if you prefer not to map each port.
 
 | Application | Default port |
 |-------------|--------------|
 | Manager UI | 8080 |
-| qBittorrent | 8081 (VueTorrent WebUI by default under `/config/qbittorrent/vuetorrent`) |
+| qBittorrent | 8081 |
 | Shelfmark | 8084 |
 | SABnzbd | 8085 |
 | Jellyfin | 8096 |
-| Flaresolverr | 8191 (x86_64 only; omitted on ARM64) |
+| Flaresolverr | 8191 (x86_64 only) |
 | Bazarr | 6767 |
 | NZBGet | 6789 |
 | Profilarr | 6868 |
@@ -76,37 +81,29 @@ The manager UI listens on **8080**. Child applications bind in the same containe
 | Seerr | 5055 |
 | Grimmory | 6060 |
 | NeutArr | 9705 |
-| Recyclarr | none (CLI; not published on the host) |
+| Recyclarr | none (CLI only) |
 | Plex | 32400 |
 
-## Environment
+## Common environment variables
 
-Copy [`.env.example`](../.env.example) for a native install. Compose bind-mounts `$HOME/aio-media-manager` as `/data` and sets `PUID` / `PGID`, `TZ`, and the in-container `/data` paths. Values you change in **Settings** (timezone, log level, PUID, VPN, update schedules) persist in `/config/amm_config.json`. Branding from **Settings → Visuals** (title, accent color, custom icons) is stored under `/config/branding/`. Environment variables still win for bind mounts and most compose pins; VPN enable/protocol/profile from Settings survive even when compose sets `AMM_VPN_ENABLED=false`.
+Copy [`.env.example`](../.env.example) for native installs. Many of these can also be set later in **Settings**.
 
 | Variable | Purpose |
 |----------|---------|
-| `PUID` / `PGID` | Child process user (also Settings → System) |
-| `TZ` / `AMM_TIMEZONE` | Clock, logs, scheduled updates (also Settings → System) |
-| `AMM_LOG_LEVEL` | Root log level |
-| `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Bind paths — change mounts in compose, not the UI |
-| `AMM_API_HOST` / `AMM_API_PORT` | Manager listen address (compose/env only) |
-| `GITHUB_TOKEN` | Optional; also Settings → Updates (not written back to compose) |
-| `AMM_UPDATE_CHECK_SCHEDULE` | `off` / `daily` / `weekly` / `monthly` |
-| `AMM_UPDATE_APPLY_SCHEDULE` | `off` / `same` / `daily` / `weekly` / `monthly` |
-| `AMM_UPDATE_TIME` | `HH:MM` in the host timezone |
-| `AMM_CLOUDFLARE_TUNNEL_*` | Optional tunnel; also Settings → Network |
-| `AMM_VPN_*` | Optional VPN for qBittorrent, Prowlarr, and Flaresolverr; also Settings → Network |
+| `PUID` / `PGID` | User the apps run as (match folder ownership) |
+| `TZ` / `AMM_TIMEZONE` | Timezone for logs and schedules |
+| `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Paths inside the container (change host mounts in compose) |
+| `GITHUB_TOKEN` | Optional; higher GitHub API limits for updates |
+| `AMM_CLOUDFLARE_TUNNEL_*` | Optional remote tunnel |
+| `AMM_VPN_*` | Optional VPN for torrent-related apps |
 
-## Development clone
+## If something goes wrong
 
-Use a git checkout only when changing the code. **Run that checkout in Docker** so catalog installs get Linux binaries (same as production). Do not start the manager with Poetry on macOS or Windows for install/start testing.
+- **Cannot open the UI** — container running? Correct host port?
+- **Permission denied** — folder ownership must match `PUID`/`PGID`.
+- **Child Open UI fails on LAN** — publish that app’s port (table above) or use host networking; old compose files that only mapped `8080` need updating.
+- **Apps duplicated** — remove separate Sonarr/Radarr containers; only AIO should run them.
 
-```bash
-git clone https://github.com/Qballjos/aio-media-server-manager.git
-cd aio-media-server-manager
-./scripts/test-env.sh up
-```
+## Developers
 
-Open `http://127.0.0.1:8080`. Stop with `./scripts/test-env.sh down`. Test data stays in `.docker-test/` until you delete that directory. Details: [Contributing](../CONTRIBUTING.md).
-
-Native Linux / LXC without Docker is documented in [deploy/LINUX.md](../deploy/LINUX.md).
+To hack on the code, run the checkout **in Docker** (Linux binaries). See [Contributing](../CONTRIBUTING.md) and `./scripts/test-env.sh up`.
