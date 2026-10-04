@@ -157,6 +157,13 @@ Do not add separate Sonarr/Radarr/qBittorrent containers next to it.
 
 </div>
 
+## Vibe coded
+
+**Yes — this app was vibe coded.**  
+It was built with AI pair-programming in Cursor, steered by a human who wanted a full media stack without babysitting twelve containers. That is intentional, not a secret.
+
+If something is rough around the edges, open an issue or a PR. The vibes improve with feedback.
+
 ## Image
 
 ```text
