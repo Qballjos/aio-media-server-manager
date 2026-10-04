@@ -29,6 +29,10 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 </div>
 
 <div class="aio-shot" markdown>
+![AIO Media Manager sign-in](screenshots/login.png)
+</div>
+
+<div class="aio-shot" markdown>
 ![AIO dashboard catalog](screenshots/dashboard.png)
 </div>
 

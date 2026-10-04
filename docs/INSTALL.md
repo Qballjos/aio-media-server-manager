@@ -68,24 +68,24 @@ The manager UI uses **8080**. Child apps listen inside the same container. Compo
 
 | Application | Default port |
 |-------------|--------------|
-| Manager UI | 8080 |
-| qBittorrent | 8081 |
-| Shelfmark | 8084 |
-| SABnzbd | 8085 |
-| Jellyfin | 8096 |
-| Flaresolverr | 8191 (x86_64 only) |
-| Bazarr | 6767 |
-| NZBGet | 6789 |
-| Profilarr | 6868 |
-| Lidarr | 8686 |
-| Sonarr | 8989 |
-| Radarr | 7878 |
-| Prowlarr | 9696 |
-| Seerr | 5055 |
-| Grimmory | 6060 |
-| NeutArr | 9705 |
-| Recyclarr | none (CLI only) |
-| Plex | 32400 |
+| <img src="assets/logo-aio-media-manager.png" alt="" class="aio-app-icon" /> Manager UI | 8080 |
+| <img src="assets/app-icons/qbittorrent.svg" alt="" class="aio-app-icon" /> qBittorrent | 8081 |
+| <img src="assets/app-icons/shelfmark.png" alt="" class="aio-app-icon" /> Shelfmark | 8084 |
+| <img src="assets/app-icons/sabnzbd.svg" alt="" class="aio-app-icon" /> SABnzbd | 8085 |
+| <img src="assets/app-icons/jellyfin.svg" alt="" class="aio-app-icon" /> Jellyfin | 8096 |
+| <img src="assets/app-icons/flaresolverr.png" alt="" class="aio-app-icon" /> Flaresolverr | 8191 (x86_64 only) |
+| <img src="assets/app-icons/bazarr.svg" alt="" class="aio-app-icon" /> Bazarr | 6767 |
+| <img src="assets/app-icons/nzbget.svg" alt="" class="aio-app-icon" /> NZBGet | 6789 |
+| <img src="assets/app-icons/profilarr.svg" alt="" class="aio-app-icon" /> Profilarr | 6868 |
+| <img src="assets/app-icons/lidarr.svg" alt="" class="aio-app-icon" /> Lidarr | 8686 |
+| <img src="assets/app-icons/sonarr.svg" alt="" class="aio-app-icon" /> Sonarr | 8989 |
+| <img src="assets/app-icons/radarr.svg" alt="" class="aio-app-icon" /> Radarr | 7878 |
+| <img src="assets/app-icons/prowlarr.svg" alt="" class="aio-app-icon" /> Prowlarr | 9696 |
+| <img src="assets/app-icons/seerr.svg" alt="" class="aio-app-icon" /> Seerr | 5055 |
+| <img src="assets/app-icons/grimmory.svg" alt="" class="aio-app-icon" /> Grimmory | 6060 |
+| <img src="assets/app-icons/neutarr.svg" alt="" class="aio-app-icon" /> NeutArr | 9705 |
+| <img src="assets/app-icons/recyclarr.svg" alt="" class="aio-app-icon" /> Recyclarr | none (CLI only) |
+| <img src="assets/app-icons/plex.svg" alt="" class="aio-app-icon" /> Plex | 32400 |
 
 ## Common environment variables
 

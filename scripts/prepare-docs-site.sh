@@ -9,7 +9,7 @@ REPO_BLOB="https://github.com/Qballjos/aio-media-server-manager/blob/main/deploy
 export DOCS_REPO_BLOB="${REPO_BLOB}"
 
 rm -rf "${OUT}"
-mkdir -p "${OUT}/deploy" "${OUT}/screenshots" "${OUT}/assets" "${OUT}/stylesheets"
+mkdir -p "${OUT}/deploy" "${OUT}/screenshots" "${OUT}/assets/app-icons" "${OUT}/stylesheets"
 
 cp "${ROOT}/docs/index.md" "${OUT}/index.md"
 cp "${ROOT}/docs/INSTALL.md" "${OUT}/INSTALL.md"
@@ -23,6 +23,9 @@ if [[ -d "${ROOT}/docs/screenshots" ]]; then
 fi
 if [[ -f "${ROOT}/logo-aio-media-manager.png" ]]; then
   cp "${ROOT}/logo-aio-media-manager.png" "${OUT}/assets/logo-aio-media-manager.png"
+fi
+if [[ -d "${ROOT}/frontend/public/app-icons" ]]; then
+  cp -R "${ROOT}/frontend/public/app-icons/." "${OUT}/assets/app-icons/"
 fi
 
 for name in README DOCKER LINUX UNRAID SYNOLOGY TRUENAS CLOUDFLARE CLOUDFLARE_ACCESS; do

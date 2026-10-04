@@ -23,16 +23,16 @@ You run **one** Docker container (or one native Linux service). AIO installs the
 ## Screenshots
 
 <p align="center">
+  <img src="docs/screenshots/login.png" alt="Administrator sign-in for AIO Media Server Manager" width="920" />
+</p>
+
+<p align="center"><em>Administrator sign-in before the dashboard and first-run wizard.</em></p>
+
+<p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Catalog with application icons, ports, and lifecycle controls" width="920" />
 </p>
 
 <p align="center"><em>Catalog — search, category filters, popularity sort, official icons, and per-app help.</em></p>
-
-<p align="center">
-  <img src="docs/screenshots/login.png" alt="Administrator sign-in for AIO Media Server Manager" width="920" />
-</p>
-
-<p align="center"><em>Local administrator setup and sign-in before the first-run stack wizard.</em></p>
 
 ---
 

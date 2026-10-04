@@ -1,4 +1,4 @@
-/* AIO docs — match the product’s warm orange on slate, not default Material indigo */
+/* AIO docs — brand orange + warm slate across the whole Material chrome */
 
 :root,
 [data-md-color-scheme="default"] {
@@ -6,18 +6,38 @@
   --md-primary-fg-color--light: #fb923c;
   --md-primary-fg-color--dark: #c2410c;
   --md-primary-bg-color: #fff7ed;
-  --md-primary-bg-color--light: #fffbeb;
+  --md-primary-bg-color--light: #ffedd5;
   --md-accent-fg-color: #f97316;
-  --md-accent-fg-color--transparent: rgba(249, 115, 22, 0.12);
+  --md-accent-fg-color--transparent: rgba(249, 115, 22, 0.14);
   --md-typeset-a-color: #c2410c;
+
+  --md-default-fg-color: #1c1917;
+  --md-default-fg-color--light: #44403c;
+  --md-default-fg-color--lighter: #78716c;
+  --md-default-fg-color--lightest: #a8a29e;
+  --md-default-bg-color: #faf6f1;
+  --md-default-bg-color--light: #fffaf5;
+  --md-default-bg-color--lighter: #fff7ed;
+  --md-default-bg-color--lightest: #ffffff;
+
+  --md-code-bg-color: #fff1e6;
+  --md-code-fg-color: #9a3412;
+  --md-footer-bg-color: #1c1410;
+  --md-footer-bg-color--dark: #120e0c;
+  --md-footer-fg-color: #fff7ed;
+  --md-footer-fg-color--light: #fdba74;
+  --md-footer-fg-color--lighter: #a8a29e;
+
   --aio-ink: #1c1917;
   --aio-muted: #57534e;
-  --aio-surface: #fffaf5;
+  --aio-surface: #faf6f1;
+  --aio-panel: #fffaf5;
   --aio-card: #ffffff;
   --aio-border: rgba(28, 25, 23, 0.1);
-  --aio-hero-spot: rgba(249, 115, 22, 0.16);
+  --aio-hero-spot: rgba(249, 115, 22, 0.18);
   --aio-hero-spot-2: rgba(14, 165, 233, 0.1);
   --aio-shadow: 0 18px 40px -24px rgba(28, 25, 23, 0.35);
+  --aio-nav-active: rgba(234, 88, 12, 0.12);
 }
 
 [data-md-color-scheme="slate"] {
@@ -26,39 +46,135 @@
   --md-primary-fg-color--dark: #ea580c;
   --md-primary-bg-color: #1c1410;
   --md-accent-fg-color: #fdba74;
-  --md-accent-fg-color--transparent: rgba(251, 146, 60, 0.14);
+  --md-accent-fg-color--transparent: rgba(251, 146, 60, 0.16);
   --md-typeset-a-color: #fdba74;
+
+  --md-default-fg-color: #f5f5f4;
+  --md-default-fg-color--light: #d6d3d1;
+  --md-default-fg-color--lighter: #a8a29e;
+  --md-default-fg-color--lightest: #78716c;
+  --md-default-bg-color: #0f1218;
+  --md-default-bg-color--light: #151a22;
+  --md-default-bg-color--lighter: #1a2230;
+  --md-default-bg-color--lightest: #222b3a;
+
+  --md-code-bg-color: #1a1410;
+  --md-code-fg-color: #fdba74;
+  --md-footer-bg-color: #0a0c10;
+  --md-footer-bg-color--dark: #07080b;
+  --md-footer-fg-color: #f5f5f4;
+  --md-footer-fg-color--light: #fdba74;
+  --md-footer-fg-color--lighter: #a8a29e;
+
   --aio-ink: #f5f5f4;
   --aio-muted: #a8a29e;
-  --aio-surface: #12161f;
-  --aio-card: rgba(30, 36, 48, 0.88);
+  --aio-surface: #0f1218;
+  --aio-panel: #151a22;
+  --aio-card: rgba(30, 36, 48, 0.92);
   --aio-border: rgba(255, 255, 255, 0.1);
-  --aio-hero-spot: rgba(249, 115, 22, 0.22);
+  --aio-hero-spot: rgba(249, 115, 22, 0.24);
   --aio-hero-spot-2: rgba(56, 189, 248, 0.12);
   --aio-shadow: 0 22px 48px -20px rgba(0, 0, 0, 0.55);
+  --aio-nav-active: rgba(251, 146, 60, 0.16);
 }
 
-/* Atmosphere behind the page */
-.md-main {
+/* Full-page atmosphere (not only the article column) */
+body,
+.md-container,
+.md-main,
+.md-content,
+.md-sidebar,
+.md-nav {
+  background-color: transparent;
+}
+
+body {
   background:
-    radial-gradient(900px 420px at 12% -10%, var(--aio-hero-spot), transparent 55%),
-    radial-gradient(700px 380px at 92% 8%, var(--aio-hero-spot-2), transparent 50%),
-    linear-gradient(180deg, var(--aio-surface) 0%, transparent 42%);
+    radial-gradient(1000px 480px at 8% -8%, var(--aio-hero-spot), transparent 55%),
+    radial-gradient(800px 420px at 96% 0%, var(--aio-hero-spot-2), transparent 50%),
+    linear-gradient(180deg, var(--aio-surface), color-mix(in srgb, var(--aio-surface) 70%, var(--md-default-bg-color--lightest)) 45%, var(--aio-surface));
+  background-attachment: fixed;
 }
 
+.md-main__inner {
+  margin-top: 0.5rem;
+}
+
+/* Header + tabs */
 .md-header {
-  background: color-mix(in srgb, var(--md-primary-fg-color) 92%, #1c1917);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 30px -18px rgba(0, 0, 0, 0.45);
+  background: linear-gradient(135deg, #c2410c 0%, #ea580c 48%, #f97316 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08), 0 12px 28px -16px rgba(0, 0, 0, 0.45);
+}
+
+[data-md-color-scheme="slate"] .md-header {
+  background: linear-gradient(135deg, #7c2d12 0%, #c2410c 45%, #ea580c 100%);
 }
 
 .md-tabs {
-  background: color-mix(in srgb, var(--md-primary-fg-color) 78%, #1c1917);
+  background: color-mix(in srgb, #9a3412 35%, #ea580c);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+[data-md-color-scheme="slate"] .md-tabs {
+  background: color-mix(in srgb, #431407 50%, #c2410c);
+}
+
+.md-tabs__link--active,
+.md-tabs__link:focus,
+.md-tabs__link:hover {
+  color: #fff7ed;
+}
+
+.md-header__title,
+.md-header__button,
+.md-search__input,
+.md-search__input + .md-search__icon {
+  color: #fff7ed;
+}
+
+.md-search__input {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.md-search__input::placeholder {
+  color: rgba(255, 247, 237, 0.72);
+}
+
+/* Sidebars + navigation */
+.md-sidebar__scrollwrap,
+.md-nav__title,
+.md-nav--primary .md-nav__title {
+  background-color: transparent;
+}
+
+.md-nav__item--active > .md-nav__link,
+.md-nav__link--active,
+.md-nav__link--active:hover {
+  color: var(--md-primary-fg-color);
+  background: var(--aio-nav-active);
+  border-radius: 0.45rem;
+  font-weight: 650;
+}
+
+.md-nav__link:hover,
+.md-nav__link:focus {
+  color: var(--md-primary-fg-color);
+}
+
+.md-nav__item .md-nav__link--passed {
+  color: var(--md-default-fg-color--lighter);
+}
+
+.md-typeset .headerlink {
+  color: var(--md-primary-fg-color);
+}
+
+/* Content surfaces */
 .md-typeset h1 {
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.15;
+  color: var(--aio-ink);
 }
 
 .md-typeset h2 {
@@ -67,11 +183,103 @@
   margin-top: 1.8em;
   padding-bottom: 0.2em;
   border-bottom: 1px solid var(--aio-border);
+  color: var(--aio-ink);
 }
 
 .md-typeset h3 {
   font-weight: 600;
   letter-spacing: -0.01em;
+  color: var(--aio-ink);
+}
+
+.md-typeset table:not([class]) {
+  border: 1px solid var(--aio-border);
+  border-radius: 0.85rem;
+  overflow: hidden;
+  box-shadow: 0 10px 28px -24px rgba(28, 25, 23, 0.4);
+}
+
+.md-typeset table:not([class]) th {
+  background: color-mix(in srgb, var(--md-primary-fg-color) 14%, var(--aio-card));
+  color: var(--aio-ink);
+  border-color: var(--aio-border);
+}
+
+.md-typeset table:not([class]) td {
+  border-color: var(--aio-border);
+  background: var(--aio-card);
+}
+
+.md-typeset table:not([class]) tr:hover td {
+  background: color-mix(in srgb, var(--md-accent-fg-color--transparent) 70%, var(--aio-card));
+}
+
+.md-typeset .md-button {
+  border-radius: 0.7rem;
+}
+
+.md-typeset .md-button--primary {
+  background: linear-gradient(135deg, #ea580c, #f97316);
+  border: none;
+  color: #fff;
+  box-shadow: 0 10px 22px -14px rgba(234, 88, 12, 0.8);
+}
+
+/* Admonitions — pull into brand palette */
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 0.85rem;
+  border-color: color-mix(in srgb, var(--md-primary-fg-color) 35%, var(--aio-border));
+  background: color-mix(in srgb, var(--aio-card) 88%, #fdba74);
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  background: color-mix(in srgb, var(--md-accent-fg-color--transparent) 85%, transparent);
+}
+
+.md-typeset .admonition.tip,
+.md-typeset details.tip,
+.md-typeset .admonition.success,
+.md-typeset details.success,
+.md-typeset .admonition.note,
+.md-typeset details.note,
+.md-typeset .admonition.info,
+.md-typeset details.info {
+  border-color: color-mix(in srgb, var(--md-primary-fg-color) 45%, var(--aio-border));
+}
+
+.md-typeset .tip > .admonition-title,
+.md-typeset .tip > summary,
+.md-typeset .success > .admonition-title,
+.md-typeset .success > summary,
+.md-typeset .note > .admonition-title,
+.md-typeset .note > summary,
+.md-typeset .info > .admonition-title,
+.md-typeset .info > summary {
+  background: color-mix(in srgb, var(--md-primary-fg-color) 16%, transparent);
+  color: var(--aio-ink);
+}
+
+.md-typeset .tip > .admonition-title::before,
+.md-typeset .tip > summary::before,
+.md-typeset .success > .admonition-title::before,
+.md-typeset .success > summary::before,
+.md-typeset .note > .admonition-title::before,
+.md-typeset .note > summary::before,
+.md-typeset .info > .admonition-title::before,
+.md-typeset .info > summary::before {
+  background-color: var(--md-primary-fg-color);
+}
+
+/* Footer */
+.md-footer {
+  background: var(--md-footer-bg-color);
+  border-top: 1px solid color-mix(in srgb, var(--md-primary-fg-color) 35%, transparent);
+}
+
+.md-footer-meta {
+  background: var(--md-footer-bg-color--dark);
 }
 
 /* Home hero */
@@ -82,7 +290,7 @@
   border: 1px solid var(--aio-border);
   border-radius: 1.15rem;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--aio-card) 88%, #fdba74) 0%, var(--aio-card) 55%),
+    linear-gradient(135deg, color-mix(in srgb, var(--aio-card) 82%, #fdba74) 0%, var(--aio-card) 55%),
     var(--aio-card);
   box-shadow: var(--aio-shadow);
   overflow: hidden;
@@ -193,7 +401,6 @@
   color: var(--md-primary-fg-color);
 }
 
-/* Soft callout for the “one rule” */
 .aio-callout {
   margin: 1.5rem 0;
   padding: 1rem 1.15rem;
@@ -206,7 +413,6 @@
   color: var(--aio-ink);
 }
 
-/* Screenshots */
 .aio-shot {
   margin: 1.5rem 0 0.5rem;
   border-radius: 1rem;
@@ -223,9 +429,27 @@
   border-radius: 0;
 }
 
-.md-typeset .admonition,
-.md-typeset details {
-  border-radius: 0.85rem;
+/* App logos in ports / name tables */
+.md-typeset img.aio-app-icon {
+  display: inline-block;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin: 0 0 0 0;
+  margin-right: 0.45rem;
+  vertical-align: -0.28em;
+  border-radius: 0.28rem;
+  object-fit: contain;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.md-typeset table td:first-child {
+  white-space: nowrap;
+}
+
+/* Selection + scrollbar accents */
+::selection {
+  background: color-mix(in srgb, var(--md-primary-fg-color) 35%, transparent);
+  color: var(--aio-ink);
 }
 
 @keyframes aio-rise {
