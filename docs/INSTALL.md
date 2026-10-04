@@ -2,6 +2,9 @@
 
 Get AIO running in three steps: create folders, start the app, open the dashboard.
 
+!!! tip "Prefer a short path?"
+    Most people start with **[Docker](deploy/DOCKER.md)** or their NAS guide (**[Unraid](deploy/UNRAID.md)** · **[Synology](deploy/SYNOLOGY.md)** · **[TrueNAS](deploy/TRUENAS.md)**), then come back here for ports and updates.
+
 ## Before you start
 
 1. **Pick where it will run** — Unraid, Synology, TrueNAS, plain Docker, or native Linux.

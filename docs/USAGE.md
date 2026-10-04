@@ -2,6 +2,9 @@
 
 This guide is for after AIO is installed and you can open the web UI.
 
+!!! success "Goal"
+    Enable only the apps you need, finish each app’s own setup, and use **Open UI** whenever you want that tool’s screen.
+
 Default address on your home network:
 
 ```text

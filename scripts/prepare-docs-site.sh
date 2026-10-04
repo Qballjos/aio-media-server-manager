@@ -9,12 +9,15 @@ REPO_BLOB="https://github.com/Qballjos/aio-media-server-manager/blob/main/deploy
 export DOCS_REPO_BLOB="${REPO_BLOB}"
 
 rm -rf "${OUT}"
-mkdir -p "${OUT}/deploy" "${OUT}/screenshots" "${OUT}/assets"
+mkdir -p "${OUT}/deploy" "${OUT}/screenshots" "${OUT}/assets" "${OUT}/stylesheets"
 
 cp "${ROOT}/docs/index.md" "${OUT}/index.md"
 cp "${ROOT}/docs/INSTALL.md" "${OUT}/INSTALL.md"
 cp "${ROOT}/docs/USAGE.md" "${OUT}/USAGE.md"
 
+if [[ -d "${ROOT}/docs/stylesheets" ]]; then
+  cp -R "${ROOT}/docs/stylesheets/." "${OUT}/stylesheets/"
+fi
 if [[ -d "${ROOT}/docs/screenshots" ]]; then
   cp -R "${ROOT}/docs/screenshots/." "${OUT}/screenshots/"
 fi

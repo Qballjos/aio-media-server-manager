@@ -1,45 +1,154 @@
-# AIO Media Server Manager
+---
+hide:
+  - navigation
+  - toc
+title: AIO Media Server Manager
+---
 
-One app that runs your whole media stack — downloads, automation, and streaming — from a single dashboard.
+<div class="aio-hero" markdown>
 
-You do **not** install Sonarr, Radarr, qBittorrent, and friends as separate containers. You install **this** once. It starts and manages those tools for you.
+<div class="aio-hero__brand" markdown>
+<img src="assets/logo-aio-media-manager.png" alt="" width="40" height="40" />
+AIO Media Server Manager
+</div>
 
-## Who this is for
+# Your whole media stack. One install.
 
-- You want a media server at home (NAS, Unraid, Linux box, etc.)
-- You would rather not wire up a big Docker Compose file by hand
-- You want one place to see status, start apps, and open each web UI
+<p class="aio-hero__lead">
+Downloads, *Arr apps, and streaming — supervised from a single dashboard.
+No Compose file full of Sonarr, Radarr, and qBittorrent containers.
+</p>
+
+<div class="aio-hero__actions" markdown>
+
+[Install now](INSTALL.md){ .md-button .md-button--primary }
+[Using the dashboard](USAGE.md){ .md-button }
+[GitHub](https://github.com/Qballjos/aio-media-server-manager){ .md-button }
+
+</div>
+</div>
+
+<div class="aio-shot" markdown>
+![AIO dashboard catalog](screenshots/dashboard.png)
+</div>
+
+## Start where you are
+
+<div class="grid cards" markdown>
+
+-   :material-rocket-launch:{ .lg .middle } __New here__
+
+    ---
+
+    Create folders, start the container, open the UI.
+
+    [:octicons-arrow-right-24: Install guide](INSTALL.md)
+
+-   :material-view-dashboard-outline:{ .lg .middle } __Already running__
+
+    ---
+
+    Enable apps, open each web UI, wire libraries.
+
+    [:octicons-arrow-right-24: Using the dashboard](USAGE.md)
+
+-   :material-docker:{ .lg .middle } __Docker host__
+
+    ---
+
+    The usual path for NAS boxes and Linux servers.
+
+    [:octicons-arrow-right-24: Docker guide](deploy/DOCKER.md)
+
+-   :material-cloud-lock-outline:{ .lg .middle } __Away from home__
+
+    ---
+
+    HTTPS via Cloudflare Tunnel, then a login gate with Access.
+
+    [:octicons-arrow-right-24: Remote access](deploy/CLOUDFLARE.md)
+
+</div>
+
+## Pick your platform
+
+<div class="grid cards" markdown>
+
+-   :material-nas:{ .lg .middle } __Unraid__
+
+    ---
+
+    One Community Applications–style container.
+
+    [Unraid guide](deploy/UNRAID.md)
+
+-   :material-server:{ .lg .middle } __Synology__
+
+    ---
+
+    One Container Manager project.
+
+    [Synology guide](deploy/SYNOLOGY.md)
+
+-   :material-harddisk:{ .lg .middle } __TrueNAS__
+
+    ---
+
+    One custom app on SCALE.
+
+    [TrueNAS guide](deploy/TRUENAS.md)
+
+-   :material-linux:{ .lg .middle } __Linux / LXC__
+
+    ---
+
+    Native install without Docker.
+
+    [Linux guide](deploy/LINUX.md)
+
+</div>
 
 ## What you get
 
-| Piece | What it does |
-|-------|----------------|
-| **Dashboard** | Overview of every app, quick links, health |
-| ***Arr apps** | Find and organize TV, movies, music, subtitles |
-| **Download clients** | Torrents and Usenet (when you enable them) |
-| **Players / requests** | Jellyfin, Plex, Seerr, and similar — when you turn them on |
-| **Optional VPN** | WireGuard or OpenVPN for the download path |
-| **Optional Cloudflare** | Reach apps from outside your home with HTTPS |
+<div class="grid cards" markdown>
 
-## Pick a path
+-   :material-monitor-dashboard:{ .lg .middle } __One dashboard__
 
-| I want to… | Start here |
-|------------|------------|
-| Install for the first time | [Install](INSTALL.md) |
-| Learn the UI after it is running | [Using the dashboard](USAGE.md) |
-| Run with Docker | [Docker](deploy/DOCKER.md) |
-| Install on Unraid | [Unraid](deploy/UNRAID.md) |
-| Install on Synology | [Synology](deploy/SYNOLOGY.md) |
-| Install on TrueNAS | [TrueNAS](deploy/TRUENAS.md) |
-| Install without Docker (Linux / LXC) | [Linux](deploy/LINUX.md) |
-| Share apps on the internet safely | [Cloudflare Tunnel](deploy/CLOUDFLARE.md) → [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md) |
+    ---
 
-## The one rule that matters
+    Status, start/stop, and **Open UI** for every app you enable.
 
-**One AIO install = one container (or one native install).**  
-Do not add separate Sonarr/Radarr/qBittorrent containers next to it. That fights this design and usually breaks networking or duplicates config.
+-   :material-television-play:{ .lg .middle } __Automation + libraries__
 
-## Source and image
+    ---
 
-- Code: [GitHub](https://github.com/Qballjos/aio-media-server-manager)
-- Docker image: `ghcr.io/qballjos/aio-media-server-manager:latest`
+    Sonarr, Radarr, Lidarr, Bazarr, and friends — when you want them.
+
+-   :material-download:{ .lg .middle } __Downloads__
+
+    ---
+
+    Torrents and Usenet clients, optional VPN on the download path.
+
+-   :material-cast:{ .lg .middle } __Watch & request__
+
+    ---
+
+    Jellyfin, Plex, Seerr, and more — same appliance.
+
+</div>
+
+<div class="aio-callout" markdown>
+
+**The one rule:** one AIO install = one container (or one native service).  
+Do not add separate Sonarr/Radarr/qBittorrent containers next to it.
+
+</div>
+
+## Image
+
+```text
+ghcr.io/qballjos/aio-media-server-manager:latest
+```
+
+Works on `linux/amd64` and `linux/arm64`. After a pull, recreate the container so new ports and runtimes apply.
