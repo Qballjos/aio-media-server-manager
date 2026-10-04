@@ -26,13 +26,19 @@ You run **one** Docker container (or one native Linux service). AIO installs the
   <img src="docs/screenshots/login.png" alt="Administrator sign-in for AIO Media Server Manager" width="920" />
 </p>
 
-<p align="center"><em>Administrator sign-in before the dashboard and first-run wizard.</em></p>
+<p align="center"><em>Administrator sign-in before the home dashboard.</em></p>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="Catalog with application icons, ports, and lifecycle controls" width="920" />
+  <img src="docs/screenshots/dashboard.png" alt="Home dashboard with app shortcuts, search, and recently added" width="920" />
 </p>
 
-<p align="center"><em>Catalog — search, category filters, popularity sort, official icons, and per-app help.</em></p>
+<p align="center"><em>Home — app launcher, search, recently added, and requests.</em></p>
+
+<p align="center">
+  <img src="docs/screenshots/catalog.png" alt="Catalog with application cards, ports, and lifecycle controls" width="920" />
+</p>
+
+<p align="center"><em>Catalog — install, start, Open UI, and per-app controls.</em></p>
 
 ---
 
