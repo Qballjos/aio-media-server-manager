@@ -1,10 +1,28 @@
 name: CI
 
+# Docs-only changes are covered by docs.yml — skip image/test CI for those paths.
+# Version tags always rebuild images (tag push still evaluates paths against the tagged commit).
 on:
   push:
     branches: [main]
     tags: ["v*"]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "scripts/prepare-docs-site.sh"
+      - ".github/workflows/docs.yml"
+      - "logo-aio-media-manager.png"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "scripts/prepare-docs-site.sh"
+      - ".github/workflows/docs.yml"
+      - "logo-aio-media-manager.png"
   workflow_dispatch:
 
 permissions:
