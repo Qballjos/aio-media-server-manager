@@ -177,6 +177,38 @@ class GitHubReleaseClient:
         data = resp.json()
         return data if isinstance(data, dict) else {}
 
+    def latest_workflow_run_sha(
+        self,
+        repo: str,
+        workflow: str,
+        *,
+        branch: str = "main",
+        status: str = "success",
+    ) -> str:
+        """Return head SHA of the newest matching Actions workflow run, or ''."""
+        clean_workflow = (workflow or "").strip()
+        if not clean_workflow:
+            return ""
+        url = f"https://api.github.com/repos/{repo}/actions/workflows/{clean_workflow}/runs"
+        resp = self._request_with_retries(
+            url,
+            params={
+                "branch": (branch or "main").strip() or "main",
+                "status": (status or "success").strip() or "success",
+                "per_page": 1,
+            },
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Cannot list workflow runs for {repo}/{clean_workflow} (status {resp.status_code})"
+            )
+        data = resp.json()
+        runs = data.get("workflow_runs") if isinstance(data, dict) else None
+        if not isinstance(runs, list) or not runs:
+            return ""
+        head = runs[0].get("head_sha") if isinstance(runs[0], dict) else ""
+        return str(head or "").strip()
+
     def select_asset(
         self,
         release: dict[str, Any],

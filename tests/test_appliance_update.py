@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from core.appliance_update import (
+    APPLIANCE_DOCKER_WORKFLOW,
     APPLIANCE_IMAGE,
     APPLIANCE_NAME,
     _same_commit,
@@ -25,7 +26,7 @@ def test_no_sha_is_not_an_update(monkeypatch):
     monkeypatch.delenv("AMM_VERSION", raising=False)
     github = MagicMock()
     payload = check_appliance_image(github)
-    github.get_commit.assert_not_called()
+    github.latest_workflow_run_sha.assert_not_called()
     assert payload["name"] == APPLIANCE_NAME
     assert payload["update_available"] is False
     assert git_sha() == ""
@@ -43,32 +44,51 @@ def test_running_identity_uses_env(monkeypatch):
     assert app_version() == "1.2.3"
 
 
-def test_newer_main_commit_is_available(monkeypatch):
+def test_newer_published_image_is_available(monkeypatch):
     monkeypatch.setenv("AMM_GIT_SHA", "aaaaaaaaaaaaaaaa")
     github = MagicMock()
-    github.get_commit.return_value = {"sha": "bbbbbbbbbbbbbbbb"}
+    github.latest_workflow_run_sha.return_value = "bbbbbbbbbbbbbbbb"
     github.compare_commits.return_value = {"status": "ahead"}
     payload = check_appliance_image(github)
-    github.get_commit.assert_called_once()
-    github.compare_commits.assert_called_once()
+    github.latest_workflow_run_sha.assert_called_once_with(
+        "Qballjos/aio-media-server-manager",
+        APPLIANCE_DOCKER_WORKFLOW,
+        branch="main",
+        status="success",
+    )
+    github.compare_commits.assert_called_once_with(
+        "Qballjos/aio-media-server-manager",
+        "aaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbb",
+    )
     assert payload["update_available"] is True
     assert payload["latest_sha"] == "bbbbbbbbbbbbbbbb"
     assert payload["latest_version"] == "bbbbbbb"
 
 
-def test_ahead_of_main_is_not_an_update(monkeypatch):
+def test_docs_commits_on_main_do_not_count_as_image_update(monkeypatch):
+    """main may move for docs; only a newer Docker workflow SHA should notify."""
+    monkeypatch.setenv("AMM_GIT_SHA", "aaaaaaaaaaaaaaaa")
+    github = MagicMock()
+    github.latest_workflow_run_sha.return_value = "aaaaaaaaaaaaaaaa"
+    payload = check_appliance_image(github)
+    github.compare_commits.assert_not_called()
+    assert payload["update_available"] is False
+
+
+def test_running_newer_than_published_is_not_an_update(monkeypatch):
     monkeypatch.setenv("AMM_GIT_SHA", "cccccccccccccccc")
     github = MagicMock()
-    github.get_commit.return_value = {"sha": "bbbbbbbbbbbbbbbb"}
+    github.latest_workflow_run_sha.return_value = "bbbbbbbbbbbbbbbb"
     github.compare_commits.return_value = {"status": "behind"}
     payload = check_appliance_image(github)
     assert payload["update_available"] is False
 
 
-def test_current_commit_is_not_available(monkeypatch):
-    monkeypatch.setenv("AMM_GIT_SHA", "abcdef1234567890deadbeef")
+def test_no_docker_runs_is_not_an_update(monkeypatch):
+    monkeypatch.setenv("AMM_GIT_SHA", "aaaaaaaaaaaaaaaa")
     github = MagicMock()
-    github.get_commit.return_value = {"sha": "abcdef1234567890deadbeefcafe"}
+    github.latest_workflow_run_sha.return_value = ""
     payload = check_appliance_image(github)
-    github.compare_commits.assert_not_called()
     assert payload["update_available"] is False
+    assert "No successful Docker" in (payload.get("detail") or "")

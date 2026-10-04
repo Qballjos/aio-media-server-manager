@@ -11,7 +11,12 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from applications.catalog import ApplicationCatalog
-from core.appliance_update import APPLIANCE_NAME, check_appliance_image, running_appliance_identity
+from core.appliance_update import (
+    APPLIANCE_NAME,
+    _same_commit,
+    check_appliance_image,
+    running_appliance_identity,
+)
 from core.installer.github import GitHubRateLimitError, GitHubReleaseClient
 from core.maintenance import pause_reason, update_in_progress
 from core.settings import Settings, settings
@@ -141,6 +146,10 @@ class UpdateScheduler:
         check = normalize_check_schedule(self.settings.update_check_schedule)
         apply = normalize_apply_schedule(self.settings.update_apply_schedule)
         apply_kind = check if apply == "same" else apply
+        available, appliance = self._sanitize_available(
+            state.get("available") or [],
+            state.get("appliance") or running_appliance_identity(),
+        )
         return {
             "check_schedule": check,
             "apply_schedule": apply,
@@ -171,10 +180,32 @@ class UpdateScheduler:
             "last_check_at": state.get("last_check_at"),
             "last_apply_at": state.get("last_apply_at"),
             "last_error": state.get("last_error") or "",
-            "available": state.get("available") or [],
-            "appliance": state.get("appliance") or running_appliance_identity(),
+            "available": available,
+            "appliance": appliance,
             "notify_enabled": check != "off",
         }
+
+    def _sanitize_available(
+        self,
+        available: list[dict[str, Any]],
+        appliance: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Drop stale appliance notices after the host already pulled that SHA."""
+        running = str(running_appliance_identity().get("running_sha") or "")
+        cleaned: list[dict[str, Any]] = []
+        for item in available:
+            if not isinstance(item, dict):
+                continue
+            if item.get("kind") == "appliance":
+                latest = str(item.get("latest_sha") or "")
+                if running and latest and _same_commit(running, latest):
+                    continue
+            cleaned.append(item)
+        appliance_out = dict(appliance) if isinstance(appliance, dict) else running_appliance_identity()
+        latest = str(appliance_out.get("latest_sha") or "")
+        if running and latest and _same_commit(running, latest):
+            appliance_out["update_available"] = False
+        return cleaned, appliance_out
 
     def _skip_reason(self, plugin, supervisor: ProcessSupervisor) -> str | None:
         if not plugin.is_installed():

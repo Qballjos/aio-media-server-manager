@@ -10,6 +10,9 @@ from core.version import app_version, git_sha
 APPLIANCE_NAME = "aio-media-server-manager"
 APPLIANCE_REPO = "Qballjos/aio-media-server-manager"
 APPLIANCE_IMAGE = "ghcr.io/qballjos/aio-media-server-manager:latest"
+# Compare against the last successful Docker publish, not git main tip.
+# Docs-only commits advance main without rebuilding GHCR.
+APPLIANCE_DOCKER_WORKFLOW = "docker.yml"
 APPLIANCE_HINT = (
     f"On the host: docker pull {APPLIANCE_IMAGE} and recreate the container "
     "(compose up -d). The manager cannot replace its own image."
@@ -53,21 +56,28 @@ def check_appliance_image(github: GitHubReleaseClient | None = None) -> dict[str
         return payload
     client = github or GitHubReleaseClient()
     try:
-        commit = client.get_commit(APPLIANCE_REPO, "main")
+        published_sha = client.latest_workflow_run_sha(
+            APPLIANCE_REPO,
+            APPLIANCE_DOCKER_WORKFLOW,
+            branch="main",
+            status="success",
+        )
     except Exception as exc:
         payload["detail"] = str(exc)[:240]
         return payload
-    latest_sha = str(commit.get("sha") or "").strip()
-    payload["latest_sha"] = latest_sha
-    payload["latest_version"] = latest_sha[:7] if latest_sha else None
-    if not latest_sha or _same_commit(running, latest_sha):
+    if not published_sha:
+        payload["detail"] = "No successful Docker workflow run found on main yet."
+        return payload
+    payload["latest_sha"] = published_sha
+    payload["latest_version"] = published_sha[:7]
+    if _same_commit(running, published_sha):
         payload["update_available"] = False
         return payload
     try:
-        compared = client.compare_commits(APPLIANCE_REPO, running, "main")
+        compared = client.compare_commits(APPLIANCE_REPO, running, published_sha)
         status = str(compared.get("status") or "")
-        # head is main: ahead/diverged means published :latest has commits we do not.
+        # head is the published image commit: ahead/diverged means :latest is newer.
         payload["update_available"] = status in {"ahead", "diverged"}
     except Exception:
-        payload["update_available"] = True
+        payload["update_available"] = not _same_commit(running, published_sha)
     return payload
