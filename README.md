@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://qballjos.github.io/aio-media-server-manager/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-0F6FFF?logo=gitbook&logoColor=white" alt="Docs"></a>
   <a href="https://github.com/Qballjos/aio-media-server-manager/actions/workflows/ci.yml"><img src="https://github.com/Qballjos/aio-media-server-manager/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/Qballjos/aio-media-server-manager/pkgs/container/aio-media-server-manager"><img src="https://img.shields.io/badge/GHCR-aio--media--server--manager-0F6FFF" alt="GHCR"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2ea44f.svg" alt="MIT License"></a>
