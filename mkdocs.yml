@@ -1,0 +1,74 @@
+site_name: AIO Media Server Manager
+site_description: One Linux appliance for a complete Usenet and BitTorrent media stack.
+site_url: https://qballjos.github.io/aio-media-server-manager/
+repo_url: https://github.com/Qballjos/aio-media-server-manager
+repo_name: Qballjos/aio-media-server-manager
+edit_uri: ""
+docs_dir: .docs-site
+site_dir: site
+
+theme:
+  name: material
+  logo: assets/logo-aio-media-manager.png
+  favicon: assets/logo-aio-media-manager.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Qballjos/aio-media-server-manager
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: INSTALL.md
+      - Usage: USAGE.md
+  - Deploy:
+      - Overview: deploy/README.md
+      - Docker: deploy/DOCKER.md
+      - Linux / LXC: deploy/LINUX.md
+      - Unraid: deploy/UNRAID.md
+      - Synology: deploy/SYNOLOGY.md
+      - TrueNAS: deploy/TRUENAS.md
+  - Cloudflare:
+      - Tunnel: deploy/CLOUDFLARE.md
+      - Access: deploy/CLOUDFLARE_ACCESS.md

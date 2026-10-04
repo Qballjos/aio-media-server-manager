@@ -2,6 +2,7 @@
 
 AIO Media Server Manager is **one process tree** — typically **one container**. Never add a Compose service per application.
 
+**Docs site:** [qballjos.github.io/aio-media-server-manager](https://qballjos.github.io/aio-media-server-manager/)  
 **Image:** [`ghcr.io/qballjos/aio-media-server-manager`](https://github.com/Qballjos/aio-media-server-manager/pkgs/container/aio-media-server-manager)
 
 | Mode | Guide |

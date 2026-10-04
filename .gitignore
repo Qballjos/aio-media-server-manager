@@ -105,3 +105,10 @@ PROMPT.md
 DUMB/
 DUMB_docs/
 
+# ===========================
+# MkDocs (assembled + build output)
+# ===========================
+.docs-site/
+.venv-docs/
+site/
+

@@ -92,6 +92,9 @@ Each catalog card includes a help control that opens that project's official doc
 
 ## Documentation
 
+**Docs site:** [qballjos.github.io/aio-media-server-manager](https://qballjos.github.io/aio-media-server-manager/)  
+(MkDocs Material, published from this repo via GitHub Pages.)
+
 | Guide | Contents |
 |-------|----------|
 | [Installation](docs/INSTALL.md) | Host folders, ports, platform index |
@@ -101,6 +104,8 @@ Each catalog card includes a help control that opens that project's official doc
 | [Cloudflare Tunnel](deploy/CLOUDFLARE.md) | Remote access without inbound ports |
 | [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md) | Login gate in front of published app hostnames |
 | [Contributing](CONTRIBUTING.md) | Development workflow |
+
+Local preview: `bash scripts/prepare-docs-site.sh && pip install -r requirements-docs.txt && mkdocs serve`
 
 ---
 

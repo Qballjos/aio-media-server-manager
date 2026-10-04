@@ -9,6 +9,8 @@ The ARM64 image does not install Chromium, Xvfb, or fonts-liberation. Flaresolve
 
 ## Platform guides
 
+Published site: [qballjos.github.io/aio-media-server-manager](https://qballjos.github.io/aio-media-server-manager/).
+
 | Platform | Guide |
 |----------|--------|
 | Docker / Compose (recommended) | [deploy/DOCKER.md](../deploy/DOCKER.md) |
