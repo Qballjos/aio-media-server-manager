@@ -1,11 +1,13 @@
 name: Docs
 
+# GitHub Pages / wiki — runs on documentation edits.
+# Docker image builds are a separate workflow and ignore these paths.
 on:
   push:
     branches: [main]
     paths:
       - "docs/**"
-      - "deploy/*.md"
+      - "**/*.md"
       - "mkdocs.yml"
       - "requirements-docs.txt"
       - "scripts/prepare-docs-site.sh"
