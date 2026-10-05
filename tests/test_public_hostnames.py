@@ -84,6 +84,25 @@ def test_decode_tunnel_token(tmp_path: Path):
     assert ids["tunnel_id"] == "tunnel-uuid"
 
 
+def test_decode_prefers_token_file_over_stale_env(tmp_path: Path, monkeypatch):
+    import base64
+    import json
+
+    creds = {"a": "acct", "t": "from-file", "s": "x"}
+    good = base64.b64encode(json.dumps(creds).encode()).decode().rstrip("=")
+    path = tmp_path / "cloudflare" / "tunnel.token"
+    path.parent.mkdir(parents=True)
+    path.write_text(good + "\n", encoding="utf-8")
+    cfg = Settings(
+        config_dir=tmp_path,
+        cloudflare_tunnel_token="not-a-valid-token",
+        cloudflare_tunnel_token_file=path,
+    )
+    mgr = CloudflareTunnelManager(cfg)
+    monkeypatch.setattr("core.cloudflare_api.cloudflare_tunnel", mgr)
+    assert decode_tunnel_token()["tunnel_id"] == "from-file"
+
+
 def test_merge_ingress_keeps_unrelated():
     existing = [
         {"hostname": "other.example.com", "service": "http://127.0.0.1:9000"},

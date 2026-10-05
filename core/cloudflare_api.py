@@ -62,26 +62,16 @@ def _b64_json_decode(blob: str) -> dict[str, Any]:
     raise CloudflareApiError("Could not decode tunnel connector token.") from last_error
 
 
-def _tunnel_ids_from_payload(payload: dict[str, Any]) -> dict[str, str]:
-    account_id = str(
-        payload.get("a") or payload.get("AccountTag") or payload.get("account_id") or ""
-    ).strip()
-    tunnel_id = str(
-        payload.get("t") or payload.get("TunnelID") or payload.get("tunnel_id") or ""
-    ).strip()
-    if not account_id or not tunnel_id:
-        raise CloudflareApiError("Tunnel token is missing account or tunnel id.")
-    return {"account_id": account_id, "tunnel_id": tunnel_id}
+def _normalize_connector_token(raw: str) -> str:
+    text = (raw or "").strip().strip('"').strip("'")
+    for needle in ("--token ", " tunnel run "):
+        if needle in text:
+            text = text.rsplit(needle, 1)[-1].strip().strip('"').strip("'")
+    return text
 
 
-def decode_tunnel_token(token: str | None = None) -> dict[str, str]:
-    """Decode cloudflared connector token → account_id + tunnel_id.
-
-    Remotely managed tunnel tokens from the dashboard are **not** JWTs. They are
-    base64-encoded JSON (often starting with ``eyJ…`` because the JSON begins with
-    ``{"a":…}``). Legacy/alternate forms may use a three-part JWT; both are accepted.
-    """
-    raw = (token if token is not None else cloudflare_tunnel.read_token() or "").strip()
+def _decode_connector_token_raw(raw: str) -> dict[str, str]:
+    raw = _normalize_connector_token(raw)
     if not raw:
         raise CloudflareApiError("Tunnel connector token is missing. Save it under Cloudflare Tunnel first.")
 
@@ -103,6 +93,48 @@ def decode_tunnel_token(token: str | None = None) -> dict[str, str]:
     return _tunnel_ids_from_payload(_b64_json_decode(raw))
 
 
+def _tunnel_ids_from_payload(payload: dict[str, Any]) -> dict[str, str]:
+    account_id = str(
+        payload.get("a") or payload.get("AccountTag") or payload.get("account_id") or ""
+    ).strip()
+    tunnel_id = str(
+        payload.get("t") or payload.get("TunnelID") or payload.get("tunnel_id") or ""
+    ).strip()
+    if not account_id or not tunnel_id:
+        raise CloudflareApiError("Tunnel token is missing account or tunnel id.")
+    return {"account_id": account_id, "tunnel_id": tunnel_id}
+
+
+def decode_tunnel_token(token: str | None = None) -> dict[str, str]:
+    """Decode cloudflared connector token → account_id + tunnel_id.
+
+    Remotely managed tunnel tokens from the dashboard are **not** JWTs. They are
+    base64-encoded JSON (often starting with ``eyJ…`` because the JSON begins with
+    ``{"a":…}``). Legacy/alternate forms may use a three-part JWT; both are accepted.
+    """
+    if token is not None:
+        return _decode_connector_token_raw(token)
+
+    candidates: list[str] = []
+    for value in (
+        cloudflare_tunnel.read_connector_token(),
+        cloudflare_tunnel.read_token(),
+    ):
+        norm = _normalize_connector_token(value)
+        if norm and norm not in candidates:
+            candidates.append(norm)
+    if not candidates:
+        raise CloudflareApiError("Tunnel connector token is missing. Save it under Cloudflare Tunnel first.")
+
+    last_error: CloudflareApiError | None = None
+    for raw in candidates:
+        try:
+            return _decode_connector_token_raw(raw)
+        except CloudflareApiError as exc:
+            last_error = exc
+    raise last_error or CloudflareApiError("Could not decode tunnel connector token.")
+
+
 async def _cf_request(
     method: str,
     path: str,
@@ -113,11 +145,9 @@ async def _cf_request(
     token = get_api_token()
     if not token:
         raise CloudflareApiError(
-            "Cloudflare API token is not configured. For dashboard publishing you do not need one — "
-            "add Published applications under Networking → Tunnels. For AIO API publish, create a token "
-            "via My Profile → API Tokens (or Manage Account → Account API Tokens) → Create Token → "
-            "Edit zone DNS template, keep Zone → DNS → Edit on your zone, add Account → Cloudflare Tunnel "
-            "→ Edit, then paste it in Settings → Network → Public subdomains. "
+            "Cloudflare API token is not configured. Paste one under Settings → Network → Public subdomains "
+            "(My Profile → API Tokens → Create Token → Edit zone DNS, then add Account → Cloudflare Tunnel → Edit). "
+            "This is not the eyJ… tunnel connector token. "
             "See https://developers.cloudflare.com/fundamentals/api/get-started/create-token/"
         )
     url = path if path.startswith("http") else f"{CF_API}{path}"

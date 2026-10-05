@@ -7,7 +7,7 @@ Think of it as a bouncer for your household links.
 ### Before you start
 
 1. Tunnel working — [Cloudflare Tunnel](CLOUDFLARE.md)
-2. Hostnames published (Cloudflare **Published applications**, or AIO **Publish via API**)
+2. Hostnames published (AIO **Public subdomains** → Publish to Cloudflare, or Cloudflare Published applications + Save in AIO)
 
 Official Cloudflare docs: [Self-hosted apps](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/) · [Policies](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/).
 
@@ -130,7 +130,7 @@ LAN URLs (`http://nas-ip:8989`) **skip** Access — that is normal. Use those on
 
 ## When you add or rename a subdomain
 
-1. Publish it in Cloudflare (**Published application**) or from AIO (**Publish via API**).
+1. Publish it from AIO (**Public subdomains** → Publish to Cloudflare), or add the Published application in Cloudflare and Save the same label in AIO.
 2. Add it to an Access application, use a `*.example.com` wildcard, or create a new Access app.
 
 Access does not notice new publishes by itself.

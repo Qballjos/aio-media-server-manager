@@ -19,6 +19,7 @@ from core.cloudflare_api import (
 from core.cloudflare_api import planned_routes
 from core.homepage import clear_homepage_snapshot_cache
 from core.public_hostnames import PublicHostnameError, load_hostnames, save_hostnames
+from core.cloudflare_tunnel import cloudflare_tunnel
 from core.settings import settings
 
 router = APIRouter(prefix="/api/cloudflare/hostnames", tags=["Cloudflare Hostnames"])
@@ -60,12 +61,16 @@ async def list_hostnames(request: Request) -> dict[str, Any]:
         tunnel_ids = decode_tunnel_token()
     except CloudflareApiError as exc:
         tunnel_decode_error = str(exc)
+    tunnel_status = cloudflare_tunnel.status()
     return {
         "public_app_base_domain": settings.public_app_base_domain,
         "api_token_configured": api_token_configured(),
         "tunnel_account_id": tunnel_ids.get("account_id", ""),
         "tunnel_id": tunnel_ids.get("tunnel_id", ""),
         "tunnel_decode_error": tunnel_decode_error,
+        "tunnel_token_present": bool(tunnel_status.get("token_present")),
+        "tunnel_connected": bool(tunnel_status.get("connected")),
+        "tunnel_enabled": bool(tunnel_status.get("enabled")),
         "routes": planned_routes(),
         "stored": load_hostnames(),
     }
