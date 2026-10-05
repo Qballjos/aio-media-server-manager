@@ -47,6 +47,12 @@ class SabnzbdApp(BaseApplication):
         return script.is_file() and self._runtime_imports_ok(self._venv_python())
 
     def start_command(self) -> list[str]:
+        try:
+            from core.integrations.sabnzbd import ensure_sabnzbd_public_access
+
+            ensure_sabnzbd_public_access(self.config_dir, port=self.port)
+        except Exception:
+            pass
         self._ensure_runtime()
         self._write_runner()
         self._own_config()
@@ -174,6 +180,12 @@ class SabnzbdApp(BaseApplication):
                     if key:
                         set_application_api_key(self.name, key)
                     break
+        try:
+            from core.integrations.sabnzbd import ensure_sabnzbd_public_access
+
+            ensure_sabnzbd_public_access(self.config_dir, port=self.port)
+        except Exception:
+            pass
         self._own_config()
 
     def _own_config(self) -> None:

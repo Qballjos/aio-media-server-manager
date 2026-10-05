@@ -232,8 +232,46 @@ def test_sabnzbd_bootstrap_ini_includes_usenet(tmp_path: Path):
     assert "connections = 20" in text
     assert "ssl = 1" in text
     assert "helpful_warnings = 0" in text
+    assert "inet_exposure = 5" in text
+    assert "host_whitelist = localhost,127.0.0.1,::1" in text
     write_bootstrap_ini(path, port=1, complete_dir="x", incomplete_dir="y")
     assert "port = 8085" in path.read_text(encoding="utf-8")
+
+
+def test_ensure_sabnzbd_public_access_sets_exposure_and_whitelist(tmp_path: Path, monkeypatch):
+    from core.integrations.sabnzbd import ensure_sabnzbd_public_access
+    from core.public_hostnames import save_hostnames
+    from core.settings import Settings
+
+    cfg = Settings(config_dir=tmp_path, public_app_base_domain="example.com")
+    monkeypatch.setattr("core.settings.settings", cfg)
+    monkeypatch.setattr("core.public_hostnames.settings", cfg)
+    sab_dir = tmp_path / "sabnzbd"
+    sab_dir.mkdir()
+    ini = sab_dir / "sabnzbd.ini"
+    ini.write_text(
+        "[misc]\n"
+        "host = 0.0.0.0\n"
+        "port = 8085\n"
+        "api_key = aabbccddeeff00112233445566778899\n"
+        "username = admin\n"
+        "password = secret\n"
+        "inet_exposure = 0\n"
+        "host_whitelist = localhost\n"
+        "\n[categories]\n",
+        encoding="utf-8",
+    )
+    save_hostnames(
+        {"sabnzbd": {"subdomain": "usenet", "enabled": True}},
+        app_settings=cfg,
+    )
+    assert ensure_sabnzbd_public_access(sab_dir, port=8085) is True
+    text = ini.read_text(encoding="utf-8")
+    assert "inet_exposure = 5" in text
+    assert "usenet.example.com" in text
+    assert "localhost" in text
+    # Second pass should be a no-op once values match.
+    assert ensure_sabnzbd_public_access(sab_dir, port=8085) is False
 
 
 def test_sabnzbd_post_install_seeds_ini_and_api_key(tmp_path: Path, monkeypatch):

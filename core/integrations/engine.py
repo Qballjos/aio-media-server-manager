@@ -217,6 +217,8 @@ class IntegrationEngine:
             lidarr_url = f"http://{bridge}:{lidarr_port}"
 
         if not self._skip_unavailable(steps, "sabnzbd", "configure_folders_and_categories"):
+            from core.integrations.sabnzbd import ensure_sabnzbd_public_access
+
             sab_client = SABnzbdClient(port=sab_port, api_key=sab_key)
             sab_ok = sab_client.set_folders(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
@@ -225,6 +227,10 @@ class IntegrationEngine:
             usenet = load_usenet_server()
             if usenet and usenet.get("host"):
                 sab_ok = sab_client.add_news_server(**usenet) and sab_ok
+            try:
+                ensure_sabnzbd_public_access(sab_cfg, api_key=sab_key, port=sab_port)
+            except Exception as exc:
+                logger.debug("SABnzbd public-access sync failed: %s", exc)
             steps.append(_step("sabnzbd", "configure_folders_and_categories", sab_ok, str(layout.complete)))
 
         if not self._skip_unavailable(steps, "nzbget", "configure_folders_and_categories"):

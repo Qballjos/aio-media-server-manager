@@ -120,6 +120,8 @@ Service URL must be `http://127.0.0.1:PORT` inside AIO. Then match the same labe
 
 **Important:** published hostnames are on the public internet until you add [Cloudflare Access](CLOUDFLARE_ACCESS.md). Prefer Access (or very strong app passwords) for Sonarr, Radarr, qBittorrent, and the AIO manager itself.
 
+SABnzbd blocks unknown public Hosts by default (`External internet access denied`). AIO sets `inet_exposure` and adds your published SABnzbd hostname to `host_whitelist` on start / Auto-Wire / Publish. After enabling `sabnzbd` under Public subdomains, restart SABnzbd or run Auto-Wire once if the page still denies access.
+
 ---
 
 ## Optional: token file on disk (SSH / Compose)
