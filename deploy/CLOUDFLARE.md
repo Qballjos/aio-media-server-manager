@@ -51,31 +51,35 @@ Cloudflare shows install commands for Docker, Windows, etc. **Do not run those o
 
 ---
 
-## Step 3 — Publish hostnames (so Open UI works remotely)
+## Step 3 — Paste the connector token into AIO
+
+1. Open `http://YOUR-SERVER-IP:8080`.
+2. **Settings → Network → Cloudflare Tunnel**
+3. Turn **Enable tunnel** on, paste the `eyJ…` token, Save.
+4. Status should show **Enabled**, **Token saved**, **Tunnel up**, **cloudflared ready**.  
+   The header **CF** pill turns green/blue when healthy.
+
+Stuck on **Tunnel down**? Check cloudflared logs in Catalog/Diagnostics, outbound access to Cloudflare (port **7844**), and that nothing else is using the same token.
+
+---
+
+## Step 4 — Publish applications (so Open UI works remotely)
 
 Cloudflare only serves **HTTPS on port 443**. You cannot open `https://media.example.com:8989`.  
-Each app needs its own hostname, e.g. `https://sonarr.example.com`, routed to `http://127.0.0.1:8989` **inside** the AIO container.
+Each app needs its own **public hostname**, e.g. `https://sonarr.example.com`, mapped to `http://127.0.0.1:8989` **inside** the AIO container.
 
-### Easiest: do it in AIO
+In Cloudflare’s model these are **[Published applications](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/#2a-publish-an-application)** (hostname → service). That is **not** the same as private-network Tunnel **routes** (CIDR / private hostname / WAN routes).
 
-After the tunnel token is saved (Step 4):
+### Recommended: Published application in the Cloudflare dashboard
 
-1. **Settings → Network → Public subdomains**
-2. Set **Public app domain** to your zone (e.g. `example.com` or `example.co.uk`).
-3. Create a [Cloudflare API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) with:
-   - **Account** → **Cloudflare Tunnel** → **Edit**
-   - **Zone** → **DNS** → **Edit** (limit to your zone)
-4. Paste that API token under **Public subdomains**  
-   (this is **not** the `eyJ…` connector token).
-5. Toggle **Expose** per app, edit subdomains if you like, **Save**, then **Publish to Cloudflare**.
+When you add a published application in the dashboard, Cloudflare also creates the proxied DNS **CNAME** to `<tunnel-id>.cfargotunnel.com` for you ([routing docs](https://developers.cloudflare.com/tunnel/concepts/routing/)).
 
-AIO writes tunnel routes and creates proxied DNS names. Day to day you can stay in AIO instead of the Cloudflare dashboard.
+1. **Networking → Tunnels** → your tunnel → **Routes** → **Add route** → **Published application**
+2. Subdomain + domain (e.g. `sonarr` + `example.com`)
+3. **Service URL:** `http://127.0.0.1:PORT` (see table below — must be localhost inside AIO, not a LAN IP)
+4. Save
 
-### Or: publish routes by hand in Cloudflare
-
-**Networking → Tunnels** → your tunnel → **Routes** → **Published application**.
-
-At least the manager: `media.example.com` → `http://127.0.0.1:8080`.
+At least publish the manager: `media.example.com` → `http://127.0.0.1:8080`.
 
 | Hostname | Points to (inside AIO) |
 |----------|-------------------------|
@@ -92,26 +96,30 @@ At least the manager: `media.example.com` → `http://127.0.0.1:8080`.
 
 More ports: [Install → Ports](../docs/INSTALL.md#ports).
 
+Then in AIO: **Settings → Network → Public subdomains** — set **Public app domain**, toggle the same labels, **Save**. That only aligns Catalog **Open UI** links; it does not call Cloudflare.
+
+### Optional: publish via Cloudflare API from AIO
+
+Same outcome as the dashboard path, using Cloudflare’s [Tunnel API get-started](https://developers.cloudflare.com/tunnel/get-started/) steps (PUT tunnel **ingress** configuration + Zone DNS CNAME). Useful if you want AIO to keep ingress in sync when you change listen ports.
+
+Create the API token the way Cloudflare documents ([Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)) — do **not** invent a shortcut path:
+
+1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), go to **My Profile → API Tokens** for a user token. For an Account Token, go to **Manage Account → Account API Tokens**.
+2. Select **Create Token**.
+3. Pick a template or **Create Custom Token**. Start from the **Edit zone DNS** template (Cloudflare’s own example), then adjust:
+   - Name it something clear (e.g. `AIO Media publish`).
+   - Keep **Zone → DNS → Edit**, and under **Zone Resources** limit the token to **your** zone (not All zones).
+   - Add **Account → Cloudflare Tunnel → Edit** (required to update published-application ingress). Scope **Account Resources** to your account.
+   - Recommended: also **Zone → Zone → Read** so AIO can resolve the zone by name.
+4. **Continue to summary** → **Create Token**. Copy the secret once (shown only once).
+
+Paste that token under **Public subdomains** (this is **not** the `eyJ…` connector token). Toggle **Expose**, **Save**, then **Publish via API (advanced)**.
+
+API calls need DNS write plus a tunnel-connector write permission ([`DNS Write`](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) and one of `Cloudflare Tunnel Write` / `Cloudflare One Connector: cloudflared Write` / `Cloudflare One Connectors Write`).
+
+AIO only rewrites ingress hostnames it manages (or that you enable now). Hand-made dashboard published applications you never published from AIO stay put. Turning an app off and publishing again removes that ingress hostname; the DNS name may remain (then you get a tunnel 404). Changing a listen port updates the **service URL** in ingress; the DNS CNAME still targets the tunnel id.
+
 **Important:** published hostnames are on the public internet until you add [Cloudflare Access](CLOUDFLARE_ACCESS.md). Prefer Access (or very strong app passwords) for Sonarr, Radarr, qBittorrent, and the AIO manager itself.
-
-**Publish behaviour (short version)**
-
-- AIO only changes routes it published (or that you enable now). Hand-made dashboard routes you never published from AIO stay put.
-- Turning an app off and publishing again removes its tunnel route; the DNS name may remain (then you get a tunnel 404).
-- Changing an app’s listen port updates the tunnel target when an API token is saved.
-- At home, `http://nas-ip:8080` still opens apps as `http://nas-ip:port` even if a public domain is set.
-
----
-
-## Step 4 — Paste the token into AIO
-
-1. Open `http://YOUR-SERVER-IP:8080`.
-2. **Settings → Network → Cloudflare Tunnel**
-3. Turn **Enable tunnel** on, paste the `eyJ…` token, Save.
-4. Status should show **Enabled**, **Token saved**, **Tunnel up**, **cloudflared ready**.  
-   The header **CF** pill turns green/blue when healthy.
-
-Stuck on **Tunnel down**? Check cloudflared logs in Catalog/Diagnostics, outbound access to Cloudflare (port **7844**), and that nothing else is using the same token.
 
 ---
 
@@ -196,8 +204,8 @@ Access login gate: [CLOUDFLARE_ACCESS.md](CLOUDFLARE_ACCESS.md) — trusted prox
 |---------|----------------|
 | Not connected | Full `eyJ…` pasted; only one `cloudflared` using that token |
 | 502 on hostname | Service must be `http://127.0.0.1:PORT` inside AIO, not a LAN IP |
-| Open UI fails over tunnel | Publish `https://app.your.domain`; set **Public app domain**; do not expect `:8989` on the manager hostname |
-| Works on LAN, not remotely | Outbound firewall / port **7844**; DNS and tunnel route |
+| Open UI fails over tunnel | Add a Published application for `https://app.your.domain`; set **Public app domain** in AIO; do not expect `:8989` on the manager hostname |
+| Works on LAN, not remotely | Outbound firewall / port **7844**; DNS CNAME to `<tunnel-id>.cfargotunnel.com` and published application ingress |
 | Odd login/cookies | Leave trusted proxies empty for tunnel-only |
 | Token field empty after save | Normal — stored on disk, never shown again |
 
@@ -208,7 +216,7 @@ Access login gate: [CLOUDFLARE_ACCESS.md](CLOUDFLARE_ACCESS.md) — trusted prox
 1. Create tunnel in Cloudflare.
 2. Copy `eyJ…` — do **not** run Cloudflare’s installer on the NAS.
 3. Paste token in AIO → enable tunnel → Save.
-4. Publish hostnames (AIO **Public subdomains** or dashboard routes).
+4. Add **Published applications** in Cloudflare (hostname → `http://127.0.0.1:PORT`); optionally align Open UI labels under AIO **Public subdomains**.
 5. Leave trusted proxies empty unless you also run nginx/Caddy in front.
 6. Confirm Healthy / connected, then open the HTTPS URL.
 7. Lock it down with [Cloudflare Access](CLOUDFLARE_ACCESS.md).

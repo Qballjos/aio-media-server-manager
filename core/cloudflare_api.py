@@ -45,24 +45,62 @@ def api_token_configured() -> bool:
     return bool(get_api_token())
 
 
-def decode_tunnel_token(token: str | None = None) -> dict[str, str]:
-    """Decode cloudflared connector JWT payload → account_id + tunnel_id."""
-    raw = (token if token is not None else cloudflare_tunnel.read_token() or "").strip()
-    if not raw:
-        raise CloudflareApiError("Tunnel connector token is missing. Save it under Cloudflare Tunnel first.")
-    parts = raw.split(".")
-    if len(parts) < 2:
-        raise CloudflareApiError("Tunnel token is not a valid JWT.")
-    payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
-    try:
-        payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode("ascii")))
-    except (ValueError, json.JSONDecodeError) as exc:
-        raise CloudflareApiError("Could not decode tunnel token.") from exc
-    account_id = str(payload.get("a") or "").strip()
-    tunnel_id = str(payload.get("t") or "").strip()
+def _b64_json_decode(blob: str) -> dict[str, Any]:
+    """Decode base64 (URL-safe or standard) JSON from cloudflared connector tokens."""
+    text = (blob or "").strip()
+    pad = "=" * (-len(text) % 4)
+    last_error: Exception | None = None
+    for decoder in (base64.urlsafe_b64decode, base64.b64decode):
+        try:
+            raw = decoder((text + pad).encode("ascii"))
+            parsed = json.loads(raw.decode("utf-8"))
+            if isinstance(parsed, dict):
+                return parsed
+        except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            last_error = exc
+            continue
+    raise CloudflareApiError("Could not decode tunnel connector token.") from last_error
+
+
+def _tunnel_ids_from_payload(payload: dict[str, Any]) -> dict[str, str]:
+    account_id = str(
+        payload.get("a") or payload.get("AccountTag") or payload.get("account_id") or ""
+    ).strip()
+    tunnel_id = str(
+        payload.get("t") or payload.get("TunnelID") or payload.get("tunnel_id") or ""
+    ).strip()
     if not account_id or not tunnel_id:
         raise CloudflareApiError("Tunnel token is missing account or tunnel id.")
     return {"account_id": account_id, "tunnel_id": tunnel_id}
+
+
+def decode_tunnel_token(token: str | None = None) -> dict[str, str]:
+    """Decode cloudflared connector token → account_id + tunnel_id.
+
+    Remotely managed tunnel tokens from the dashboard are **not** JWTs. They are
+    base64-encoded JSON (often starting with ``eyJ…`` because the JSON begins with
+    ``{"a":…}``). Legacy/alternate forms may use a three-part JWT; both are accepted.
+    """
+    raw = (token if token is not None else cloudflare_tunnel.read_token() or "").strip()
+    if not raw:
+        raise CloudflareApiError("Tunnel connector token is missing. Save it under Cloudflare Tunnel first.")
+
+    parts = raw.split(".")
+    if len(parts) >= 3:
+        try:
+            return _tunnel_ids_from_payload(_b64_json_decode(parts[1]))
+        except CloudflareApiError:
+            pass
+
+    if raw.startswith("{") and raw.endswith("}"):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return _tunnel_ids_from_payload(parsed)
+        except json.JSONDecodeError:
+            pass
+
+    return _tunnel_ids_from_payload(_b64_json_decode(raw))
 
 
 async def _cf_request(
@@ -75,8 +113,12 @@ async def _cf_request(
     token = get_api_token()
     if not token:
         raise CloudflareApiError(
-            "Cloudflare API token is not configured. Create one with Account → Cloudflare Tunnel → Edit "
-            "and Zone → DNS → Edit, then paste it in Settings → Network."
+            "Cloudflare API token is not configured. For dashboard publishing you do not need one — "
+            "add Published applications under Networking → Tunnels. For AIO API publish, create a token "
+            "via My Profile → API Tokens (or Manage Account → Account API Tokens) → Create Token → "
+            "Edit zone DNS template, keep Zone → DNS → Edit on your zone, add Account → Cloudflare Tunnel "
+            "→ Edit, then paste it in Settings → Network → Public subdomains. "
+            "See https://developers.cloudflare.com/fundamentals/api/get-started/create-token/"
         )
     url = path if path.startswith("http") else f"{CF_API}{path}"
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -288,10 +330,10 @@ def _merge_ingress(
 
 
 async def sync_published_app_port(app_name: str, port: int) -> dict[str, Any]:
-    """Rewrite tunnel ingress + recreate DNS when an exposed app's listen port changes.
+    """Rewrite published-application ingress when an exposed app's listen port changes.
 
-    DNS CNAMEs do not embed the origin port; we still delete and recreate the CNAME
-    so the public hostname is refreshed cleanly alongside the new localhost service.
+    DNS CNAMEs target ``<tunnel-id>.cfargotunnel.com`` only — they do not embed the
+    origin port — so we update the tunnel ingress service URL and leave DNS alone.
     """
     name = (app_name or "").strip().lower()
     new_port = int(port)
@@ -327,16 +369,7 @@ async def sync_published_app_port(app_name: str, port: int) -> dict[str, Any]:
     ids = decode_tunnel_token()
     account_id = ids["account_id"]
     tunnel_id = ids["tunnel_id"]
-    base = (settings.public_app_base_domain or "").strip().lower().strip(".")
-    if not base:
-        # Derive zone from published hostname (supports multi-part TLDs).
-        from core.app_web_url import derive_public_app_base_domain
 
-        base = derive_public_app_base_domain(hostname)
-    if not base:
-        raise CloudflareApiError("Set Public app domain before syncing tunnel ports.")
-
-    zone_id = await resolve_zone_id(base)
     current = await get_tunnel_config(account_id, tunnel_id)
     config = current.get("config") if isinstance(current.get("config"), dict) else {}
     existing_ingress = list(config.get("ingress") or []) if isinstance(config, dict) else []
@@ -356,18 +389,12 @@ async def sync_published_app_port(app_name: str, port: int) -> dict[str, Any]:
     )
     await put_tunnel_ingress(account_id, tunnel_id, new_ingress, existing_config=current)
 
-    deleted = await delete_dns_records_for_hostname(zone_id=zone_id, hostname=hostname)
-    dns_action = await upsert_dns_cname(zone_id=zone_id, hostname=hostname, tunnel_id=tunnel_id)
-
     mark_published({name: hostname}, ports={name: new_port})
-    # Keep enabled/subdomain; mark_published merges last_published.
     logger.info(
-        "Synced Cloudflare tunnel for %s → %s (port %s; dns deleted=%s %s)",
+        "Synced Cloudflare published application for %s → %s (port %s)",
         name,
         hostname,
         new_port,
-        deleted,
-        dns_action,
     )
     return {
         "ok": True,
@@ -377,9 +404,7 @@ async def sync_published_app_port(app_name: str, port: int) -> dict[str, Any]:
         "port": new_port,
         "previous_port": prev_port_i,
         "service": service,
-        "dns_deleted": deleted,
-        "dns": dns_action,
-        "detail": f"Tunnel service updated to {service}; DNS recreated for {hostname}.",
+        "detail": f"Published application service updated to {service}.",
     }
 
 
@@ -455,7 +480,7 @@ async def publish_hostnames(
         "ingress_count": max(0, len(new_ingress) - 1),
         "warning": (
             "Published hostnames are reachable from the internet unless you add Cloudflare Access. "
-            "DNS CNAMEs for disabled apps are left in place (tunnel route removed)."
+            "DNS CNAMEs for disabled apps are left in place (published-application ingress hostname removed)."
             if enabled or cleared
             else ""
         ),

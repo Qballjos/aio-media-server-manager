@@ -58,17 +58,25 @@ def test_open_ui_uses_custom_subdomain(tmp_path: Path, monkeypatch):
 
 
 def test_decode_tunnel_token(tmp_path: Path):
-    # Minimal JWT-shaped token: header.payload.sig with a + t claims
     import base64
     import json
 
-    payload = base64.urlsafe_b64encode(
-        json.dumps({"a": "account123", "t": "tunnel-uuid", "s": "x"}).encode()
-    ).decode().rstrip("=")
-    token = f"eyJhbGciOiJub25lIn0.{payload}.sig"
+    creds = {"a": "account123", "t": "tunnel-uuid", "s": "x"}
+
+    # Dashboard / cloudflared service install token: single base64 JSON blob (not a JWT).
+    b64_token = base64.b64encode(json.dumps(creds).encode()).decode().rstrip("=")
+    assert b64_token.startswith("eyJ")
+    assert decode_tunnel_token(b64_token) == {
+        "account_id": "account123",
+        "tunnel_id": "tunnel-uuid",
+    }
+
+    # Three-part JWT-shaped token (also accepted).
+    payload = base64.urlsafe_b64encode(json.dumps(creds).encode()).decode().rstrip("=")
+    jwt_token = f"eyJhbGciOiJub25lIn0.{payload}.sig"
     path = tmp_path / "cloudflare" / "tunnel.token"
     path.parent.mkdir(parents=True)
-    path.write_text(token + "\n", encoding="utf-8")
+    path.write_text(jwt_token + "\n", encoding="utf-8")
     mgr = CloudflareTunnelManager(Settings(config_dir=tmp_path, cloudflare_tunnel_token_file=path))
     assert mgr.read_token().startswith("eyJ")
     ids = decode_tunnel_token(mgr.read_token())
