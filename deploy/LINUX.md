@@ -80,7 +80,7 @@ Install only what you will run. On ARM64, skip Chromium — Flaresolverr is x86_
 | `ffmpeg`, `libfontconfig1` | Jellyfin, Plex |
 | `libicu*`, `libssl3`, `libsqlite3-0`, `sqlite3`, `libgssapi-krb5-2`, `zlib1g` | Sonarr, Radarr, Lidarr, Prowlarr, NeutArr |
 | `git` | Recyclarr (clones TRaSH Guides) |
-| `unrar` (RAR 5+), `par2`, `p7zip-full` | SABnzbd, NZBGet |
+| `unrar` (RAR 5+), `p7zip-full`, [par2cmdline-turbo](https://sabnzbd.org/wiki/installation/par2cmdline-turbo) as `par2` | SABnzbd, NZBGet |
 | Python 3.13, `libxml2`, `libxslt1.1`, `libjpeg62-turbo`, `python3-dev`, `build-essential` | Bazarr, SABnzbd, Shelfmark, NeutArr |
 | Node.js 22 | Seerr |
 | JRE 25, `mariadb-server` | Grimmory |
