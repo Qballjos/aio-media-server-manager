@@ -19,7 +19,7 @@ FROM python:3.13-slim-bookworm AS py313
 
 # Userspace WireGuard for NAS kernels that have no wireguard module (typical on Synology).
 # wg-quick falls back to this binary when `ip link add type wireguard` fails (exit 127 otherwise).
-FROM --platform=$BUILDPLATFORM golang:1.23-bookworm AS wggo
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS wggo
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
