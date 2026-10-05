@@ -205,6 +205,82 @@ def test_grimmory_bookdrop_matches_shelfmark_ingest(tmp_path: Path, monkeypatch)
     assert g_env["APP_BOOKDROP_FOLDER"] == bookdrop
     assert s_env["INGEST_DIR"] == bookdrop
     assert s_env["DESTINATION"] == bookdrop
+    assert s_env["BOOKLORE_HOST"] == "http://127.0.0.1:6060"
+    assert s_env["AUDIOBOOK_LIBRARY_URL"] == "http://127.0.0.1:6060"
+    assert s_env["QBITTORRENT_CATEGORY"] == "books"
     assert "DESTINATION_AUDIOBOOK" not in s_env
     assert "QBITTORRENT_CATEGORY_AUDIOBOOK" not in s_env
+    # qBittorrent not installed in this fixture → client URL not autofilled yet
+    assert "QBITTORRENT_URL" not in s_env
+
+
+def test_shelfmark_download_client_env_autofills_qbittorrent(tmp_path: Path, monkeypatch):
+    from applications.shelfmark_mirrors import (
+        shelfmark_download_client_env,
+        sync_shelfmark_download_clients,
+    )
+    from core import settings as settings_mod
+    from core.library_layout import LibraryLayout
+
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        install_dir=tmp_path / "apps",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        cache_dir=tmp_path / "cache",
+    )
+    monkeypatch.setattr(settings_mod, "settings", cfg)
+    monkeypatch.setattr(
+        "applications.shelfmark_mirrors._app_installed",
+        lambda name: name == "qbittorrent",
+    )
+    monkeypatch.setattr("applications.shelfmark_mirrors._app_port", lambda name, default: 8081)
+    monkeypatch.setattr(
+        "core.integrations.qbittorrent.qbittorrent_credentials",
+        lambda: ("aioadmin", "secret"),
+    )
+
+    env = shelfmark_download_client_env()
+    assert env["PROWLARR_TORRENT_CLIENT"] == "qbittorrent"
+    assert env["QBITTORRENT_URL"] == "http://127.0.0.1:8081"
+    assert env["QBITTORRENT_USERNAME"] == "aioadmin"
+    assert env["QBITTORRENT_PASSWORD"] == "secret"
+    assert env["QBITTORRENT_CATEGORY"] == "books"
+    assert env["QBITTORRENT_DOWNLOAD_DIR"] == str(LibraryLayout.from_settings(cfg).torrent_path("books"))
+
+    shelf_cfg = tmp_path / "config" / "shelfmark"
+    shelf_cfg.mkdir(parents=True)
+    assert sync_shelfmark_download_clients(shelf_cfg) is True
+    import json
+
+    data = json.loads((shelf_cfg / "settings.json").read_text(encoding="utf-8"))
+    assert data["QBITTORRENT_URL"] == "http://127.0.0.1:8081"
+    assert data["PROWLARR_TORRENT_CLIENT"] == "qbittorrent"
+
+
+def test_shelfmark_audiobook_library_uses_public_grimmory(tmp_path: Path, monkeypatch):
+    from applications.community import ShelfmarkApp
+    from core import settings as settings_mod
+    from core.public_hostnames import save_hostnames
+
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        install_dir=tmp_path / "apps",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        cache_dir=tmp_path / "cache",
+        public_app_base_domain="example.com",
+    )
+    monkeypatch.setattr(settings_mod, "settings", cfg)
+    monkeypatch.setattr("applications.community.default_settings", cfg)
+    monkeypatch.setattr("core.app_web_url.settings", cfg)
+    monkeypatch.setattr("core.public_hostnames.settings", cfg)
+    save_hostnames(
+        {"grimmory": {"subdomain": "grimmory", "enabled": True}},
+        app_settings=cfg,
+    )
+    shelfmark = ShelfmarkApp(base_config_dir=cfg.config_dir, base_install_dir=cfg.install_dir)
+    env = shelfmark.extra_env()
+    assert env["BOOKLORE_HOST"] == "http://127.0.0.1:6060"
+    assert env["AUDIOBOOK_LIBRARY_URL"] == "https://grimmory.example.com"
 

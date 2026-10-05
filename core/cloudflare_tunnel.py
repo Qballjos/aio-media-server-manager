@@ -46,6 +46,9 @@ class CloudflareTunnelManager:
         token = (self.settings.cloudflare_tunnel_token or "").strip()
         if token:
             return token
+        return self._read_token_file()
+
+    def _read_token_file(self) -> str:
         path = self.token_file
         if path.is_file():
             try:
@@ -53,6 +56,13 @@ class CloudflareTunnelManager:
             except OSError:
                 return ""
         return ""
+
+    def read_connector_token(self) -> str:
+        """Token cloudflared runs with (--token-file), preferring the on-disk file."""
+        from_file = self._read_token_file()
+        if from_file:
+            return from_file
+        return (self.settings.cloudflare_tunnel_token or "").strip()
 
     def token_present(self) -> bool:
         return bool(self.read_token())

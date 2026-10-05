@@ -289,8 +289,8 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
     elif plugin.manifest.daemon:
         notes.append(
             "Open UI uses http://<host>:<port> on LAN, or https://<subdomain>.<domain> over Cloudflare. "
-            "If this app is published on the tunnel and you change the listen port, AIO updates the "
-            "tunnel service and recreates the DNS CNAME when a Cloudflare API token is saved."
+            "If this app is published and you change the listen port, AIO updates the published "
+            "application service URL when a Cloudflare API token is saved (DNS still points at the tunnel)."
         )
     else:
         notes.append("This is a CLI/sync tool, not a background WebUI service.")

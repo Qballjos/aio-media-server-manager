@@ -175,18 +175,32 @@ class ShelfmarkApp(SimpleApplication):
     )
 
     def extra_env(self) -> dict[str, str]:
+        from applications.shelfmark_mirrors import shelfmark_download_client_env
+        from core.app_web_url import grimmory_browser_url
+
         layout = LibraryLayout.from_settings(default_settings)
         # Ebooks and audiobooks share the same Grimmory bookdrop inbox.
         bookdrop = layout.bookdrop
         bookdrop.mkdir(parents=True, exist_ok=True)
         layout.books.mkdir(parents=True, exist_ok=True)
+        # BOOKLORE_HOST stays on loopback for Shelfmark→Grimmory API uploads.
+        # AUDIOBOOK_LIBRARY_URL is a browser nav link → prefer public Grimmory URL.
+        grimmory_port = 6060
+        try:
+            from applications.catalog import ApplicationCatalog
+
+            cat = ApplicationCatalog()
+            if cat.has("grimmory"):
+                grimmory_port = int(cat.get("grimmory").port or 6060)
+        except Exception:
+            grimmory_port = 6060
+        grimmory_lan = f"http://127.0.0.1:{grimmory_port}"
         env = {
             "FLASK_HOST": "0.0.0.0",
             "FLASK_PORT": str(self.port),
             "CONFIG_DIR": str(self.config_dir),
             "INGEST_DIR": str(bookdrop),
             "DESTINATION": str(bookdrop),
-            "QBITTORRENT_CATEGORY": "books",
             "TZ": "Etc/UTC",
             "SEARCH_MODE": "universal",
             "USING_EXTERNAL_BYPASSER": "true",
@@ -194,10 +208,11 @@ class ShelfmarkApp(SimpleApplication):
             "EXT_BYPASSER_PATH": "/v1",
             "PROWLARR_ENABLED": "true",
             "PROWLARR_URL": "http://127.0.0.1:9696",
-            "BOOKLORE_HOST": "http://127.0.0.1:6060",
-            "AUDIOBOOK_LIBRARY_URL": "http://127.0.0.1:6060",
+            "BOOKLORE_HOST": grimmory_lan,
+            "AUDIOBOOK_LIBRARY_URL": grimmory_browser_url(port=grimmory_port),
             "PYTHONPATH": str(self.install_dir),
         }
+        env.update(shelfmark_download_client_env())
         try:
             from core.integrations.credentials import get_application_api_key
 
