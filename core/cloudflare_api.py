@@ -33,16 +33,68 @@ def get_api_token() -> str:
     return (secret_store.get_secret(API_TOKEN_SECRET) or "").strip()
 
 
+def _looks_like_connector_token(value: str) -> bool:
+    """True when the pasted secret is the tunnel eyJ… connector, not an API token."""
+    raw = _normalize_connector_token(value)
+    if not raw or not raw.startswith("eyJ"):
+        return False
+    try:
+        _decode_connector_token_raw(raw)
+        return True
+    except CloudflareApiError:
+        return False
+
+
+def _normalize_api_token(token: str) -> str:
+    # Cloudflare copies sometimes include wrapping quotes or invisible whitespace.
+    return (
+        (token or "")
+        .replace("\u200b", "")
+        .replace("\ufeff", "")
+        .strip()
+        .strip('"')
+        .strip("'")
+    )
+
+
 def set_api_token(token: str | None) -> None:
-    value = (token or "").strip()
-    if value:
-        secret_store.save_secret(API_TOKEN_SECRET, value)
-    else:
+    value = _normalize_api_token(token or "")
+    if not value:
         secret_store.delete_secret(API_TOKEN_SECRET)
+        return
+    if _looks_like_connector_token(value):
+        raise CloudflareApiError(
+            "That looks like the tunnel connector token (eyJ…). "
+            "Paste a Cloudflare API token instead: My Profile → API Tokens → Create Token "
+            "(Edit zone DNS + Account → Cloudflare Tunnel → Edit). "
+            "The connector token belongs only under Cloudflare Tunnel above."
+        )
+    # Global API Key is 37 hex chars and must use X-Auth-Email/X-Auth-Key — Bearer rejects it as 9109.
+    if len(value) == 37 and all(c in "0123456789abcdef" for c in value.lower()):
+        raise CloudflareApiError(
+            "That looks like a Global API Key, which AIO cannot use as a Bearer token. "
+            "Create an API Token instead: My Profile → API Tokens → Create Token → "
+            "Edit zone DNS, then add Account → Cloudflare Tunnel → Edit."
+        )
+    secret_store.save_secret(API_TOKEN_SECRET, value)
 
 
 def api_token_configured() -> bool:
     return bool(get_api_token())
+
+
+def _format_cloudflare_api_error(errors: list[Any], status_code: int) -> str:
+    msg = "; ".join(str(e.get("message") or e) for e in errors if e) or f"HTTP {status_code}"
+    codes = {e.get("code") for e in errors if isinstance(e, dict)}
+    lowered = msg.lower()
+    if 9109 in codes or "invalid access token" in lowered:
+        return (
+            "Cloudflare rejected the API token (Invalid access token). "
+            "Use a scoped API Token from My Profile → API Tokens → Create Token — "
+            "not the eyJ… tunnel connector, and not the Global API Key. "
+            "Clear the saved token, paste a fresh API Token, Save, then publish again."
+        )
+    return msg
 
 
 def _b64_json_decode(blob: str) -> dict[str, Any]:
@@ -168,10 +220,7 @@ async def _cf_request(
         raise CloudflareApiError(f"Cloudflare API returned non-JSON ({resp.status_code}).") from exc
     if resp.status_code >= 400 or not data.get("success", False):
         errors = data.get("errors") or []
-        msg = "; ".join(
-            str(e.get("message") or e) for e in errors if e
-        ) or f"HTTP {resp.status_code}"
-        raise CloudflareApiError(msg)
+        raise CloudflareApiError(_format_cloudflare_api_error(errors, resp.status_code))
     return data.get("result")
 
 

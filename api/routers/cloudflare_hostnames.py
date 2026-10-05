@@ -89,9 +89,11 @@ async def put_hostnames(request: Request, body: HostnamesPut) -> dict[str, Any]:
         settings.public_app_base_domain = domain
         settings.save()
     if body.cloudflare_api_token is not None:
-        token = body.cloudflare_api_token.strip()
-        # Empty string clears; omit field to keep.
-        set_api_token(token)
+        try:
+            # Empty string clears; omit field to keep.
+            set_api_token(body.cloudflare_api_token)
+        except CloudflareApiError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     try:
         saved = save_hostnames(_entries_as_dict(body.hostnames) or {})
     except PublicHostnameError as exc:

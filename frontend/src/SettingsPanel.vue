@@ -1933,8 +1933,8 @@ onBeforeUnmount(() => {
           <label class="ui-field">
             Cloudflare API token
             <span class="ui-field-hint">
-              Used by Publish to Cloudflare. Different from the tunnel <code>eyJ…</code> token.
-              Create under
+              Used by Publish to Cloudflare. Different from the tunnel <code>eyJ…</code> token
+              and from the Global API Key. Create under
               <a
                 href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/"
                 target="_blank"
@@ -1943,6 +1943,7 @@ onBeforeUnmount(() => {
               (or Manage Account → Account API Tokens): Create Token →
               <strong>Edit zone DNS</strong> template → keep Zone → DNS → Edit on your zone →
               add Account → Cloudflare Tunnel → Edit → Create Token.
+              If you see <strong>Invalid access token</strong>, clear the saved token and paste a new API Token.
               Leave blank to keep a saved token.
             </span>
             <input

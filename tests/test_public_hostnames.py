@@ -103,6 +103,23 @@ def test_decode_prefers_token_file_over_stale_env(tmp_path: Path, monkeypatch):
     assert decode_tunnel_token()["tunnel_id"] == "from-file"
 
 
+def test_set_api_token_rejects_connector_token(tmp_path: Path, monkeypatch):
+    import base64
+    import json
+
+    from core import cloudflare_api as cf_api
+
+    monkeypatch.setattr(cf_api, "secret_store", type("S", (), {
+        "save_secret": staticmethod(lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("should not save"))),
+        "delete_secret": staticmethod(lambda *_a, **_k: None),
+        "get_secret": staticmethod(lambda *_a, **_k: None),
+    })())
+    creds = {"a": "acct", "t": "tun", "s": "x"}
+    connector = base64.b64encode(json.dumps(creds).encode()).decode().rstrip("=")
+    with pytest.raises(cf_api.CloudflareApiError, match="tunnel connector"):
+        cf_api.set_api_token(connector)
+
+
 def test_merge_ingress_keeps_unrelated():
     existing = [
         {"hostname": "other.example.com", "service": "http://127.0.0.1:9000"},

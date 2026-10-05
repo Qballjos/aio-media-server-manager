@@ -83,7 +83,8 @@ After the tunnel connector token is saved (Step 3):
    - Add **Account → Cloudflare Tunnel → Edit** (and preferably **Zone → Zone → Read**)
    - Continue to summary → Create Token (copy the secret once)
 4. Paste that API token under **Public subdomains**  
-   (this is **not** the `eyJ…` tunnel connector token from Step 3).
+   (this is **not** the `eyJ…` tunnel connector token from Step 3, and **not** the Global API Key).
+   If Cloudflare returns **Invalid access token**, clear the saved token and paste a fresh **API Token** from Create Token.
 5. Toggle **Expose** per app, edit subdomain labels if you like, **Save**, then **Publish to Cloudflare**.
 
 **Save** updates Catalog Open UI and Home widget links. **Publish** writes published applications into the tunnel and creates proxied DNS CNAMEs (`<subdomain>.yourzone` → `<tunnel-id>.cfargotunnel.com`).
