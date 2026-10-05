@@ -113,3 +113,51 @@ def app_web_ui_url_for_request(request: Request, *, app_name: str, port: int) ->
     host = request.url.hostname or "127.0.0.1"
     scheme = request.url.scheme or "http"
     return app_web_ui_url(app_name=app_name, port=port, hostname=host, scheme=scheme)
+
+
+def catalog_app_browser_url(
+    app_name: str,
+    *,
+    port: int,
+    base_domain: str | None = None,
+) -> str:
+    """Browser URL for linking to a catalog app from another app's UI.
+
+    Uses the Cloudflare public subdomain when that app is exposed and a public
+    app domain (or last-published hostname) is available; otherwise localhost.
+    """
+    name = (app_name or "").strip().lower()
+    lan = f"http://127.0.0.1:{int(port)}"
+    if not name:
+        return lan
+
+    configured = (base_domain if base_domain is not None else settings.public_app_base_domain) or ""
+    configured = configured.strip().strip(".").lower()
+    sub = subdomain_for(name)
+    if configured and sub:
+        return f"https://{sub}.{configured}"
+
+    from core.public_hostnames import load_hostnames
+
+    entry = load_hostnames().get(name) or {}
+    last = str(entry.get("last_published") or "").strip().lower()
+    if last:
+        host = last.split("://", 1)[-1].split("/", 1)[0].strip().strip(".")
+        if host and not is_lan_hostname(host):
+            return f"https://{host}"
+    return lan
+
+
+def grimmory_browser_url(*, port: int | None = None) -> str:
+    """Shelfmark Audiobook Library / nav link target for Grimmory."""
+    resolved = int(port) if port else 6060
+    if port is None:
+        try:
+            from applications.catalog import ApplicationCatalog
+
+            cat = ApplicationCatalog()
+            if cat.has("grimmory"):
+                resolved = int(cat.get("grimmory").port or 6060)
+        except Exception:
+            resolved = 6060
+    return catalog_app_browser_url("grimmory", port=resolved)

@@ -25,6 +25,16 @@ from core.settings import settings
 router = APIRouter(prefix="/api/cloudflare/hostnames", tags=["Cloudflare Hostnames"])
 
 
+def _sync_shelfmark_after_hostname_change() -> None:
+    """Refresh Shelfmark's Grimmory audiobook-library link when public hostnames change."""
+    try:
+        from applications.shelfmark_mirrors import sync_shelfmark_audiobook_library_url
+
+        sync_shelfmark_audiobook_library_url(settings.config_dir / "shelfmark")
+    except Exception:
+        pass
+
+
 def _ensure_authenticated(request: Request) -> None:
     if not auth_manager.setup_required():
         auth_manager.authenticate_request(request)
@@ -99,6 +109,7 @@ async def put_hostnames(request: Request, body: HostnamesPut) -> dict[str, Any]:
     except PublicHostnameError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     clear_homepage_snapshot_cache()
+    _sync_shelfmark_after_hostname_change()
     return {
         "ok": True,
         "public_app_base_domain": settings.public_app_base_domain,
@@ -132,6 +143,7 @@ async def publish(request: Request, body: PublishBody | None = None) -> dict[str
     except CloudflareApiError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     clear_homepage_snapshot_cache()
+    _sync_shelfmark_after_hostname_change()
     return result
 
 
