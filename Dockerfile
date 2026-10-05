@@ -3,7 +3,7 @@
 
 # Vue dist is JS/CSS. Build it on the builder CPU, not under QEMU, or
 # `npm ci` on linux/arm64 hangs for a long time on GitHub-hosted amd64 runners.
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:26-alpine AS frontend
 WORKDIR /ui
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -11,7 +11,7 @@ COPY frontend/ ./
 COPY logo-aio-media-manager.png ./public/logo-aio-media-manager.png
 RUN npm run build
 
-FROM node:22-bookworm-slim AS nodebin
+FROM node:26-bookworm-slim AS nodebin
 
 FROM eclipse-temurin:25-jre-noble AS jre
 
