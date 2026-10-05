@@ -102,7 +102,41 @@ const tunnelLive = ref({})
 const hostnameRoutes = ref([])
 const apiTokenConfigured = ref(false)
 const hostnameBusy = ref(false)
-const hostnameMeta = ref({ tunnel_id: '', tunnel_account_id: '', tunnel_decode_error: '' })
+const hostnameMeta = ref({
+  tunnel_id: '',
+  tunnel_account_id: '',
+  tunnel_decode_error: '',
+  tunnel_token_present: false,
+  tunnel_connected: false,
+  tunnel_enabled: false,
+})
+
+const publicTunnelChip = computed(() => {
+  const t = tunnelLive.value || {}
+  const meta = hostnameMeta.value || {}
+  const tokenOk = !!(t.token_present || t.token_saved || meta.tunnel_token_present)
+  const connected = !!(t.connected || meta.tunnel_connected)
+  const enabled = !!(t.enabled || meta.tunnel_enabled)
+
+  if (connected) {
+    return { cls: 'is-on', label: 'Cloudflare tunnel active' }
+  }
+  if (meta.tunnel_id) {
+    return { cls: 'is-on', label: 'Cloudflare tunnel ready' }
+  }
+  if (tokenOk && enabled) {
+    return {
+      cls: meta.tunnel_decode_error ? 'is-warn' : 'is-on',
+      label: meta.tunnel_decode_error
+        ? 'Cloudflare tunnel — repaste token to publish'
+        : 'Cloudflare tunnel ready',
+    }
+  }
+  if (tokenOk) {
+    return { cls: 'is-warn', label: 'Cloudflare tunnel configured' }
+  }
+  return { cls: 'is-warn', label: 'Cloudflare tunnel needed' }
+})
 const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
 const seerrConfigured = ref(false)
@@ -347,6 +381,9 @@ async function refreshHostnames() {
       tunnel_id: data.tunnel_id || '',
       tunnel_account_id: data.tunnel_account_id || '',
       tunnel_decode_error: data.tunnel_decode_error || '',
+      tunnel_token_present: !!data.tunnel_token_present,
+      tunnel_connected: !!data.tunnel_connected,
+      tunnel_enabled: !!data.tunnel_enabled,
     }
     if (data.public_app_base_domain != null) {
       form.value.public_app_base_domain = data.public_app_base_domain || ''
@@ -433,7 +470,7 @@ async function publishHostnames() {
         : 'Disable previously published hostnames in the tunnel?',
       preview ? `\n${preview}${count > 6 ? '\n…' : ''}` : '',
       '\nThese URLs are reachable from the internet unless you add Cloudflare Access.',
-      'Dashboard-only routes you never published from AIO are left alone.',
+      'Hand-made Cloudflare dashboard hostnames you never published from AIO are left alone.',
     ].join('\n'),
   )
   if (!okConfirm) return
@@ -1831,7 +1868,7 @@ onBeforeUnmount(() => {
             <span class="ui-field-hint">
               {{ (tunnelLive.token_saved || tunnelLive.token_present)
                 ? 'A token is already saved. Leave blank to keep it, or paste a new eyJ… token to replace it.'
-                : 'Paste the eyJ… token from Cloudflare. It is stored on disk and never shown again.' }}
+                : 'Paste the eyJ… connector token from Cloudflare (base64 credentials, not your API token). Stored on disk and never shown again.' }}
             </span>
             <input
               v-model="form.cloudflare_tunnel_token"
@@ -1873,31 +1910,41 @@ onBeforeUnmount(() => {
         <div class="settings-card-head">
           <h3>Public subdomains</h3>
           <p>
-            Choose a subdomain per app for Catalog Open UI. With a Cloudflare API token, this page can
-            create the tunnel routes and DNS CNAMEs for you — no Cloudflare dashboard hop required
-            after the initial tunnel + API token.
-            API token needs <strong>Account → Cloudflare Tunnel → Edit</strong> and
-            <strong>Zone → DNS → Edit</strong> on your domain.
+            Choose a subdomain per app for Catalog <strong>Open UI</strong> and Home widget links
+            (for example <code>tv</code> → <code>https://tv.example.com</code>).
+            With a Cloudflare API token, <strong>Publish to Cloudflare</strong> creates the published
+            application (hostname → <code>http://127.0.0.1:port</code>) and DNS CNAME for you.
           </p>
         </div>
         <div class="setting-status" aria-live="polite">
           <span class="setting-chip" :class="apiTokenConfigured ? 'is-on' : 'is-warn'">
-            {{ apiTokenConfigured ? 'API token saved' : 'API token optional' }}
+            {{ apiTokenConfigured ? 'API token saved' : 'API token needed to publish' }}
           </span>
-          <span
-            class="setting-chip"
-            :class="hostnameMeta.tunnel_id ? 'is-on' : 'is-warn'"
-          >
-            {{ hostnameMeta.tunnel_id ? 'Tunnel id ready' : 'Need connector token' }}
+          <span class="setting-chip" :class="publicTunnelChip.cls">
+            {{ publicTunnelChip.label }}
           </span>
         </div>
         <p v-if="hostnameMeta.tunnel_decode_error" class="share-meta">{{ hostnameMeta.tunnel_decode_error }}</p>
+        <p v-else-if="publicTunnelChip.label === 'Cloudflare tunnel needed'" class="share-meta">
+          Enable <strong>Cloudflare Tunnel</strong> above and paste the <code>eyJ…</code> connector token
+          (not the API token). Publish needs a running tunnel plus an API token.
+        </p>
         <form class="form-stack" @submit.prevent="saveHostnames">
           <label class="ui-field">
             Cloudflare API token
             <span class="ui-field-hint">
-              Different from the tunnel <code>eyJ…</code> connector token. Create under
-              My Profile → API Tokens. Leave blank to keep a saved token.
+              Used by Publish to Cloudflare. Different from the tunnel <code>eyJ…</code> token
+              and from the Global API Key. Create under
+              <a
+                href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >My Profile → API Tokens</a>
+              (or Manage Account → Account API Tokens): Create Token →
+              <strong>Edit zone DNS</strong> template → keep Zone → DNS → Edit on your zone →
+              add Account → Cloudflare Tunnel → Edit → Create Token.
+              If you see <strong>Invalid access token</strong>, clear the saved token and paste a new API Token.
+              Leave blank to keep a saved token.
             </span>
             <input
               v-model="form.cloudflare_api_token"
@@ -1941,10 +1988,12 @@ onBeforeUnmount(() => {
                       class="ui-input font-mono"
                       :placeholder="row.default_subdomain"
                       autocomplete="off"
-                      :disabled="!row.enabled"
                     />
                   </td>
                   <td class="font-mono hostname-preview">{{ previewHostnameUrl(row) }}</td>
+                </tr>
+                <tr v-if="!hostnameRoutes.length">
+                  <td colspan="4" class="share-idle">No apps listed yet — reload Settings or check Catalog.</td>
                 </tr>
               </tbody>
             </table>
@@ -1972,15 +2021,14 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <p class="share-meta">
-            Save updates Open UI links only. Publish writes enabled hostnames into your tunnel config
-            and creates proxied DNS CNAMEs under the public app domain.
-            Changing an exposed app’s listen port updates the tunnel service and recreates its DNS
-            CNAME automatically (API token required). Disabling an app removes its tunnel route but
-            leaves the DNS CNAME (safe no-op / 404). LAN browsing still uses
-            <code>http://nas-ip:port</code> even when a public domain is set.
+            <strong>Save</strong> updates Catalog Open UI and Home widget links in AIO.
+            <strong>Publish to Cloudflare</strong> writes enabled hostnames into your tunnel
+            (published applications) and creates proxied DNS CNAMEs under the public app domain.
+            Changing an exposed app’s listen port updates the tunnel service when an API token is saved.
+            Disabling an app and publishing removes its ingress hostname; the DNS CNAME may remain
+            (tunnel 404). LAN browsing still uses <code>http://nas-ip:port</code>.
             For zones like <code>example.co.uk</code>, set Public app domain to that full zone.
-            Secure public hostnames with
-            <code>deploy/CLOUDFLARE_ACCESS.md</code>.
+            Secure public hostnames with <code>deploy/CLOUDFLARE_ACCESS.md</code>.
           </p>
         </form>
       </div>
