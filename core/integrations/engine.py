@@ -522,6 +522,27 @@ class IntegrationEngine:
             )
         )
 
+        if self._installed("shelfmark"):
+            try:
+                from applications.shelfmark_mirrors import (
+                    sync_shelfmark_audiobook_library_url,
+                    sync_shelfmark_download_clients,
+                )
+
+                shelf_cfg = _config_dir("shelfmark")
+                dl_ok = sync_shelfmark_download_clients(shelf_cfg)
+                lib_ok = sync_shelfmark_audiobook_library_url(shelf_cfg)
+                steps.append(
+                    _step(
+                        "shelfmark",
+                        "autofill_download_clients",
+                        True,
+                        f"download_clients={dl_ok} audiobook_library={lib_ok}",
+                    )
+                )
+            except Exception as exc:
+                steps.append(_step("shelfmark", "autofill_download_clients", False, str(exc)))
+
         return {"timestamp": time.time(), "status": "completed", "steps": steps, "layout": layout.as_dict()}
 
 

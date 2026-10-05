@@ -307,6 +307,12 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         from core.homepage import clear_homepage_snapshot_cache
 
         clear_homepage_snapshot_cache()
+        try:
+            from applications.shelfmark_mirrors import sync_shelfmark_audiobook_library_url
+
+            sync_shelfmark_audiobook_library_url(settings.config_dir / "shelfmark")
+        except Exception:
+            pass
         notes.append(
             "Public app domain saved. Home and Catalog Open UI links use https://<app>."
             + (domain or "<derived-host>")
