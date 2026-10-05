@@ -26,8 +26,8 @@ SLOTS: dict[str, dict[str, str]] = {
         "label": "Header icon",
         "help": (
             "Shown in the top navigation bar. "
-            "Use a square PNG or WebP. Recommended size: 512 × 512 px "
-            "(minimum 128 × 128). Displayed at 44 × 44."
+            "Starts as the built-in placeholder; upload a square PNG or WebP to replace it. "
+            "Recommended size: 512 × 512 px (minimum 128 × 128). Displayed at 44 × 44."
         ),
         "recommended": "512 × 512 px (square)",
         "basename": "header",
@@ -36,8 +36,8 @@ SLOTS: dict[str, dict[str, str]] = {
         "label": "Logo",
         "help": (
             "Shown on the login and first-run setup screens. "
-            "Use a square PNG or WebP. Recommended size: 512 × 512 px "
-            "(minimum 128 × 128). Displayed at about 72 × 72."
+            "Starts as the built-in placeholder; upload a square PNG or WebP to replace it. "
+            "Recommended size: 512 × 512 px (minimum 128 × 128). Displayed at about 72 × 72."
         ),
         "recommended": "512 × 512 px (square)",
         "basename": "logo",
@@ -46,8 +46,8 @@ SLOTS: dict[str, dict[str, str]] = {
         "label": "Favicon",
         "help": (
             "Browser tab icon (and home-screen shortcut when installed). "
-            "Use a square PNG or ICO. Recommended: 32 × 32 or 64 × 64 px; "
-            "180 × 180 px also works well for Apple touch icons."
+            "Starts as the built-in placeholder; upload a square PNG or ICO to replace it. "
+            "Recommended: 32 × 32 or 64 × 64 px; 180 × 180 px also works well for Apple touch icons."
         ),
         "recommended": "32 × 32 or 64 × 64 px (square)",
         "basename": "favicon",

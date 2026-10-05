@@ -1266,7 +1266,7 @@ onBeforeUnmount(() => {
               <strong>{{ slot.label }}</strong>
               <span>{{ slot.help }}</span>
               <span class="brand-asset-size">Required / recommended: {{ slot.recommended }}</span>
-              <span class="share-idle">{{ slot.custom ? 'Custom image in use.' : 'Using the built-in default.' }}</span>
+              <span class="share-idle">{{ slot.custom ? 'Custom image in use.' : 'Built-in placeholder — upload to replace.' }}</span>
             </div>
             <div class="brand-asset-actions">
               <label class="ui-btn ui-btn-ghost brand-upload-btn">

@@ -1,0 +1,34 @@
+---
+description: Why catalog apps and some deps stay un-bumped — do not “fix” these without reading this
+alwaysApply: true
+---
+
+# Updates and intentional pins
+
+## Catalog apps (Sonarr, Seerr, …)
+
+- AIO does **not** auto-upgrade child apps on a timer by default. Schedules default to **Off** (`AMM_UPDATE_CHECK_SCHEDULE` / `AMM_UPDATE_APPLY_SCHEDULE`).
+- Updates are **operator-driven**: dashboard **Update** (snapshot → reinstall → health → rollback), or Settings schedules when the operator enables them.
+- Outdated app versions on a running appliance are **not** a repo bug. Do not add Docker-per-app Compose or silent auto-upgrade.
+
+## Image / runtime pins (Dependabot)
+
+| Pin | Why | Do not |
+|---|---|---|
+| **Node 22** (`node:22-alpine`, `node:22-bookworm-slim`, CI `node-version: "22"`) | Seerr `engines.node` is `^22.19.0` only. Node is copied into the appliance for Seerr. Node 25/26 Dependabot PRs fail or break Seerr; Node 26 also drops `corepack` where the Dockerfile expects it. | Merge Node 24/25/26 image bumps until Seerr’s engines allow it |
+| **Python 3.14** (manager) + **3.13** (child) | Manager on 3.14; Bazarr/SABnzbd/Shelfmark need 3.13 (`AMM_CHILD_PYTHON` / `/opt/python3.13`) | Point child apps at 3.14 without verifying upstream |
+| **JRE 25** | Grimmory requirement | Downgrade without checking Grimmory |
+
+- Prefer **Node 22 LTS** patch tags only. Close / ignore Dependabot majors that leave Node 22.
+- **vue-router 5.x** is a major; do not merge Drive-by Dependabot bumps without a Vue Router 5 migration pass.
+
+## Catalog policy
+
+- Catalog is **16** apps after Profilarr removal. Do not re-add Profilarr.
+- VueTorrent is a qBittorrent WebUI option, not a catalog app.
+- Trailarr is a **later local-only** candidate (ROADMAP); not in the catalog yet. Never Docker for child apps.
+- Stay-out list: Tautulli, Unpackerr, Cleanuparr, Maintainerr, Kometa, Autobrr, Mylar3, Debrid.
+
+## Human-readable copy
+
+Same policy is summarized in `CONTRIBUTING.md` → **Updates and runtime pins**.

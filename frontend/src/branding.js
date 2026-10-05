@@ -114,9 +114,11 @@ export function initAccentFromCache() {
 
 export function applyBranding(data) {
   const title = (data?.title || DEFAULT_TITLE).trim() || DEFAULT_TITLE
+  // Each Settings slot has its own built-in placeholder; do not cascade a custom
+  // header into logo/favicon (or vice versa) when that slot is still default.
   const header = data?.header_url || data?.slots?.header?.url || DEFAULT_LOGO
-  const logo = data?.logo_url || data?.slots?.logo?.url || header
-  const favicon = data?.favicon_url || data?.slots?.favicon?.url || header
+  const logo = data?.logo_url || data?.slots?.logo?.url || DEFAULT_LOGO
+  const favicon = data?.favicon_url || data?.slots?.favicon?.url || DEFAULT_LOGO
   const accent = normalizeHex(data?.accent_color || DEFAULT_ACCENT)
 
   brandTitle.value = title
@@ -132,8 +134,9 @@ export function applyBranding(data) {
   const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]')
   if (appleTitle) appleTitle.setAttribute('content', title.slice(0, 12))
 
+  // Tab icon + Apple touch icon follow the favicon slot (placeholder or custom upload).
   ensureLink('icon', { type: favicon.endsWith('.ico') ? 'image/x-icon' : 'image/png', href: favicon })
-  ensureLink('apple-touch-icon', { href: logo || header || favicon })
+  ensureLink('apple-touch-icon', { href: favicon })
 }
 
 export async function loadBranding() {

@@ -290,8 +290,16 @@ def test_pwa_public_assets():
     assert (root / "pwa-192.png").is_file()
     assert (root / "pwa-512.png").is_file()
     assert (root / "apple-touch-icon.png").is_file()
+    assert (root / "logo-aio-media-manager.png").is_file()
     manifest = (root / "manifest.json").read_text(encoding="utf-8")
     assert '"short_name": "AIO Media"' in manifest
     assert '"display": "standalone"' in manifest
+    assert "/apple-touch-icon.png" in manifest
+    assert "/pwa-192.png" in manifest
+    index_html = (root.parent / "index.html").read_text(encoding="utf-8")
+    assert 'href="/logo-aio-media-manager.png"' in index_html
+    assert 'href="/apple-touch-icon.png"' in index_html
+    assert 'rel="icon"' in index_html
+    assert 'rel="apple-touch-icon"' in index_html
     sw = (root / "sw.js").read_text(encoding="utf-8")
     assert "addEventListener('fetch'" in sw

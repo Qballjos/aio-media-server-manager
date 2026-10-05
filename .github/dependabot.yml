@@ -11,6 +11,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # vue-router 5 is a major migration; keep on 4.x until explicitly upgraded.
+    ignore:
+      - dependency-name: "vue-router"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -21,3 +25,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Seerr requires Node 22 (`engines.node: ^22.19.0`). The appliance copies
+    # Node from node:*-bookworm-slim for Seerr; frontend build uses node:22-alpine.
+    # Do not open major bumps past 22 until Seerr’s engines change.
+    ignore:
+      - dependency-name: "node"
+        versions: [">=23"]
