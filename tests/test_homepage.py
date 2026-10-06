@@ -446,7 +446,7 @@ def test_homepage_seerr_requests_row(tmp_path):
                 {
                     "results": [
                         {
-                            "media": {"tmdbId": 42, "mediaType": "movie"},
+                            "media": {"tmdbId": 42, "mediaType": "movie", "status": 2},
                             "requestedBy": {"displayName": "Qballjos"},
                         }
                     ]
@@ -468,6 +468,8 @@ def test_homepage_seerr_requests_row(tmp_path):
         snap = homepage_snapshot("nas.local", force=True)
     assert snap["requests"][0]["title"] == "Dune"
     assert snap["requests"][0]["detail"] == "Qballjos"
+    assert snap["requests"][0]["mediaType"] == "movie"
+    assert snap["requests"][0]["status"] == "requested"
     assert "image.tmdb.org" in snap["requests"][0]["poster"]
 
 
@@ -613,6 +615,8 @@ def test_seerr_media_status_mapping():
     assert seerr_media_status({"mediaInfo": {"status": 2}}) == "requested"
     assert seerr_media_status({"mediaInfo": {"status": 4}}) == "partial"
     assert seerr_media_status({"mediaInfo": {"status": 5}}) == "available"
+    assert seerr_media_status({"status": 2}) == "requested"
+    assert seerr_media_status({"status": 5}) == "available"
 
 
 def test_jellyfin_auth_header_carries_token():

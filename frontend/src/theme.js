@@ -1,3 +1,5 @@
+/** Theme preference — localStorage cache + profile sync. */
+
 const STORAGE_KEY = 'amm-theme'
 const PREFS = new Set(['dark', 'light', 'system'])
 const THEME_COLORS = {
@@ -47,11 +49,16 @@ export function applyThemePreference(preference = getThemePreference()) {
   return applyResolvedTheme(resolveTheme(pref))
 }
 
-export function setThemePreference(preference) {
+export function cacheThemePreference(preference) {
   const pref = normalizePreference(preference)
   try {
     localStorage.setItem(STORAGE_KEY, pref)
   } catch (_) {}
+  return pref
+}
+
+export function setThemePreference(preference) {
+  const pref = cacheThemePreference(preference)
   bindSystemListener(pref)
   return applyThemePreference(pref)
 }

@@ -1,7 +1,11 @@
-/** Personal wallpaper / background presets (browser-local, like color theme). */
+/** Personal wallpaper — localStorage cache + profile sync. */
+
+import { setThemePreference } from './theme.js'
+import { applyHomepageWidgetDebugFromProfile, readHomepageWidgetDebug } from './homepageDebug.js'
 
 const PREF_KEY = 'amm-wallpaper'
 const IMAGE_KEY = 'amm-wallpaper-image'
+const IMAGE_URL_KEY = 'amm-wallpaper-image-url'
 const PRESETS = new Set(['default', 'jellyfin', 'plex', 'personal'])
 
 export const WALLPAPER_OPTIONS = [
@@ -25,19 +29,36 @@ export function getWallpaperPreference() {
 
 export function getWallpaperImage() {
   try {
-    return localStorage.getItem(IMAGE_KEY) || ''
+    return localStorage.getItem(IMAGE_URL_KEY) || localStorage.getItem(IMAGE_KEY) || ''
   } catch (_) {
     return ''
   }
 }
 
-export function applyWallpaper(preference = getWallpaperPreference(), imageDataUrl = getWallpaperImage()) {
+export function cacheWallpaperPreference(preference) {
+  const pref = normalizePreference(preference)
+  try {
+    localStorage.setItem(PREF_KEY, pref)
+  } catch (_) {}
+  return pref
+}
+
+export function cacheWallpaperImageUrl(url) {
+  try {
+    if (url) localStorage.setItem(IMAGE_URL_KEY, url)
+    else localStorage.removeItem(IMAGE_URL_KEY)
+  } catch (_) {}
+  return url || ''
+}
+
+export function applyWallpaper(preference = getWallpaperPreference(), imageSrc = getWallpaperImage()) {
   if (typeof document === 'undefined') return preference
   const pref = normalizePreference(preference)
   const root = document.documentElement
   root.setAttribute('data-wallpaper', pref)
-  if (pref === 'personal' && imageDataUrl) {
-    root.style.setProperty('--wallpaper-image', `url("${imageDataUrl}")`)
+  if (pref === 'personal' && imageSrc) {
+    const cssUrl = imageSrc.startsWith('url(') ? imageSrc : `url("${imageSrc}")`
+    root.style.setProperty('--wallpaper-image', cssUrl)
     root.classList.add('has-wallpaper-image')
   } else {
     root.style.removeProperty('--wallpaper-image')
@@ -47,21 +68,21 @@ export function applyWallpaper(preference = getWallpaperPreference(), imageDataU
 }
 
 export function setWallpaperPreference(preference) {
-  const pref = normalizePreference(preference)
-  try {
-    localStorage.setItem(PREF_KEY, pref)
-  } catch (_) {}
+  const pref = cacheWallpaperPreference(preference)
   return applyWallpaper(pref, getWallpaperImage())
 }
 
 export function clearWallpaperImage() {
   try {
     localStorage.removeItem(IMAGE_KEY)
+    localStorage.removeItem(IMAGE_URL_KEY)
   } catch (_) {}
-  return applyWallpaper(getWallpaperPreference(), '')
+  const pref = getWallpaperPreference() === 'personal' ? 'default' : getWallpaperPreference()
+  cacheWallpaperPreference(pref)
+  return applyWallpaper(pref, '')
 }
 
-/** Resize and JPEG-compress an image file for localStorage (~1.2MB budget). */
+/** Resize and JPEG-compress an image file for upload (~1.2MB budget). */
 export function encodeWallpaperFile(file) {
   return new Promise((resolve, reject) => {
     if (!file || !String(file.type || '').startsWith('image/')) {
@@ -91,17 +112,17 @@ export function encodeWallpaperFile(file) {
         return
       }
       ctx.drawImage(img, 0, 0, width, height)
-      let quality = 0.82
-      let dataUrl = canvas.toDataURL('image/jpeg', quality)
-      while (dataUrl.length > 1_400_000 && quality > 0.45) {
-        quality -= 0.08
-        dataUrl = canvas.toDataURL('image/jpeg', quality)
-      }
-      if (dataUrl.length > 1_800_000) {
-        reject(new Error('Could not compress image enough for this browser. Try a smaller photo.'))
-        return
-      }
-      resolve(dataUrl)
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Could not process image.'))
+            return
+          }
+          resolve(blob)
+        },
+        'image/jpeg',
+        0.82,
+      )
     }
     img.onerror = () => {
       URL.revokeObjectURL(url)
@@ -112,19 +133,53 @@ export function encodeWallpaperFile(file) {
 }
 
 export async function setWallpaperImageFromFile(file) {
-  const dataUrl = await encodeWallpaperFile(file)
-  try {
-    localStorage.setItem(IMAGE_KEY, dataUrl)
-  } catch (_) {
-    throw new Error('Browser storage is full. Clear site data or use a smaller image.')
-  }
-  try {
-    localStorage.setItem(PREF_KEY, 'personal')
-  } catch (_) {}
-  applyWallpaper('personal', dataUrl)
-  return dataUrl
+  const blob = await encodeWallpaperFile(file)
+  cacheWallpaperPreference('personal')
+  // Temporary object URL until the profile upload returns a stable URL.
+  const tempUrl = URL.createObjectURL(blob)
+  applyWallpaper('personal', tempUrl)
+  return { blob, tempUrl }
 }
 
 export function initWallpaper() {
   return applyWallpaper(getWallpaperPreference(), getWallpaperImage())
+}
+
+/** Apply visuals returned from /api/auth/status, /me, login, or visuals PATCH. */
+export function applyVisualsFromProfile(payload = {}) {
+  if (!payload || typeof payload !== 'object') return
+  if (payload.theme) {
+    setThemePreference(payload.theme)
+  }
+  if (payload.wallpaper) {
+    cacheWallpaperPreference(payload.wallpaper)
+  }
+  if (payload.wallpaper_url) {
+    cacheWallpaperImageUrl(payload.wallpaper_url)
+    try {
+      localStorage.removeItem(IMAGE_KEY)
+    } catch (_) {}
+  } else if (payload.has_wallpaper_image === false) {
+    cacheWallpaperImageUrl('')
+    try {
+      localStorage.removeItem(IMAGE_KEY)
+    } catch (_) {}
+  }
+  applyWallpaper(getWallpaperPreference(), getWallpaperImage())
+  applyHomepageWidgetDebugFromProfile(payload)
+}
+
+/** One-time migrate browser-only prefs into the profile when the profile is still default. */
+export function shouldMigrateLocalVisuals(payload = {}) {
+  const theme = payload.theme || 'dark'
+  const wallpaper = payload.wallpaper || 'default'
+  const hasImage = !!payload.has_wallpaper_image
+  const profileDebug = !!payload.homepage_widget_debug
+  const localDebug = readHomepageWidgetDebug()
+  if (localDebug && !profileDebug) return true
+  if (theme !== 'dark' || wallpaper !== 'default' || hasImage) return false
+  const localTheme = getThemePreference()
+  const localWallpaper = getWallpaperPreference()
+  const localImage = getWallpaperImage()
+  return localTheme !== 'dark' || localWallpaper !== 'default' || !!localImage
 }

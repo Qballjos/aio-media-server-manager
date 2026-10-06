@@ -94,7 +94,7 @@ Set `AMM_VPN_ENABLED=true` in the project compose, then start the project again.
 
 ## Cloudflare Tunnel
 
-Do not add a second project service. Write the token on the NAS, then set `AMM_CLOUDFLARE_TUNNEL_ENABLED=true` in the project compose. See [CLOUDFLARE.md](CLOUDFLARE.md).
+Do not add a second project service. Write the token on the NAS, then enable the tunnel in **Settings → Network** (saved across restarts). Optionally set `AMM_CLOUDFLARE_TUNNEL_ENABLED=true` in the project compose. See [CLOUDFLARE.md](CLOUDFLARE.md).
 
 ```bash
 sudo mkdir -p /volume1/docker/aio-media-manager/config/cloudflare

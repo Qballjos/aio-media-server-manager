@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { resolveSettingsSection, SETTINGS_NAV } from './router'
 import { apiError, apiRequest, readJson } from './api.js'
 import { startGuardedInterval } from './pageVisible.js'
-import { readHomepageWidgetDebug, writeHomepageWidgetDebug } from './homepageDebug.js'
+import { readHomepageWidgetDebug } from './homepageDebug.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 import {
   canPromptInstall,
@@ -16,16 +16,20 @@ import {
 import {
   THEME_OPTIONS,
   getThemePreference,
-  setThemePreference,
 } from './theme.js'
 import {
   WALLPAPER_OPTIONS,
   getWallpaperPreference,
   getWallpaperImage,
-  setWallpaperPreference,
-  setWallpaperImageFromFile,
-  clearWallpaperImage,
 } from './background.js'
+import {
+  saveThemeToProfile,
+  saveWallpaperToProfile,
+  uploadWallpaperToProfile,
+  removeWallpaperFromProfile,
+  saveHomepageWidgetDebugToProfile,
+  applyVisualsFromProfile,
+} from './visualsProfile.js'
 import {
   ACCENT_PRESETS,
   DEFAULT_ACCENT,
@@ -199,16 +203,28 @@ function refreshPwaInstall() {
 }
 
 function chooseTheme(pref) {
-  setThemePreference(pref)
-  themePreference.value = getThemePreference()
-  notice.value = `Theme set to ${themePreference.value}.`
+  error.value = ''
+  saveThemeToProfile(pref)
+    .then(() => {
+      themePreference.value = getThemePreference()
+      notice.value = `Theme set to ${themePreference.value}.`
+    })
+    .catch((err) => {
+      error.value = err?.message || 'Could not save theme.'
+    })
 }
 
 function chooseWallpaper(pref) {
-  setWallpaperPreference(pref)
-  wallpaperPreference.value = getWallpaperPreference()
-  wallpaperImage.value = getWallpaperImage()
-  notice.value = `Background set to ${WALLPAPER_OPTIONS.find((row) => row[0] === wallpaperPreference.value)?.[1] || wallpaperPreference.value}.`
+  error.value = ''
+  saveWallpaperToProfile(pref)
+    .then(() => {
+      wallpaperPreference.value = getWallpaperPreference()
+      wallpaperImage.value = getWallpaperImage()
+      notice.value = `Background set to ${WALLPAPER_OPTIONS.find((row) => row[0] === wallpaperPreference.value)?.[1] || wallpaperPreference.value}.`
+    })
+    .catch((err) => {
+      error.value = err?.message || 'Could not save background.'
+    })
 }
 
 async function onWallpaperFileChange(event) {
@@ -218,10 +234,10 @@ async function onWallpaperFileChange(event) {
   wallpaperBusy.value = true
   error.value = ''
   try {
-    await setWallpaperImageFromFile(file)
+    await uploadWallpaperToProfile(file)
     wallpaperPreference.value = getWallpaperPreference()
     wallpaperImage.value = getWallpaperImage()
-    notice.value = 'Personal background saved in this browser.'
+    notice.value = 'Personal background saved to your profile.'
   } catch (err) {
     error.value = err?.message || 'Could not save background image.'
   } finally {
@@ -231,10 +247,16 @@ async function onWallpaperFileChange(event) {
 }
 
 function removeWallpaperImage() {
-  clearWallpaperImage()
-  wallpaperImage.value = ''
-  wallpaperPreference.value = getWallpaperPreference()
-  notice.value = 'Personal background image removed.'
+  error.value = ''
+  removeWallpaperFromProfile()
+    .then(() => {
+      wallpaperImage.value = ''
+      wallpaperPreference.value = getWallpaperPreference()
+      notice.value = 'Personal background image removed.'
+    })
+    .catch((err) => {
+      error.value = err?.message || 'Could not remove background image.'
+    })
 }
 
 function applyBrandingPayload(data) {
@@ -372,9 +394,16 @@ async function installPwaFromSettings() {
   refreshPwaInstall()
 }
 
-function toggleHomepageWidgetDebug() {
-  widgetDebug.value = !widgetDebug.value
-  writeHomepageWidgetDebug(widgetDebug.value)
+async function toggleHomepageWidgetDebug() {
+  const next = !widgetDebug.value
+  widgetDebug.value = next
+  try {
+    await saveHomepageWidgetDebugToProfile(next)
+    notice.value = next ? 'Widget debug enabled on your profile.' : 'Widget debug disabled.'
+  } catch (err) {
+    widgetDebug.value = !next
+    error.value = err?.message || 'Could not save widget debug.'
+  }
 }
 
 const jellyfinKey = computed(() => snapshot.value.homepage_keys?.jellyfin || { configured: jellyfinConfigured.value })
@@ -719,6 +748,10 @@ async function loadAll() {
       form.value.username = me.username || 'admin'
       form.value.email = me.email || ''
       applyProfileAvatar(me)
+      applyVisualsFromProfile(me)
+      themePreference.value = getThemePreference()
+      wallpaperPreference.value = getWallpaperPreference()
+      wallpaperImage.value = getWallpaperImage()
     }
     if (setRes.ok) applySettingsPayload(await readJson(setRes))
     else error.value = 'Could not load settings.'
@@ -1313,7 +1346,7 @@ onBeforeUnmount(() => {
         <div class="settings-card-head">
           <span class="accent-badge">THEME</span>
           <h3>Color mode</h3>
-          <p>Dark, light, or follow the system preference. Saved in this browser.</p>
+          <p>Dark, light, or follow the system preference. Saved on your profile for every browser on this appliance.</p>
         </div>
         <div class="theme-picker" role="group" aria-label="Color theme">
           <button
@@ -1333,7 +1366,7 @@ onBeforeUnmount(() => {
         <div class="settings-card-head">
           <span class="accent-badge">BACKGROUND</span>
           <h3>Personal background</h3>
-          <p>Pick a gradient style or upload your own image. Saved in this browser only — panels stay translucent so the wallpaper shows through.</p>
+          <p>Pick a gradient style or upload your own image. Saved on your profile — panels stay translucent so the wallpaper shows through.</p>
         </div>
         <div class="wallpaper-picker" role="group" aria-label="Background style">
           <button
@@ -2253,7 +2286,7 @@ onBeforeUnmount(() => {
           <h3>Widget debug</h3>
           <p>
             Show empty calendar, downloads, and recently added tiles plus per-source skip notes.
-            API keys are never shown.
+            Saved on your profile. API keys are never shown.
           </p>
         </div>
         <div class="ui-switch-row">

@@ -20,6 +20,7 @@ import {
 import { useToasts } from './useToasts.js'
 import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInstall.js'
 import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
+import { migrateLocalVisualsIfNeeded } from './visualsProfile.js'
 
 const { toasts, showToast } = useToasts()
 const showPwaInstall = ref(false)
@@ -121,6 +122,9 @@ setUnauthorizedHandler(() => {
 function onAuthStatus(data) {
   authStatus.value = data
   applySession(data)
+  if (data?.authenticated) {
+    migrateLocalVisualsIfNeeded(data).catch(() => {})
+  }
 }
 
 async function onAuthSession(data) {
@@ -131,6 +135,7 @@ async function onAuthSession(data) {
     avatar_url: data.avatar_url || null,
   }
   applySession(data)
+  await migrateLocalVisualsIfNeeded(data).catch(() => {})
   await Promise.all([refreshDashboard(), fetchWizardStatus()])
 }
 

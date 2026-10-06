@@ -145,7 +145,7 @@ sudo chmod 600 "$CONFIG/cloudflare/tunnel.token"
 sudo chown "${PUID:-1000}:${PGID:-1000}" "$CONFIG/cloudflare/tunnel.token"
 ```
 
-Then enable in Settings, or set and recreate:
+Then enable in **Settings → Network** (preferred — it is saved in `amm_config.json` and survives container restarts even if compose still has `AMM_CLOUDFLARE_TUNNEL_ENABLED=false`), or set and recreate:
 
 ```bash
 AMM_CLOUDFLARE_TUNNEL_ENABLED=true

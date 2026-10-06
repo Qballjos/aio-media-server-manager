@@ -5,7 +5,7 @@ import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { startGuardedInterval } from './pageVisible.js'
-import { readHomepageWidgetDebug } from './homepageDebug.js'
+import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepageDebug.js'
 
 const props = defineProps({
   systemInfo: { type: Object, default: null },
@@ -71,6 +71,8 @@ const searchedFor = ref('')
 const notice = ref('')
 const requestBusy = ref('')
 const downloadsFresh = ref(false)
+const requestsFilter = ref('all')
+const trendingFilter = ref('all')
 let poll = null
 let downloadsPoll = null
 let searchTimer = null
@@ -133,16 +135,36 @@ const recentItems = computed(() =>
   (snapshot.value.recent || []).map((item) => withPublicUrls(item, item.source)),
 )
 const requestItems = computed(() =>
-  (snapshot.value.requests || []).map((item) => withPublicUrls(item, 'seerr')),
+  (snapshot.value.requests || [])
+    .filter((item) => mediaTypeMatches(item, requestsFilter.value))
+    .map((item) => withPublicUrls(item, 'seerr')),
 )
 const trendingItems = computed(() =>
-  (snapshot.value.trending || []).map((item) => withPublicUrls(item, 'seerr')),
+  (snapshot.value.trending || [])
+    .filter((item) => mediaTypeMatches(item, trendingFilter.value))
+    .map((item) => withPublicUrls(item, 'seerr')),
 )
 const seerrHomeUrl = computed(() => {
   const seerr = snapshot.value.seerr || {}
   const port = Number((snapshot.value.apps || []).find((app) => app.name === 'seerr')?.port || 5055)
   return publicAppUrl('seerr', port, seerr.url || '')
 })
+
+function mediaTypeMatches(item, filter) {
+  if (!filter || filter === 'all') return true
+  const kind = String(item?.mediaType || '').toLowerCase()
+  if (filter === 'movie') return kind === 'movie'
+  if (filter === 'tv') return kind === 'tv' || kind === 'series'
+  return true
+}
+
+function requestStatusDot(item) {
+  const status = String(item?.status || 'missing')
+  if (status === 'available') return { cls: 'is-available', label: 'Available' }
+  if (status === 'partial') return { cls: 'is-partial', label: 'Partially available' }
+  if (status === 'requested' || status === 'monitored') return { cls: 'is-requested', label: 'Requested' }
+  return { cls: 'is-missing', label: 'Not available' }
+}
 
 function notesFor(widget) {
   return widgetNotes.value.filter((item) => item.widget === widget)
@@ -328,7 +350,7 @@ const trendingRail = ref(null)
 
 function defaultCalView() {
   const width = typeof window === 'undefined' ? 1024 : window.innerWidth
-  if (width < 768) return 'list'
+  if (width < 768) return 'day'
   return 'week'
 }
 
@@ -531,6 +553,18 @@ function goToday() {
   calCursor.value = now
 }
 
+function onWidgetDebugEvent(event) {
+  if (debugFlagFromRoute()) {
+    widgetDebug.value = true
+    return
+  }
+  if (event?.detail && typeof event.detail.enabled === 'boolean') {
+    widgetDebug.value = event.detail.enabled
+    return
+  }
+  widgetDebug.value = readHomepageWidgetDebug()
+}
+
 onMounted(() => {
   try {
     const params = new URLSearchParams(window.location.search)
@@ -541,6 +575,7 @@ onMounted(() => {
   }
   syncCalViewToViewport()
   window.addEventListener('resize', syncCalViewToViewport)
+  window.addEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   loadSnapshot()
   // Defer live queues so first paint is the launcher snapshot.
   setTimeout(() => loadDownloads(), 750)
@@ -567,6 +602,7 @@ watch(calView, (view) => {
 })
 onUnmounted(() => {
   window.removeEventListener('resize', syncCalViewToViewport)
+  window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   if (poll) poll()
   if (downloadsPoll) downloadsPoll()
   clearTimeout(searchTimer)
@@ -693,12 +729,19 @@ onUnmounted(() => {
         <article v-if="snapshot.requests.length || snapshot.seerr.available || widgetDebug" class="home-widget glass-card home-widget-rail">
           <div class="home-rail-head">
             <h3>Requests</h3>
-            <div v-if="snapshot.requests.length" class="home-rail-nav">
-              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
-              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
+            <div class="home-rail-tools">
+              <div v-if="snapshot.requests.length" class="home-type-filter" role="group" aria-label="Filter requests">
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'all' }" @click="requestsFilter = 'all'">All</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">Movies</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">Series</button>
+              </div>
+              <div v-if="requestItems.length" class="home-rail-nav">
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
+              </div>
             </div>
           </div>
-          <div v-if="snapshot.requests.length" ref="requestsRail" class="home-rail">
+          <div v-if="requestItems.length" ref="requestsRail" class="home-rail">
             <a
               v-for="(item, idx) in requestItems"
               :key="idx"
@@ -707,12 +750,24 @@ onUnmounted(() => {
               :target="item.url || seerrHomeUrl ? '_blank' : undefined"
               rel="noopener noreferrer"
             >
-              <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
-              <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+              <span class="home-tile-art">
+                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                <span
+                  class="home-status-dot"
+                  :class="requestStatusDot(item).cls"
+                  :title="requestStatusDot(item).label"
+                  role="img"
+                  :aria-label="requestStatusDot(item).label"
+                ></span>
+              </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
             </a>
           </div>
+          <p v-else-if="snapshot.requests.length" class="home-muted">
+            No {{ requestsFilter === 'movie' ? 'movie' : requestsFilter === 'tv' ? 'series' : '' }} requests in this filter.
+          </p>
           <p v-else class="home-muted">No Seerr requests yet. Search above to request a title.</p>
           <ul v-if="widgetDebug && notesFor('requests').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('requests')" :key="idx">
@@ -724,12 +779,19 @@ onUnmounted(() => {
         <article v-if="snapshot.trending.length || snapshot.seerr.available || widgetDebug" class="home-widget glass-card home-widget-rail">
           <div class="home-rail-head">
             <h3>Trending</h3>
-            <div v-if="snapshot.trending.length" class="home-rail-nav">
-              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous trending" @click="scrollRail('trending', -1)">‹</button>
-              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next trending" @click="scrollRail('trending', 1)">›</button>
+            <div class="home-rail-tools">
+              <div v-if="snapshot.trending.length" class="home-type-filter" role="group" aria-label="Filter trending">
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">All</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">Movies</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" @click="trendingFilter = 'tv'">Series</button>
+              </div>
+              <div v-if="trendingItems.length" class="home-rail-nav">
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous trending" @click="scrollRail('trending', -1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next trending" @click="scrollRail('trending', 1)">›</button>
+              </div>
             </div>
           </div>
-          <div v-if="snapshot.trending.length" ref="trendingRail" class="home-rail">
+          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail">
             <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
               <a
                 class="home-tile-link"
@@ -754,6 +816,9 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
+          <p v-else-if="snapshot.trending.length" class="home-muted">
+            No {{ trendingFilter === 'movie' ? 'movies' : trendingFilter === 'tv' ? 'series' : 'titles' }} in this filter.
+          </p>
           <p v-else class="home-muted">Trending titles appear when Seerr is running.</p>
           <ul v-if="widgetDebug && notesFor('trending').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('trending')" :key="idx">
@@ -1104,10 +1169,33 @@ onUnmounted(() => {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 0.75rem;
   margin-bottom: 0.75rem;
 }
 .home-rail-head h3 {
   margin: 0;
+}
+.home-rail-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.home-type-filter {
+  display: inline-flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.home-type-filter .ui-btn {
+  font-size: 0.75rem;
+  min-height: 1.7rem;
+  padding: 0.2rem 0.55rem;
+}
+.home-type-filter .ui-btn.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text-primary);
 }
 .home-rail-nav {
   display: flex;
@@ -1160,6 +1248,41 @@ onUnmounted(() => {
   min-height: 1.85rem;
   padding: 0.3rem 0.4rem;
   white-space: nowrap;
+}
+.home-tile-art {
+  position: relative;
+  display: block;
+  width: 7.25rem;
+  height: 10.6rem;
+  flex: 0 0 auto;
+}
+.home-tile-art .home-tile-poster,
+.home-tile-art .home-tile-fallback {
+  width: 100%;
+  height: 100%;
+}
+.home-status-dot {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.4rem;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.home-status-dot.is-requested {
+  background: #3b82f6;
+}
+.home-status-dot.is-available {
+  background: #22c55e;
+}
+.home-status-dot.is-partial {
+  background: #eab308;
+}
+.home-status-dot.is-missing {
+  background: #ef4444;
 }
 .home-tile-poster,
 .home-tile-fallback {

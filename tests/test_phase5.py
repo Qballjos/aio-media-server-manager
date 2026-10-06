@@ -774,6 +774,27 @@ def test_persisted_vpn_enabled_beats_compose_env(tmp_path: Path, monkeypatch):
     assert reloaded.vpn_enforce is True
 
 
+def test_persisted_cloudflare_tunnel_enabled_beats_compose_env(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AMM_CLOUDFLARE_TUNNEL_ENABLED", "false")
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        cloudflare_tunnel_enabled=False,
+    )
+    cfg.initialise()
+    cfg.cloudflare_tunnel_enabled = True
+    cfg.save()
+    reloaded = Settings(
+        config_dir=cfg.config_dir,
+        download_dir=cfg.download_dir,
+        media_dir=cfg.media_dir,
+        cloudflare_tunnel_enabled=False,
+    )
+    reloaded.initialise()
+    assert reloaded.cloudflare_tunnel_enabled is True
+
+
 def test_flaresolverr_start_command_wraps_on_linux(tmp_path: Path, monkeypatch):
     from applications.community import FlaresolverrApp
     from core import vpn as vpn_mod

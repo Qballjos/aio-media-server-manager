@@ -1331,6 +1331,7 @@ def _seerr_request_cards(
         requester = who.get("displayName") or who.get("username") or ""
         title = info.get("title") or f"{media_type} {tmdb_id}"
         path = f"tv/{tmdb_id}" if media_type == "tv" else f"movie/{tmdb_id}"
+        media = row.get("media") if isinstance(row.get("media"), dict) else {}
         items.append(
             {
                 "source": "seerr",
@@ -1340,6 +1341,7 @@ def _seerr_request_cards(
                 "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
                 "mediaType": media_type,
                 "mediaId": tmdb_id,
+                "status": seerr_media_status(media),
             }
         )
     return items
@@ -1370,9 +1372,15 @@ _SEERR_MEDIA_STATUS = {2: "requested", 3: "requested", 4: "partial", 5: "availab
 
 
 def seerr_media_status(row: dict[str, Any]) -> str:
-    info = row.get("mediaInfo")
+    """Map Seerr/Overseerr media availability codes to homepage status keys.
+
+    Accepts discover rows (``mediaInfo.status``), media payloads (``status``),
+    or request ``media`` objects.
+    """
+    info = row.get("mediaInfo") if isinstance(row.get("mediaInfo"), dict) else None
+    raw = info.get("status") if info is not None else row.get("status")
     try:
-        code = int(info.get("status")) if isinstance(info, dict) else 0
+        code = int(raw) if raw is not None else 0
     except (TypeError, ValueError):
         code = 0
     return _SEERR_MEDIA_STATUS.get(code, "missing")

@@ -40,10 +40,35 @@ class AuthStatusResponse(BaseModel):
     email: Optional[str] = None
     csrf_token: Optional[str] = None
     avatar_url: Optional[str] = None
+    theme: Optional[str] = None
+    wallpaper: Optional[str] = None
+    wallpaper_url: Optional[str] = None
+    has_wallpaper_image: Optional[bool] = None
+    homepage_widget_debug: Optional[bool] = None
 
 
 def _avatar_url() -> str | None:
     return profile_mod.avatar_url()
+
+
+def _visuals_payload() -> dict:
+    return profile_mod.visual_preferences()
+
+
+def _empty_auth(*, setup_required: bool) -> dict:
+    return {
+        "setup_required": setup_required,
+        "authenticated": False,
+        "username": None,
+        "email": None,
+        "csrf_token": None,
+        "avatar_url": None,
+        "theme": None,
+        "wallpaper": None,
+        "wallpaper_url": None,
+        "has_wallpaper_image": None,
+        "homepage_widget_debug": None,
+    }
 
 
 @router.get("/status", response_model=AuthStatusResponse, summary="Check auth status")
@@ -54,17 +79,11 @@ async def auth_status(request: Request) -> dict:
     """
     needs_setup = auth_manager.setup_required()
     if needs_setup:
-        return {
-            "setup_required": True,
-            "authenticated": False,
-            "username": None,
-            "email": None,
-            "csrf_token": None,
-            "avatar_url": None,
-        }
+        return _empty_auth(setup_required=True)
 
     try:
         username = auth_manager.authenticate_request(request)
+        visuals = _visuals_payload()
         return {
             "setup_required": False,
             "authenticated": True,
@@ -72,16 +91,10 @@ async def auth_status(request: Request) -> dict:
             "email": auth_manager.email() or None,
             "csrf_token": request.cookies.get(COOKIE_CSRF),
             "avatar_url": _avatar_url(),
+            **visuals,
         }
     except HTTPException:
-        return {
-            "setup_required": False,
-            "authenticated": False,
-            "username": None,
-            "email": None,
-            "csrf_token": None,
-            "avatar_url": None,
-        }
+        return _empty_auth(setup_required=False)
 
 
 @router.post("/setup", summary="Create initial admin account")
@@ -94,6 +107,7 @@ async def setup_admin(req: SetupRequest, response: Response) -> dict:
     save_shared_admin_credentials(req.username, req.password, email=email)
     token = auth_manager.issue_token(req.username)
     csrf = auth_manager.set_session_cookies(response, token)
+    visuals = _visuals_payload()
     return {
         "status": "ok",
         "username": req.username,
@@ -101,6 +115,7 @@ async def setup_admin(req: SetupRequest, response: Response) -> dict:
         "csrf_token": csrf,
         "access_token": token,
         "avatar_url": _avatar_url(),
+        **visuals,
     }
 
 
@@ -127,12 +142,14 @@ async def login(req: LoginRequest, request: Request, response: Response) -> dict
 
     token = auth_manager.issue_token(req.username)
     csrf = auth_manager.set_session_cookies(response, token)
+    visuals = _visuals_payload()
     return {
         "status": "ok",
         "username": req.username,
         "csrf_token": csrf,
         "access_token": token,
         "avatar_url": _avatar_url(),
+        **visuals,
     }
 
 
@@ -195,6 +212,67 @@ async def delete_avatar(request: Request) -> dict:
         "email": auth_manager.email() or None,
         **profile,
     }
+
+
+class VisualsPatch(BaseModel):
+    theme: Optional[str] = None
+    wallpaper: Optional[str] = None
+    homepage_widget_debug: Optional[bool] = None
+
+
+@router.patch("/visuals", summary="Update admin visual preferences")
+async def patch_visuals(body: VisualsPatch, request: Request) -> dict:
+    auth_manager.authenticate_request(request)
+    if body.theme is None and body.wallpaper is None and body.homepage_widget_debug is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide theme, wallpaper, and/or homepage_widget_debug.",
+        )
+    if body.theme is not None and body.theme not in profile_mod.THEMES:
+        raise HTTPException(status_code=422, detail="theme must be dark, light, or system.")
+    if body.wallpaper is not None and body.wallpaper not in profile_mod.WALLPAPERS:
+        raise HTTPException(
+            status_code=422,
+            detail="wallpaper must be default, jellyfin, plex, or personal.",
+        )
+    visuals = profile_mod.save_visual_preferences(
+        theme=body.theme,
+        wallpaper=body.wallpaper,
+        homepage_widget_debug=body.homepage_widget_debug,
+    )
+    return {"status": "ok", **visuals}
+
+
+@router.get("/wallpaper", summary="Serve the admin wallpaper image")
+async def get_wallpaper(request: Request):
+    auth_manager.authenticate_request(request)
+    resolved = profile_mod.wallpaper_file()
+    if resolved is None:
+        raise HTTPException(status_code=404, detail="No wallpaper image set.")
+    path, mime = resolved
+    return FileResponse(
+        path,
+        media_type=mime,
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
+@router.put("/wallpaper", summary="Upload the admin wallpaper image")
+async def put_wallpaper(request: Request) -> dict:
+    auth_manager.authenticate_request(request)
+    data = await request.body()
+    try:
+        visuals = profile_mod.save_wallpaper_image(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"status": "ok", **visuals}
+
+
+@router.delete("/wallpaper", summary="Remove the admin wallpaper image")
+async def delete_wallpaper(request: Request) -> dict:
+    auth_manager.authenticate_request(request)
+    visuals = profile_mod.clear_wallpaper_image()
+    return {"status": "ok", **visuals}
 
 
 class AccountPatch(BaseModel):

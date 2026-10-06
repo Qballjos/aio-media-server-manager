@@ -97,3 +97,67 @@ def test_avatar_rejects_bad_payload(tmp_path: Path, monkeypatch):
         headers={**headers, "Content-Type": "application/octet-stream"},
     )
     assert bad.status_code == 422
+
+
+def test_visual_preferences_persist_on_profile(tmp_path: Path, monkeypatch):
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+
+    me = client.get("/api/auth/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["theme"] == "dark"
+    assert me.json()["wallpaper"] == "default"
+    assert me.json()["has_wallpaper_image"] is False
+    assert me.json()["homepage_widget_debug"] is False
+
+    patched = client.patch(
+        "/api/auth/visuals",
+        json={"theme": "light", "wallpaper": "jellyfin"},
+        headers=headers,
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["theme"] == "light"
+    assert patched.json()["wallpaper"] == "jellyfin"
+
+    debug_on = client.patch(
+        "/api/auth/visuals",
+        json={"homepage_widget_debug": True},
+        headers=headers,
+    )
+    assert debug_on.status_code == 200, debug_on.text
+    assert debug_on.json()["homepage_widget_debug"] is True
+    assert debug_on.json()["theme"] == "light"
+
+    status = client.get("/api/auth/status")
+    assert status.status_code == 200
+    body = status.json()
+    assert body["authenticated"] is True
+    assert body["theme"] == "light"
+    assert body["wallpaper"] == "jellyfin"
+    assert body["homepage_widget_debug"] is True
+
+    meta = (cfg.config_dir / "profile" / "profile.json").read_text(encoding="utf-8")
+    assert '"theme": "light"' in meta
+    assert '"wallpaper": "jellyfin"' in meta
+    assert '"homepage_widget_debug": true' in meta
+
+    uploaded = client.put(
+        "/api/auth/wallpaper",
+        content=_MIN_PNG,
+        headers={**headers, "Content-Type": "image/png"},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["wallpaper"] == "personal"
+    assert uploaded.json()["has_wallpaper_image"] is True
+    assert uploaded.json()["wallpaper_url"].startswith("/api/auth/wallpaper?")
+    assert (cfg.config_dir / "profile" / "wallpaper.png").is_file()
+
+    file_res = client.get("/api/auth/wallpaper", headers=headers)
+    assert file_res.status_code == 200
+    assert file_res.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    cleared = client.delete("/api/auth/wallpaper", headers=headers)
+    assert cleared.status_code == 200
+    assert cleared.json()["has_wallpaper_image"] is False
+    assert cleared.json()["wallpaper"] == "default"
+
