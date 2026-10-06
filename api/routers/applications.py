@@ -276,7 +276,7 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         notes.append(
             "VueTorrent is the default WebUI (downloaded from GitHub on install/start). "
             "Turn it off for the stock UI, or use Update VueTorrent to replace files with the latest release. "
-            "The WebAPI stays the same for *Arr."
+            "The WebAPI stays the same for Sonarr, Radarr, and Lidarr."
         )
     elif plugin.name == "jellyfin":
         notes.append(

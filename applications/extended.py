@@ -35,7 +35,7 @@ class NzbgetApp(SimpleApplication):
     manifest = AppManifest(
         name="nzbget",
         display_name="NZBGet",
-        description="Alternative Usenet downloader with a web interface.",
+        description="Usenet downloader with a web interface.",
         github_repo="nzbgetcom/nzbget",
         upstream_url="https://github.com/nzbgetcom/nzbget",
         tier=AppTier.CORE,
@@ -164,7 +164,7 @@ class BazarrApp(SimpleApplication):
     manifest = AppManifest(
         name="bazarr",
         display_name="Bazarr",
-        description="Subtitle management companion for Sonarr and Radarr.",
+        description="Subtitle management for Sonarr and Radarr.",
         github_repo="morpheus65535/bazarr",
         upstream_url="https://github.com/morpheus65535/bazarr",
         tier=AppTier.RECOMMENDED,
@@ -271,7 +271,7 @@ class RecyclarrApp(SimpleApplication):
     manifest = AppManifest(
         name="recyclarr",
         display_name="Recyclarr",
-        description="CLI that syncs TRaSH Guides quality profiles into Sonarr and Radarr.",
+        description="Syncs TRaSH Guides quality profiles into Sonarr and Radarr.",
         github_repo="Recyclarr/Recyclarr",
         upstream_url="https://github.com/Recyclarr/Recyclarr",
         tier=AppTier.RECOMMENDED,
@@ -321,7 +321,7 @@ class NeutarrApp(SimpleApplication):
     manifest = AppManifest(
         name="neutarr",
         display_name="NeutArr",
-        description="Hunts missing media and quality upgrades across the *Arr stack.",
+        description="Finds missing media and quality upgrades for Sonarr and Radarr.",
         github_repo="I-am-PUID-0/NeutArr",
         upstream_url="https://github.com/I-am-PUID-0/NeutArr",
         tier=AppTier.RECOMMENDED,

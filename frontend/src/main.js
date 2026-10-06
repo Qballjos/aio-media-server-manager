@@ -5,9 +5,11 @@ import App from './App.vue'
 import { router } from './router'
 import { initPwaInstall } from './pwaInstall.js'
 import { initTheme } from './theme.js'
+import { initWallpaper } from './background.js'
 import { initAccentFromCache, loadBranding } from './branding.js'
 
 initTheme()
+initWallpaper()
 initAccentFromCache()
 initPwaInstall()
 loadBranding()

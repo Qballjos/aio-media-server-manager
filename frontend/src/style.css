@@ -3,20 +3,24 @@
 :root,
 [data-theme="dark"] {
   --bg-base: #0b0f17;
-  --bg-surface: #111827;
-  --bg-surface-elevated: #1a2234;
-  --bg-card: rgba(22, 30, 46, 0.75);
-  --bg-input: #0e1524;
-  --app-bg: radial-gradient(circle at 10% 20%, rgba(18, 20, 32, 1) 0%, rgba(10, 11, 16, 1) 90%);
-  --nav-bg: rgba(15, 17, 26, 0.7);
-  --pill-bg: rgba(30, 41, 59, 0.5);
-  --modal-bg: #0f121b;
-  --switch-track: rgba(71, 85, 105, 0.7);
-  --menu-bg: rgba(15, 23, 42, 0.96);
-  --overlay-soft: rgba(15, 23, 42, 0.55);
+  /* Smokey grey glass — neutral charcoal smoke, not blue slate */
+  --bg-card: rgba(48, 48, 52, 0.58);
+  --bg-surface: rgba(42, 42, 46, 0.48);
+  --bg-surface-elevated: rgba(56, 56, 60, 0.55);
+  --bg-input: rgba(36, 36, 40, 0.78);
+  --app-bg: radial-gradient(circle at 12% 18%, rgba(42, 28, 18, 0.95) 0%, rgba(11, 15, 23, 1) 52%, rgba(8, 10, 16, 1) 100%);
+  --nav-bg: rgba(40, 40, 44, 0.62);
+  --pill-bg: rgba(52, 52, 56, 0.52);
+  --modal-bg: rgba(32, 32, 36, 0.88);
+  --switch-track: rgba(82, 82, 88, 0.72);
+  --menu-bg: rgba(38, 38, 42, 0.82);
+  --overlay-soft: rgba(28, 28, 32, 0.55);
+  --glass-blur: 20px;
+  --glass-shine: none;
+  --glass-shadow: 0 10px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.15);
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.16);
   --border-hover: rgba(249, 115, 22, 0.35);
   --border-active: #f97316;
 
@@ -55,20 +59,33 @@
 
 [data-theme="light"] {
   --bg-base: #f4f6fb;
-  --bg-surface: #ffffff;
-  --bg-surface-elevated: #ffffff;
-  --bg-card: rgba(255, 255, 255, 0.88);
-  --bg-input: #f1f5f9;
+  /* Clear glass with a soft top shine */
+  --bg-surface: rgba(255, 255, 255, 0.32);
+  --bg-surface-elevated: rgba(255, 255, 255, 0.38);
+  --bg-card: rgba(255, 255, 255, 0.34);
+  --bg-input: rgba(255, 255, 255, 0.55);
   --app-bg: radial-gradient(circle at 10% 20%, #f8fafc 0%, #eef2f7 55%, #e8edf5 100%);
-  --nav-bg: rgba(255, 255, 255, 0.82);
-  --pill-bg: rgba(241, 245, 249, 0.95);
-  --modal-bg: #ffffff;
+  --nav-bg: rgba(255, 255, 255, 0.42);
+  --pill-bg: rgba(255, 255, 255, 0.45);
+  --modal-bg: rgba(255, 255, 255, 0.78);
   --switch-track: rgba(148, 163, 184, 0.55);
-  --menu-bg: #ffffff;
-  --overlay-soft: rgba(241, 245, 249, 0.95);
+  --menu-bg: rgba(255, 255, 255, 0.72);
+  --overlay-soft: rgba(255, 255, 255, 0.45);
+  --glass-blur: 18px;
+  --glass-shine: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 255, 255, 0.22) 28%,
+    rgba(255, 255, 255, 0.04) 55%,
+    transparent 72%
+  );
+  --glass-shadow:
+    0 8px 28px rgba(15, 23, 42, 0.07),
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 -1px 0 rgba(15, 23, 42, 0.04) inset;
 
-  --border-subtle: rgba(15, 23, 42, 0.1);
-  --border-strong: rgba(15, 23, 42, 0.16);
+  --border-subtle: rgba(255, 255, 255, 0.65);
+  --border-strong: rgba(15, 23, 42, 0.12);
   --border-hover: rgba(234, 88, 12, 0.4);
   --border-active: #ea580c;
 
@@ -125,6 +142,69 @@ body {
   max-width: 100%;
 }
 
+/* Wallpaper presets (Settings → Visuals). Gradients inspired by Jellyfin / Plex / app default. */
+[data-wallpaper='default'] {
+  --app-bg: radial-gradient(circle at 12% 18%, rgba(42, 28, 18, 0.95) 0%, rgba(11, 15, 23, 1) 52%, rgba(8, 10, 16, 1) 100%);
+  --wallpaper-overlay: radial-gradient(ellipse at 80% 0%, rgba(249, 115, 22, 0.12) 0%, transparent 45%);
+}
+
+[data-theme='light'][data-wallpaper='default'] {
+  --app-bg: radial-gradient(circle at 10% 20%, #f8fafc 0%, #eef2f7 55%, #e8edf5 100%);
+  --wallpaper-overlay: radial-gradient(ellipse at 80% 0%, rgba(249, 115, 22, 0.08) 0%, transparent 45%);
+}
+
+[data-wallpaper='jellyfin'] {
+  --app-bg:
+    radial-gradient(ellipse at 15% 20%, rgba(170, 100, 255, 0.45) 0%, transparent 42%),
+    radial-gradient(ellipse at 85% 10%, rgba(0, 200, 220, 0.28) 0%, transparent 38%),
+    radial-gradient(ellipse at 50% 100%, rgba(80, 40, 160, 0.35) 0%, transparent 50%),
+    linear-gradient(160deg, #0b0618 0%, #101828 48%, #0a1220 100%);
+  --wallpaper-overlay: linear-gradient(180deg, rgba(8, 6, 20, 0.2) 0%, rgba(8, 6, 20, 0.35) 100%);
+  --glow-orb: rgba(170, 100, 255, 0.22);
+}
+
+[data-theme='light'][data-wallpaper='jellyfin'] {
+  --app-bg:
+    radial-gradient(ellipse at 15% 20%, rgba(170, 100, 255, 0.22) 0%, transparent 42%),
+    radial-gradient(ellipse at 85% 10%, rgba(0, 180, 200, 0.16) 0%, transparent 38%),
+    linear-gradient(160deg, #f4f0ff 0%, #eef6fb 55%, #e8eef8 100%);
+  --wallpaper-overlay: transparent;
+}
+
+[data-wallpaper='plex'] {
+  --app-bg:
+    radial-gradient(ellipse at 20% 0%, rgba(229, 160, 13, 0.38) 0%, transparent 40%),
+    radial-gradient(ellipse at 90% 80%, rgba(229, 160, 13, 0.12) 0%, transparent 45%),
+    linear-gradient(165deg, #141414 0%, #1c1c1c 40%, #0e0e0e 100%);
+  --wallpaper-overlay: linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.4) 100%);
+  --glow-orb: rgba(229, 160, 13, 0.2);
+}
+
+[data-theme='light'][data-wallpaper='plex'] {
+  --app-bg:
+    radial-gradient(ellipse at 20% 0%, rgba(229, 160, 13, 0.2) 0%, transparent 40%),
+    linear-gradient(165deg, #f7f4ef 0%, #f0ebe3 50%, #ebe6de 100%);
+  --wallpaper-overlay: transparent;
+}
+
+[data-wallpaper='personal'].has-wallpaper-image {
+  --app-bg:
+    linear-gradient(180deg, rgba(8, 10, 16, 0.55) 0%, rgba(8, 10, 16, 0.72) 100%),
+    var(--wallpaper-image) center / cover no-repeat fixed;
+  --wallpaper-overlay: linear-gradient(180deg, rgba(8, 10, 16, 0.25) 0%, rgba(8, 10, 16, 0.45) 100%);
+}
+
+[data-theme='light'][data-wallpaper='personal'].has-wallpaper-image {
+  --app-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.45) 0%, rgba(244, 246, 251, 0.62) 100%),
+    var(--wallpaper-image) center / cover no-repeat fixed;
+  --wallpaper-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(244, 246, 251, 0.35) 100%);
+}
+
+[data-wallpaper='personal']:not(.has-wallpaper-image) {
+  --app-bg: radial-gradient(circle at 12% 18%, rgba(42, 28, 18, 0.95) 0%, rgba(11, 15, 23, 1) 52%, rgba(8, 10, 16, 1) 100%);
+}
+
 html {
   overflow-x: hidden;
   max-width: 100%;
@@ -163,10 +243,23 @@ html {
   justify-content: space-between;
   padding: 16px 24px;
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.12);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.12);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   margin-bottom: 28px;
+  box-shadow: var(--glass-shadow, none);
+  position: relative;
+  overflow: hidden;
+}
+
+.app-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--glass-shine, none);
 }
 
 .brand {
@@ -962,6 +1055,120 @@ textarea.ui-input::placeholder {
   background: rgba(var(--color-primary-rgb), 0.12);
   color: var(--color-primary);
   box-shadow: 0 0 0 1px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.wallpaper-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+@media (min-width: 720px) {
+  .wallpaper-picker {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.wallpaper-option {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--border-subtle);
+  background: var(--pill-bg);
+  color: var(--text-main);
+  border-radius: 12px;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  display: grid;
+  grid-template-rows: 4.5rem auto;
+}
+
+.wallpaper-option:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.wallpaper-option.is-active {
+  border-color: rgba(var(--color-primary-rgb), 0.6);
+  box-shadow: 0 0 0 1px rgba(var(--color-primary-rgb), 0.25);
+}
+
+.wallpaper-swatch {
+  display: block;
+  width: 100%;
+  height: 4.5rem;
+  background: var(--swatch-bg, var(--pill-bg));
+  background-size: cover;
+  background-position: center;
+}
+
+.wallpaper-swatch[data-preset='default'] {
+  --swatch-bg: radial-gradient(circle at 20% 30%, #3a2414 0%, #0f141e 55%, #0a0c12 100%);
+}
+
+.wallpaper-swatch[data-preset='jellyfin'] {
+  --swatch-bg:
+    radial-gradient(ellipse at 20% 30%, rgba(170, 100, 255, 0.7) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(0, 200, 220, 0.45) 0%, transparent 45%),
+    linear-gradient(160deg, #0b0618, #101828);
+}
+
+.wallpaper-swatch[data-preset='plex'] {
+  --swatch-bg:
+    radial-gradient(ellipse at 30% 0%, rgba(229, 160, 13, 0.55) 0%, transparent 50%),
+    linear-gradient(165deg, #1a1a1a, #0e0e0e);
+}
+
+.wallpaper-swatch[data-preset='personal'] {
+  --swatch-bg:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.7)),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 0 8px, transparent 8px 16px);
+}
+
+.wallpaper-swatch[data-preset='personal'].has-image {
+  background-image: var(--wallpaper-preview);
+}
+
+.wallpaper-option-meta {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.65rem 0.7rem 0.75rem;
+}
+
+.wallpaper-option-meta strong {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.wallpaper-option-meta span {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.wallpaper-personal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  margin-top: 0.85rem;
+}
+
+.wallpaper-file-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.wallpaper-file-btn input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 100px;
 }
 
 @media (max-width: 640px) {

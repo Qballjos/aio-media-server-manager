@@ -1,8 +1,8 @@
 """
-core/integrations/seerr.py — Seerr (Overseerr/Jellyseerr) REST API Client.
+core/integrations/seerr.py — Seerr REST API client.
 
-Connects Seerr to media servers (Jellyfin/Plex) and automation apps (Sonarr/Radarr)
-so user media requests automatically route to the appropriate downloader and library.
+Connects Seerr to Jellyfin or Plex and to Sonarr or Radarr so media requests
+route to the configured download client and library.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def read_seerr_api_key(config_dir: Path | None) -> str:
-    """Read Seerr/Jellyseerr apiKey from settings.json (written after first setup)."""
+    """Read Seerr apiKey from settings.json (written after first setup)."""
     if not config_dir:
         return ""
     root = Path(config_dir)

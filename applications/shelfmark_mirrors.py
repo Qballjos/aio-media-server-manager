@@ -236,8 +236,8 @@ def sync_shelfmark_audiobook_library_url(config_dir: Path, *, port: int | None =
     """Keep AUDIOBOOK_LIBRARY_URL pointed at Grimmory (public when exposed).
 
     Only rewrites empty values or URLs AIO previously managed (localhost Grimmory
-    or the current/previous Grimmory public hostname). Custom targets such as
-    Audiobookshelf are left alone.
+    or the current/previous Grimmory public hostname). Other custom library URLs
+    are left unchanged.
     """
     from core.app_web_url import grimmory_browser_url
 

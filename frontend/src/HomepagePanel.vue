@@ -321,6 +321,7 @@ const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const calViewPicked = ref(false)
 const calView = ref(defaultCalView())
 const calFilter = ref('all')
+const selectedDayKey = ref(dayKey(new Date()))
 const recentRail = ref(null)
 const requestsRail = ref(null)
 const trendingRail = ref(null)
@@ -328,13 +329,26 @@ const trendingRail = ref(null)
 function defaultCalView() {
   const width = typeof window === 'undefined' ? 1024 : window.innerWidth
   if (width < 768) return 'list'
-  if (width < 1440) return 'week'
-  return 'month'
+  return 'week'
 }
 
 function setCalView(view) {
   calViewPicked.value = true
   calView.value = view
+  if ((view === 'week' || view === 'day' || view === 'list') && !selectedDayKey.value) {
+    selectedDayKey.value = dayKey(new Date())
+  }
+}
+
+function selectCalDay(day) {
+  if (!day?.key) return
+  selectedDayKey.value = day.key
+  if (calView.value === 'month' || calView.value === 'week') {
+    const parts = day.key.split('-').map(Number)
+    if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
+      calCursor.value = new Date(parts[0], parts[1] - 1, parts[2])
+    }
+  }
 }
 
 function syncCalViewToViewport() {
@@ -505,6 +519,7 @@ function shiftCalendar(direction) {
 function goToday() {
   const now = new Date()
   now.setHours(0, 0, 0, 0)
+  selectedDayKey.value = dayKey(now)
   if (calView.value === 'month') {
     calCursor.value = new Date(now.getFullYear(), now.getMonth(), 1)
     return
@@ -799,7 +814,17 @@ onUnmounted(() => {
                   v-for="day in week.days"
                   :key="day.key"
                   class="cal-day"
-                  :class="{ 'is-today': day.isToday, 'is-outside': !day.inMonth }"
+                  :class="{
+                    'is-today': day.isToday,
+                    'is-selected': day.key === selectedDayKey,
+                    'is-outside': !day.inMonth,
+                  }"
+                  role="button"
+                  tabindex="0"
+                  :aria-pressed="day.key === selectedDayKey"
+                  @click="selectCalDay(day)"
+                  @keydown.enter.prevent="selectCalDay(day)"
+                  @keydown.space.prevent="selectCalDay(day)"
                 >
                   <span class="cal-num">{{ calView === 'week' ? day.weekday + ' ' + day.date : day.date }}</span>
                   <ul v-if="day.events.length" class="cal-events">
@@ -1049,6 +1074,32 @@ onUnmounted(() => {
 .home-widget-calendar {
   grid-column: 1 / -1;
 }
+@media (min-width: 1280px) {
+  .home-widgets {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1.1rem 1.15rem;
+  }
+  .home-widget-rail,
+  .home-widget-calendar,
+  .home-widget:not(.home-widget-rail):not(.home-widget-calendar) {
+    grid-column: span 12;
+  }
+}
+@media (min-width: 1600px) {
+  .home-launcher-groups {
+    gap: 0.9rem;
+  }
+  .home-widgets {
+    gap: 1.2rem 1.25rem;
+  }
+  .home-widgets:has(.home-widget:not(.home-widget-rail):not(.home-widget-calendar)) .home-widget-calendar {
+    grid-column: span 8;
+  }
+  .home-widget:not(.home-widget-rail):not(.home-widget-calendar) {
+    grid-column: span 4;
+    align-self: stretch;
+  }
+}
 .home-rail-head {
   display: flex;
   align-items: baseline;
@@ -1203,14 +1254,21 @@ onUnmounted(() => {
 }
 .cal-mode-week .cal-weekdays,
 .cal-mode-week .cal-week {
-  min-width: 56rem;
+  min-width: min(56rem, 100%);
 }
 .cal-weeks.is-week .cal-week,
 .cal-weeks.is-day .cal-week {
   overflow-x: visible;
 }
 .cal-weeks.is-week .cal-week {
-  min-width: 56rem;
+  min-width: min(56rem, 100%);
+}
+@media (min-width: 1280px) {
+  .cal-mode-week .cal-weekdays,
+  .cal-mode-week .cal-week,
+  .cal-weeks.is-week .cal-week {
+    min-width: 0;
+  }
 }
 .cal-weeks.is-day .cal-week {
   grid-template-columns: 1fr;
@@ -1233,13 +1291,19 @@ onUnmounted(() => {
   padding: 0.4rem 0.4rem 0.5rem;
   border: 1px solid var(--border-subtle);
   border-radius: 0.55rem;
-  background: var(--bg-surface-elevated, var(--bg-card));
+  background: color-mix(in srgb, var(--bg-surface-elevated, var(--bg-card)) 72%, transparent);
+  backdrop-filter: blur(10px);
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
   overflow: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  cursor: pointer;
+  transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+}
+.cal-day:hover {
+  border-color: var(--border-hover);
 }
 .cal-day::-webkit-scrollbar {
   display: none;
@@ -1247,7 +1311,7 @@ onUnmounted(() => {
   height: 0;
 }
 .cal-weeks.is-week .cal-day {
-  min-height: 18rem;
+  min-height: clamp(14rem, 28vh, 22rem);
 }
 .cal-weeks.is-week .cal-num {
   display: none;
@@ -1256,8 +1320,12 @@ onUnmounted(() => {
   opacity: 0.45;
 }
 .cal-day.is-today {
-  border-color: var(--color-info);
-  box-shadow: inset 0 0 0 1px var(--color-info);
+  border-color: color-mix(in srgb, var(--color-info) 70%, var(--border-subtle));
+}
+.cal-day.is-selected {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.55), 0 0 0 1px rgba(var(--color-primary-rgb), 0.2);
+  background: color-mix(in srgb, rgba(var(--color-primary-rgb), 0.16) 55%, var(--bg-surface-elevated, var(--bg-card)));
 }
 .cal-num {
   font-size: 0.78rem;
@@ -1266,6 +1334,9 @@ onUnmounted(() => {
 }
 .cal-day.is-today .cal-num {
   color: var(--color-info);
+}
+.cal-day.is-selected .cal-num {
+  color: var(--color-primary);
 }
 .cal-events,
 .cal-list ul {
@@ -1280,7 +1351,7 @@ onUnmounted(() => {
   gap: 0.05rem;
   padding: 0.28rem 0.35rem;
   border-radius: 0.35rem;
-  background: var(--bg-input);
+  background: color-mix(in srgb, var(--bg-input) 78%, transparent);
   min-width: 0;
   border-left: 3px solid var(--color-warning, #f59e0b);
 }

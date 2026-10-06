@@ -43,8 +43,8 @@ Do not use `poetry run python main.py` on macOS or Windows to exercise catalog i
 ## Project rules
 
 - One manager, many **managed processes**. Do not add per-application Docker Compose services.
-- No Debrid functionality (Real-Debrid, Zurg, Riven, mounts, caches).
-- The catalog stays **16 applications** (Profilarr was removed). VueTorrent is a qBittorrent WebUI option, not a catalog app. Hide an entry from the catalog and wizard when the host architecture is unsupported; do not install a default “wrong-arch” build.
+- No Debrid functionality or cloud remotes.
+- The catalog stays **16 applications**. VueTorrent is a qBittorrent WebUI option, not a catalog app. Hide an entry from the catalog and wizard when the host architecture is unsupported; do not install a default “wrong-arch” build.
 - The appliance image must not install Flaresolverr’s Chromium/Xvfb stack on `linux/arm64`. Shared runtimes (Python 3.13, Node 22, JRE, MariaDB, ffmpeg) stay on both published architectures.
 - Application-specific behaviour lives in `applications/` plugins, not in `core/`.
 - Do not log or return secrets in API responses.
@@ -69,7 +69,7 @@ Agents and Dependabot often treat “not on the newest version” as a bug. In t
 
 **Frontend majors:** treat `vue-router` 5.x as a deliberate migration, not an auto-merge.
 
-**Out of catalog (do not re-add without an explicit product decision):** Profilarr (removed), Tautulli, Unpackerr, Cleanuparr, Maintainerr, Kometa, Autobrr, Mylar3. Trailarr may be added later as a local-only install (never a Docker child container).
+**Out of catalog (do not add without an explicit product decision):** analytics frontends, unpack helpers, library automation extras, and tracker automation tools outside the 16 catalog apps. A local-only trailer manager may be considered later (never a Docker child container).
 
 Report vulnerabilities through [GitHub private advisories](https://github.com/Qballjos/aio-media-server-manager/security/advisories/new), not public issues.
 

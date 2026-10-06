@@ -134,7 +134,7 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 
     ---
 
-    Sonarr, Radarr, Lidarr, Bazarr, and friends — when you want them.
+    Sonarr, Radarr, Lidarr, and Bazarr — when you want them.
 
 -   :material-download:{ .lg .middle } __Downloads__
 
@@ -146,7 +146,7 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 
     ---
 
-    Jellyfin, Plex, Seerr, and more — same appliance.
+    Jellyfin, Plex, and Seerr — same appliance.
 
 </div>
 

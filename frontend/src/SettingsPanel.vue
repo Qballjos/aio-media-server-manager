@@ -19,6 +19,14 @@ import {
   setThemePreference,
 } from './theme.js'
 import {
+  WALLPAPER_OPTIONS,
+  getWallpaperPreference,
+  getWallpaperImage,
+  setWallpaperPreference,
+  setWallpaperImageFromFile,
+  clearWallpaperImage,
+} from './background.js'
+import {
   ACCENT_PRESETS,
   DEFAULT_ACCENT,
   applyBranding,
@@ -137,6 +145,39 @@ const publicTunnelChip = computed(() => {
   }
   return { cls: 'is-warn', label: 'Cloudflare tunnel needed' }
 })
+
+const currentTime = ref('')
+let stopClock = null
+
+const showVpnStatusPill = computed(() => !!vpnLive.value.enabled)
+const vpnStatusOk = computed(() => !!vpnLive.value.tunnel_up)
+
+const showCloudflareStatusPill = computed(() => {
+  const t = tunnelLive.value || {}
+  const meta = hostnameMeta.value || {}
+  return !!(
+    form.value.cloudflare_tunnel_enabled ||
+    t.enabled ||
+    meta.tunnel_enabled ||
+    t.token_present ||
+    t.token_saved ||
+    meta.tunnel_token_present
+  )
+})
+
+const cloudflareStatusOk = computed(() => {
+  const t = tunnelLive.value || {}
+  const meta = hostnameMeta.value || {}
+  return !!(t.connected || meta.tunnel_connected)
+})
+
+const cloudflareStatusTitle = computed(() => {
+  if (cloudflareStatusOk.value) {
+    return 'Cloudflare Tunnel connected'
+  }
+  const t = tunnelLive.value || {}
+  return t.summary || 'Cloudflare Tunnel not connected'
+})
 const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
 const seerrConfigured = ref(false)
@@ -145,6 +186,10 @@ const pwaStandalone = ref(false)
 const pwaCanInstall = ref(false)
 const pwaIos = ref(false)
 const themePreference = ref(getThemePreference())
+const wallpaperPreference = ref(getWallpaperPreference())
+const wallpaperImage = ref(getWallpaperImage())
+const wallpaperBusy = ref(false)
+const wallpaperFileInput = ref(null)
 let stopPwa = null
 
 function refreshPwaInstall() {
@@ -157,6 +202,39 @@ function chooseTheme(pref) {
   setThemePreference(pref)
   themePreference.value = getThemePreference()
   notice.value = `Theme set to ${themePreference.value}.`
+}
+
+function chooseWallpaper(pref) {
+  setWallpaperPreference(pref)
+  wallpaperPreference.value = getWallpaperPreference()
+  wallpaperImage.value = getWallpaperImage()
+  notice.value = `Background set to ${WALLPAPER_OPTIONS.find((row) => row[0] === wallpaperPreference.value)?.[1] || wallpaperPreference.value}.`
+}
+
+async function onWallpaperFileChange(event) {
+  const input = event?.target
+  const file = input?.files?.[0]
+  if (!file) return
+  wallpaperBusy.value = true
+  error.value = ''
+  try {
+    await setWallpaperImageFromFile(file)
+    wallpaperPreference.value = getWallpaperPreference()
+    wallpaperImage.value = getWallpaperImage()
+    notice.value = 'Personal background saved in this browser.'
+  } catch (err) {
+    error.value = err?.message || 'Could not save background image.'
+  } finally {
+    wallpaperBusy.value = false
+    if (input) input.value = ''
+  }
+}
+
+function removeWallpaperImage() {
+  clearWallpaperImage()
+  wallpaperImage.value = ''
+  wallpaperPreference.value = getWallpaperPreference()
+  notice.value = 'Personal background image removed.'
 }
 
 function applyBrandingPayload(data) {
@@ -1169,10 +1247,16 @@ onMounted(() => {
   widgetDebug.value = readHomepageWidgetDebug()
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
+  const tickClock = () => {
+    currentTime.value = new Date().toLocaleTimeString()
+  }
+  tickClock()
+  stopClock = startGuardedInterval(tickClock, 1000)
   loadAll()
 })
 onBeforeUnmount(() => {
   if (stopPwa) stopPwa()
+  if (stopClock) stopClock()
   stopJobPoll()
 })
 </script>
@@ -1183,6 +1267,29 @@ onBeforeUnmount(() => {
       <div>
         <h2 class="section-title">Settings</h2>
         <p class="section-subtitle">Manage this appliance after first-run. Bind mounts and the manager port stay in compose/env.</p>
+      </div>
+      <div class="settings-header-metrics" role="status" aria-label="Live status">
+        <div class="metric-pill status-pill" :title="currentTime">
+          <span class="metric-val font-mono">{{ currentTime }}</span>
+        </div>
+        <RouterLink
+          v-if="showVpnStatusPill"
+          :to="{ name: 'settings', params: { section: 'network' } }"
+          class="metric-pill status-pill"
+          :class="vpnStatusOk ? 'is-ok' : 'is-bad'"
+          :title="vpnStatusOk ? 'VPN tunnel up' : 'VPN tunnel down'"
+        >
+          <span class="metric-val font-mono">VPN</span>
+        </RouterLink>
+        <RouterLink
+          v-if="showCloudflareStatusPill"
+          :to="{ name: 'settings', params: { section: 'network' } }"
+          class="metric-pill status-pill"
+          :class="cloudflareStatusOk ? 'is-ok' : 'is-bad'"
+          :title="cloudflareStatusTitle"
+        >
+          <span class="metric-val font-mono">CF</span>
+        </RouterLink>
       </div>
     </div>
 
@@ -1219,6 +1326,56 @@ onBeforeUnmount(() => {
             @click="chooseTheme(item[0])"
           >
             {{ item[1] }}
+          </button>
+        </div>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <span class="accent-badge">BACKGROUND</span>
+          <h3>Personal background</h3>
+          <p>Pick a gradient style or upload your own image. Saved in this browser only — panels stay translucent so the wallpaper shows through.</p>
+        </div>
+        <div class="wallpaper-picker" role="group" aria-label="Background style">
+          <button
+            v-for="item in WALLPAPER_OPTIONS"
+            :key="item[0]"
+            type="button"
+            class="wallpaper-option"
+            :class="{ 'is-active': wallpaperPreference === item[0] }"
+            :aria-pressed="wallpaperPreference === item[0]"
+            @click="chooseWallpaper(item[0])"
+          >
+            <span
+              class="wallpaper-swatch"
+              :data-preset="item[0]"
+              :class="{ 'has-image': item[0] === 'personal' && wallpaperImage }"
+              :style="item[0] === 'personal' && wallpaperImage ? { '--wallpaper-preview': `url('${wallpaperImage}')` } : undefined"
+            />
+            <span class="wallpaper-option-meta">
+              <strong>{{ item[1] }}</strong>
+              <span>{{ item[2] }}</span>
+            </span>
+          </button>
+        </div>
+        <div class="wallpaper-personal-actions">
+          <label class="ui-btn ui-btn-primary wallpaper-file-btn" :aria-disabled="wallpaperBusy">
+            {{ wallpaperBusy ? 'Saving…' : (wallpaperImage ? 'Replace image' : 'Upload image') }}
+            <input
+              ref="wallpaperFileInput"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              :disabled="wallpaperBusy"
+              @change="onWallpaperFileChange"
+            />
+          </label>
+          <button
+            v-if="wallpaperImage"
+            type="button"
+            class="ui-btn ui-btn-ghost"
+            :disabled="wallpaperBusy"
+            @click="removeWallpaperImage"
+          >
+            Remove image
           </button>
         </div>
       </div>
@@ -2174,9 +2331,16 @@ onBeforeUnmount(() => {
 .settings-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+.settings-header-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
 }
 .section-title {
   font-size: 1.25rem;

@@ -161,7 +161,7 @@ class ShelfmarkApp(SimpleApplication):
     manifest = AppManifest(
         name="shelfmark",
         display_name="Shelfmark",
-        description="Search and request ebooks and audiobooks; pairs with Grimmory and Prowlarr.",
+        description="Search and request ebooks and audiobooks for Grimmory, with Prowlarr support.",
         github_repo="calibrain/shelfmark",
         upstream_url="https://github.com/calibrain/shelfmark",
         tier=AppTier.OPTIONAL,

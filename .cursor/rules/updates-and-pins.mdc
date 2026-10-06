@@ -24,10 +24,10 @@ alwaysApply: true
 
 ## Catalog policy
 
-- Catalog is **16** apps after Profilarr removal. Do not re-add Profilarr.
+- Catalog is **16** apps. Do not expand it without an explicit product decision.
 - VueTorrent is a qBittorrent WebUI option, not a catalog app.
-- Trailarr is a **later local-only** candidate (ROADMAP); not in the catalog yet. Never Docker for child apps.
-- Stay-out list: Tautulli, Unpackerr, Cleanuparr, Maintainerr, Kometa, Autobrr, Mylar3, Debrid.
+- A trailer manager may be a **later local-only** candidate (ROADMAP); not in the catalog yet. Never Docker for child apps.
+- Stay out of scope: Debrid, cloud remotes, and apps outside the 16 catalog plugins.
 
 ## Human-readable copy
 

@@ -77,14 +77,14 @@ Keep **downloads** and **media** on the same volume/share so completed files can
 
 ### 4. Streaming / requests
 
-Enable **Jellyfin**, **Plex**, **Seerr**, or others you want.
+Enable **Jellyfin**, **Plex**, and **Seerr** as needed.
 
-- Point libraries at the same media folders the *Arr apps use.
-- Seerr (or similar) talks to Sonarr/Radarr so people can request titles.
+- Point libraries at the same media folders Sonarr, Radarr, and Lidarr use.
+- Seerr talks to Sonarr and Radarr so household members can request titles.
 
 ### 5. Optional extras
 
-VPN, Cloudflare tunnel, quality sync tools (e.g. Recyclarr), backups — turn these on when you need them. None are required for a basic home setup.
+VPN, Cloudflare Tunnel, Recyclarr, NeutArr, and backups — turn these on when you need them. None are required for a basic home setup.
 
 ---
 

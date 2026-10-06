@@ -47,14 +47,12 @@ const isLoadingData = ref(false)
 const wizardCompleted = ref(true)
 const wizardStatusLoaded = ref(false)
 const wiringRunning = ref(false)
-const currentTime = ref(new Date().toLocaleTimeString())
 const vpnLive = ref({})
 const cloudflareLive = ref({})
 const showHealthModal = ref(false)
 const logApp = ref(null)
 const settingsService = ref(null)
 
-let stopClock = null
 let stopLivePoll = null
 let stopSlowPoll = null
 
@@ -67,14 +65,6 @@ const currentView = computed(() => {
 })
 
 const transcodingAvailable = computed(() => systemInfo.value?.transcoding?.available)
-const showVpnPill = computed(
-  () => authStatus.value.authenticated && wizardCompleted.value && !!vpnLive.value.enabled,
-)
-const vpnTunnelUp = computed(() => !!vpnLive.value.tunnel_up)
-const showCloudflarePill = computed(
-  () => authStatus.value.authenticated && wizardCompleted.value && !!cloudflareLive.value.enabled,
-)
-const cloudflareUp = computed(() => !!cloudflareLive.value.connected)
 const availableUpdates = computed(() => updateStatus.value.available || [])
 const showUpdatesPill = computed(
   () =>
@@ -328,16 +318,12 @@ onMounted(() => {
   loadBranding()
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
-  stopClock = startGuardedInterval(() => {
-    currentTime.value = new Date().toLocaleTimeString()
-  }, 1000)
   stopLivePoll = startGuardedInterval(pollLiveStatus, 10000)
   stopSlowPoll = startGuardedInterval(pollSlowStatus, 45000)
 })
 
 onUnmounted(() => {
   if (stopPwa) stopPwa()
-  if (stopClock) stopClock()
   if (stopLivePoll) stopLivePoll()
   if (stopSlowPoll) stopSlowPoll()
 })
@@ -360,40 +346,12 @@ onUnmounted(() => {
       </div>
 
       <div class="nav-metrics">
-        <div class="metric-pill hide-compact" :title="currentTime">
-          <span class="pulse-dot"></span>
-          <span class="metric-val font-mono">{{ currentTime }}</span>
-        </div>
-        <div
-          v-if="showVpnPill"
-          class="metric-pill"
-          :class="vpnTunnelUp ? 'is-vpn-up' : 'is-vpn-down'"
-          :title="vpnTunnelUp ? 'VPN tunnel up' : 'VPN tunnel down'"
-        >
-          <span class="pulse-dot"></span>
-          <span class="metric-val font-mono">VPN</span>
-        </div>
-        <RouterLink
-          v-if="showCloudflarePill"
-          :to="{ name: 'settings', params: { section: 'network' } }"
-          class="metric-pill"
-          :class="cloudflareUp ? 'is-cf-up' : 'is-cf-down'"
-          :title="cloudflareUp
-            ? (cloudflareLive.token_saved || cloudflareLive.token_present
-              ? 'Cloudflare Tunnel up · token saved'
-              : 'Cloudflare Tunnel up')
-            : (cloudflareLive.summary || 'Cloudflare Tunnel down — open Settings → Network')"
-        >
-          <span class="pulse-dot"></span>
-          <span class="metric-val font-mono">CF</span>
-        </RouterLink>
         <RouterLink
           v-if="showUpdatesPill"
           :to="{ name: 'settings', params: { section: 'updates' } }"
           class="metric-pill is-updates"
           title="Open Settings → Updates"
         >
-          <span class="pulse-dot"></span>
           <span class="metric-val font-mono">{{ updatesPillLabel }}</span>
         </RouterLink>
         <div v-if="transcodingAvailable" class="metric-pill hide-narrow" title="Hardware transcoding available">

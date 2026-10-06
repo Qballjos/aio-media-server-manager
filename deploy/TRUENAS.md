@@ -1,6 +1,6 @@
 # TrueNAS SCALE
 
-Deploy AIO as **one** custom app / Docker install. Do not also install Sonarr, Radarr, and friends as separate SCALE apps if you want this all-in-one model.
+Deploy AIO as **one** custom app / Docker install. Do not also install Sonarr, Radarr, or download clients as separate SCALE apps if you want this all-in-one model.
 
 **Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`
 

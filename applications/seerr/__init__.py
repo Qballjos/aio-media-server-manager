@@ -14,7 +14,7 @@ from core.installer import AppInstaller, InstallResult
 MANIFEST = AppManifest(
     name="seerr",
     display_name="Seerr",
-    description="Request management UI that talks to Sonarr, Radarr, and the media server.",
+    description="Request management UI that connects to Sonarr, Radarr, Jellyfin, and Plex.",
     github_repo="seerr-team/seerr",
     upstream_url="https://github.com/seerr-team/seerr",
     tier=AppTier.CORE,

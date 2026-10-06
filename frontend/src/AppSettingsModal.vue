@@ -379,7 +379,7 @@ watch(
               <span>
                 On by default. Uses
                 <a href="https://github.com/VueTorrent/VueTorrent" target="_blank" rel="noopener noreferrer">VueTorrent</a>
-                instead of the stock qBittorrent WebUI. Turn off for the stock UI. Turning back on re-downloads the latest release. *Arr still uses the same WebAPI.
+                instead of the stock qBittorrent WebUI. Turn off for the stock UI. Turning back on re-downloads the latest release. Sonarr, Radarr, and Lidarr still use the same WebAPI.
               </span>
               <span v-if="settingsMeta.vuetorrent_version" class="settings-hint">
                 Installed {{ settingsMeta.vuetorrent_version }}

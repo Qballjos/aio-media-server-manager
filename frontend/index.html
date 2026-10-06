@@ -27,6 +27,17 @@
           var meta = document.querySelector('meta[name="theme-color"]')
           if (meta) meta.setAttribute('content', theme === 'light' ? '#f4f6fb' : '#0b0f17')
 
+          var wallpaper = localStorage.getItem('amm-wallpaper') || 'default'
+          if (wallpaper !== 'jellyfin' && wallpaper !== 'plex' && wallpaper !== 'personal') wallpaper = 'default'
+          root.setAttribute('data-wallpaper', wallpaper)
+          if (wallpaper === 'personal') {
+            var wallpaperImage = localStorage.getItem('amm-wallpaper-image') || ''
+            if (wallpaperImage.indexOf('data:image/') === 0) {
+              root.style.setProperty('--wallpaper-image', 'url("' + wallpaperImage + '")')
+              root.classList.add('has-wallpaper-image')
+            }
+          }
+
           var accent = localStorage.getItem('amm-accent') || ''
           if (/^#[0-9a-fA-F]{6}$/.test(accent)) {
             var n = parseInt(accent.slice(1), 16)

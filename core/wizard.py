@@ -186,7 +186,7 @@ class WizardEngine:
             return {
                 "step": 1,
                 "title": "Welcome to AIO Media Server Manager",
-                "description": "All-in-One supervisor and manager for the *Arr ecosystem, download clients, and media servers without container overhead.",
+                "description": "One appliance for Sonarr, Radarr, download clients, and media servers — installed and supervised together, not as separate containers.",
             }
 
         if step_id == 2:

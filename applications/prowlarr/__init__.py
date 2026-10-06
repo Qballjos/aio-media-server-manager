@@ -9,7 +9,7 @@ from core.vpn import vpn_manager
 MANIFEST = AppManifest(
     name="prowlarr",
     display_name="Prowlarr",
-    description="Indexer manager that syncs indexers to the *Arr applications.",
+    description="Indexer manager that syncs indexers to Sonarr, Radarr, and Lidarr.",
     github_repo="Prowlarr/Prowlarr",
     upstream_url="https://github.com/Prowlarr/Prowlarr",
     tier=AppTier.CORE,

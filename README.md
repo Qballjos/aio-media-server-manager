@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/vibe%20coded-yes-ff69b4" alt="Vibe coded">
 </p>
 
-You run **one** Docker container (or one native Linux service). AIO installs the apps you choose, starts them, wires folders and APIs together, and gives you one web dashboard. There is no per-app Compose stack and **no Debrid** functionality.
+You run **one** Docker container (or one native Linux service). AIO installs the apps you choose, starts them, wires folders and APIs together, and gives you one web dashboard. There is no per-app Compose stack and no Debrid functionality.
 
 **This project was vibe coded** — built with AI pair-programming in Cursor, guided by a human who wanted one appliance instead of a Compose novel. Expect a fast-moving stack; issues and PRs are welcome when something feels off.
 
@@ -59,7 +59,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 | You get | You do not get |
 |---------|----------------|
 | One image, one process tree | A generator of per-app containers |
-| Automatic wiring between indexers, downloaders, and libraries | Debrid, Zurg, Riven, or cloud mounts |
+| Automatic wiring between indexers, downloaders, and libraries | Debrid services or cloud remotes |
 | A first-run wizard for the apps you actually want | A second Docker network per service |
 | `linux/amd64` and `linux/arm64` (NAS-friendly) | Kubernetes or extra brokers |
 
