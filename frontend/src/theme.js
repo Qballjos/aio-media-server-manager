@@ -9,6 +9,8 @@ const THEME_COLORS = {
 
 let mediaQuery = null
 let mediaHandler = null
+/** First-run setup / wizard always follow OS theme until unlocked. */
+let lockedToSystem = false
 
 function normalizePreference(value) {
   return PREFS.has(value) ? value : 'dark'
@@ -45,7 +47,12 @@ export function applyResolvedTheme(theme) {
 }
 
 export function applyThemePreference(preference = getThemePreference()) {
+  if (lockedToSystem) {
+    bindSystemListener('system')
+    return applyResolvedTheme(resolveTheme('system'))
+  }
   const pref = normalizePreference(preference)
+  bindSystemListener(pref)
   return applyResolvedTheme(resolveTheme(pref))
 }
 
@@ -59,8 +66,31 @@ export function cacheThemePreference(preference) {
 
 export function setThemePreference(preference) {
   const pref = cacheThemePreference(preference)
+  if (lockedToSystem) {
+    bindSystemListener('system')
+    return applyResolvedTheme(resolveTheme('system'))
+  }
   bindSystemListener(pref)
   return applyThemePreference(pref)
+}
+
+/** Force OS light/dark for setup + first-run wizard (does not change saved preference). */
+export function lockThemeToSystem() {
+  lockedToSystem = true
+  bindSystemListener('system')
+  return applyResolvedTheme(resolveTheme('system'))
+}
+
+/** Resume saved / profile theme after wizard completes. */
+export function unlockTheme() {
+  lockedToSystem = false
+  const pref = getThemePreference()
+  bindSystemListener(pref)
+  return applyThemePreference(pref)
+}
+
+export function isThemeLockedToSystem() {
+  return lockedToSystem
 }
 
 function bindSystemListener(preference = getThemePreference()) {
@@ -72,16 +102,15 @@ function bindSystemListener(preference = getThemePreference()) {
     mediaQuery.removeEventListener('change', mediaHandler)
     mediaHandler = null
   }
-  if (normalizePreference(preference) !== 'system') return
+  const pref = lockedToSystem ? 'system' : normalizePreference(preference)
+  if (pref !== 'system') return
   mediaHandler = () => applyResolvedTheme(resolveTheme('system'))
   mediaQuery.addEventListener('change', mediaHandler)
 }
 
 export function initTheme() {
-  const pref = getThemePreference()
-  applyThemePreference(pref)
-  bindSystemListener(pref)
-  return pref
+  // First paint: follow OS until App decides setup/wizard vs saved preference.
+  return lockThemeToSystem()
 }
 
 export const THEME_OPTIONS = [

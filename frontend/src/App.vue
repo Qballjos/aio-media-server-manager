@@ -21,6 +21,7 @@ import { useToasts } from './useToasts.js'
 import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInstall.js'
 import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
 import { migrateLocalVisualsIfNeeded } from './visualsProfile.js'
+import { lockThemeToSystem, unlockTheme } from './theme.js'
 
 const { toasts, showToast } = useToasts()
 const showPwaInstall = ref(false)
@@ -47,6 +48,7 @@ const hostArch = ref('')
 const isLoadingData = ref(false)
 const wizardCompleted = ref(true)
 const wizardStatusLoaded = ref(false)
+const authStatusKnown = ref(false)
 const wiringRunning = ref(false)
 const vpnLive = ref({})
 const cloudflareLive = ref({})
@@ -120,6 +122,7 @@ setUnauthorizedHandler(() => {
 })
 
 function onAuthStatus(data) {
+  authStatusKnown.value = true
   authStatus.value = data
   applySession(data)
   if (data?.authenticated) {
@@ -128,6 +131,7 @@ function onAuthStatus(data) {
 }
 
 async function onAuthSession(data) {
+  authStatusKnown.value = true
   authStatus.value = {
     setup_required: false,
     authenticated: true,
@@ -218,8 +222,37 @@ async function fetchWizardStatus() {
   }
 }
 
+function syncSetupTheme() {
+  // Until auth status is known, stay on OS theme (covers first-run + loading).
+  if (!authStatusKnown.value) {
+    lockThemeToSystem()
+    return
+  }
+  const setup = !!authStatus.value.setup_required
+  const auth = !!authStatus.value.authenticated
+  const wizardPending = auth && (!wizardStatusLoaded.value || !wizardCompleted.value)
+  if (setup || wizardPending) {
+    lockThemeToSystem()
+    return
+  }
+  unlockTheme()
+}
+
+watch(
+  () => [
+    authStatusKnown.value,
+    authStatus.value.setup_required,
+    authStatus.value.authenticated,
+    wizardCompleted.value,
+    wizardStatusLoaded.value,
+  ],
+  () => syncSetupTheme(),
+  { immediate: true },
+)
+
 async function onWizardDone() {
   wizardCompleted.value = true
+  unlockTheme()
   await router.replace({ name: 'home' })
   showToast('Setup finished. Catalog installs may continue in the background.', 'success')
   await refreshDashboard()

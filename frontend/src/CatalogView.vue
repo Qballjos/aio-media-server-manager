@@ -615,7 +615,7 @@ onUnmounted(() => {
               </span>
               <span v-if="backupStatus.schedule">
                 · last backup {{ formatUpdateWhen(backupStatus.last_backup_at) }}
-                <span v-if="backupStatus.last_error" style="color: #fbbf24;">(last attempt failed)</span>
+                <span v-if="backupStatus.last_error" class="text-warn">(last attempt failed)</span>
               </span>
             </p>
           </div>

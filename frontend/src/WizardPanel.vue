@@ -376,7 +376,7 @@ onUnmounted(() => {
 
 <template>
   <section class="wizard-shell animate-fade">
-    <div class="wizard-card">
+    <div class="wizard-card glass-card">
       <div class="wizard-glow"></div>
       <div class="wizard-header">
         <img
@@ -690,11 +690,6 @@ onUnmounted(() => {
 .wizard-card {
   width: min(640px, 100%);
   padding: clamp(1.25rem, 4vw, 2.25rem);
-  background: rgba(19, 23, 34, 0.65);
-  backdrop-filter: blur(14px);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
   position: relative;
   overflow: hidden;
   min-width: 0;
@@ -720,7 +715,7 @@ onUnmounted(() => {
   display: block;
   margin-bottom: 0.85rem;
   border: 1px solid var(--border-subtle);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-card);
 }
 .wizard-badge {
   display: inline-block;
@@ -773,9 +768,9 @@ onUnmounted(() => {
   box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.35);
 }
 .wizard-steps li.done {
-  color: #34d399;
-  border-color: rgba(16, 185, 129, 0.3);
-  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-success-fg);
+  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
+  background: var(--color-success-bg);
 }
 .wizard-body {
   display: flex;
@@ -820,7 +815,7 @@ onUnmounted(() => {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: #1e293b;
+  background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
@@ -846,10 +841,10 @@ onUnmounted(() => {
   place-items: center;
   font-weight: 700;
   font-size: 0.82rem;
-  color: #93c5fd;
-  border: 1px solid rgba(147, 197, 253, 0.4);
+  color: var(--color-info-fg);
+  border: 1px solid color-mix(in srgb, var(--color-info) 40%, transparent);
   text-decoration: none;
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-info-bg);
   flex-shrink: 0;
 }
 .wizard-dl {
@@ -941,7 +936,7 @@ onUnmounted(() => {
   min-width: 0;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #f3f4f6;
+  color: var(--text-main);
   overflow-wrap: anywhere;
 }
 .wizard-install-error {
@@ -949,7 +944,7 @@ onUnmounted(() => {
   margin-top: 0.2rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: #fca5a5;
+  color: var(--color-danger-fg);
 }
 .wizard-status {
   display: inline-flex;
@@ -968,24 +963,24 @@ onUnmounted(() => {
   background: currentColor;
 }
 .badge-running {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 .badge-failed {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
 }
 .badge-installing {
-  background: rgba(6, 182, 212, 0.12);
-  color: #38bdf8;
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  background: var(--color-info-bg);
+  color: var(--color-info-fg);
+  border: 1px solid color-mix(in srgb, var(--color-info) 35%, transparent);
 }
 .badge-inactive {
-  background: rgba(71, 85, 105, 0.15);
+  background: color-mix(in srgb, var(--text-dim) 16%, transparent);
   color: var(--text-muted);
-  border: 1px solid rgba(71, 85, 105, 0.2);
+  border: 1px solid color-mix(in srgb, var(--text-dim) 25%, transparent);
 }
 .wizard-actions {
   display: flex;
@@ -1007,9 +1002,9 @@ onUnmounted(() => {
   display: inline-block;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--spinner-track, rgba(148, 163, 184, 0.35));
   border-radius: 50%;
-  border-top-color: var(--color-primary-contrast);
+  border-top-color: var(--color-primary);
   animation: wizard-spin 0.8s linear infinite;
 }
 .spinner-sm {

@@ -1032,7 +1032,7 @@ onUnmounted(() => {
   box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
 }
 .home-app.is-sick .home-app-state {
-  color: #f87171;
+  color: var(--color-danger-fg);
 }
 .home-app-icon,
 .home-app-fallback {
@@ -1120,15 +1120,15 @@ onUnmounted(() => {
   border: 1px solid currentColor;
 }
 .home-status.is-available {
-  color: #34d399;
+  color: var(--color-success-fg);
 }
 .home-status.is-partial,
 .home-status.is-requested,
 .home-status.is-monitored {
-  color: #fbbf24;
+  color: var(--color-warning-fg);
 }
 .home-status.is-missing {
-  color: var(--text-muted);
+  color: var(--color-danger-fg);
 }
 .home-widgets {
   display: grid;
@@ -1414,8 +1414,7 @@ onUnmounted(() => {
   padding: 0.4rem 0.4rem 0.5rem;
   border: 1px solid var(--border-subtle);
   border-radius: 0.55rem;
-  background: color-mix(in srgb, var(--bg-surface-elevated, var(--bg-card)) 72%, transparent);
-  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--bg-surface-elevated, var(--bg-card)) 82%, transparent);
   display: flex;
   flex-direction: column;
   gap: 0.3rem;

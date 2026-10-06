@@ -1,84 +1,108 @@
-/* AIO docs — brand orange + warm slate across the whole Material chrome */
+/* AIO docs — match the manager UI (smokey glass dark / clear light + orange accent) */
 
 :root,
 [data-md-color-scheme="default"] {
+  --md-text-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --md-code-font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --md-primary-fg-color: #ea580c;
-  --md-primary-fg-color--light: #fb923c;
+  --md-primary-fg-color--light: #f97316;
   --md-primary-fg-color--dark: #c2410c;
-  --md-primary-bg-color: #fff7ed;
-  --md-primary-bg-color--light: #ffedd5;
-  --md-accent-fg-color: #f97316;
-  --md-accent-fg-color--transparent: rgba(249, 115, 22, 0.14);
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #f8fafc;
+  --md-accent-fg-color: #ea580c;
+  --md-accent-fg-color--transparent: rgba(234, 88, 12, 0.14);
   --md-typeset-a-color: #c2410c;
 
-  --md-default-fg-color: #1c1917;
-  --md-default-fg-color--light: #44403c;
-  --md-default-fg-color--lighter: #78716c;
-  --md-default-fg-color--lightest: #a8a29e;
-  --md-default-bg-color: #faf6f1;
-  --md-default-bg-color--light: #fffaf5;
-  --md-default-bg-color--lighter: #fff7ed;
+  --md-default-fg-color: #0f172a;
+  --md-default-fg-color--light: #475569;
+  --md-default-fg-color--lighter: #64748b;
+  --md-default-fg-color--lightest: #94a3b8;
+  --md-default-bg-color: #f4f6fb;
+  --md-default-bg-color--light: #eef2f7;
+  --md-default-bg-color--lighter: #e8edf5;
   --md-default-bg-color--lightest: #ffffff;
 
-  --md-code-bg-color: #fff1e6;
+  --md-code-bg-color: rgba(15, 23, 42, 0.06);
   --md-code-fg-color: #9a3412;
-  --md-footer-bg-color: #1c1410;
-  --md-footer-bg-color--dark: #120e0c;
-  --md-footer-fg-color: #fff7ed;
+  --md-footer-bg-color: #0b0f17;
+  --md-footer-bg-color--dark: #070a10;
+  --md-footer-fg-color: #f3f4f6;
   --md-footer-fg-color--light: #fdba74;
-  --md-footer-fg-color--lighter: #a8a29e;
+  --md-footer-fg-color--lighter: #9ca3af;
 
-  --aio-ink: #1c1917;
-  --aio-muted: #57534e;
-  --aio-surface: #faf6f1;
-  --aio-panel: #fffaf5;
-  --aio-card: #ffffff;
-  --aio-border: rgba(28, 25, 23, 0.1);
-  --aio-hero-spot: rgba(249, 115, 22, 0.18);
-  --aio-hero-spot-2: rgba(14, 165, 233, 0.1);
-  --aio-shadow: 0 18px 40px -24px rgba(28, 25, 23, 0.35);
+  --aio-ink: #0f172a;
+  --aio-muted: #334155;
+  --aio-surface: #f4f6fb;
+  --aio-panel: rgba(255, 255, 255, 0.92);
+  --aio-card: rgba(255, 255, 255, 0.96);
+  --aio-border: rgba(15, 23, 42, 0.12);
+  --aio-border-strong: rgba(15, 23, 42, 0.18);
+  --aio-hero-spot: rgba(249, 115, 22, 0.14);
+  --aio-hero-spot-2: rgba(14, 165, 233, 0.08);
+  --aio-shadow:
+    0 10px 28px rgba(15, 23, 42, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.85) inset;
   --aio-nav-active: rgba(234, 88, 12, 0.12);
+  --aio-header-bg: rgba(255, 255, 255, 0.9);
+  --aio-header-fg: #0f172a;
+  --aio-tabs-bg: rgba(255, 255, 255, 0.82);
+  --aio-glass-blur: 18px;
+  --aio-app-bg:
+    radial-gradient(circle at 10% 20%, #f8fafc 0%, #eef2f7 55%, #e8edf5 100%);
+  --aio-button-gradient: linear-gradient(135deg, #c2410c 0%, #f97316 100%);
 }
 
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #fb923c;
-  --md-primary-fg-color--light: #fdba74;
+  --md-text-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --md-code-font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --md-primary-fg-color: #f97316;
+  --md-primary-fg-color--light: #fb923c;
   --md-primary-fg-color--dark: #ea580c;
-  --md-primary-bg-color: #1c1410;
-  --md-accent-fg-color: #fdba74;
-  --md-accent-fg-color--transparent: rgba(251, 146, 60, 0.16);
-  --md-typeset-a-color: #fdba74;
+  --md-primary-bg-color: #0b0f17;
+  --md-accent-fg-color: #fb923c;
+  --md-accent-fg-color--transparent: rgba(249, 115, 22, 0.16);
+  --md-typeset-a-color: #fb923c;
 
-  --md-default-fg-color: #f5f5f4;
-  --md-default-fg-color--light: #d6d3d1;
-  --md-default-fg-color--lighter: #a8a29e;
-  --md-default-fg-color--lightest: #78716c;
-  --md-default-bg-color: #0f1218;
-  --md-default-bg-color--light: #151a22;
-  --md-default-bg-color--lighter: #1a2230;
-  --md-default-bg-color--lightest: #222b3a;
+  --md-default-fg-color: #f3f4f6;
+  --md-default-fg-color--light: #9ca3af;
+  --md-default-fg-color--lighter: #6b7280;
+  --md-default-fg-color--lightest: #4b5563;
+  --md-default-bg-color: #0b0f17;
+  --md-default-bg-color--light: #121722;
+  --md-default-bg-color--lighter: #181e2a;
+  --md-default-bg-color--lightest: #1e2533;
 
-  --md-code-bg-color: #1a1410;
+  --md-code-bg-color: rgba(36, 36, 40, 0.85);
   --md-code-fg-color: #fdba74;
-  --md-footer-bg-color: #0a0c10;
-  --md-footer-bg-color--dark: #07080b;
-  --md-footer-fg-color: #f5f5f4;
+  --md-footer-bg-color: #070a10;
+  --md-footer-bg-color--dark: #05070c;
+  --md-footer-fg-color: #f3f4f6;
   --md-footer-fg-color--light: #fdba74;
-  --md-footer-fg-color--lighter: #a8a29e;
+  --md-footer-fg-color--lighter: #9ca3af;
 
-  --aio-ink: #f5f5f4;
-  --aio-muted: #a8a29e;
-  --aio-surface: #0f1218;
-  --aio-panel: #151a22;
-  --aio-card: rgba(30, 36, 48, 0.92);
+  --aio-ink: #f8fafc;
+  --aio-muted: #9ca3af;
+  --aio-surface: #0b0f17;
+  --aio-panel: rgba(30, 30, 34, 0.92);
+  --aio-card: rgba(36, 36, 40, 0.94);
   --aio-border: rgba(255, 255, 255, 0.1);
-  --aio-hero-spot: rgba(249, 115, 22, 0.24);
-  --aio-hero-spot-2: rgba(56, 189, 248, 0.12);
-  --aio-shadow: 0 22px 48px -20px rgba(0, 0, 0, 0.55);
-  --aio-nav-active: rgba(251, 146, 60, 0.16);
+  --aio-border-strong: rgba(255, 255, 255, 0.16);
+  --aio-hero-spot: rgba(249, 115, 22, 0.2);
+  --aio-hero-spot-2: rgba(56, 189, 248, 0.1);
+  --aio-shadow:
+    0 10px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --aio-nav-active: rgba(249, 115, 22, 0.16);
+  --aio-header-bg: rgba(40, 40, 44, 0.72);
+  --aio-header-fg: #f3f4f6;
+  --aio-tabs-bg: rgba(36, 36, 40, 0.78);
+  --aio-glass-blur: 20px;
+  --aio-app-bg:
+    radial-gradient(circle at 12% 18%, rgba(42, 28, 18, 0.95) 0%, rgba(11, 15, 23, 1) 52%, rgba(8, 10, 16, 1) 100%);
+  --aio-button-gradient: linear-gradient(135deg, #ea580c 0%, #fb923c 100%);
 }
 
-/* Full-page atmosphere (not only the article column) */
+/* Full-page atmosphere — same radial wash as the app shell */
 body,
 .md-container,
 .md-main,
@@ -90,54 +114,68 @@ body,
 
 body {
   background:
-    radial-gradient(1000px 480px at 8% -8%, var(--aio-hero-spot), transparent 55%),
-    radial-gradient(800px 420px at 96% 0%, var(--aio-hero-spot-2), transparent 50%),
-    linear-gradient(180deg, var(--aio-surface), color-mix(in srgb, var(--aio-surface) 70%, var(--md-default-bg-color--lightest)) 45%, var(--aio-surface));
+    radial-gradient(ellipse at 80% 0%, var(--aio-hero-spot), transparent 45%),
+    var(--aio-app-bg);
   background-attachment: fixed;
+  color: var(--aio-ink);
 }
 
 .md-main__inner {
   margin-top: 0.5rem;
 }
 
-/* Header + tabs */
+/* Header + tabs — glass bar like the app nav, not solid orange chrome */
 .md-header {
-  background: linear-gradient(135deg, #c2410c 0%, #ea580c 48%, #f97316 100%);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08), 0 12px 28px -16px rgba(0, 0, 0, 0.45);
-}
-
-[data-md-color-scheme="slate"] .md-header {
-  background: linear-gradient(135deg, #7c2d12 0%, #c2410c 45%, #ea580c 100%);
+  background: var(--aio-header-bg);
+  color: var(--aio-header-fg);
+  backdrop-filter: blur(var(--aio-glass-blur));
+  -webkit-backdrop-filter: blur(var(--aio-glass-blur));
+  box-shadow: var(--aio-shadow);
+  border-bottom: 1px solid var(--aio-border);
 }
 
 .md-tabs {
-  background: color-mix(in srgb, #9a3412 35%, #ea580c);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: var(--aio-tabs-bg);
+  backdrop-filter: blur(calc(var(--aio-glass-blur) - 4px));
+  -webkit-backdrop-filter: blur(calc(var(--aio-glass-blur) - 4px));
+  box-shadow: none;
+  border-bottom: 1px solid var(--aio-border);
+  color: var(--aio-header-fg);
 }
 
-[data-md-color-scheme="slate"] .md-tabs {
-  background: color-mix(in srgb, #431407 50%, #c2410c);
+.md-tabs__link {
+  color: color-mix(in srgb, var(--aio-header-fg) 72%, transparent);
 }
 
 .md-tabs__link--active,
 .md-tabs__link:focus,
 .md-tabs__link:hover {
-  color: #fff7ed;
+  color: var(--md-primary-fg-color);
 }
 
 .md-header__title,
 .md-header__button,
 .md-search__input,
 .md-search__input + .md-search__icon {
-  color: #fff7ed;
+  color: var(--aio-header-fg);
+}
+
+.md-header__button:hover {
+  opacity: 0.85;
 }
 
 .md-search__input {
-  background: rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, var(--aio-panel) 80%, transparent);
+  border: 1px solid var(--aio-border);
+  border-radius: 0.65rem;
 }
 
 .md-search__input::placeholder {
-  color: rgba(255, 247, 237, 0.72);
+  color: var(--aio-muted);
+}
+
+.md-search__form {
+  border-radius: 0.65rem;
 }
 
 /* Sidebars + navigation */
@@ -152,7 +190,7 @@ body {
 .md-nav__link--active:hover {
   color: var(--md-primary-fg-color);
   background: var(--aio-nav-active);
-  border-radius: 0.45rem;
+  border-radius: 0.55rem;
   font-weight: 650;
 }
 
@@ -196,11 +234,11 @@ body {
   border: 1px solid var(--aio-border);
   border-radius: 0.85rem;
   overflow: hidden;
-  box-shadow: 0 10px 28px -24px rgba(28, 25, 23, 0.4);
+  box-shadow: var(--aio-shadow);
 }
 
 .md-typeset table:not([class]) th {
-  background: color-mix(in srgb, var(--md-primary-fg-color) 14%, var(--aio-card));
+  background: color-mix(in srgb, var(--md-primary-fg-color) 12%, var(--aio-card));
   color: var(--aio-ink);
   border-color: var(--aio-border);
 }
@@ -216,21 +254,29 @@ body {
 
 .md-typeset .md-button {
   border-radius: 0.7rem;
+  border-color: var(--aio-border-strong);
+  color: var(--aio-ink);
+  background: var(--aio-panel);
+}
+
+.md-typeset .md-button:hover {
+  border-color: color-mix(in srgb, var(--md-primary-fg-color) 45%, var(--aio-border));
 }
 
 .md-typeset .md-button--primary {
-  background: linear-gradient(135deg, #ea580c, #f97316);
+  background: var(--aio-button-gradient);
   border: none;
   color: #fff;
   box-shadow: 0 10px 22px -14px rgba(234, 88, 12, 0.8);
 }
 
-/* Admonitions — pull into brand palette */
+/* Admonitions — glass panels with orange accent */
 .md-typeset .admonition,
 .md-typeset details {
   border-radius: 0.85rem;
   border-color: color-mix(in srgb, var(--md-primary-fg-color) 35%, var(--aio-border));
-  background: color-mix(in srgb, var(--aio-card) 88%, #fdba74);
+  background: var(--aio-card);
+  box-shadow: var(--aio-shadow);
 }
 
 .md-typeset .admonition-title,
@@ -257,7 +303,7 @@ body {
 .md-typeset .note > summary,
 .md-typeset .info > .admonition-title,
 .md-typeset .info > summary {
-  background: color-mix(in srgb, var(--md-primary-fg-color) 16%, transparent);
+  background: color-mix(in srgb, var(--md-primary-fg-color) 14%, transparent);
   color: var(--aio-ink);
 }
 
@@ -272,26 +318,34 @@ body {
   background-color: var(--md-primary-fg-color);
 }
 
+/* Code blocks */
+.md-typeset code,
+.md-typeset pre {
+  border-radius: 0.55rem;
+}
+
+.md-typeset pre > code {
+  border: 1px solid var(--aio-border);
+}
+
 /* Footer */
 .md-footer {
   background: var(--md-footer-bg-color);
-  border-top: 1px solid color-mix(in srgb, var(--md-primary-fg-color) 35%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--md-primary-fg-color) 28%, transparent);
 }
 
 .md-footer-meta {
   background: var(--md-footer-bg-color--dark);
 }
 
-/* Home hero */
+/* Home hero — glass card like dashboard panels */
 .aio-hero {
   position: relative;
   margin: 0.25rem 0 2rem;
   padding: 1.75rem 1.6rem 1.6rem;
   border: 1px solid var(--aio-border);
   border-radius: 1.15rem;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--aio-card) 82%, #fdba74) 0%, var(--aio-card) 55%),
-    var(--aio-card);
+  background: var(--aio-card);
   box-shadow: var(--aio-shadow);
   overflow: hidden;
   animation: aio-rise 0.55s ease-out both;
@@ -355,13 +409,14 @@ body {
 
 .aio-hero__actions .md-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 22px -12px rgba(234, 88, 12, 0.7);
+  box-shadow: 0 10px 22px -12px rgba(234, 88, 12, 0.55);
 }
 
 .aio-hero__actions .md-button--primary {
-  background: linear-gradient(135deg, #ea580c, #f97316);
+  background: var(--aio-button-gradient);
   border: none;
   color: #fff;
+  -webkit-text-fill-color: #fff;
 }
 
 /* Path / feature cards */
@@ -370,7 +425,7 @@ body {
   border: 1px solid var(--aio-border);
   border-radius: 1rem;
   background: var(--aio-card);
-  box-shadow: 0 10px 28px -22px rgba(28, 25, 23, 0.45);
+  box-shadow: var(--aio-shadow);
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   animation: aio-rise 0.55s ease-out both;
 }
@@ -394,7 +449,7 @@ body {
 .md-typeset .grid.cards > ol > li:hover {
   transform: translateY(-3px);
   border-color: color-mix(in srgb, var(--md-accent-fg-color) 55%, var(--aio-border));
-  box-shadow: 0 18px 34px -20px rgba(234, 88, 12, 0.35);
+  box-shadow: 0 18px 34px -20px rgba(234, 88, 12, 0.28);
 }
 
 .md-typeset .grid.cards .lg {
@@ -406,7 +461,7 @@ body {
   padding: 1rem 1.15rem;
   border-radius: 0.9rem;
   border: 1px solid color-mix(in srgb, var(--md-primary-fg-color) 35%, var(--aio-border));
-  background: color-mix(in srgb, var(--md-accent-fg-color--transparent) 80%, var(--aio-card));
+  background: color-mix(in srgb, var(--md-accent-fg-color--transparent) 70%, var(--aio-card));
 }
 
 .aio-callout strong {

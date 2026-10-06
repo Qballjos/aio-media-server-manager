@@ -34,15 +34,29 @@
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
   padding: calc(0.85rem + env(safe-area-inset-top, 0px)) clamp(0.85rem, 3vw, 2rem) 0.85rem;
-  background: var(--nav-bg);
-  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.1);
-  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.1);
+  background: transparent;
   border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
   z-index: 50;
   min-width: 0;
   isolation: isolate;
+}
+
+.top-nav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--nav-bg);
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.1);
+}
+
+.top-nav > * {
+  position: relative;
+  z-index: 1;
 }
 
 .nav-brand {
@@ -167,13 +181,13 @@ button.metric-pill {
 }
 
 .status-pill.is-ok {
-  color: #34d399;
-  border-color: rgba(34, 197, 94, 0.55);
+  color: var(--color-success-fg);
+  border-color: color-mix(in srgb, var(--color-success) 55%, transparent);
 }
 
 .status-pill.is-bad {
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.58);
+  color: var(--color-danger-fg);
+  border-color: color-mix(in srgb, var(--color-danger) 55%, transparent);
 }
 
 a.status-pill {
@@ -181,8 +195,8 @@ a.status-pill {
 }
 
 .metric-pill.is-updates {
-  color: #86efac;
-  border-color: rgba(134, 239, 172, 0.4);
+  color: var(--color-success-fg);
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
   text-decoration: none;
 }
 
@@ -263,7 +277,7 @@ a.status-pill {
 }
 
 .btn-logout:hover {
-  color: #f87171;
+  color: var(--color-danger-fg);
 }
 
 /* Content — wide shell on large displays */
@@ -286,15 +300,14 @@ a.status-pill {
   }
 }
 
-/* Glass Card */
+/* Glass Card — blur/shine live on a background layer so text stays sharp */
 .glass-card {
-  background: var(--bg-card);
-  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.12);
-  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.12);
+  background: transparent;
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   position: relative;
   overflow: hidden;
+  isolation: isolate;
   transition: border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
   min-width: 0;
   width: 100%;
@@ -306,10 +319,34 @@ a.status-pill {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--bg-card);
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.12);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.12);
+}
+
+.glass-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   border-radius: inherit;
   pointer-events: none;
   background: var(--glass-shine, none);
-  opacity: 1;
+}
+
+.glass-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Keep decorative glows behind text (absolute, not promoted above the glass layer). */
+.glass-card > .card-glow,
+.glass-card > .wizard-glow {
+  position: absolute;
+  z-index: 0;
 }
 
 .service-card.glass-card,
@@ -342,7 +379,7 @@ a.status-pill {
   width: 100%;
   max-width: min(440px, 100%);
   padding: clamp(1.15rem, 4vw, 2.25rem);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--glass-shadow, var(--shadow-card));
 }
 
 .card-glow {
@@ -464,15 +501,15 @@ a.status-pill {
 }
 
 .storage-color {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
 }
 
 .refresh-color {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 
 .stat-label {
@@ -489,8 +526,8 @@ a.status-pill {
 }
 
 .text-glow-cyan {
-  color: #22d3ee;
-  text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
+  color: var(--color-info-fg);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--color-info) 40%, transparent);
 }
 
 .text-glow-purple,
@@ -500,16 +537,16 @@ a.status-pill {
 }
 
 .text-emerald {
-  color: #34d399;
+  color: var(--color-success-fg);
 }
 
 .text-warn {
-  color: #fbbf24;
+  color: var(--color-warning-fg);
 }
 
 .status-indicator-tag {
   font-size: 0.85rem;
-  color: #fbbf24;
+  color: var(--color-warning-fg);
   letter-spacing: 0.02em;
 }
 
@@ -723,14 +760,18 @@ a.status-pill {
   border-radius: 5px;
 }
 
-.app-badge.indexers { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.1); }
-.app-badge.automation { color: #818cf8; border-color: rgba(129, 140, 248, 0.3); background: rgba(129, 140, 248, 0.1); }
-.app-badge.downloading { color: #34d399; border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.1); }
-.app-badge.media { color: #f472b6; border-color: rgba(244, 114, 182, 0.3); background: rgba(244, 114, 182, 0.1); }
-.app-badge.requests { color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.1); }
-.app-badge.subtitles { color: #c084fc; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.1); }
-.app-badge.optimization { color: #22d3ee; border-color: rgba(34, 211, 238, 0.3); background: rgba(34, 211, 238, 0.1); }
-.app-badge.maintenance { color: #fb923c; border-color: rgba(251, 146, 60, 0.3); background: rgba(251, 146, 60, 0.1); }
+.app-badge.indexers { color: var(--color-info-fg); border-color: color-mix(in srgb, var(--color-info) 35%, transparent); background: var(--color-info-bg); }
+.app-badge.automation { color: #6366f1; border-color: rgba(99, 102, 241, 0.35); background: rgba(99, 102, 241, 0.12); }
+.app-badge.downloading { color: var(--color-success-fg); border-color: color-mix(in srgb, var(--color-success) 35%, transparent); background: var(--color-success-bg); }
+.app-badge.media { color: #db2777; border-color: rgba(219, 39, 119, 0.3); background: rgba(219, 39, 119, 0.1); }
+.app-badge.requests { color: var(--color-warning-fg); border-color: color-mix(in srgb, var(--color-warning) 35%, transparent); background: var(--color-warning-bg); }
+.app-badge.subtitles { color: #7c3aed; border-color: rgba(124, 58, 237, 0.3); background: rgba(124, 58, 237, 0.1); }
+.app-badge.optimization { color: var(--color-info-fg); border-color: color-mix(in srgb, var(--color-info) 35%, transparent); background: var(--color-info-bg); }
+.app-badge.maintenance { color: var(--color-primary); border-color: color-mix(in srgb, var(--color-primary) 35%, transparent); background: rgba(var(--color-primary-rgb), 0.12); }
+
+[data-theme="dark"] .app-badge.automation { color: #a5b4fc; border-color: rgba(129, 140, 248, 0.3); background: rgba(129, 140, 248, 0.1); }
+[data-theme="dark"] .app-badge.media { color: #f9a8d4; border-color: rgba(244, 114, 182, 0.3); background: rgba(244, 114, 182, 0.1); }
+[data-theme="dark"] .app-badge.subtitles { color: #d8b4fe; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.1); }
 
 .service-name-row {
   display: flex;
@@ -753,9 +794,9 @@ a.status-pill {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #86efac;
-  border: 1px solid rgba(134, 239, 172, 0.35);
-  background: rgba(22, 163, 74, 0.15);
+  color: var(--color-success-fg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent);
+  background: var(--color-success-bg);
   border-radius: 999px;
   padding: 0.15rem 0.45rem;
   white-space: nowrap;
@@ -770,15 +811,15 @@ a.status-pill {
   flex-shrink: 0;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #93c5fd;
-  border: 1px solid rgba(147, 197, 253, 0.35);
+  color: var(--color-info-fg);
+  border: 1px solid color-mix(in srgb, var(--color-info) 40%, transparent);
   text-decoration: none;
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-info-bg);
 }
 
 .help-btn:hover {
-  color: #1d4ed8;
-  border-color: #93c5fd;
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
 }
 
 [data-theme="dark"] .help-btn:hover {
@@ -809,7 +850,7 @@ a.status-pill {
 }
 
 .port-link {
-  color: #38bdf8;
+  color: var(--color-info-fg);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -818,7 +859,7 @@ a.status-pill {
 }
 
 .port-link:hover {
-  color: #7dd3fc;
+  color: var(--color-info-fg);
   text-decoration: underline;
 }
 
@@ -834,21 +875,21 @@ a.status-pill {
 }
 
 .badge-running {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 
 .badge-stopped {
-  background: rgba(100, 116, 139, 0.15);
+  background: color-mix(in srgb, var(--text-dim) 16%, transparent);
   color: var(--text-muted);
-  border: 1px solid rgba(100, 116, 139, 0.35);
+  border: 1px solid color-mix(in srgb, var(--text-dim) 30%, transparent);
 }
 
 .badge-failed {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
 }
 
 .badge-inactive {
@@ -930,33 +971,33 @@ a.status-pill {
 }
 
 .btn-start {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border-color: rgba(16, 185, 129, 0.3);
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 
 .btn-start:hover {
-  background: rgba(16, 185, 129, 0.25);
+  background: color-mix(in srgb, var(--color-success) 22%, transparent);
 }
 
 .btn-stop {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.3);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
 }
 
 .btn-stop:hover {
-  background: rgba(239, 68, 68, 0.25);
+  background: color-mix(in srgb, var(--color-danger) 22%, transparent);
 }
 
 .btn-restart {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border-color: rgba(245, 158, 11, 0.3);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+  border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
 }
 
 .btn-restart:hover {
-  background: rgba(245, 158, 11, 0.25);
+  background: color-mix(in srgb, var(--color-warning) 22%, transparent);
 }
 
 .btn-webui {
@@ -1033,7 +1074,7 @@ a.status-pill {
 }
 
 .card-menu button.danger {
-  color: #fca5a5;
+  color: var(--color-danger-fg);
 }
 
 .card-menu button:disabled {
@@ -1259,7 +1300,7 @@ a.status-pill {
 .link-btn {
   background: none;
   border: none;
-  color: #93c5fd;
+  color: var(--color-info-fg);
   cursor: pointer;
   font: inherit;
   padding: 0;
@@ -1489,9 +1530,9 @@ a.status-pill {
   display: inline-block;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--spinner-track, rgba(148, 163, 184, 0.35));
   border-radius: 50%;
-  border-top-color: var(--text-heading);
+  border-top-color: var(--color-primary);
   animation: spin 0.8s linear infinite;
 }
 

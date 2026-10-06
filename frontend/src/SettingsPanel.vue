@@ -2605,7 +2605,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-subtle);
 }
 .backup-warn {
-  color: #fbbf24;
+  color: var(--color-warning-fg);
 }
 .backup-job {
   display: grid;
