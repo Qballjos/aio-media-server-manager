@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api/branding", tags=["Branding"])
 class BrandingPatch(BaseModel):
     title: Optional[str] = Field(default=None, max_length=branding_mod.MAX_TITLE_LEN)
     accent_color: Optional[str] = Field(default=None, max_length=16)
+    login_message: Optional[str] = Field(default=None, max_length=branding_mod.MAX_LOGIN_MESSAGE_LEN)
 
 
 def _ensure_authenticated(request: Request) -> str:
@@ -48,7 +49,7 @@ async def get_branding_file(slot: str):
 @router.patch("", summary="Update brand title and/or accent color")
 async def patch_branding(body: BrandingPatch, request: Request) -> dict:
     _ensure_authenticated(request)
-    if body.title is None and body.accent_color is None:
+    if body.title is None and body.accent_color is None and body.login_message is None:
         raise HTTPException(status_code=400, detail="No branding fields to update.")
     if body.title is not None:
         branding_mod.set_title(body.title)
@@ -57,6 +58,8 @@ async def patch_branding(body: BrandingPatch, request: Request) -> dict:
             branding_mod.set_accent(body.accent_color)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if body.login_message is not None:
+        branding_mod.set_login_message(body.login_message)
     return branding_mod.public_branding()
 
 

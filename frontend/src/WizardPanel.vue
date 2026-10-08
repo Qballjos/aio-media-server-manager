@@ -714,8 +714,8 @@ onUnmounted(() => {
   object-fit: cover;
   display: block;
   margin-bottom: 0.85rem;
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-card);
+  border: none;
+  box-shadow: none;
 }
 .wizard-badge {
   display: inline-block;

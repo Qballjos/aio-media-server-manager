@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_TITLE = "AIO Media Server Manager"
 DEFAULT_ACCENT = "#f97316"
 MAX_TITLE_LEN = 64
+MAX_LOGIN_MESSAGE_LEN = 280
 MAX_BYTES = 2 * 1024 * 1024
 META_NAME = "branding.json"
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -117,6 +118,7 @@ def _load_meta() -> dict[str, Any]:
     return {
         "title": title[:MAX_TITLE_LEN],
         "accent_color": accent,
+        "login_message": normalize_login_message(data.get("login_message")),
         "files": files,
     }
 
@@ -146,6 +148,20 @@ def set_accent(value: str | None) -> str:
     meta["accent_color"] = normalize_accent(value, allow_default_token=True)
     _save_meta(meta)
     return meta["accent_color"]
+
+
+def normalize_login_message(value: str | None) -> str:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines = [" ".join(line.split()) for line in text.split("\n")]
+    text = "\n".join(line for line in lines if line).strip()
+    return text[:MAX_LOGIN_MESSAGE_LEN]
+
+
+def set_login_message(value: str | None) -> str:
+    meta = _load_meta()
+    meta["login_message"] = normalize_login_message(value)
+    _save_meta(meta)
+    return meta["login_message"]
 
 
 def _detect_image(data: bytes) -> tuple[str, str] | None:
@@ -215,6 +231,7 @@ def public_branding() -> dict[str, Any]:
         "header_url": slots_out["header"]["url"],
         "logo_url": slots_out["logo"]["url"],
         "favicon_url": slots_out["favicon"]["url"],
+        "login_message": normalize_login_message(meta.get("login_message")),
         "slots": slots_out,
     }
 

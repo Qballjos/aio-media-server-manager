@@ -13,6 +13,7 @@ export const brandHeaderUrl = ref(DEFAULT_LOGO)
 export const brandLogoUrl = ref(DEFAULT_LOGO)
 export const brandFaviconUrl = ref(DEFAULT_LOGO)
 export const brandAccent = ref(DEFAULT_ACCENT)
+export const brandLoginMessage = ref('')
 export const brandSlots = ref({})
 
 export const ACCENT_PRESETS = [
@@ -126,6 +127,7 @@ export function applyBranding(data) {
   brandLogoUrl.value = logo
   brandFaviconUrl.value = favicon
   brandSlots.value = data?.slots || {}
+  brandLoginMessage.value = String(data?.login_message || '').trim()
   applyAccentColor(accent)
 
   if (typeof document === 'undefined') return

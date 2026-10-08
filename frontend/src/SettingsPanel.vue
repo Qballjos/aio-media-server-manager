@@ -91,6 +91,7 @@ const form = ref({
   update_day_of_month: 1,
   brand_title: 'AIO Media Server Manager',
   accent_color: DEFAULT_ACCENT,
+  login_message: '',
 })
 const branding = ref({
   title: 'AIO Media Server Manager',
@@ -270,6 +271,7 @@ function applyBrandingPayload(data) {
   }
   form.value.brand_title = branding.value.title
   form.value.accent_color = branding.value.accent_color
+  form.value.login_message = payload.login_message || ''
   applyBranding(payload)
 }
 
@@ -278,6 +280,31 @@ function normalizeAccentInput(value) {
   if (!text) return DEFAULT_ACCENT
   if (!text.startsWith('#')) text = `#${text}`
   return text.toLowerCase()
+}
+
+async function saveLoginMessage() {
+  saving.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const res = await apiRequest('/api/branding', {
+      method: 'PATCH',
+      body: JSON.stringify({ login_message: form.value.login_message || '' }),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not save login message.')
+      return
+    }
+    applyBrandingPayload(data)
+    notice.value = form.value.login_message.trim()
+      ? 'Login message saved.'
+      : 'Login message cleared.'
+  } catch (err) {
+    error.value = err.message || 'Could not save login message.'
+  } finally {
+    saving.value = false
+  }
 }
 
 async function saveBrandTitle() {
@@ -2227,6 +2254,26 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'homepage'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
+          <h3>Login message</h3>
+          <p>Shown on the sign-in screen under the logo. Leave it empty to hide the line.</p>
+        </div>
+        <form class="form-stack" @submit.prevent="saveLoginMessage">
+          <label class="ui-field">Personal message
+            <textarea
+              v-model="form.login_message"
+              class="ui-input"
+              maxlength="280"
+              rows="3"
+              placeholder="Welcome home"
+            />
+          </label>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">
+            {{ saving ? 'Saving…' : 'Save message' }}
+          </button>
+        </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
           <h3>Jellyfin API key</h3>
           <p>
             Home → Recently added uses this key. Create one in Jellyfin Dashboard → API Keys
@@ -2697,8 +2744,8 @@ onBeforeUnmount(() => {
   height: 56px;
   border-radius: 12px;
   object-fit: cover;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  background: transparent;
+  border: none;
   flex-shrink: 0;
 }
 .brand-asset-copy {

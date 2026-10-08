@@ -123,6 +123,7 @@ onUnmounted(() => {
           <button type="button" class="btn-icon" title="Close" @click="closeHealthModal">×</button>
         </div>
         <div class="health-body">
+          <div class="health-charts">
           <article class="health-chart-card">
             <div class="health-chart-head">
               <span>CPU</span>
@@ -163,6 +164,7 @@ onUnmounted(() => {
               <path :d="diskChart.line" class="health-line disk"></path>
             </svg>
           </article>
+          </div>
           <article class="health-apps-card">
             <div class="health-chart-head">
               <span>Applications</span>
