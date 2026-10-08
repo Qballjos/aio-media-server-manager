@@ -3,24 +3,24 @@
 :root,
 [data-theme="dark"] {
   --bg-base: #0b0f17;
-  /* Smokey grey glass — opaque enough that text stays readable */
-  --bg-card: rgba(42, 42, 46, 0.82);
-  --bg-surface: rgba(36, 36, 40, 0.78);
-  --bg-surface-elevated: rgba(52, 52, 56, 0.86);
-  --bg-input: rgba(30, 30, 34, 0.9);
+  /* Smokey grey glass — translucent so wallpaper shows through */
+  --bg-card: rgba(48, 48, 52, 0.58);
+  --bg-surface: rgba(42, 42, 46, 0.48);
+  --bg-surface-elevated: rgba(56, 56, 60, 0.55);
+  --bg-input: rgba(36, 36, 40, 0.78);
   --app-bg: radial-gradient(circle at 12% 18%, rgba(42, 28, 18, 0.95) 0%, rgba(11, 15, 23, 1) 52%, rgba(8, 10, 16, 1) 100%);
-  --nav-bg: rgba(32, 32, 36, 0.88);
-  --pill-bg: rgba(48, 48, 52, 0.72);
-  --modal-bg: rgba(28, 28, 32, 0.94);
+  --nav-bg: rgba(40, 40, 44, 0.62);
+  --pill-bg: rgba(52, 52, 56, 0.52);
+  --modal-bg: rgba(32, 32, 36, 0.88);
   --switch-track: rgba(82, 82, 88, 0.72);
-  --menu-bg: rgba(34, 34, 38, 0.94);
-  --overlay-soft: rgba(22, 22, 26, 0.72);
+  --menu-bg: rgba(38, 38, 42, 0.82);
+  --overlay-soft: rgba(28, 28, 32, 0.55);
   --glass-blur: 20px;
   --glass-shine: none;
   --glass-shadow: 0 10px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  --border-subtle: rgba(255, 255, 255, 0.12);
-  --border-strong: rgba(255, 255, 255, 0.2);
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.16);
   --border-hover: rgba(249, 115, 22, 0.35);
   --border-active: #f97316;
 
@@ -64,32 +64,33 @@
 
 [data-theme="light"] {
   --bg-base: #f4f6fb;
-  /* Clear glass — keep panels opaque enough for readable ink */
-  --bg-surface: rgba(255, 255, 255, 0.86);
-  --bg-surface-elevated: rgba(255, 255, 255, 0.92);
-  --bg-card: rgba(255, 255, 255, 0.88);
-  --bg-input: rgba(255, 255, 255, 0.96);
+  /* Clear glass — translucent with soft top shine */
+  --bg-surface: rgba(255, 255, 255, 0.32);
+  --bg-surface-elevated: rgba(255, 255, 255, 0.38);
+  --bg-card: rgba(255, 255, 255, 0.34);
+  --bg-input: rgba(255, 255, 255, 0.55);
   --app-bg: radial-gradient(circle at 10% 20%, #f8fafc 0%, #eef2f7 55%, #e8edf5 100%);
-  --nav-bg: rgba(255, 255, 255, 0.86);
-  --pill-bg: rgba(248, 250, 252, 0.92);
-  --modal-bg: rgba(255, 255, 255, 0.96);
+  --nav-bg: rgba(255, 255, 255, 0.42);
+  --pill-bg: rgba(255, 255, 255, 0.45);
+  --modal-bg: rgba(255, 255, 255, 0.78);
   --switch-track: rgba(148, 163, 184, 0.55);
-  --menu-bg: rgba(255, 255, 255, 0.96);
-  --overlay-soft: rgba(248, 250, 252, 0.8);
+  --menu-bg: rgba(255, 255, 255, 0.72);
+  --overlay-soft: rgba(255, 255, 255, 0.45);
   --glass-blur: 18px;
   --glass-shine: linear-gradient(
     165deg,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.12) 28%,
-    transparent 62%
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 255, 255, 0.22) 28%,
+    rgba(255, 255, 255, 0.04) 55%,
+    transparent 72%
   );
   --glass-shadow:
-    0 8px 28px rgba(15, 23, 42, 0.08),
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 -1px 0 rgba(15, 23, 42, 0.05) inset;
+    0 8px 28px rgba(15, 23, 42, 0.07),
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 -1px 0 rgba(15, 23, 42, 0.04) inset;
 
-  --border-subtle: rgba(15, 23, 42, 0.12);
-  --border-strong: rgba(15, 23, 42, 0.2);
+  --border-subtle: rgba(15, 23, 42, 0.1);
+  --border-strong: rgba(15, 23, 42, 0.16);
   --border-hover: rgba(234, 88, 12, 0.4);
   --border-active: #ea580c;
 
@@ -887,6 +888,8 @@ textarea.ui-input::placeholder {
 
 .ui-btn,
 .wizard-btn {
+  position: relative;
+  isolation: isolate;
   min-height: 2.6rem;
   padding: 0.7rem 1.15rem;
   border-radius: 8px;
@@ -898,7 +901,7 @@ textarea.ui-input::placeholder {
   justify-content: center;
   gap: 0.45rem;
   font-family: inherit;
-  transition: all 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s, border-color 0.2s, color 0.2s;
 }
 
 .ui-btn-primary,
@@ -907,14 +910,39 @@ textarea.ui-input::placeholder {
   background: var(--gradient-primary);
   border: none;
   color: var(--color-primary-contrast);
-  box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.35);
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.28);
+  z-index: 0;
+}
+
+/* Soft orange glow behind the button face (not over the label). */
+.ui-btn-primary::after,
+.wizard-btn-main::after,
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(var(--color-primary-rgb), 0.7);
+  filter: blur(10px);
+  transform: translateY(5px) scale(0.92);
+  opacity: 0.55;
+  z-index: -1;
+  pointer-events: none;
 }
 
 .ui-btn-primary:hover:not(:disabled),
 .wizard-btn-main:hover:not(:disabled),
 .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.1);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.38);
+}
+
+.ui-btn-primary:hover:not(:disabled)::after,
+.wizard-btn-main:hover:not(:disabled)::after,
+.btn-primary:hover:not(:disabled)::after {
+  opacity: 0.75;
+  filter: blur(12px);
+  transform: translateY(6px) scale(0.94);
 }
 
 .ui-btn-ghost,
@@ -946,6 +974,12 @@ textarea.ui-input::placeholder {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+.ui-btn-primary:disabled::after,
+.wizard-btn-main:disabled::after,
+.btn-primary:disabled::after {
+  opacity: 0;
 }
 
 .ui-btn.btn-block,

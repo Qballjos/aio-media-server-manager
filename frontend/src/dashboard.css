@@ -965,9 +965,26 @@ a.status-pill {
 
 .btn-install {
   flex: 2;
+  position: relative;
+  isolation: isolate;
   background: var(--gradient-primary);
   color: var(--color-primary-contrast);
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.28);
+  z-index: 0;
+}
+
+.btn-install::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(var(--color-primary-rgb), 0.7);
+  filter: blur(10px);
+  transform: translateY(5px) scale(0.92);
+  opacity: 0.55;
+  z-index: -1;
+  pointer-events: none;
 }
 
 .btn-start {
