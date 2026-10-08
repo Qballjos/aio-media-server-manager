@@ -135,6 +135,16 @@ def set_neutarr_login(config_dir: Path, username: str, password: str) -> bool:
     return True
 
 
+def read_neutarr_setup_token(config_dir: Path) -> str | None:
+    """Return NeutArr's generated first-run token while setup is still pending."""
+    path = Path(config_dir) / ".setup-token"
+    try:
+        token = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return token or None
+
+
 def sha256_hex(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 

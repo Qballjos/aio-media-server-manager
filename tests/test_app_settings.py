@@ -96,6 +96,37 @@ def test_patch_application_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert resp.status_code == 409
 
 
+def test_neutarr_settings_include_setup_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        install_dir=tmp_path / "apps",
+    )
+    cfg.initialise()
+    monkeypatch.setattr(settings, "config_dir", cfg.config_dir)
+    from api.routers import applications as apps_mod
+
+    apps_mod.catalog._settings = settings
+    refresh_live_catalogs()
+
+    client = TestClient(create_app())
+    missing = client.get("/api/applications/neutarr/settings")
+    assert missing.status_code == 200
+    assert missing.json()["setup_token"] == ""
+
+    token_path = cfg.config_dir / "neutarr" / ".setup-token"
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    token_path.write_text("generated-setup-token-value\n", encoding="utf-8")
+
+    present = client.get("/api/applications/neutarr/settings")
+    assert present.status_code == 200
+    assert present.json()["setup_token"] == "generated-setup-token-value"
+
+    other = client.get("/api/applications/sonarr/settings")
+    assert "setup_token" not in other.json()
+
+
 def test_patch_qbittorrent_vuetorrent_switch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     cfg = Settings(
         config_dir=tmp_path / "config",

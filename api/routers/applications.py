@@ -329,6 +329,10 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         from core.crypto import secret_store
 
         payload["api_key_configured"] = bool(secret_store.get_secret(f"{plugin.name}_api_key"))
+    if plugin.name == "neutarr":
+        from core.integrations.local_auth import read_neutarr_setup_token
+
+        payload["setup_token"] = read_neutarr_setup_token(plugin.config_dir) or ""
     return payload
 
 

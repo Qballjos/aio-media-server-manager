@@ -86,6 +86,16 @@ Enable **Jellyfin**, **Plex**, and **Seerr** as needed.
 
 VPN, Cloudflare Tunnel, Recyclarr, NeutArr, and backups — turn these on when you need them. None are required for a basic home setup.
 
+#### NeutArr first-run setup token
+
+The first time NeutArr starts, before it has an account, it asks for a one-time setup token.
+
+1. Wait until NeutArr shows as **running**.
+2. Open **Catalog → NeutArr → Settings**.
+3. Copy **First-run setup token** and paste it into NeutArr's setup screen.
+
+That value is the file `/config/neutarr/.setup-token` inside the appliance (the host folder mounted as `/config`). NeutArr deletes the file after the account is created, and the Settings field goes empty. Until NeutArr has started, the field stays empty.
+
 ---
 
 ## Opening each app’s UI
@@ -145,6 +155,7 @@ Read release notes on GitHub if something major changed.
 | Problem | Try this |
 |---------|----------|
 | Blank or login loop on an app | Clear site data for that URL; confirm the app is running |
+| NeutArr asks for a setup token | **Catalog → NeutArr → Settings** after NeutArr is running. The token is removed once the NeutArr account exists |
 | Permission errors writing files | Host folder owner must match the container user (`PUID`/`PGID`) |
 | Sonarr imports but duplicates files | Downloads and media must share one filesystem for hardlinks |
 | Works at home, not on phone data | Need Tunnel (+ ideally Access); LAN IPs are not reachable from mobile data |

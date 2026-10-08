@@ -1330,6 +1330,17 @@ a.status-pill {
   overflow-wrap: anywhere;
 }
 
+.setup-token-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.setup-token-row .ui-input {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Modal */
 .modal-backdrop {
   position: fixed;

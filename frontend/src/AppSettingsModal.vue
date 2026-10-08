@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
+import { copyText } from './clipboard.js'
 import { useToasts } from './useToasts.js'
 
 const props = defineProps({
@@ -41,6 +42,7 @@ const settingsError = ref('')
 
 const actionLoading = ref({})
 const vuetorrentUpdating = ref(false)
+const setupTokenCopied = ref(false)
 
 async function loadSettings(service) {
   settingsError.value = ''
@@ -66,6 +68,7 @@ async function loadSettings(service) {
       recyclarrPrefs: {}
     }
     recyclarrMeta.value = null
+    setupTokenCopied.value = false
     if (service.name === 'recyclarr') {
       const rec = await apiRequest('/api/recyclarr')
       const recData = await readJson(rec)
@@ -212,6 +215,25 @@ async function saveAppSettings() {
   }
 }
 
+async function copySetupToken() {
+  const token = settingsMeta.value?.setup_token
+  if (!token) return
+  settingsError.value = ''
+  try {
+    await copyText(token)
+    setupTokenCopied.value = true
+    showToast('Setup token copied', 'success')
+    setTimeout(() => { setupTokenCopied.value = false }, 2500)
+  } catch {
+    const field = document.getElementById('neutarr-setup-token')
+    if (field && typeof field.select === 'function') {
+      field.focus()
+      field.select()
+    }
+    settingsError.value = 'Copy failed. The token is selected — press Cmd/Ctrl+C.'
+  }
+}
+
 async function resetRecyclarrDefaults() {
   settingsLoading.value = true
   settingsError.value = ''
@@ -339,6 +361,33 @@ watch(
             Open UI:
             <a :href="openUiUrl" target="_blank" rel="noopener noreferrer" class="link-btn font-mono">{{ openUiUrl }}</a>
           </p>
+          <div v-if="settingsApp.name === 'neutarr'" class="ui-field-block">
+            <label class="ui-field">
+              First-run setup token
+              <span class="setup-token-row">
+                <input
+                  id="neutarr-setup-token"
+                  class="ui-input font-mono"
+                  type="text"
+                  readonly
+                  :value="settingsMeta?.setup_token || ''"
+                  placeholder="Appears after NeutArr starts, until setup finishes"
+                />
+                <button
+                  type="button"
+                  class="ui-btn ui-btn-ghost"
+                  :disabled="!settingsMeta?.setup_token"
+                  @click="copySetupToken"
+                >
+                  {{ setupTokenCopied ? 'Copied' : 'Copy' }}
+                </button>
+              </span>
+            </label>
+            <p class="settings-hint">
+              NeutArr writes this the first time it starts. Paste it into NeutArr's setup screen.
+              The token is removed after the account is created.
+            </p>
+          </div>
           <div v-if="settingsMeta?.daemon !== false" class="ui-switch-row">
             <div class="ui-switch-copy">
               <strong>Start with the manager</strong>

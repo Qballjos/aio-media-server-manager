@@ -83,7 +83,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Operations.** `config` / `downloads` / `media` with `PUID` / `PGID` and hardlink checks. Optional WireGuard or OpenVPN isolation for qBittorrent, Prowlarr, and Flaresolverr (Usenet stays off the tunnel). Optional VAAPI / QSV / NVIDIA transcoding. Optional Cloudflare Tunnel (`cloudflared` inside this appliance). Configuration backups with verify, per-app restore, and a schedule.
 
-**Open UI.** Each catalog card opens `http://<host>:<app-port>`. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent uses [VueTorrent](https://github.com/VueTorrent/VueTorrent) by default (same port and WebAPI). Catalog → qBittorrent → Settings can switch to the stock WebUI or **Update VueTorrent** (re-downloads the latest UI zip; not part of Catalog app updates).
+**Open UI.** Each catalog card opens `http://<host>:<app-port>`. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent uses [VueTorrent](https://github.com/VueTorrent/VueTorrent) by default (same port and WebAPI). Catalog → qBittorrent → Settings can switch to the stock WebUI or **Update VueTorrent** (re-downloads the latest UI zip; not part of Catalog app updates). Catalog → NeutArr → Settings shows NeutArr's first-run setup token while `/config/neutarr/.setup-token` exists. NeutArr removes that file after account creation.
 
 ---
 
