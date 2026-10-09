@@ -229,6 +229,7 @@ def test_uid_routing_applies_ipv6_blackhole_and_output_ks(tmp_path: Path, monkey
         return CompletedProcess(["iptables", *args], 0, "", "")
 
     monkeypatch.setattr(mgr, "_main_tunnel_interface_names", lambda: ["wg0"])
+    monkeypatch.setattr(mgr, "_house_interface", lambda: "eth0")
     monkeypatch.setattr(mgr, "_ip", fake_ip)
     monkeypatch.setattr(mgr, "_host_iptables", fake_iptables)
     monkeypatch.setattr(mgr, "_host_ip6tables", fake_iptables)
@@ -237,6 +238,15 @@ def test_uid_routing_applies_ipv6_blackhole_and_output_ks(tmp_path: Path, monkey
     assert any("uidrange" in row and "blackhole" in row and "-6" in row for row in flat)
     assert any("AMM-UID-KS" in row and "owner" in row for row in flat)
     assert any("REJECT" in row for row in flat)
+    # Replies to connections that came in from the house side (published WebUI
+    # ports) must leave the way they came in instead of vanishing into the tunnel.
+    assert any("mangle" in row and "PREROUTING" in row and "-i eth0" in row and "CONNMARK --set-mark 0x2a" in row for row in flat)
+    assert any("mangle" in row and "OUTPUT" in row and "--restore-mark" in row for row in flat)
+    assert any(row.startswith("rule add fwmark 0x2a lookup main") for row in flat)
+    ks_rows = [row for row in flat if "AMM-UID-KS" in row]
+    reply_ok = next(i for i, row in enumerate(ks_rows) if "connmark --mark 0x2a -j RETURN" in row)
+    reject = next(i for i, row in enumerate(ks_rows) if "REJECT" in row)
+    assert reply_ok < reject
 
 
 def test_main_tunnel_interface_names_does_not_cache_empty(tmp_path: Path, monkeypatch):
@@ -983,3 +993,16 @@ def test_reclaim_clearnet_spares_vpn_uid_processes(tmp_path: Path, monkeypatch):
     assert leaked == ["qbittorrent"]
     assert good.terminate_calls == 0
     assert bad.terminate_calls == 1
+
+
+def test_house_interface_comes_from_the_main_default_route(tmp_path: Path, monkeypatch):
+    from subprocess import CompletedProcess
+
+    cfg = Settings(config_dir=tmp_path / "config", download_dir=tmp_path / "dl", media_dir=tmp_path / "media")
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(
+        mgr, "_ip", lambda args: CompletedProcess(["ip", *args], 0, "default via 172.18.0.1 dev eth0 \n", "")
+    )
+    assert mgr._house_interface() == "eth0"
+    monkeypatch.setattr(mgr, "_ip", lambda args: CompletedProcess(["ip", *args], 0, "", ""))
+    assert mgr._house_interface() is None
