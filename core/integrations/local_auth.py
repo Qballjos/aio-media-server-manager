@@ -16,7 +16,14 @@ from core.shared_credentials import shared_admin_credentials
 logger = logging.getLogger(__name__)
 
 
-def set_servarr_forms_auth(base_url: str, api_key: Optional[str], username: str, password: str) -> bool:
+def set_servarr_forms_auth(
+    base_url: str,
+    api_key: Optional[str],
+    username: str,
+    password: str,
+    *,
+    name: str = "",
+) -> bool:
     if not api_key:
         return False
     headers = {"Content-Type": "application/json", "X-Api-Key": api_key}
@@ -27,13 +34,19 @@ def set_servarr_forms_auth(base_url: str, api_key: Optional[str], username: str,
         cfg = resp.json()
         if not isinstance(cfg, dict):
             return False
+        previous_method = str(cfg.get("authenticationMethod") or "").lower()
         cfg["authenticationMethod"] = "forms"
         cfg["authenticationRequired"] = "enabled"
         cfg["username"] = username
         cfg["password"] = password
         cfg["passwordConfirmation"] = password
         put = requests.put(f"{base_url}/config/host", headers=headers, json=cfg, timeout=8.0)
-        return put.status_code in (200, 201, 202)
+        ok = put.status_code in (200, 201, 202)
+        if ok and name and previous_method != "forms":
+            # Servarr reads the authentication method once at startup; until a
+            # restart its login service rejects every password.
+            restart_app_if_running(name)
+        return ok
     except Exception as exc:
         logger.debug("Servarr forms auth at %s failed: %s", base_url, exc)
         return False
@@ -82,7 +95,7 @@ def apply_shared_local_logins(
         if not installed(name):
             continue
         base = f"http://127.0.0.1:{port_for(name, fallback)}{prefix}"
-        ok = set_servarr_forms_auth(base, api_key_for(name), username, password)
+        ok = set_servarr_forms_auth(base, api_key_for(name), username, password, name=name)
         steps.append(_step(name, "set_shared_login", ok, username))
 
     if installed("bazarr"):
@@ -217,16 +230,21 @@ def _rewrite_bazarr_auth_block(text: str, username: str, hashed: str) -> str:
     return result
 
 
-def restart_bazarr_if_running() -> None:
+def restart_app_if_running(name: str) -> None:
+    """Restart a managed app so a login change takes effect; no-op when it is not running."""
     try:
         from core.supervisor import ProcessSupervisor
 
         supervisor = ProcessSupervisor.get()
-        if supervisor.status("bazarr").value != "running":
+        if supervisor.status(name).value != "running":
             return
-        supervisor.run_coroutine_sync(supervisor.restart("bazarr"), timeout=90.0)
+        supervisor.run_coroutine_sync(supervisor.restart(name), timeout=90.0)
     except Exception as exc:
-        logger.debug("Bazarr restart after login seed skipped: %s", exc)
+        logger.debug("%s restart after login change skipped: %s", name, exc)
+
+
+def restart_bazarr_if_running() -> None:
+    restart_app_if_running("bazarr")
 
 
 def _step(target: str, action: str, ok: bool, detail: str) -> dict[str, Any]:

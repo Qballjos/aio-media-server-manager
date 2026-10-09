@@ -123,3 +123,30 @@ def test_set_neutarr_login_enables_lan_bypass(tmp_path: Path):
     data = json.loads((tmp_path / "general.json").read_text(encoding="utf-8"))
     assert data["local_access_bypass"] is True
     assert "192.168.0.0/16" in data["local_bypass_cidrs"]
+
+
+@patch("requests.put")
+@patch("requests.get")
+def test_set_servarr_forms_auth_restarts_app_when_auth_method_changes(mock_get, mock_put, monkeypatch):
+    from core.integrations import local_auth
+
+    restarted = []
+    monkeypatch.setattr(local_auth, "restart_app_if_running", lambda name: restarted.append(name))
+    mock_get.return_value = MagicMock(status_code=200, json=lambda: {"authenticationMethod": "none", "port": 9696})
+    mock_put.return_value = MagicMock(status_code=202)
+    # Servarr only reads the authentication method at startup, so a change needs a restart.
+    assert set_servarr_forms_auth("http://127.0.0.1:9696/api/v1", "key", "amm", "SharedPass123!", name="prowlarr") is True
+    assert restarted == ["prowlarr"]
+
+
+@patch("requests.put")
+@patch("requests.get")
+def test_set_servarr_forms_auth_leaves_app_running_when_already_forms(mock_get, mock_put, monkeypatch):
+    from core.integrations import local_auth
+
+    restarted = []
+    monkeypatch.setattr(local_auth, "restart_app_if_running", lambda name: restarted.append(name))
+    mock_get.return_value = MagicMock(status_code=200, json=lambda: {"authenticationMethod": "forms", "port": 8989})
+    mock_put.return_value = MagicMock(status_code=202)
+    assert set_servarr_forms_auth("http://127.0.0.1:8989/api/v3", "key", "amm", "SharedPass123!", name="sonarr") is True
+    assert restarted == []
