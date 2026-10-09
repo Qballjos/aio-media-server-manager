@@ -407,7 +407,6 @@ class IntegrationEngine:
                 syncs.append(prowlarr_client.add_flaresolverr(f"http://127.0.0.1:{flare_port}"))
             prowl_ok = all(syncs) if syncs else True
             steps.append(_step("prowlarr", "sync_applications", prowl_ok, "Prowlarr → Sonarr/Radarr/Lidarr/Flaresolverr"))
-            steps.append(self._starter_indexers_step(prowlarr_client))
 
         if not self._skip_uninstalled(steps, "jellyfin", "configure_libraries_and_transcode"):
             jelly_client = JellyfinClient(port=jelly_port, api_key=jellyfin_key)
@@ -552,6 +551,13 @@ class IntegrationEngine:
                 config_dir_for=_config_dir,
             )
         )
+
+        # Last: adding indexers waits on Prowlarr's catalog download and tests each
+        # indexer, so it must not hold up Seerr, Bazarr, or the shared logins.
+        if self._installed("prowlarr") and self._is_app_running("prowlarr"):
+            steps.append(
+                self._starter_indexers_step(ProwlarrClient(port=prowlarr_port, api_key=prowlarr_key))
+            )
 
         if self._installed("shelfmark"):
             try:
