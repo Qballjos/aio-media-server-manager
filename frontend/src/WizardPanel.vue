@@ -25,7 +25,7 @@ const TITLE = {
   3: 'Storage',
   4: 'File ownership',
   5: 'Download clients',
-  6: 'VPN',
+  6: 'VPN & remote access',
   7: '*Arr apps',
   8: 'Media server',
   9: 'Requests',
@@ -186,6 +186,9 @@ async function loadStep(id) {
       selections.vpn_enforce = !!data.vpn_enforce
       selections.has_vpn_config = !!data.has_vpn_config
       selections.vpn_config_text = ''
+      selections.cloudflare_tunnel_enabled = !!data.cloudflare_tunnel_enabled
+      selections.has_cloudflare_token = !!data.has_cloudflare_token
+      selections.cloudflare_tunnel_token = ''
     } else if (id === 7) {
       selections.arr_apps = [...(data.selected || [])]
     } else if (id === 8) {
@@ -226,7 +229,9 @@ function bodyForStep(id) {
       vpn_config_path: selections.vpn_config_path,
       vpn_protocol: selections.vpn_protocol,
       vpn_enforce: selections.vpn_provider !== 'none',
-      ...(selections.vpn_config_text ? { vpn_config_text: selections.vpn_config_text } : {})
+      ...(selections.vpn_config_text ? { vpn_config_text: selections.vpn_config_text } : {}),
+      cloudflare_tunnel_enabled: !!selections.cloudflare_tunnel_enabled,
+      ...(selections.cloudflare_tunnel_token ? { cloudflare_tunnel_token: selections.cloudflare_tunnel_token } : {})
     }
   }
   if (id === 7) return { arr_apps: selections.arr_apps }
@@ -553,6 +558,21 @@ onUnmounted(() => {
               :has-config="!!selections.has_vpn_config"
             />
           </template>
+          <p class="wizard-muted">Remote access (optional). A Cloudflare Tunnel reaches the dashboard and apps over HTTPS without opening router ports; it starts right after this wizard.</p>
+          <label class="wizard-option" :class="{ selected: selections.cloudflare_tunnel_enabled }">
+            <input type="checkbox" v-model="selections.cloudflare_tunnel_enabled" />
+            Cloudflare Tunnel
+          </label>
+          <label v-if="selections.cloudflare_tunnel_enabled" class="ui-field">
+            <span>Tunnel token</span>
+            <input
+              v-model="selections.cloudflare_tunnel_token"
+              type="password"
+              class="ui-input font-mono"
+              autocomplete="off"
+              :placeholder="selections.has_cloudflare_token ? 'Saved — leave blank to keep' : 'Token from Cloudflare Zero Trust → Tunnels'"
+            />
+          </label>
         </template>
 
         <template v-else-if="step === 7">
@@ -644,6 +664,7 @@ onUnmounted(() => {
             <div><dt>Media</dt><dd>{{ (summary.media_servers || []).join(', ') || '—' }}</dd></div>
             <div><dt>Requests</dt><dd>{{ summary.request_system || '—' }}</dd></div>
             <div><dt>VPN</dt><dd>{{ summary.vpn_provider || 'none' }}{{ summary.has_vpn_config ? ' · config saved' : '' }}</dd></div>
+            <div><dt>Remote access</dt><dd>{{ summary.cloudflare_tunnel_enabled ? 'Cloudflare Tunnel' : '—' }}</dd></div>
             <div><dt>Recommended</dt><dd>{{ (summary.recommended_preview || []).join(', ') || 'none' }}</dd></div>
           </dl>
         </template>

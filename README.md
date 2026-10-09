@@ -71,7 +71,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Install and catalog.** GitHub releases, official binaries (Jellyfin, Plex), and PyPI applications. The catalog and first-run wizard only list applications that support the host CPU architecture (Flaresolverr is x86_64-only).
 
-**First-run wizard.** Choose *Arr apps, download clients (including Usenet provider fields), media servers, VPN, and recommended tools. Persist paths and credentials, then install. Administrator setup requires an email address.
+**First-run wizard.** Choose *Arr apps, download clients (including Usenet provider fields), media servers, VPN, an optional Cloudflare Tunnel, and recommended tools. The tunnel and the VPN start as soon as the wizard finishes. Persist paths and credentials, then install. Administrator setup requires an email address.
 
 **Shared local login.** The manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin). Seerr's admin is created by signing in with that Jellyfin account (or the claimed Plex token), and its first-run wizard is completed for you. Plex still uses a Plex account.
 

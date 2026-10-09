@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 
+from core.cloudflare_tunnel import cloudflare_tunnel
 from core.integrations.lifecycle import bring_up_vpn
 from core.settings import settings
 from core.wizard import wizard_engine
@@ -53,6 +54,9 @@ async def skip_wizard() -> dict[str, Any]:
 @router.post("/execute", summary="Execute wizard installation and automatic wiring")
 async def execute_wizard(background_tasks: BackgroundTasks) -> dict[str, Any]:
     result = await wizard_engine.execute_installation()
+    if settings.cloudflare_tunnel_enabled:
+        # Remote access first, so the dashboard is reachable while apps install.
+        background_tasks.add_task(cloudflare_tunnel.start)
     if settings.vpn_enabled:
         # The wizard only saved the VPN switch; bring the tunnel up now so
         # qBittorrent/Prowlarr can start as soon as their installs finish.

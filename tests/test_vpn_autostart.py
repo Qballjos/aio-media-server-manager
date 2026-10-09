@@ -81,3 +81,29 @@ def test_wizard_execute_brings_vpn_up_only_when_enabled(monkeypatch):
     monkeypatch.setattr(settings, "vpn_enabled", False)
     assert client.post("/api/wizard/execute").status_code == 200
     assert calls == [True]
+
+
+def test_wizard_execute_starts_cloudflare_tunnel_before_the_vpn(monkeypatch):
+    from api.routers import wizard as wizard_router
+
+    order = []
+
+    async def fake_tunnel_start():
+        order.append("cloudflare")
+        return {"status": "started"}
+
+    async def fake_bring_up(*args, **kwargs):
+        order.append("vpn")
+        return {}
+
+    async def fake_execute():
+        return {"completed": True, "target_apps": [], "installations": []}
+
+    monkeypatch.setattr(wizard_router.cloudflare_tunnel, "start", fake_tunnel_start)
+    monkeypatch.setattr(wizard_router, "bring_up_vpn", fake_bring_up)
+    monkeypatch.setattr(wizard_router.wizard_engine, "execute_installation", fake_execute)
+    monkeypatch.setattr(settings, "cloudflare_tunnel_enabled", True)
+    monkeypatch.setattr(settings, "vpn_enabled", True)
+    client = TestClient(create_app())
+    assert client.post("/api/wizard/execute").status_code == 200
+    assert order == ["cloudflare", "vpn"]
