@@ -10,6 +10,7 @@ routing — no nested netns and no iptables NAT.
 from __future__ import annotations
 
 import logging
+import ipaddress
 import os
 import pwd
 import shutil
@@ -226,16 +227,17 @@ def parse_wireguard_endpoint(text: str) -> tuple[str, int] | None:
         line = raw.split("#", 1)[0].strip()
         if not line.lower().startswith("endpoint"):
             continue
-        _, _, rest = line.partition("=")
-        if not rest.strip():
+        _, separator, rest = line.partition("=")
+        if not separator:
             _, _, rest = line.partition(" ")
-        host, port = _split_endpoint(rest.strip())
-        if not host:
-            continue
         try:
-            return host, int(port or "51820")
-        except ValueError:
-            return host, 51820
+            host, port = _split_endpoint(rest.strip())
+            port_number = int(port)
+        except (ValueError, IndexError):
+            return None
+        if host and 1 <= port_number <= 65535:
+            return host, port_number
+        return None
     return None
 
 
@@ -1230,7 +1232,20 @@ class VpnManager:
 
     def _apply_uid_output_kill_switch(self, wg_iface: str) -> None:
         """Reject clear-net OUTPUT from the VPN UID (defense in depth beyond policy routing)."""
-        for helper in (self._host_iptables, self._host_ip6tables):
+        endpoints = []
+        try:
+            raw = self._active_wg_conf.read_text(encoding="utf-8") if self._active_wg_conf else ""
+        except OSError:
+            raw = ""
+        for line in raw.splitlines():
+            endpoint = parse_wireguard_endpoint(line)
+            if endpoint:
+                host, port = endpoint
+                try:
+                    endpoints.append((str(ipaddress.IPv4Address(host)), str(port)))
+                except ValueError:
+                    continue
+        for family, helper in ((4, self._host_iptables), (6, self._host_ip6tables)):
             helper(["-N", _UID_KS_CHAIN])
             helper(["-F", _UID_KS_CHAIN])
             helper(["-A", _UID_KS_CHAIN, "-o", "lo", "-j", "RETURN"])
@@ -1241,6 +1256,12 @@ class VpnManager:
             # Answers to published WebUI ports (Docker, LAN clients) go back out
             # the house interface; the apps' own connections never carry the mark.
             helper(["-A", _UID_KS_CHAIN, "-m", "connmark", "--mark", _UID_REPLY_MARK, "-j", "RETURN"])
+            # Kernel WireGuard's outer UDP packets retain the inner socket's UID.
+            if family == 4:
+                for host, port in endpoints:
+                    result = helper(["-A", _UID_KS_CHAIN, "-p", "udp", "-d", host, "--dport", port, "-j", "RETURN"])
+                    if result.returncode != 0:
+                        logger.warning("Could not allow WireGuard endpoint through UID kill switch: %s", (result.stderr or "")[:160])
             reject = helper(
                 ["-A", _UID_KS_CHAIN, "-j", "REJECT", "--reject-with", "icmp-net-unreachable"]
             )

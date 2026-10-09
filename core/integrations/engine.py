@@ -166,8 +166,8 @@ class IntegrationEngine:
                 "prowlarr", "starter_indexers", sorted(tried | set(handled)), app_settings=self._settings
             )
         tagged: list[str] = []
-        if starter["added"] and self._installed("flaresolverr"):
-            tagged = prowlarr_client.attach_flaresolverr(starter["added"])
+        if handled and self._installed("flaresolverr"):
+            tagged = prowlarr_client.attach_flaresolverr(handled)
         ok = bool(handled) or not starter["missing"]
         detail = (
             f"added={','.join(starter['added']) or '-'} disabled={','.join(starter['disabled']) or '-'} "

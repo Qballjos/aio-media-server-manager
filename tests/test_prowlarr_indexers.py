@@ -2,7 +2,11 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from core.integrations.engine import IntegrationEngine
 from core.integrations.prowlarr import ProwlarrClient
+from core.settings import Settings
 
 
 def _resp(status, payload=None, text=""):
@@ -78,13 +82,16 @@ def test_add_starter_indexers_saves_a_failing_indexer_disabled(mock_get, mock_po
     assert mock_post.call_args_list[1].kwargs["json"]["enable"] is False
 
 
+@pytest.mark.parametrize("initially_disabled", [False, True])
 @patch("requests.put")
 @patch("requests.post")
 @patch("requests.get")
-def test_attach_flaresolverr_tags_only_cloudflare_blocked_indexers(mock_get, mock_post, mock_put):
+def test_starter_indexers_tags_only_cloudflare_blocked_indexers(
+    mock_get, mock_post, mock_put, tmp_path, initially_disabled
+):
     indexers = [
-        {"id": 1, "name": "1337x", "enable": True, "tags": []},
-        {"id": 2, "name": "YTS", "enable": True, "tags": []},
+        {"id": 1, "name": "1337x", "enable": not initially_disabled, "tags": []},
+        {"id": 2, "name": "YTS", "enable": not initially_disabled, "tags": []},
     ]
     proxy = {"id": 5, "name": "Flaresolverr (AMM)", "implementation": "FlareSolverr", "tags": []}
 
@@ -110,11 +117,25 @@ def test_attach_flaresolverr_tags_only_cloudflare_blocked_indexers(mock_get, moc
     mock_post.side_effect = post
     mock_put.return_value = _resp(202, {})
     client = ProwlarrClient(api_key="k")
-    assert client.attach_flaresolverr(["1337x", "YTS"]) == ["1337x"]
+    engine = IntegrationEngine(Settings(config_dir=tmp_path / "config"))
+    starter = {
+        "added": [] if initially_disabled else ["1337x", "YTS"],
+        "disabled": ["1337x", "YTS"] if initially_disabled else [],
+        "missing": [],
+    }
+    with (
+        patch.object(client, "add_starter_indexers", return_value=starter),
+        patch.object(engine, "_installed", return_value=True),
+    ):
+        report = engine._starter_indexers_step(client)
+    assert "flaresolverr=1337x" in report["detail"]
     put_calls = {call.args[0].split("?")[0].rsplit("/", 1)[-1]: call for call in mock_put.call_args_list}
     assert put_calls["5"].kwargs["json"]["tags"] == [7]  # the proxy now only serves tagged indexers
     assert "forceSave=true" in put_calls["5"].args[0]
     assert put_calls["1"].kwargs["json"]["tags"] == [7]
+    assert put_calls["1"].kwargs["json"]["enable"] is True
+    assert indexers[1]["tags"] == []
+    assert indexers[1]["enable"] is not initially_disabled
     assert "forceSave=true" in put_calls["1"].args[0]
 
 
