@@ -678,14 +678,16 @@ def test_homepage_launcher_explains_why_apps_are_stopped(tmp_path, monkeypatch):
             _plugin("seerr", 5055, tmp_path, category="requests"),
             _plugin("sonarr", 8989, tmp_path),
             _plugin("radarr", 7878, tmp_path),
+            _plugin("jellyfin", 8096, tmp_path, category="media"),
         ]
     )
     clear_jobs()
     set_job("seerr", "installing")
+    set_job("radarr", "configuring")  # process already runs, post-install wiring still busy
     monkeypatch.setattr(settings, "vpn_enabled", True)
     with (
         patch("core.homepage.ApplicationCatalog", return_value=catalog),
-        patch("core.homepage._running_names", return_value={"radarr"}),
+        patch("core.homepage._running_names", return_value={"radarr", "jellyfin"}),
         patch("core.homepage.vpn_manager.tunneled_apps_allowed", return_value=False),
         patch("core.homepage.vpn_manager.status", return_value={"tunnel_up": False, "last_error": "handshake timed out"}),
         patch("core.homepage.get_application_api_key", return_value=None),
@@ -697,7 +699,8 @@ def test_homepage_launcher_explains_why_apps_are_stopped(tmp_path, monkeypatch):
     assert by_name["prowlarr"] == ("waiting_for_vpn", "Waiting for VPN")
     assert by_name["seerr"] == ("installing", "Installing…")
     assert by_name["sonarr"] == ("stopped", "Stopped")
-    assert by_name["radarr"] == ("running", "")
+    assert by_name["radarr"] == ("configuring", "Configuring…")
+    assert by_name["jellyfin"] == ("running", "")
     assert snap["vpn"] == {
         "enabled": True,
         "tunnel_up": False,

@@ -303,3 +303,30 @@ def test_pwa_public_assets():
     assert 'rel="apple-touch-icon"' in index_html
     sw = (root / "sw.js").read_text(encoding="utf-8")
     assert "addEventListener('fetch'" in sw
+
+
+def test_install_marks_the_job_configuring_while_wiring_runs(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from api.app import create_app
+    from api.routers import catalog as catalog_router
+    from core.install_jobs import clear_jobs, get_job
+
+    seen: list[str] = []
+
+    async def fake_finalize(plugin):
+        seen.append(get_job(plugin.name)["status"])
+        return {}
+
+    plugin = catalog_router.catalog.get("sonarr")
+    monkeypatch.setattr(plugin, "install", lambda: None)
+    monkeypatch.setattr(plugin, "is_installed", lambda: False)
+    monkeypatch.setattr(catalog_router, "finalize_application_install", fake_finalize)
+    clear_jobs()
+    try:
+        client = TestClient(create_app())
+        assert client.post("/api/catalog/sonarr/install").status_code == 200
+        assert seen == ["configuring"]
+        assert get_job("sonarr")["status"] == "started"
+    finally:
+        clear_jobs()

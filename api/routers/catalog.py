@@ -146,6 +146,7 @@ async def install_application(
             logger.info("Starting background install for '%s'...", name)
             await asyncio.to_thread(plugin.install)
             logger.info("Background install for '%s' completed successfully.", name)
+            set_job(name, "configuring")
             try:
                 await finalize_application_install(plugin)
             except Exception as err:

@@ -42,7 +42,7 @@ const installDoneCount = computed(() =>
   ).length
 )
 const installActive = computed(() =>
-  installProgress.value.find((item) => item.status === 'installing')
+  installProgress.value.find((item) => ['installing', 'configuring'].includes(item.status))
 )
 const installPercent = computed(() => {
   if (!installTotal.value) return installing.value ? 8 : 0
@@ -117,6 +117,8 @@ async function refreshInstallProgress() {
       next.detail = row.install_error || item.detail
     } else if (item.status === 'failed') {
       return next
+    } else if (row.install_job === 'configuring') {
+      next.status = 'configuring'
     } else if (row.install_job === 'installing' || row.install_job === 'queued') {
       next.status = 'installing'
     }
@@ -136,6 +138,7 @@ async function waitForAppInstall(name) {
 function installStatusLabel(status) {
   if (status === 'queued') return 'QUEUED'
   if (status === 'installing') return 'INSTALLING'
+  if (status === 'configuring') return 'CONFIGURING'
   if (status === 'started') return 'STARTED'
   if (status === 'already_installed') return 'INSTALLED'
   if (status === 'failed') return 'FAILED'
@@ -145,7 +148,7 @@ function installStatusLabel(status) {
 function installBadgeClass(status) {
   if (status === 'started' || status === 'already_installed') return 'badge-running'
   if (status === 'failed') return 'badge-failed'
-  if (status === 'installing') return 'badge-installing'
+  if (status === 'installing' || status === 'configuring') return 'badge-installing'
   return 'badge-inactive'
 }
 
@@ -445,7 +448,7 @@ onUnmounted(() => {
                   <small v-if="item.status === 'failed' && item.detail" class="wizard-install-error">{{ item.detail }}</small>
                 </span>
                 <span class="wizard-status" :class="installBadgeClass(item.status)">
-                  <span v-if="item.status === 'installing'" class="spinner spinner-sm"></span>
+                  <span v-if="item.status === 'installing' || item.status === 'configuring'" class="spinner spinner-sm"></span>
                   <span v-else class="wizard-status-dot"></span>
                   {{ installStatusLabel(item.status) }}
                 </span>

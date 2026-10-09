@@ -387,7 +387,7 @@ function launcherTitle(app) {
 }
 
 function launcherOpen(app) {
-  return app.running && !app.sick
+  return app.state === 'running'
 }
 
 const vpnNotice = computed(() => {
@@ -650,7 +650,7 @@ onUnmounted(() => {
               v-for="app in group.apps"
               :key="app.name"
               class="home-app"
-              :class="{ 'is-down': !app.running && !app.sick, 'is-sick': app.sick }"
+              :class="{ 'is-down': app.state !== 'running' && !app.sick, 'is-sick': app.sick }"
               v-bind="launcherOpen(app) ? { href: app.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
               :title="launcherTitle(app)"
               @click="launcherOpen(app) && openApp($event, app.name, app.url)"
@@ -1045,6 +1045,9 @@ onUnmounted(() => {
 .home-app.is-down {
   opacity: 0.55;
   cursor: default;
+}
+.home-app.is-down:hover {
+  border-color: transparent;
 }
 .home-notice-link {
   margin-left: 0.35rem;

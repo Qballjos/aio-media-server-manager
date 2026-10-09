@@ -447,6 +447,7 @@ _STATE_LABELS = {
     "running": "",
     "unhealthy": "Unhealthy",
     "installing": "Installing…",
+    "configuring": "Configuring…",
     "waiting_for_vpn": "Waiting for VPN",
     "stopped": "Stopped",
 }
@@ -454,12 +455,16 @@ _STATE_LABELS = {
 
 def _launcher_state(name: str, running: bool, sick: bool, vpn_waiting: bool) -> tuple[str, str]:
     """Why a launcher tile cannot be opened right now, with its label."""
+    job = (get_job(name) or {}).get("status")
     if sick:
         state = "unhealthy"
+    elif job in {"queued", "installing"}:
+        state = "installing"
+    elif job == "configuring":
+        # The process may already run, but the post-install wiring is still busy.
+        state = "configuring"
     elif running:
         state = "running"
-    elif (get_job(name) or {}).get("status") in {"queued", "installing"}:
-        state = "installing"
     elif vpn_waiting and name in VPN_TUNNELED_APPS:
         state = "waiting_for_vpn"
     else:
