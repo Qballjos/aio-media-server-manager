@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
+import { openApp } from './appOpen.js'
 import { copyText } from './clipboard.js'
 import { useToasts } from './useToasts.js'
 
@@ -359,7 +360,7 @@ watch(
           </p>
           <p v-if="openUiUrl" class="settings-hint">
             Open UI:
-            <a :href="openUiUrl" target="_blank" rel="noopener noreferrer" class="link-btn font-mono">{{ openUiUrl }}</a>
+            <a :href="openUiUrl" target="_blank" rel="noopener noreferrer" class="link-btn font-mono" @click="openApp($event, service.name, openUiUrl)">{{ openUiUrl }}</a>
           </p>
           <div v-if="settingsApp.name === 'neutarr'" class="ui-field-block">
             <label class="ui-field">

@@ -22,8 +22,7 @@ from applications.catalog import ApplicationCatalog, refresh_live_catalogs
 from core.app_prefs import AppPrefsError, autostart_for, set_app_option, update_app_prefs
 from core.app_web_url import app_web_ui_url_for_request
 from core.auth import auth_manager
-from core.integrations.plex import PlexClient
-from core.integrations.seerr import SEERR_SESSION_MAX_AGE, seerr_admin_login
+from core.integrations.sessions import app_session_cookies
 from core.settings import settings
 from core.supervisor import ProcessSupervisor
 from core.uninstall import UninstallError, uninstall_application
@@ -111,28 +110,36 @@ async def list_applications(request: Request) -> dict[str, Any]:
     return {"applications": results}
 
 
-@router.post("/seerr/session", summary="Sign the manager admin in to Seerr for this browser")
-async def seerr_session(request: Request) -> JSONResponse:
-    """Log the shared admin in to Seerr server-side and hand the browser the session.
+@router.post("/{name}/session", summary="Sign the manager admin in to an app for this browser")
+async def app_session(name: str, request: Request) -> JSONResponse:
+    """Log the shared admin in to the app server-side and hand the browser the session.
 
-    The dashboard calls this before opening Seerr. Browsers do not isolate cookies
-    by port, so a host-only cookie set here is also sent to http://<same host>:<seerr
-    port>. On public subdomains the hosts differ, so Seerr keeps its own login.
+    The dashboard calls this before opening an app. Browsers do not isolate cookies
+    by port, so a host-only cookie set here is also sent to http://<same host>:<app
+    port>. On public subdomains the hosts differ, so the app keeps its own login.
     """
     _ensure_authenticated(request)
-    port = catalog.get("seerr").port
-    target = app_web_ui_url_for_request(request, app_name="seerr", port=port)
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    target = app_web_ui_url_for_request(request, app_name=plugin.name, port=plugin.port)
     same_host = (urlparse(target).hostname or "") == (request.url.hostname or "")
-    client = None
+    jar = None
     if same_host:
-        plex_token = PlexClient(config_dir=catalog.get("plex").config_dir).token if catalog.has("plex") else None
-        client = await asyncio.to_thread(seerr_admin_login, port, plex_token=plex_token)
-    response = JSONResponse({"url": target, "signed_in": client is not None})
-    for cookie in client.http.cookies if client else []:
+        plex_dir = catalog.get("plex").config_dir if catalog.has("plex") else None
+        jar = await asyncio.to_thread(
+            app_session_cookies, plugin.name, plugin.port, plex_config_dir=plex_dir
+        )
+    response = JSONResponse({"url": target, "signed_in": bool(jar)})
+    for cookie in jar or []:
+        max_age = None
+        if cookie.expires:
+            max_age = max(0, int(cookie.expires - time.time()))
         response.set_cookie(
             cookie.name,
             cookie.value,
-            max_age=SEERR_SESSION_MAX_AGE,
+            max_age=max_age,
             path="/",
             secure=request.url.scheme == "https",
             httponly=True,

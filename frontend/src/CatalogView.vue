@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { catalogQueryFromState, catalogStateFromQuery, sameCatalogQuery } from './catalogQuery.js'
 import { appWebUrl } from './appWebUrl.js'
-import { openSeerr } from './seerrOpen.js'
+import { openApp } from './appOpen.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { formatUpdateWhen, formatUptime } from './format.js'
 import { useToasts } from './useToasts.js'
@@ -776,7 +776,7 @@ onUnmounted(() => {
                       target="_blank"
                       rel="noopener noreferrer"
                       class="port-link"
-                      @click="service.name === 'seerr' && openSeerr($event, service.webUrl)"
+                      @click="openApp($event, service.name, service.webUrl)"
                       title="Open UI"
                     >
                       :{{ service.port }}
@@ -871,7 +871,7 @@ onUnmounted(() => {
                   target="_blank"
                   rel="noopener noreferrer"
                   class="btn-action btn-webui"
-                  @click="service.name === 'seerr' && openSeerr($event, service.webUrl)"
+                  @click="openApp($event, service.name, service.webUrl)"
                 >
                   Open UI
                 </a>
