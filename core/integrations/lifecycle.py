@@ -263,6 +263,10 @@ async def bring_up_vpn(manager: Any = None) -> dict[str, Any]:
     result = await asyncio.to_thread(manager.start)
     if result.get("tunnel_up"):
         result["started_apps"] = await start_tunneled_apps(stopped or None)
+        if result["started_apps"]:
+            # Apps that only start once the tunnel is up still need their shared
+            # login and *Arr links; the install-time wiring skipped them.
+            asyncio.create_task(schedule_full_wiring(wait_for_apps=True))
     else:
         await enforce_vpn_isolation()
         result["started_apps"] = []

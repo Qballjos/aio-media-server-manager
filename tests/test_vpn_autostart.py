@@ -13,19 +13,28 @@ async def _nothing_stopped(*_args, **_kwargs):
     return []
 
 
-def test_bring_up_vpn_starts_every_installed_tunneled_app_when_none_were_running(monkeypatch):
+async def test_bring_up_vpn_starts_every_installed_tunneled_app_when_none_were_running(monkeypatch):
     calls = []
+    wiring = []
 
     async def fake_start(names=None):
         calls.append(names)
         return ["prowlarr", "qbittorrent"]
 
+    async def fake_wiring(*, wait_for_apps=False):
+        wiring.append(wait_for_apps)
+        return {}
+
     monkeypatch.setattr(lifecycle, "stop_tunneled_apps", _nothing_stopped)
     monkeypatch.setattr(lifecycle, "start_tunneled_apps", fake_start)
+    monkeypatch.setattr(lifecycle, "schedule_full_wiring", fake_wiring)
     monkeypatch.setattr(lifecycle.vpn_manager, "start", lambda: {"status": "ok", "tunnel_up": True})
-    result = asyncio.run(lifecycle.bring_up_vpn())
+    result = await lifecycle.bring_up_vpn()
+    await asyncio.sleep(0)
     assert calls == [None]
     assert result["started_apps"] == ["prowlarr", "qbittorrent"]
+    # Apps that only start once the tunnel is up still need their shared login and links.
+    assert wiring == [True]
 
 
 def test_bring_up_vpn_keeps_apps_stopped_when_tunnel_stays_down(monkeypatch):
