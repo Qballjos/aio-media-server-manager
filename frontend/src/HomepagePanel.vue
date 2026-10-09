@@ -121,7 +121,7 @@ const launcherGroups = computed(() => {
     }
     groups.get(id).apps.push({
       ...app,
-      url: publicAppUrl(app.name, app.port, app.url || ''),
+      url: app.name === 'seerr' ? '/api/applications/seerr/open' : publicAppUrl(app.name, app.port, app.url || ''),
     })
   }
   return [...groups.values()].sort((a, b) => {

@@ -29,7 +29,7 @@ from core.integrations.prowlarr import ProwlarrClient
 from core.integrations.qbittorrent import QBittorrentClient, apply_qbittorrent_webui_login, qbittorrent_credentials
 from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient, read_sabnzbd_ini
-from core.integrations.seerr import SeerrClient
+from core.integrations.seerr import SeerrClient, seerr_admin_login
 from core.integrations.sonarr import SonarrClient
 from core.integrations.usenet import load_usenet_server
 from core.vpn import vpn_manager
@@ -40,7 +40,7 @@ from core.library_layout import (
     jellyfin_libraries,
 )
 from core.settings import settings
-from core.shared_credentials import admin_email, shared_admin_credentials
+from core.shared_credentials import shared_admin_credentials
 from core.storage import StorageManager
 from core.supervisor import ProcessSupervisor
 
@@ -402,22 +402,20 @@ class IntegrationEngine:
             steps.append(_step("plex", "configure_libraries_and_transcode", plex_ok, str(layout.transcode_plex)))
 
         if not self._skip_uninstalled(steps, "seerr", "connect_media_services"):
-            seerr_client = SeerrClient(port=seerr_port, api_key=seerr_key)
-            shared = shared_admin_credentials()
-            email = admin_email()
-            try:
-                from core.auth import auth_manager
-
-                email = email or auth_manager.email()
-                seerr_user = auth_manager.username()
-            except Exception:
-                seerr_user = shared[0] if shared else "admin"
-            seerr_pass = shared[1] if shared else ""
-            setup_ok = True
-            if email and seerr_pass:
-                setup_ok = seerr_client.setup_local_admin(email, seerr_user, seerr_pass)
             media_servers = self._chosen_apps("jellyfin", "plex", selection_key="media_servers")
             arr_apps = self._chosen_apps("sonarr", "radarr", selection_key="arr_apps")
+            jelly_for_seerr = (
+                jelly_port if "jellyfin" in media_servers and self._is_app_running("jellyfin") else None
+            )
+            plex_token = None
+            if "plex" in media_servers:
+                plex_token = PlexClient(port=plex_port, config_dir=self._catalog.get("plex").config_dir).token
+            # Seerr's admin is created by the first media-server sign-in and the API key
+            # only works after that, so the whole step runs on the signed-in session.
+            seerr_client = seerr_admin_login(seerr_port, jellyfin_port=jelly_for_seerr, plex_token=plex_token)
+            signed_in = seerr_client is not None
+            if seerr_client is None:
+                seerr_client = SeerrClient(port=seerr_port, api_key=seerr_key)
             links: list[bool] = []
             if "sonarr" in arr_apps:
                 links.append(
@@ -431,20 +429,22 @@ class IntegrationEngine:
                         port=radarr_port, api_key=radarr_key or "", root_folder=str(layout.movies)
                     )
                 )
-            if "jellyfin" in media_servers:
-                links.append(seerr_client.connect_jellyfin(port=jelly_port, api_key=jellyfin_key or ""))
-            if "plex" in media_servers:
-                links.append(seerr_client.connect_plex(port=plex_port))
-            seerr_ok = setup_ok and (any(links) if links else True)
-            detail = "Seerr local admin"
-            if links:
-                wired = []
-                if "sonarr" in arr_apps:
-                    wired.append("Sonarr")
-                if "radarr" in arr_apps:
-                    wired.append("Radarr")
-                wired.extend(name.title() for name in media_servers)
-                detail = "Seerr → " + "/".join(wired) if wired else detail
+            setup: list[bool] = []
+            if signed_in:
+                if seerr_client.media_server == "plex":
+                    links.append(seerr_client.connect_plex(port=plex_port))
+                setup.append(seerr_client.enable_all_libraries(seerr_client.media_server))
+                setup.append(seerr_client.initialize())
+            seerr_ok = signed_in and all(setup) and (any(links) if links else True)
+            wired = []
+            if "sonarr" in arr_apps:
+                wired.append("Sonarr")
+            if "radarr" in arr_apps:
+                wired.append("Radarr")
+            if signed_in:
+                wired.append(seerr_client.media_server.title())
+            detail = ("Seerr → " + "/".join(wired)) if wired else "Seerr"
+            detail += f" signed_in={signed_in} setup_complete={bool(setup) and all(setup)}"
             steps.append(_step("seerr", "connect_media_services", seerr_ok, detail))
 
         if not self._skip_unavailable(steps, "bazarr", "pair_libraries", require_running=False):

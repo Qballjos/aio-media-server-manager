@@ -89,6 +89,15 @@ const combinedServices = computed(() => {
   return props.catalogApps.filter((cat) => cat.current_arch_supported !== false).map(cat => {
     const live = appMap.get(cat.name)
     const port = live?.port || cat.port || cat.default_port
+    const webUrl = appWebUrl({
+      appName: cat.name,
+      port,
+      baseDomain: props.systemInfo?.public_app_base_domain || '',
+      subdomain: (() => {
+        const row = (props.systemInfo?.public_app_hostnames || {})[cat.name]
+        return row && row.enabled ? row.subdomain : ''
+      })(),
+    })
     return {
       name: cat.name,
       displayName: cat.display_name,
@@ -100,15 +109,9 @@ const combinedServices = computed(() => {
       defaultPort: cat.default_port,
       installed: cat.installed || (live && live.installed) || false,
       installedVersion: cat.installed_version || (live && live.version),
-      webUrl: appWebUrl({
-        appName: cat.name,
-        port,
-        baseDomain: props.systemInfo?.public_app_base_domain || '',
-        subdomain: (() => {
-          const row = (props.systemInfo?.public_app_hostnames || {})[cat.name]
-          return row && row.enabled ? row.subdomain : ''
-        })(),
-      }),
+      webUrl,
+      // Seerr: the manager signs the shared admin in and hands the session to the browser.
+      openUrl: cat.name === 'seerr' ? '/api/applications/seerr/open' : webUrl,
       state: live ? live.state : (cat.installed ? 'stopped' : 'not_installed'),
       pid: live ? live.pid : null,
       uptime: live ? live.uptime_seconds : null,
@@ -770,7 +773,7 @@ onUnmounted(() => {
                   <div v-if="service.daemon" class="service-port font-mono">
                     <span class="port-label">PORT:</span>
                     <a
-                      :href="service.webUrl"
+                      :href="service.openUrl"
                       target="_blank"
                       rel="noopener noreferrer"
                       class="port-link"
@@ -864,7 +867,7 @@ onUnmounted(() => {
                 </button>
                 <a
                   v-if="service.daemon"
-                  :href="service.webUrl"
+                  :href="service.openUrl"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="btn-action btn-webui"

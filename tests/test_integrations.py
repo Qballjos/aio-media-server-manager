@@ -605,24 +605,21 @@ def test_prowlarr_client(mock_post, mock_get):
     assert client.add_flaresolverr() is True
 
 
-@patch("requests.get")
-@patch("requests.post")
-def test_seerr_client(mock_post, mock_get):
-    mock_get_resp = MagicMock()
-    mock_get_resp.status_code = 200
-    mock_get_resp.json.return_value = []
-    mock_get.return_value = mock_get_resp
+def test_seerr_client():
+    http = MagicMock()
+    get_resp = MagicMock()
+    get_resp.status_code = 200
+    get_resp.json.return_value = []
+    http.get.return_value = get_resp
+    post_resp = MagicMock()
+    post_resp.status_code = 201
+    http.post.return_value = post_resp
 
-    mock_post_resp = MagicMock()
-    mock_post_resp.status_code = 201
-    mock_post.return_value = mock_post_resp
-
-    client = SeerrClient(api_key="seerr_key_123")
+    client = SeerrClient(api_key="seerr_key_123", http=http)
     assert client.connect_sonarr(api_key="sonarr_key") is True
     assert client.connect_radarr(api_key="radarr_key") is True
     assert client.connect_jellyfin(api_key="jelly_key") is True
     assert client.connect_plex(port=32400) is True
-    assert client.setup_local_admin("admin@example.com", "admin", "SharedPass123!") is True
 
 
 def test_integration_endpoints():

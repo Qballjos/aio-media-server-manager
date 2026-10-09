@@ -81,6 +81,7 @@ Enable **Jellyfin**, **Plex**, and **Seerr** as needed.
 
 - Point libraries at the same media folders Sonarr, Radarr, and Lidarr use.
 - Seerr talks to Sonarr and Radarr so household members can request titles.
+- Seerr's admin account and first-run wizard are completed for you using the shared login (through Jellyfin, or a claimed Plex). On the LAN, **Open UI** opens Seerr already signed in.
 
 ### 5. Optional extras
 

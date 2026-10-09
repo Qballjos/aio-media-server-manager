@@ -73,7 +73,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **First-run wizard.** Choose *Arr apps, download clients (including Usenet provider fields), media servers, VPN, and recommended tools. Persist paths and credentials, then install. Administrator setup requires an email address.
 
-**Shared local login.** The manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin, Seerr). Plex still uses a Plex account.
+**Shared local login.** The manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin). Seerr's admin is created by signing in with that Jellyfin account (or the claimed Plex token), and its first-run wizard is completed for you. Plex still uses a Plex account.
 
 **Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr.
 
@@ -83,7 +83,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Operations.** `config` / `downloads` / `media` with `PUID` / `PGID` and hardlink checks. Optional WireGuard or OpenVPN isolation for qBittorrent, Prowlarr, and Flaresolverr (Usenet stays off the tunnel). Optional VAAPI / QSV / NVIDIA transcoding. Optional Cloudflare Tunnel (`cloudflared` inside this appliance). Configuration backups with verify, per-app restore, and a schedule.
 
-**Open UI.** Each catalog card opens `http://<host>:<app-port>`. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent uses [VueTorrent](https://github.com/VueTorrent/VueTorrent) by default (same port and WebAPI). Catalog → qBittorrent → Settings can switch to the stock WebUI or **Update VueTorrent** (re-downloads the latest UI zip; not part of Catalog app updates). Catalog → NeutArr → Settings shows NeutArr's first-run setup token while `/config/neutarr/.setup-token` exists. NeutArr removes that file after account creation.
+**Open UI.** Each catalog card opens `http://<host>:<app-port>`. On the LAN, Seerr opens already signed in as the manager admin (the manager signs in server-side and hands the session to your browser); on public subdomains Seerr shows its own login. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent uses [VueTorrent](https://github.com/VueTorrent/VueTorrent) by default (same port and WebAPI). Catalog → qBittorrent → Settings can switch to the stock WebUI or **Update VueTorrent** (re-downloads the latest UI zip; not part of Catalog app updates). Catalog → NeutArr → Settings shows NeutArr's first-run setup token while `/config/neutarr/.setup-token` exists. NeutArr removes that file after account creation.
 
 ---
 

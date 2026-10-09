@@ -11,8 +11,10 @@ import asyncio
 import logging
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 
 from pydantic import BaseModel
 
@@ -20,6 +22,8 @@ from applications.catalog import ApplicationCatalog, refresh_live_catalogs
 from core.app_prefs import AppPrefsError, autostart_for, set_app_option, update_app_prefs
 from core.app_web_url import app_web_ui_url_for_request
 from core.auth import auth_manager
+from core.integrations.plex import PlexClient
+from core.integrations.seerr import SEERR_SESSION_MAX_AGE, seerr_admin_login
 from core.settings import settings
 from core.supervisor import ProcessSupervisor
 from core.uninstall import UninstallError, uninstall_application
@@ -105,6 +109,35 @@ async def list_applications(request: Request) -> dict[str, Any]:
         )
 
     return {"applications": results}
+
+
+@router.get("/seerr/open", summary="Open Seerr signed in as the manager admin")
+async def open_seerr(request: Request) -> RedirectResponse:
+    """Sign the shared admin in to Seerr server-side and hand the browser the session.
+
+    Browsers do not isolate cookies by port, so a host-only cookie set here is sent
+    to http://<same host>:<seerr port> too. On public subdomains the hosts differ, so
+    the user gets a plain redirect and Seerr's own login.
+    """
+    _ensure_authenticated(request)
+    port = catalog.get("seerr").port
+    target = app_web_ui_url_for_request(request, app_name="seerr", port=port)
+    response = RedirectResponse(target, status_code=status.HTTP_302_FOUND)
+    if (urlparse(target).hostname or "") != (request.url.hostname or ""):
+        return response
+    plex_token = PlexClient(config_dir=catalog.get("plex").config_dir).token if catalog.has("plex") else None
+    client = await asyncio.to_thread(seerr_admin_login, port, plex_token=plex_token)
+    for cookie in client.http.cookies if client else []:
+        response.set_cookie(
+            cookie.name,
+            cookie.value,
+            max_age=SEERR_SESSION_MAX_AGE,
+            path="/",
+            secure=request.url.scheme == "https",
+            httponly=True,
+            samesite="lax",
+        )
+    return response
 
 
 @router.post("/{name}/start", summary="Start an application process")
