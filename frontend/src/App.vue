@@ -295,7 +295,10 @@ async function refreshDashboard() {
 
 function pollLiveStatus() {
   if (!authStatus.value.authenticated || !wizardCompleted.value) return
-  if (currentView.value === 'catalog') fetchApplications()
+  if (currentView.value === 'catalog') {
+    fetchApplications()
+    fetchCatalog()
+  }
   fetchVpnStatus()
 }
 
@@ -337,6 +340,7 @@ watch(currentView, (view) => {
   if (!authStatus.value.authenticated || !wizardCompleted.value) return
   if (view === 'catalog') {
     fetchApplications()
+    fetchCatalog()
     fetchUpdateStatus()
   }
 })

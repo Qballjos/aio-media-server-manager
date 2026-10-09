@@ -83,6 +83,19 @@ class JellyfinApp(BaseApplication):
 
     def post_install(self) -> None:
         self._write_http_port(self.port)
+        self.prepare_browser_login()
+
+    def prepare_browser_login(self) -> bool:
+        """Serve the sign-in helper from Jellyfin's own browser origin."""
+        webdir = self._webdir()
+        if webdir is None:
+            return False
+        for name in ("aio-login.html", "aio-login.js"):
+            content = (Path(__file__).parent / name).read_bytes()
+            target = webdir / name
+            if not target.is_file() or target.read_bytes() != content:
+                target.write_bytes(content)
+        return True
 
     def _write_http_port(self, port: int | None = None) -> Path:
         """Jellyfin 12 dropped --http-port; listen port lives in network.xml."""

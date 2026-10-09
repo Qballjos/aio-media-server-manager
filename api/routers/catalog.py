@@ -78,6 +78,14 @@ async def list_ports(request: Request) -> dict[str, Any]:
     }
 
 
+@router.get("/install-jobs", summary="Current installation and configuration activity")
+async def install_jobs(request: Request) -> dict[str, Any]:
+    from core.install_jobs import snapshot
+
+    _ensure_authenticated(request)
+    return {"jobs": snapshot()}
+
+
 @router.get("/{name}", summary="Get application details")
 async def get_application_details(name: str, request: Request) -> dict[str, Any]:
     """
@@ -113,9 +121,16 @@ async def install_application(
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
-    if plugin.is_installed():
-        from core.install_jobs import set_job
+    from core.install_jobs import get_job, set_job
 
+    job = get_job(name)
+    if job and job["status"] in {"queued", "installing", "configuring"}:
+        return {
+            "status": job["status"],
+            "message": job["message"] or f"Setup is already in progress for '{plugin.manifest.display_name}'.",
+        }
+
+    if plugin.is_installed():
         set_job(name, "already_installed")
         return {
             "status": "already_installed",
@@ -134,24 +149,28 @@ async def install_application(
         )
 
     from core.diagnostics import diagnostics
-    from core.install_jobs import set_job
     from core.maintenance import begin_install, end_install
 
-    set_job(name, "queued")
+    set_job(name, "queued", "Waiting to start installation")
 
     async def _do_install():
-        set_job(name, "installing")
+        set_job(name, "installing", "Preparing installation")
         begin_install()
         try:
             logger.info("Starting background install for '%s'...", name)
             await asyncio.to_thread(plugin.install)
             logger.info("Background install for '%s' completed successfully.", name)
-            set_job(name, "configuring")
+            set_job(name, "configuring", "Starting application")
             try:
-                await finalize_application_install(plugin)
+                report = await finalize_application_install(plugin)
             except Exception as err:
                 logger.error("Post-install wiring failed for '%s': %s", name, err, exc_info=True)
-            set_job(name, "started")
+                set_job(name, "failed", f"Automatic setup failed: {err}")
+            else:
+                if report.get("wiring_error"):
+                    set_job(name, "failed", f"Automatic setup failed: {report['wiring_error']}")
+                else:
+                    set_job(name, "started")
         except Exception as err:
             logger.error("Failed to install '%s': %s", name, err, exc_info=True)
             set_job(name, "failed", str(err))

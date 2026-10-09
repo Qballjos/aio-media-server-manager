@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { brandLogoUrl, brandTitle } from './branding.js'
+import { formatUptime } from './format.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 
 const emit = defineEmits(['done'])
@@ -19,6 +20,7 @@ const saving = ref(false)
 const error = ref('')
 const installing = ref(false)
 const installProgress = ref([])
+const progressNow = ref(Date.now() / 1000)
 let finishAborted = false
 
 const TITLE = {
@@ -45,9 +47,8 @@ const installActive = computed(() =>
   installProgress.value.find((item) => ['installing', 'configuring'].includes(item.status))
 )
 const installPercent = computed(() => {
-  if (!installTotal.value) return installing.value ? 8 : 0
-  const partial = installActive.value ? 0.4 : 0
-  return Math.min(100, Math.round(((installDoneCount.value + partial) / installTotal.value) * 100))
+  if (!installTotal.value) return 0
+  return Math.round((installDoneCount.value / installTotal.value) * 100)
 })
 const headerTitle = computed(() => (installing.value ? 'Installing applications' : TITLE[step.value]))
 const headerSubtitle = computed(() => {
@@ -56,7 +57,7 @@ const headerSubtitle = computed(() => {
   }
   if (installing.value) {
     const current = installActive.value
-    if (current) return `Downloading and installing ${displayName(current.name)}.`
+    if (current) return `${displayName(current.name)}: ${current.message || installStatusLabel(current.status).toLowerCase()}`
     return `Finished ${installDoneCount.value} of ${installTotal.value} selected apps.`
   }
   return `Step ${flowIndex.value} of ${FLOW.length} — pick your stack, then save and install.`
@@ -102,6 +103,7 @@ function sleep(ms) {
 }
 
 async function refreshInstallProgress() {
+  progressNow.value = Date.now() / 1000
   const res = await apiRequest('/api/catalog')
   if (!res.ok) return
   const data = await readJson(res)
@@ -109,18 +111,22 @@ async function refreshInstallProgress() {
   installProgress.value = installProgress.value.map((item) => {
     const row = byName[item.name]
     if (!row) return item
-    const next = { ...item, displayName: row.display_name || item.displayName }
-    if (row.installed || row.install_job === 'started' || row.install_job === 'already_installed') {
-      next.status = row.install_job === 'already_installed' ? 'already_installed' : 'started'
-    } else if (row.install_job === 'failed') {
+    const next = {
+      ...item,
+      displayName: row.display_name || item.displayName,
+      installed: row.installed,
+      message: row.install_message || '',
+      updatedAt: row.install_updated_at,
+    }
+    if (row.install_job === 'failed') {
       next.status = 'failed'
       next.detail = row.install_error || item.detail
-    } else if (item.status === 'failed') {
-      return next
     } else if (row.install_job === 'configuring') {
       next.status = 'configuring'
     } else if (row.install_job === 'installing' || row.install_job === 'queued') {
-      next.status = 'installing'
+      next.status = row.install_job
+    } else if (row.installed || row.install_job === 'started' || row.install_job === 'already_installed') {
+      next.status = row.install_job === 'already_installed' ? 'already_installed' : 'started'
     }
     return next
   })
@@ -130,7 +136,8 @@ async function waitForAppInstall(name) {
   while (!finishAborted) {
     await refreshInstallProgress()
     const item = installProgress.value.find((row) => row.name === name)
-    if (!item || isInstallTerminal(item.status)) return
+    // Configuration can wait for other apps, so keep installing the remaining packages.
+    if (!item || item.installed || isInstallTerminal(item.status)) return
     await sleep(1500)
   }
 }
@@ -321,7 +328,7 @@ async function finish() {
     await refreshInstallProgress()
     for (const item of [...installProgress.value]) {
       if (finishAborted) return
-      if (isInstallTerminal(item.status)) continue
+      if (item.installed || isInstallTerminal(item.status)) continue
       patchInstallItem(item.name, { status: 'installing' })
       try {
         const inst = await apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
@@ -424,7 +431,9 @@ onUnmounted(() => {
               role="progressbar"
               :aria-valuemin="0"
               :aria-valuemax="100"
-              :aria-valuenow="installPercent"
+              :aria-valuenow="installTotal ? installPercent : undefined"
+              :aria-valuetext="`${installDoneCount} of ${installTotal} apps finished`"
+              aria-label="Application setup"
             >
               <div
                 class="wizard-bar-fill"
@@ -446,6 +455,12 @@ onUnmounted(() => {
                 <span class="wizard-install-name">
                   {{ displayName(item.name) }}
                   <small v-if="item.status === 'failed' && item.detail" class="wizard-install-error">{{ item.detail }}</small>
+                  <template v-else-if="['queued', 'installing', 'configuring'].includes(item.status)">
+                    <small v-if="item.message" class="wizard-install-detail" aria-live="polite">{{ item.message }}</small>
+                    <small v-if="item.updatedAt" class="wizard-install-detail">
+                      Last progress {{ formatUptime(progressNow - item.updatedAt) }} ago
+                    </small>
+                  </template>
                 </span>
                 <span class="wizard-status" :class="installBadgeClass(item.status)">
                   <span v-if="item.status === 'installing' || item.status === 'configuring'" class="spinner spinner-sm"></span>
@@ -963,12 +978,16 @@ onUnmounted(() => {
   color: var(--text-main);
   overflow-wrap: anywhere;
 }
-.wizard-install-error {
+.wizard-install-error,
+.wizard-install-detail {
   display: block;
   margin-top: 0.2rem;
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-danger-fg);
+}
+.wizard-install-detail {
+  color: var(--text-muted);
 }
 .wizard-status {
   display: inline-flex;

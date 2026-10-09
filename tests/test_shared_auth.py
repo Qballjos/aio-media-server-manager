@@ -3,6 +3,8 @@ import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from core.crypto import SecretStore
 from core.integrations.local_auth import (
     patch_bazarr_auth_yaml,
@@ -150,3 +152,114 @@ def test_set_servarr_forms_auth_leaves_app_running_when_already_forms(mock_get, 
     mock_put.return_value = MagicMock(status_code=202)
     assert set_servarr_forms_auth("http://127.0.0.1:8989/api/v3", "key", "amm", "SharedPass123!", name="sonarr") is True
     assert restarted == []
+
+
+def test_shared_logins_run_before_slow_media_setup(tmp_path, monkeypatch):
+    from core.integrations import engine
+    from core.settings import Settings
+
+    events = []
+    manager = engine.IntegrationEngine(Settings(config_dir=tmp_path / "config"))
+    monkeypatch.setattr(engine, "apply_shared_local_logins", lambda **kwargs: events.append("shared logins") or [])
+    storage = MagicMock()
+
+    def stop_at_storage():
+        events.append("media folders")
+        raise RuntimeError("stop before media setup")
+
+    storage.create_standard_layout.side_effect = stop_at_storage
+    monkeypatch.setattr(engine, "StorageManager", lambda *args: storage)
+    with pytest.raises(RuntimeError, match="stop before media setup"):
+        manager.run_full_wiring()
+    assert events == ["shared logins", "media folders"]
+
+
+async def test_ready_servarr_gets_aio_login_before_waiting_for_shared_wiring(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from core.integrations import lifecycle
+
+    events = []
+    plugin = SimpleNamespace(
+        name="prowlarr", port=9696, config_dir=tmp_path,
+        manifest=SimpleNamespace(daemon=True), start_command=lambda: ["Prowlarr"],
+        working_directory=lambda: tmp_path, extra_env=lambda: {},
+    )
+    supervisor = SimpleNamespace(start=AsyncMock())
+    monkeypatch.setattr(lifecycle.ProcessSupervisor, "get", lambda: supervisor)
+    monkeypatch.setattr(lifecycle.vpn_manager, "assert_can_start_tunneled_app", lambda name: None)
+    healthy = AsyncMock(return_value=True)
+    monkeypatch.setattr(lifecycle, "_wait_healthy", healthy)
+    monkeypatch.setattr(lifecycle, "wait_for_application_api_key", AsyncMock(return_value="test-api-key"))
+    monkeypatch.setattr(lifecycle, "set_job", lambda *args, **kwargs: None)
+
+    def configure_login(**kwargs):
+        assert kwargs["installed"]("prowlarr") is True
+        assert kwargs["installed"]("sonarr") is False
+        assert kwargs["port_for"]("prowlarr", 0) == 9696
+        assert kwargs["api_key_for"]("prowlarr") == "test-api-key"
+        assert kwargs["config_dir_for"]("prowlarr") == tmp_path
+        events.append("shared login")
+        return [{"status": "success"}]
+
+    async def wiring():
+        assert healthy.await_count == 2
+        events.append("shared wiring")
+        return {"status": "completed"}
+
+    monkeypatch.setattr(lifecycle, "apply_shared_local_logins", configure_login)
+    monkeypatch.setattr(lifecycle, "schedule_full_wiring", wiring)
+    report = await lifecycle.finalize_application_install(plugin)
+    assert events == ["shared login", "shared wiring"]
+    assert report["shared_login"] is True
+    assert report["healthy"] is True
+
+
+def test_concurrent_servarr_login_setup_changes_auth_and_restarts_once(monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from core.integrations import local_auth
+
+    first_get = threading.Event()
+    release_first = threading.Event()
+    second_started = threading.Event()
+    second_get = threading.Event()
+    methods = []
+    current = {"method": "none"}
+    restarted = []
+
+    def get(*args, **kwargs):
+        method = current["method"]
+        methods.append(method)
+        if len(methods) == 1:
+            first_get.set()
+            assert release_first.wait(2)
+        else:
+            second_get.set()
+        return MagicMock(status_code=200, json=lambda: {"authenticationMethod": method})
+
+    def put(*args, **kwargs):
+        current["method"] = kwargs["json"]["authenticationMethod"]
+        return MagicMock(status_code=202)
+
+    def configure(second=False):
+        if second:
+            second_started.set()
+        return set_servarr_forms_auth("http://127.0.0.1:9696/api/v1", "key", "amm", "SharedPass123!", name="prowlarr")
+
+    monkeypatch.setattr(local_auth.requests, "get", get)
+    monkeypatch.setattr(local_auth.requests, "put", put)
+    monkeypatch.setattr(local_auth, "restart_app_if_running", restarted.append)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        first = workers.submit(configure)
+        try:
+            assert first_get.wait(1)
+            second = workers.submit(configure, True)
+            assert second_started.wait(1)
+            assert not second_get.wait(0.1)
+        finally:
+            release_first.set()
+        assert first.result(timeout=2) is True
+        assert second.result(timeout=2) is True
+    assert methods == ["none", "forms"]
+    assert restarted == ["prowlarr"]

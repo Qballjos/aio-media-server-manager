@@ -305,7 +305,8 @@ def test_pwa_public_assets():
     assert "addEventListener('fetch'" in sw
 
 
-def test_install_marks_the_job_configuring_while_wiring_runs(monkeypatch):
+@pytest.mark.parametrize("outcome", ["success", "exception", "wiring_error"])
+def test_install_job_reports_configuration_result(monkeypatch, outcome):
     from fastapi.testclient import TestClient
 
     from api.app import create_app
@@ -316,7 +317,11 @@ def test_install_marks_the_job_configuring_while_wiring_runs(monkeypatch):
 
     async def fake_finalize(plugin):
         seen.append(get_job(plugin.name)["status"])
-        return {}
+        if outcome == "exception":
+            raise RuntimeError("Configuration failed")
+        if outcome == "wiring_error":
+            return {"wiring_error": "Configuration failed"}
+        return {"wired": True}
 
     plugin = catalog_router.catalog.get("sonarr")
     monkeypatch.setattr(plugin, "install", lambda: None)
@@ -327,6 +332,49 @@ def test_install_marks_the_job_configuring_while_wiring_runs(monkeypatch):
         client = TestClient(create_app())
         assert client.post("/api/catalog/sonarr/install").status_code == 200
         assert seen == ["configuring"]
-        assert get_job("sonarr")["status"] == "started"
+        job = get_job("sonarr")
+        assert job["status"] == ("started" if outcome == "success" else "failed")
+        assert job["message"] == (
+            "" if outcome == "success" else "Automatic setup failed: Configuration failed"
+        )
     finally:
         clear_jobs()
+
+
+@pytest.mark.parametrize("busy_status", ["queued", "installing", "configuring"])
+@pytest.mark.parametrize("installed", [False, True])
+def test_repeated_install_preserves_active_job(monkeypatch, busy_status, installed):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.routers import catalog as catalog_router
+    from core import install_jobs
+
+    monkeypatch.setattr(install_jobs, "_jobs", {})
+    monkeypatch.setattr(install_jobs, "_wiring_progress", {})
+    monkeypatch.setattr(install_jobs, "time", SimpleNamespace(time=lambda: 100.0))
+    install_jobs.set_job("seerr", busy_status, "Building Seerr", wiring=busy_status == "configuring")
+    if busy_status == "configuring":
+        install_jobs.set_wiring_progress("Signing in to Seerr")
+    previous = install_jobs.get_job("seerr")
+    monkeypatch.setattr(install_jobs, "time", SimpleNamespace(time=lambda: 200.0))
+    plugin = SimpleNamespace(
+        name="seerr", manifest=SimpleNamespace(display_name="Seerr"),
+        is_installed=Mock(return_value=installed), installed_metadata=Mock(return_value={}),
+        supports_current_arch=Mock(return_value=True), install=Mock(),
+    )
+    monkeypatch.setattr(catalog_router, "catalog", SimpleNamespace(get=lambda name: plugin))
+    monkeypatch.setattr(catalog_router, "_ensure_authenticated", lambda request: None)
+    finalize = AsyncMock(return_value={"wired": True})
+    monkeypatch.setattr(catalog_router, "finalize_application_install", finalize)
+    app = FastAPI()
+    app.include_router(catalog_router.router)
+    response = TestClient(app).post("/api/catalog/seerr/install")
+    assert response.status_code == 200
+    assert response.json() == {"status": busy_status, "message": previous["message"]}
+    assert install_jobs.get_job("seerr") == previous
+    plugin.is_installed.assert_not_called()
+    plugin.install.assert_not_called()
+    finalize.assert_not_awaited()

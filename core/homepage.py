@@ -414,7 +414,8 @@ def _launcher_apps(
     for plugin in catalog.all_plugins():
         if plugin.name in _LAUNCHER_SKIP or not plugin.manifest.daemon:
             continue
-        if not plugin.is_installed():
+        job = get_job(plugin.name) or {}
+        if not plugin.is_installed() and job.get("status") not in {"queued", "installing", "configuring", "failed"}:
             continue
         proc = states.get(plugin.name) or {}
         state = str(proc.get("state") or ("running" if plugin.name in running else "stopped"))
@@ -430,6 +431,8 @@ def _launcher_apps(
                 "sick": sick,
                 "state": tile_state,
                 "state_label": label,
+                "progress_message": job.get("message", ""),
+                "progress_updated_at": job.get("updated_at"),
                 "url": _web_url(plugin.name, plugin.port, host, scheme),
             }
         )
@@ -450,6 +453,7 @@ _STATE_LABELS = {
     "configuring": "Configuring…",
     "waiting_for_vpn": "Waiting for VPN",
     "stopped": "Stopped",
+    "failed": "Setup failed",
 }
 
 
@@ -463,6 +467,8 @@ def _launcher_state(name: str, running: bool, sick: bool, vpn_waiting: bool) -> 
     elif job == "configuring":
         # The process may already run, but the post-install wiring is still busy.
         state = "configuring"
+    elif job == "failed":
+        state = "failed"
     elif running:
         state = "running"
     elif vpn_waiting and name in VPN_TUNNELED_APPS:

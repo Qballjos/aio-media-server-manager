@@ -215,8 +215,10 @@ class BaseApplication(abc.ABC):
             "current_arch_supported": arch in self.manifest.supported_architectures,
             "current_arch": arch,
             "install_job": job["status"] if job else None,
+            "install_message": job["message"] if job else "",
+            "install_updated_at": job["updated_at"] if job else None,
         }
-        if job and job.get("message"):
+        if job and job["status"] == "failed" and job.get("message"):
             entry["install_error"] = job["message"]
         return entry
 

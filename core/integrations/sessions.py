@@ -18,8 +18,8 @@ from core.shared_credentials import shared_admin_credentials
 logger = logging.getLogger(__name__)
 
 SERVARR_APPS = ("sonarr", "radarr", "lidarr", "prowlarr")
-# Apps with a cookie login the shared admin can use. Jellyfin keeps its token in
-# localStorage, NZBGet uses HTTP basic auth, Plex uses a Plex account: no handoff.
+# Jellyfin uses a separate Quick Connect handoff for localStorage tokens;
+# NZBGet uses HTTP basic auth and Plex uses a Plex account.
 SIGN_IN_APPS = frozenset({"seerr", "qbittorrent", "bazarr", "sabnzbd", *SERVARR_APPS})
 
 

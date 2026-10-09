@@ -12,6 +12,8 @@ import time
 from typing import Any, Iterable, Optional
 import requests
 
+from core.install_jobs import set_wiring_progress
+
 logger = logging.getLogger(__name__)
 
 # Public indexers Prowlarr starts with so searches work right after setup.
@@ -79,9 +81,11 @@ class ProwlarrClient:
 
     def indexer_definitions(self, wait: float = 0.0) -> list[dict[str, Any]]:
         """Prowlarr's indexer catalog; nudge the definition download and wait when it is still empty."""
+        set_wiring_progress("Reading Prowlarr's indexer catalog")
         defs = self._get("/indexer/schema", timeout=120.0) or []
         if wait <= 0 or _public_count(defs) >= _MIN_PUBLIC_DEFINITIONS:
             return defs
+        set_wiring_progress("Updating Prowlarr's indexer catalog")
         resp = self._post("/command", {"name": "IndexerDefinitionUpdate"})
         command_id = resp.json().get("id") if resp is not None and resp.status_code in (200, 201) else None
         deadline = time.monotonic() + wait
@@ -90,6 +94,7 @@ class ProwlarrClient:
             status = (self._get(f"/command/{command_id}") or {}).get("status")
             if status in ("completed", "failed", "aborted"):
                 break
+        set_wiring_progress("Reading Prowlarr's updated indexer catalog")
         return self._get("/indexer/schema", timeout=120.0) or defs
 
     def add_starter_indexers(
@@ -100,6 +105,7 @@ class ProwlarrClient:
         definitions_wait: float = 0.0,
     ) -> dict[str, list[str]]:
         """Add the wanted public indexers Prowlarr knows; an unreachable one is saved disabled."""
+        set_wiring_progress("Checking configured Prowlarr indexers")
         existing = {str(item.get("name")) for item in self.list_indexers()}
         skipped = set(skip)
         definitions = {
@@ -116,10 +122,12 @@ class ProwlarrClient:
                 result["missing"].append(name)
                 continue
             body = _starter_body(definition)
+            set_wiring_progress(f"Checking and adding indexer: {name}")
             if self._create_indexer(body):
                 result["added"].append(name)
                 continue
             body["enable"] = False
+            set_wiring_progress(f"Saving unavailable indexer: {name}")
             if self._create_indexer(body):
                 result["disabled"].append(name)
         return result
@@ -159,6 +167,7 @@ class ProwlarrClient:
     def attach_flaresolverr(self, names: Iterable[str]) -> list[str]:
         """Tag the named indexers for FlareSolverr when Prowlarr's test says Cloudflare blocks them."""
         wanted = set(names)
+        set_wiring_progress("Preparing FlareSolverr indexer connections")
         tag_id = self.ensure_flaresolverr_tag()
         if tag_id is None or not wanted:
             return []
@@ -166,6 +175,7 @@ class ProwlarrClient:
         for indexer in self.list_indexers():
             if indexer.get("name") not in wanted or tag_id in (indexer.get("tags") or []):
                 continue
+            set_wiring_progress(f"Checking whether {indexer['name']} needs FlareSolverr")
             resp = self._post("/indexer/test", indexer, timeout=120.0)
             if resp is None or resp.status_code < 400:
                 continue
@@ -173,6 +183,7 @@ class ProwlarrClient:
                 continue
             indexer["tags"] = list(indexer.get("tags") or []) + [tag_id]
             indexer["enable"] = True
+            set_wiring_progress(f"Connecting {indexer['name']} to FlareSolverr")
             if self._put(f"/indexer/{indexer['id']}?forceSave=true", indexer):
                 tagged.append(str(indexer["name"]))
         return tagged

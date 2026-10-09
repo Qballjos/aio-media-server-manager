@@ -13,6 +13,7 @@ from pathlib import Path
 
 from applications.catalog import ApplicationCatalog
 from core.crypto import mask_secret
+from core.install_jobs import set_wiring_progress
 from core.integrations.arr_app import ArrAppClient
 from core.integrations.bazarr import BazarrClient
 from core.integrations.credentials import get_application_api_key
@@ -194,6 +195,23 @@ class IntegrationEngine:
 
     def run_full_wiring(self) -> dict[str, Any]:
         steps: list[dict[str, Any]] = []
+
+        def _config_dir(name: str) -> Path:
+            if self._catalog.has(name):
+                return self._catalog.get(name).config_dir
+            return self._settings.config_dir / name
+
+        # Apps must have their AIO login before slow media/indexer setup starts.
+        set_wiring_progress("Checking shared AIO logins")
+        steps.extend(
+            apply_shared_local_logins(
+                installed=self._installed,
+                port_for=self._port,
+                api_key_for=get_application_api_key,
+                config_dir_for=_config_dir,
+            )
+        )
+        set_wiring_progress("Preparing media folders")
         layout = StorageManager(self._settings).create_standard_layout()
         steps.append(
             _step(
@@ -218,6 +236,7 @@ class IntegrationEngine:
         seerr_port = self._port("seerr", 5055)
         bazarr_port = self._port("bazarr", 6767)
 
+        set_wiring_progress("Reading app connection settings")
         sab_cfg = self._catalog.get("sabnzbd").config_dir if self._catalog.has("sabnzbd") else self._settings.config_dir / "sabnzbd"
         sab_key = get_application_api_key("sabnzbd", sab_cfg)
         sonarr_key = get_application_api_key("sonarr")
@@ -243,6 +262,7 @@ class IntegrationEngine:
         if not self._skip_unavailable(steps, "sabnzbd", "configure_folders_and_categories"):
             from core.integrations.sabnzbd import ensure_sabnzbd_public_access
 
+            set_wiring_progress("Configuring SABnzbd download folders and categories")
             sab_client = SABnzbdClient(port=sab_port, api_key=sab_key)
             sab_ok = sab_client.set_folders(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
@@ -258,6 +278,7 @@ class IntegrationEngine:
             steps.append(_step("sabnzbd", "configure_folders_and_categories", sab_ok, str(layout.complete)))
 
         if not self._skip_unavailable(steps, "nzbget", "configure_folders_and_categories"):
+            set_wiring_progress("Configuring NZBGet download folders and categories")
             nzb = NZBGetClient(port=nzb_port)
             nzb_ok = nzb.set_download_dirs(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
@@ -268,6 +289,7 @@ class IntegrationEngine:
             steps.append(_step("nzbget", "configure_folders_and_categories", nzb_ok, str(layout.complete)))
 
         if not self._skip_unavailable(steps, "qbittorrent", "configure_folders_and_categories"):
+            set_wiring_progress("Configuring qBittorrent login and download folders")
             qb_plugin = self._catalog.get("qbittorrent")
             login_ok = apply_qbittorrent_webui_login(qb_plugin.config_dir, qb_port)
             qb_user, qb_pass = qbittorrent_credentials()
@@ -303,12 +325,14 @@ class IntegrationEngine:
         sab_pass = sab_ini.get("password") or (shared[1] if shared else "")
         sab_live = SABnzbdClient(port=sab_port, api_key=sab_key) if sab_key else None
         if sab_live:
+            set_wiring_progress("Checking SABnzbd download categories")
             for category in DOWNLOAD_CATEGORIES:
                 sab_live.add_category(category.name, dir_path=category.library)
         downloader_register = self._downloaders_for_arr(sab_key=sab_key)
 
         roots = arr_root_folders(layout)
         if not self._skip_uninstalled(steps, "sonarr", "wire_clients_and_storage"):
+            set_wiring_progress("Connecting Sonarr to download clients and media folders")
             sonarr_client = SonarrClient(port=sonarr_port, api_key=sonarr_key)
             sonarr_root = all(sonarr_client.add_root_folder(str(path)) for path in roots["sonarr"])
             sonarr_dl = _register_download_clients(
@@ -338,6 +362,7 @@ class IntegrationEngine:
             )
 
         if not self._skip_uninstalled(steps, "radarr", "wire_clients_and_storage"):
+            set_wiring_progress("Connecting Radarr to download clients and media folders")
             radarr_client = RadarrClient(port=radarr_port, api_key=radarr_key)
             radarr_root = all(radarr_client.add_root_folder(str(path)) for path in roots["radarr"])
             radarr_dl = _register_download_clients(
@@ -367,6 +392,7 @@ class IntegrationEngine:
             )
 
         if not self._skip_uninstalled(steps, "lidarr", "wire_clients_and_storage"):
+            set_wiring_progress("Connecting Lidarr to download clients and media folders")
             lidarr_client = ArrAppClient(
                 port=lidarr_port,
                 api_key=lidarr_key,
@@ -397,18 +423,23 @@ class IntegrationEngine:
             prowlarr_client = ProwlarrClient(port=prowlarr_port, api_key=prowlarr_key)
             syncs = []
             if self._installed("sonarr"):
+                set_wiring_progress("Connecting Prowlarr to Sonarr")
                 syncs.append(prowlarr_client.sync_sonarr(sonarr_url=sonarr_url, sonarr_api_key=sonarr_key or ""))
             if self._installed("radarr"):
+                set_wiring_progress("Connecting Prowlarr to Radarr")
                 syncs.append(prowlarr_client.sync_radarr(radarr_url=radarr_url, radarr_api_key=radarr_key or ""))
             if self._installed("lidarr"):
+                set_wiring_progress("Connecting Prowlarr to Lidarr")
                 syncs.append(prowlarr_client.sync_lidarr(lidarr_url=lidarr_url, lidarr_api_key=lidarr_key or ""))
             if self._installed("flaresolverr"):
+                set_wiring_progress("Connecting Prowlarr to FlareSolverr")
                 flare_port = self._port("flaresolverr", 8191)
                 syncs.append(prowlarr_client.add_flaresolverr(f"http://127.0.0.1:{flare_port}"))
             prowl_ok = all(syncs) if syncs else True
             steps.append(_step("prowlarr", "sync_applications", prowl_ok, "Prowlarr → Sonarr/Radarr/Lidarr/Flaresolverr"))
 
         if not self._skip_uninstalled(steps, "jellyfin", "configure_libraries_and_transcode"):
+            set_wiring_progress("Configuring Jellyfin media libraries")
             jelly_client = JellyfinClient(port=jelly_port, api_key=jellyfin_key)
             jelly_ok = jelly_client.set_transcoding_temp_path(str(layout.transcode_jellyfin))
             for name, collection_type, path in jellyfin_libraries(layout):
@@ -416,6 +447,7 @@ class IntegrationEngine:
             steps.append(_step("jellyfin", "configure_libraries_and_transcode", jelly_ok, str(layout.transcode_jellyfin)))
 
         if not self._skip_uninstalled(steps, "plex", "configure_libraries_and_transcode"):
+            set_wiring_progress("Configuring Plex media libraries")
             plex_config = self._catalog.get("plex").config_dir
             plex_client = PlexClient(port=plex_port, config_dir=plex_config)
             plex_ok = plex_client.set_transcoder_temp_directory(str(layout.transcode_plex))
@@ -436,18 +468,21 @@ class IntegrationEngine:
                 plex_token = PlexClient(port=plex_port, config_dir=self._catalog.get("plex").config_dir).token
             # Seerr's admin is created by the first media-server sign-in and the API key
             # only works after that, so the whole step runs on the signed-in session.
+            set_wiring_progress("Signing in to Seerr with the AIO account")
             seerr_client = seerr_admin_login(seerr_port, jellyfin_port=jelly_for_seerr, plex_token=plex_token)
             signed_in = seerr_client is not None
             if seerr_client is None:
                 seerr_client = SeerrClient(port=seerr_port, api_key=seerr_key)
             links: list[bool] = []
             if "sonarr" in arr_apps:
+                set_wiring_progress("Connecting Seerr to Sonarr")
                 links.append(
                     seerr_client.connect_sonarr(
                         port=sonarr_port, api_key=sonarr_key or "", root_folder=str(layout.tv)
                     )
                 )
             if "radarr" in arr_apps:
+                set_wiring_progress("Connecting Seerr to Radarr")
                 links.append(
                     seerr_client.connect_radarr(
                         port=radarr_port, api_key=radarr_key or "", root_folder=str(layout.movies)
@@ -456,8 +491,11 @@ class IntegrationEngine:
             setup: list[bool] = []
             if signed_in:
                 if seerr_client.media_server == "plex":
+                    set_wiring_progress("Connecting Seerr to Plex")
                     links.append(seerr_client.connect_plex(port=plex_port))
+                set_wiring_progress("Enabling media libraries in Seerr")
                 setup.append(seerr_client.enable_all_libraries(seerr_client.media_server))
+                set_wiring_progress("Finishing Seerr setup")
                 setup.append(seerr_client.initialize())
             seerr_ok = signed_in and all(setup) and (any(links) if links else True)
             wired = []
@@ -472,6 +510,7 @@ class IntegrationEngine:
             steps.append(_step("seerr", "connect_media_services", seerr_ok, detail))
 
         if not self._skip_unavailable(steps, "bazarr", "pair_libraries", require_running=False):
+            set_wiring_progress("Connecting Bazarr to media libraries")
             bazarr_cfg = (
                 self._catalog.get("bazarr").config_dir
                 if self._catalog.has("bazarr")
@@ -510,6 +549,7 @@ class IntegrationEngine:
             steps.append(_step("recyclarr", "write_trash_config", True, str(rec_path)))
             rec_plugin = self._catalog.get("recyclarr") if self._catalog.has("recyclarr") else None
             if rec_plugin and rec_plugin.is_installed():
+                set_wiring_progress("Syncing Recyclarr quality profiles")
                 result = run_sync()
                 log_tail = (result.get("log") or "").strip().splitlines()
                 detail = result.get("detail") or ""
@@ -535,23 +575,6 @@ class IntegrationEngine:
         except Exception as exc:
             steps.append(_step("neutarr", "write_starter_config", False, str(exc)))
 
-        def _api_key(name: str) -> str | None:
-            return get_application_api_key(name)
-
-        def _config_dir(name: str) -> Path:
-            if self._catalog.has(name):
-                return self._catalog.get(name).config_dir
-            return self._settings.config_dir / name
-
-        steps.extend(
-            apply_shared_local_logins(
-                installed=self._installed,
-                port_for=self._port,
-                api_key_for=_api_key,
-                config_dir_for=_config_dir,
-            )
-        )
-
         # Last: adding indexers waits on Prowlarr's catalog download and tests each
         # indexer, so it must not hold up Seerr, Bazarr, or the shared logins.
         if self._installed("prowlarr") and self._is_app_running("prowlarr"):
@@ -566,6 +589,7 @@ class IntegrationEngine:
                     sync_shelfmark_download_clients,
                 )
 
+                set_wiring_progress("Connecting Shelfmark downloads and audiobook library")
                 shelf_cfg = _config_dir("shelfmark")
                 dl_ok = sync_shelfmark_download_clients(shelf_cfg)
                 lib_ok = sync_shelfmark_audiobook_library_url(shelf_cfg)

@@ -83,11 +83,12 @@ def test_add_starter_indexers_saves_a_failing_indexer_disabled(mock_get, mock_po
 
 
 @pytest.mark.parametrize("initially_disabled", [False, True])
+@patch("core.integrations.prowlarr.set_wiring_progress")
 @patch("requests.put")
 @patch("requests.post")
 @patch("requests.get")
 def test_starter_indexers_tags_only_cloudflare_blocked_indexers(
-    mock_get, mock_post, mock_put, tmp_path, initially_disabled
+    mock_get, mock_post, mock_put, mock_progress, tmp_path, initially_disabled
 ):
     indexers = [
         {"id": 1, "name": "1337x", "enable": not initially_disabled, "tags": []},
@@ -108,6 +109,8 @@ def test_starter_indexers_tags_only_cloudflare_blocked_indexers(
         if url.endswith("/tag"):
             return _resp(201, {"id": 7, "label": "flaresolverr"})
         if url.endswith("/indexer/test"):
+            name = kwargs["json"]["name"]
+            mock_progress.assert_called_with(f"Checking whether {name} needs FlareSolverr")
             if kwargs["json"]["name"] == "1337x":
                 return _resp(400, text='[{"errorMessage":"Unable to access 1337x.to, blocked by CloudFlare Protection."}]')
             return _resp(200, {})
@@ -137,21 +140,32 @@ def test_starter_indexers_tags_only_cloudflare_blocked_indexers(
     assert indexers[1]["tags"] == []
     assert indexers[1]["enable"] is not initially_disabled
     assert "forceSave=true" in put_calls["1"].args[0]
+    assert [call.args[0] for call in mock_progress.call_args_list] == [
+        "Preparing FlareSolverr indexer connections",
+        "Checking whether 1337x needs FlareSolverr",
+        "Connecting 1337x to FlareSolverr",
+        "Checking whether YTS needs FlareSolverr",
+    ]
 
 
 @patch("core.integrations.prowlarr.time.sleep", lambda *_: None)
+@patch("core.integrations.prowlarr.set_wiring_progress")
 @patch("requests.post")
 @patch("requests.get")
-def test_indexer_definitions_waits_for_the_definition_update_command(mock_get, mock_post):
+def test_indexer_definitions_waits_for_the_definition_update_command(mock_get, mock_post, mock_progress):
     schema_calls = []
     few = [_definition("Knaben")]
     many = [_definition(f"Public{i}") for i in range(25)]
 
     def get(url, **kwargs):
         if url.endswith("/indexer/schema"):
+            mock_progress.assert_called_with(
+                "Reading Prowlarr's updated indexer catalog" if schema_calls else "Reading Prowlarr's indexer catalog"
+            )
             schema_calls.append(url)
             return _resp(200, few if len(schema_calls) == 1 else many)
         if url.endswith("/command/9"):
+            mock_progress.assert_called_with("Updating Prowlarr's indexer catalog")
             return _resp(200, {"id": 9, "status": "completed"})
         return _resp(404, [])
 
@@ -162,3 +176,36 @@ def test_indexer_definitions_waits_for_the_definition_update_command(mock_get, m
     assert len(defs) == 25
     assert mock_post.call_args.kwargs["json"] == {"name": "IndexerDefinitionUpdate"}
     assert len(schema_calls) == 2  # once before the nudge, once after the command finished
+
+
+def test_starter_indexer_progress_precedes_each_request(monkeypatch):
+    client = ProwlarrClient(api_key="k")
+    messages = []
+    monkeypatch.setattr("core.integrations.prowlarr.set_wiring_progress", messages.append)
+
+    def get(path, **kwargs):
+        if path == "/indexer":
+            assert messages[-1] == "Checking configured Prowlarr indexers"
+            return [{"name": "EZTV"}]
+        assert path == "/indexer/schema"
+        assert messages[-1] == "Reading Prowlarr's indexer catalog"
+        return [_definition(name) for name in ("1337x", "YTS", "EZTV", "Knaben")]
+
+    def post(path, body, **kwargs):
+        assert path == "/indexer"
+        expected = "Checking and adding indexer" if body["enable"] else "Saving unavailable indexer"
+        assert messages[-1] == f"{expected}: {body['name']}"
+        return _resp(400 if body["name"] == "1337x" and body["enable"] else 201)
+
+    monkeypatch.setattr(client, "_get", get)
+    monkeypatch.setattr(client, "_post", post)
+    assert client.add_starter_indexers(wanted=("1337x", "YTS", "EZTV", "Knaben"), skip={"Knaben"}) == {
+        "added": ["YTS"], "disabled": ["1337x"], "missing": []
+    }
+    assert messages == [
+        "Checking configured Prowlarr indexers",
+        "Reading Prowlarr's indexer catalog",
+        "Checking and adding indexer: 1337x",
+        "Saving unavailable indexer: 1337x",
+        "Checking and adding indexer: YTS",
+    ]

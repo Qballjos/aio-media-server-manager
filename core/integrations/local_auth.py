@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -14,6 +15,7 @@ import requests
 from core.shared_credentials import shared_admin_credentials
 
 logger = logging.getLogger(__name__)
+_servarr_auth_lock = threading.Lock()
 
 
 def set_servarr_forms_auth(
@@ -26,30 +28,32 @@ def set_servarr_forms_auth(
 ) -> bool:
     if not api_key:
         return False
-    headers = {"Content-Type": "application/json", "X-Api-Key": api_key}
-    try:
-        resp = requests.get(f"{base_url}/config/host", headers=headers, timeout=5.0)
-        if resp.status_code != 200:
+    # Per-app startup and shared setup can reach the same auth transition together.
+    with _servarr_auth_lock:
+        headers = {"Content-Type": "application/json", "X-Api-Key": api_key}
+        try:
+            resp = requests.get(f"{base_url}/config/host", headers=headers, timeout=5.0)
+            if resp.status_code != 200:
+                return False
+            cfg = resp.json()
+            if not isinstance(cfg, dict):
+                return False
+            previous_method = str(cfg.get("authenticationMethod") or "").lower()
+            cfg["authenticationMethod"] = "forms"
+            cfg["authenticationRequired"] = "enabled"
+            cfg["username"] = username
+            cfg["password"] = password
+            cfg["passwordConfirmation"] = password
+            put = requests.put(f"{base_url}/config/host", headers=headers, json=cfg, timeout=8.0)
+            ok = put.status_code in (200, 201, 202)
+            if ok and name and previous_method != "forms":
+                # Servarr reads the authentication method once at startup; until a
+                # restart its login service rejects every password.
+                restart_app_if_running(name)
+            return ok
+        except Exception as exc:
+            logger.debug("Servarr forms auth at %s failed: %s", base_url, exc)
             return False
-        cfg = resp.json()
-        if not isinstance(cfg, dict):
-            return False
-        previous_method = str(cfg.get("authenticationMethod") or "").lower()
-        cfg["authenticationMethod"] = "forms"
-        cfg["authenticationRequired"] = "enabled"
-        cfg["username"] = username
-        cfg["password"] = password
-        cfg["passwordConfirmation"] = password
-        put = requests.put(f"{base_url}/config/host", headers=headers, json=cfg, timeout=8.0)
-        ok = put.status_code in (200, 201, 202)
-        if ok and name and previous_method != "forms":
-            # Servarr reads the authentication method once at startup; until a
-            # restart its login service rejects every password.
-            restart_app_if_running(name)
-        return ok
-    except Exception as exc:
-        logger.debug("Servarr forms auth at %s failed: %s", base_url, exc)
-        return False
 
 
 def apply_shared_local_logins(

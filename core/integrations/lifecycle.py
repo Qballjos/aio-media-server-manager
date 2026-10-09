@@ -12,6 +12,9 @@ import requests
 from applications.base import BaseApplication
 from core.integrations.credentials import wait_for_application_api_key
 from core.integrations.engine import WIRE_AFTER_INSTALL, integration_engine
+from core.integrations.local_auth import apply_shared_local_logins
+from core.integrations.sessions import SERVARR_APPS
+from core.install_jobs import set_job, set_wiring_progress
 from core.settings import settings
 from core.supervisor import ProcessSupervisor
 from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager
@@ -30,15 +33,20 @@ async def schedule_full_wiring(*, wait_for_apps: bool = False) -> dict[str, Any]
         if _pending_wiring == 0:
             return {"status": "coalesced"}
         _pending_wiring = 0
-        if wait_for_apps:
-            await _wait_wiring_prereqs()
-        return await asyncio.to_thread(integration_engine.run_full_wiring)
+        try:
+            set_wiring_progress("Waiting for applications to start" if wait_for_apps else "Preparing application connections")
+            if wait_for_apps:
+                await _wait_wiring_prereqs()
+            return await asyncio.to_thread(integration_engine.run_full_wiring)
+        finally:
+            set_wiring_progress("")
 
 
 async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any]:
     """Start a newly installed daemon, wait until it answers, then wire."""
     report: dict[str, Any] = {"name": plugin.name, "started": False, "wired": False}
     if plugin.manifest.daemon:
+        set_job(plugin.name, "configuring", "Starting application")
         supervisor = ProcessSupervisor.get()
         log_dir = settings.config_dir / "logs"
         try:
@@ -56,11 +64,25 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
             logger.info("Did not start '%s' after install: %s", plugin.name, exc)
             report["start_error"] = str(exc)
 
+        set_job(plugin.name, "configuring", "Waiting for application to respond")
         healthy = await _wait_healthy(plugin)
         report["healthy"] = healthy
         if healthy:
+            set_job(plugin.name, "configuring", "Reading connection details")
             key = await wait_for_application_api_key(plugin.name, timeout=90.0)
             report["has_api_key"] = bool(key)
+            if plugin.name in SERVARR_APPS:
+                set_job(plugin.name, "configuring", "Configuring AIO login")
+                login_steps = await asyncio.to_thread(
+                    apply_shared_local_logins,
+                    installed=lambda name: name == plugin.name,
+                    port_for=lambda _name, _fallback: plugin.port,
+                    api_key_for=lambda _name: key,
+                    config_dir_for=lambda _name: plugin.config_dir,
+                )
+                report["shared_login"] = bool(login_steps) and all(step["status"] == "success" for step in login_steps)
+                # Changing Servarr's auth method restarts the app.
+                report["healthy"] = await _wait_healthy(plugin)
         else:
             logger.warning(
                 "Health check timed out for '%s'; wiring will skip it until it is running.",
@@ -72,6 +94,7 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
 
     logger.info("Running integration wiring after '%s' install.", plugin.name)
     try:
+        set_job(plugin.name, "configuring", "Waiting for shared setup", wiring=True)
         report["wiring"] = await schedule_full_wiring()
         report["wired"] = True
     except Exception as exc:
@@ -233,9 +256,11 @@ async def _wait_wiring_prereqs(timeout: float = 90.0) -> None:
         for name in names:
             plugin = catalog.get(name)
             if not await _probe_url(plugin.health_check_url()):
+                set_wiring_progress(f"Waiting for {plugin.manifest.display_name} to respond")
                 ready = False
                 break
             if name in APPS_WITH_FILE_API_KEYS and not get_application_api_key(name):
+                set_wiring_progress(f"Waiting for {plugin.manifest.display_name} connection details")
                 ready = False
                 break
         if ready:
