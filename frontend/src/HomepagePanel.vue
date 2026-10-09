@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
+import { openSeerr } from './seerrOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepageDebug.js'
 
@@ -121,7 +122,7 @@ const launcherGroups = computed(() => {
     }
     groups.get(id).apps.push({
       ...app,
-      url: app.name === 'seerr' ? '/api/applications/seerr/open' : publicAppUrl(app.name, app.port, app.url || ''),
+      url: publicAppUrl(app.name, app.port, app.url || ''),
     })
   }
   return [...groups.values()].sort((a, b) => {
@@ -634,6 +635,7 @@ onUnmounted(() => {
               target="_blank"
               rel="noopener noreferrer"
               :title="launcherTitle(app)"
+              @click="app.name === 'seerr' && openSeerr($event, app.url)"
             >
               <img
                 v-if="appIconSrc(app.name)"

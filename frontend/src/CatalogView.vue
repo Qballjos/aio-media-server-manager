@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { catalogQueryFromState, catalogStateFromQuery, sameCatalogQuery } from './catalogQuery.js'
 import { appWebUrl } from './appWebUrl.js'
+import { openSeerr } from './seerrOpen.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { formatUpdateWhen, formatUptime } from './format.js'
 import { useToasts } from './useToasts.js'
@@ -110,8 +111,6 @@ const combinedServices = computed(() => {
       installed: cat.installed || (live && live.installed) || false,
       installedVersion: cat.installed_version || (live && live.version),
       webUrl,
-      // Seerr: the manager signs the shared admin in and hands the session to the browser.
-      openUrl: cat.name === 'seerr' ? '/api/applications/seerr/open' : webUrl,
       state: live ? live.state : (cat.installed ? 'stopped' : 'not_installed'),
       pid: live ? live.pid : null,
       uptime: live ? live.uptime_seconds : null,
@@ -773,10 +772,11 @@ onUnmounted(() => {
                   <div v-if="service.daemon" class="service-port font-mono">
                     <span class="port-label">PORT:</span>
                     <a
-                      :href="service.openUrl"
+                      :href="service.webUrl"
                       target="_blank"
                       rel="noopener noreferrer"
                       class="port-link"
+                      @click="service.name === 'seerr' && openSeerr($event, service.webUrl)"
                       title="Open UI"
                     >
                       :{{ service.port }}
@@ -867,10 +867,11 @@ onUnmounted(() => {
                 </button>
                 <a
                   v-if="service.daemon"
-                  :href="service.openUrl"
+                  :href="service.webUrl"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="btn-action btn-webui"
+                  @click="service.name === 'seerr' && openSeerr($event, service.webUrl)"
                 >
                   Open UI
                 </a>

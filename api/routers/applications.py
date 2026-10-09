@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel
 
@@ -111,22 +111,23 @@ async def list_applications(request: Request) -> dict[str, Any]:
     return {"applications": results}
 
 
-@router.get("/seerr/open", summary="Open Seerr signed in as the manager admin")
-async def open_seerr(request: Request) -> RedirectResponse:
-    """Sign the shared admin in to Seerr server-side and hand the browser the session.
+@router.post("/seerr/session", summary="Sign the manager admin in to Seerr for this browser")
+async def seerr_session(request: Request) -> JSONResponse:
+    """Log the shared admin in to Seerr server-side and hand the browser the session.
 
-    Browsers do not isolate cookies by port, so a host-only cookie set here is sent
-    to http://<same host>:<seerr port> too. On public subdomains the hosts differ, so
-    the user gets a plain redirect and Seerr's own login.
+    The dashboard calls this before opening Seerr. Browsers do not isolate cookies
+    by port, so a host-only cookie set here is also sent to http://<same host>:<seerr
+    port>. On public subdomains the hosts differ, so Seerr keeps its own login.
     """
     _ensure_authenticated(request)
     port = catalog.get("seerr").port
     target = app_web_ui_url_for_request(request, app_name="seerr", port=port)
-    response = RedirectResponse(target, status_code=status.HTTP_302_FOUND)
-    if (urlparse(target).hostname or "") != (request.url.hostname or ""):
-        return response
-    plex_token = PlexClient(config_dir=catalog.get("plex").config_dir).token if catalog.has("plex") else None
-    client = await asyncio.to_thread(seerr_admin_login, port, plex_token=plex_token)
+    same_host = (urlparse(target).hostname or "") == (request.url.hostname or "")
+    client = None
+    if same_host:
+        plex_token = PlexClient(config_dir=catalog.get("plex").config_dir).token if catalog.has("plex") else None
+        client = await asyncio.to_thread(seerr_admin_login, port, plex_token=plex_token)
+    response = JSONResponse({"url": target, "signed_in": client is not None})
     for cookie in client.http.cookies if client else []:
         response.set_cookie(
             cookie.name,

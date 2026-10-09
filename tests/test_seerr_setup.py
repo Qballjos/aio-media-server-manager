@@ -115,15 +115,15 @@ def _fake_login(self, *args, **kwargs):
     return True
 
 
-def test_open_seerr_hands_session_cookie_to_browser(monkeypatch):
+def test_seerr_session_hands_cookie_to_browser_and_returns_url(monkeypatch):
     monkeypatch.setattr(seerr_mod, "shared_admin_credentials", lambda: ("admin", "pw"))
     monkeypatch.setattr(seerr_mod, "admin_email", lambda: "a@b.c")
     monkeypatch.setattr(SeerrClient, "login", _fake_login)
     monkeypatch.setattr(settings, "public_app_base_domain", "")
     client = TestClient(create_app())
-    res = client.get("/api/applications/seerr/open", follow_redirects=False)
-    assert res.status_code == 302
-    assert res.headers["location"] == "http://testserver:5055"
+    res = client.post("/api/applications/seerr/session")
+    assert res.status_code == 200
+    assert res.json() == {"url": "http://testserver:5055", "signed_in": True}
     cookie = res.headers["set-cookie"]
     assert cookie.startswith("connect.sid=s%3Aabc.def")
     assert "Path=/" in cookie
@@ -131,21 +131,22 @@ def test_open_seerr_hands_session_cookie_to_browser(monkeypatch):
     assert "SameSite=lax" in cookie
 
 
-def test_open_seerr_redirects_without_cookie_on_public_domain(monkeypatch):
+def test_seerr_session_without_cookie_on_public_domain(monkeypatch):
     monkeypatch.setattr(seerr_mod, "shared_admin_credentials", lambda: ("admin", "pw"))
     monkeypatch.setattr(SeerrClient, "login", _fake_login)
     monkeypatch.setattr(settings, "public_app_base_domain", "example.com")
     client = TestClient(create_app())
-    res = client.get("/api/applications/seerr/open", follow_redirects=False)
-    assert res.status_code == 302
-    assert res.headers["location"] == "https://seerr.example.com"
+    res = client.post("/api/applications/seerr/session")
+    assert res.status_code == 200
+    assert res.json() == {"url": "https://seerr.example.com", "signed_in": False}
     assert "set-cookie" not in res.headers
 
 
-def test_open_seerr_redirects_without_cookie_when_login_fails(monkeypatch):
+def test_seerr_session_without_cookie_when_login_fails(monkeypatch):
     monkeypatch.setattr(seerr_mod, "shared_admin_credentials", lambda: None)
     monkeypatch.setattr(settings, "public_app_base_domain", "")
     client = TestClient(create_app())
-    res = client.get("/api/applications/seerr/open", follow_redirects=False)
-    assert res.status_code == 302
+    res = client.post("/api/applications/seerr/session")
+    assert res.status_code == 200
+    assert res.json()["signed_in"] is False
     assert "set-cookie" not in res.headers
