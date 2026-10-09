@@ -1,0 +1,143 @@
+"""Starter indexers in Prowlarr, with FlareSolverr attached where Cloudflare blocks them."""
+
+from unittest.mock import MagicMock, patch
+
+from core.integrations.prowlarr import ProwlarrClient
+
+
+def _resp(status, payload=None, text=""):
+    resp = MagicMock()
+    resp.status_code = status
+    resp.json.return_value = payload if payload is not None else {}
+    resp.text = text
+    return resp
+
+
+def _definition(name, privacy="public", urls=("https://example.org/",)):
+    return {
+        "name": name,
+        "definitionName": name,
+        "implementation": "Cardigann",
+        "configContract": "CardigannSettings",
+        "privacy": privacy,
+        "protocol": "torrent",
+        "enable": True,
+        "appProfileId": 0,
+        "priority": 25,
+        "tags": [],
+        "indexerUrls": list(urls),
+        "fields": [{"name": "baseUrl", "value": None, "type": "select"}, {"name": "definitionFile", "value": name}],
+    }
+
+
+def _get_router(indexers, schema):
+    def get(url, **kwargs):
+        if url.endswith("/indexer/schema"):
+            return _resp(200, schema)
+        if url.endswith("/indexer"):
+            return _resp(200, indexers)
+        return _resp(404, [])
+
+    return get
+
+
+@patch("requests.post")
+@patch("requests.get")
+def test_add_starter_indexers_adds_only_known_public_definitions(mock_get, mock_post):
+    mock_get.side_effect = _get_router([], [_definition("1337x"), _definition("Secret", privacy="private"), _definition("YTS")])
+    mock_post.return_value = _resp(201, {"id": 1})
+    client = ProwlarrClient(api_key="k")
+    result = client.add_starter_indexers(wanted=("1337x", "YTS", "Secret", "Nope"))
+    assert result == {"added": ["1337x", "YTS"], "disabled": [], "missing": ["Secret", "Nope"]}
+    bodies = [call.kwargs["json"] for call in mock_post.call_args_list]
+    assert [body["name"] for body in bodies] == ["1337x", "YTS"]
+    assert all(body["enable"] is True and body["appProfileId"] == 1 for body in bodies)
+    base_url = next(field for field in bodies[0]["fields"] if field["name"] == "baseUrl")
+    assert base_url["value"] == "https://example.org/"
+
+
+@patch("requests.post")
+@patch("requests.get")
+def test_add_starter_indexers_skips_existing_and_already_tried(mock_get, mock_post):
+    mock_get.side_effect = _get_router([{"name": "YTS"}], [_definition("1337x"), _definition("YTS"), _definition("EZTV")])
+    mock_post.return_value = _resp(201, {"id": 1})
+    client = ProwlarrClient(api_key="k")
+    result = client.add_starter_indexers(wanted=("1337x", "YTS", "EZTV"), skip={"EZTV"})
+    assert result["added"] == ["1337x"]
+    assert mock_post.call_count == 1
+
+
+@patch("requests.post")
+@patch("requests.get")
+def test_add_starter_indexers_saves_a_failing_indexer_disabled(mock_get, mock_post):
+    mock_get.side_effect = _get_router([], [_definition("1337x")])
+    mock_post.side_effect = [_resp(400, text="Unable to connect to indexer"), _resp(201, {"id": 3})]
+    client = ProwlarrClient(api_key="k")
+    result = client.add_starter_indexers(wanted=("1337x",))
+    assert result == {"added": [], "disabled": ["1337x"], "missing": []}
+    assert mock_post.call_args_list[1].kwargs["json"]["enable"] is False
+
+
+@patch("requests.put")
+@patch("requests.post")
+@patch("requests.get")
+def test_attach_flaresolverr_tags_only_cloudflare_blocked_indexers(mock_get, mock_post, mock_put):
+    indexers = [
+        {"id": 1, "name": "1337x", "enable": True, "tags": []},
+        {"id": 2, "name": "YTS", "enable": True, "tags": []},
+    ]
+    proxy = {"id": 5, "name": "Flaresolverr (AMM)", "implementation": "FlareSolverr", "tags": []}
+
+    def get(url, **kwargs):
+        if url.endswith("/tag"):
+            return _resp(200, [])
+        if url.endswith("/indexerProxy"):
+            return _resp(200, [proxy])
+        if url.endswith("/indexer"):
+            return _resp(200, indexers)
+        return _resp(404, [])
+
+    def post(url, **kwargs):
+        if url.endswith("/tag"):
+            return _resp(201, {"id": 7, "label": "flaresolverr"})
+        if url.endswith("/indexer/test"):
+            if kwargs["json"]["name"] == "1337x":
+                return _resp(400, text='[{"errorMessage":"Unable to access 1337x.to, blocked by CloudFlare Protection."}]')
+            return _resp(200, {})
+        return _resp(404)
+
+    mock_get.side_effect = get
+    mock_post.side_effect = post
+    mock_put.return_value = _resp(202, {})
+    client = ProwlarrClient(api_key="k")
+    assert client.attach_flaresolverr(["1337x", "YTS"]) == ["1337x"]
+    put_calls = {call.args[0].split("?")[0].rsplit("/", 1)[-1]: call for call in mock_put.call_args_list}
+    assert put_calls["5"].kwargs["json"]["tags"] == [7]  # the proxy now only serves tagged indexers
+    assert "forceSave=true" in put_calls["5"].args[0]
+    assert put_calls["1"].kwargs["json"]["tags"] == [7]
+    assert "forceSave=true" in put_calls["1"].args[0]
+
+
+@patch("core.integrations.prowlarr.time.sleep", lambda *_: None)
+@patch("requests.post")
+@patch("requests.get")
+def test_indexer_definitions_waits_for_the_definition_update_command(mock_get, mock_post):
+    schema_calls = []
+    few = [_definition("Knaben")]
+    many = [_definition(f"Public{i}") for i in range(25)]
+
+    def get(url, **kwargs):
+        if url.endswith("/indexer/schema"):
+            schema_calls.append(url)
+            return _resp(200, few if len(schema_calls) == 1 else many)
+        if url.endswith("/command/9"):
+            return _resp(200, {"id": 9, "status": "completed"})
+        return _resp(404, [])
+
+    mock_get.side_effect = get
+    mock_post.return_value = _resp(201, {"id": 9, "name": "IndexerDefinitionUpdate", "status": "started"})
+    client = ProwlarrClient(api_key="k")
+    defs = client.indexer_definitions(wait=30.0)
+    assert len(defs) == 25
+    assert mock_post.call_args.kwargs["json"] == {"name": "IndexerDefinitionUpdate"}
+    assert len(schema_calls) == 2  # once before the nudge, once after the command finished

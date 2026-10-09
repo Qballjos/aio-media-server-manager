@@ -151,6 +151,30 @@ class IntegrationEngine:
         )
         return True
 
+    def _starter_indexers_step(self, prowlarr_client: ProwlarrClient) -> dict[str, Any]:
+        """Give Prowlarr its starter indexers once; names tried are remembered so removals stick."""
+        from core.app_prefs import load_prefs, set_app_option
+
+        options = (load_prefs(self._settings).get("options") or {}).get("prowlarr") or {}
+        tried = set(options.get("starter_indexers") or [])
+        starter = prowlarr_client.add_starter_indexers(
+            skip=tried, definitions_wait=0.0 if tried else 45.0
+        )
+        handled = starter["added"] + starter["disabled"]
+        if handled:
+            set_app_option(
+                "prowlarr", "starter_indexers", sorted(tried | set(handled)), app_settings=self._settings
+            )
+        tagged: list[str] = []
+        if starter["added"] and self._installed("flaresolverr"):
+            tagged = prowlarr_client.attach_flaresolverr(starter["added"])
+        ok = bool(handled) or not starter["missing"]
+        detail = (
+            f"added={','.join(starter['added']) or '-'} disabled={','.join(starter['disabled']) or '-'} "
+            f"missing={','.join(starter['missing']) or '-'} flaresolverr={','.join(tagged) or '-'}"
+        )
+        return _step("prowlarr", "starter_indexers", ok, detail)
+
     def get_wiring_status(self) -> dict[str, Any]:
         report: dict[str, Any] = {}
         for app_name in _STATUS_APPS:
@@ -383,6 +407,7 @@ class IntegrationEngine:
                 syncs.append(prowlarr_client.add_flaresolverr(f"http://127.0.0.1:{flare_port}"))
             prowl_ok = all(syncs) if syncs else True
             steps.append(_step("prowlarr", "sync_applications", prowl_ok, "Prowlarr → Sonarr/Radarr/Lidarr/Flaresolverr"))
+            steps.append(self._starter_indexers_step(prowlarr_client))
 
         if not self._skip_uninstalled(steps, "jellyfin", "configure_libraries_and_transcode"):
             jelly_client = JellyfinClient(port=jelly_port, api_key=jellyfin_key)

@@ -75,7 +75,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Shared local login.** The manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin). Seerr's admin is created by signing in with that Jellyfin account (or the claimed Plex token), and its first-run wizard is completed for you. Plex still uses a Plex account.
 
-**Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr.
+**Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr. Prowlarr also gets a starter set of public indexers (1337x, The Pirate Bay, YTS, EZTV, Nyaa.si, TorrentGalaxy, LimeTorrents, Knaben, BitSearch, TheRARBG), and FlareSolverr is attached to the ones Cloudflare blocks. Remove any you do not want; they are not added back.
 
 **Home.** Launcher plus calendar, downloads, recently added, and Seerr search. Widget diagnostics live under **Settings → Homepage** (empty tiles explained; API keys never shown).
 
