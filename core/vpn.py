@@ -13,7 +13,9 @@ import logging
 import os
 import pwd
 import shutil
+import stat
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -387,6 +389,48 @@ def parse_wireguard_tunnel_address(text: str) -> str | None:
     return None
 
 
+def _tun_node_ready(path: Path) -> bool:
+    try:
+        return stat.S_ISCHR(path.stat().st_mode)
+    except OSError:
+        return False
+
+
+def ensure_tun_device(path: Path | None = None, *, linux: bool | None = None) -> str | None:
+    """Create /dev/net/tun when the node is missing.
+
+    Synology kernels usually have no WireGuard module, so wg-quick falls back to
+    wireguard-go. That binary, and OpenVPN, both need a TUN node. Privileged
+    containers can create it even when the NAS never had /dev/net/tun.
+    Returns an error string when the node still cannot be opened.
+    """
+    on_linux = sys.platform.startswith("linux") if linux is None else linux
+    if not on_linux:
+        return None
+    node = path or Path("/dev/net/tun")
+    if _tun_node_ready(node):
+        return None
+    try:
+        node.parent.mkdir(parents=True, exist_ok=True)
+        if not node.exists():
+            os.mknod(node, stat.S_IFCHR | 0o666, os.makedev(10, 200))
+        os.chmod(node, 0o666)
+    except OSError as exc:
+        logger.warning("Could not create TUN device %s: %s", node, exc)
+        return (
+            "VPN could not create /dev/net/tun "
+            f"({exc}). Recreate the container with privileged: true, "
+            "then save VPN again in Settings → Network."
+        )
+    if _tun_node_ready(node):
+        logger.info("Created TUN device at %s for userspace WireGuard/OpenVPN.", node)
+        return None
+    return (
+        "VPN needs /dev/net/tun and this kernel did not accept the device node. "
+        "Recreate the container with privileged: true."
+    )
+
+
 def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
     detail = (stderr or stdout or "").strip()
     lower = detail.lower()
@@ -407,6 +451,16 @@ def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
             "(this NAS kernel has no nft addrtype/comment). The appliance sets "
             "Table = off and adds the default route itself — recreate the container "
             "from a current image."
+        )
+        return f"{hint} {detail}".strip()[:2000]
+    if "unknown device type" in lower or (
+        "cannot find device" in lower and "wg0" in lower
+    ):
+        hint = (
+            "WireGuard did not create wg0. This kernel has no WireGuard module, "
+            "and the userspace fallback needs /dev/net/tun in a privileged container. "
+            "Recreate the project with privileged: true, then save VPN again in "
+            "Settings → Network. OpenVPN needs that same device node."
         )
         return f"{hint} {detail}".strip()[:2000]
     if returncode == 127 or "command not found" in lower:
@@ -719,6 +773,10 @@ class VpnManager:
             return self._fail(f"VPN config missing: {self.config_path}")
         self._cached_underlay_ips = None
         proto = self.settings.vpn_protocol
+
+        tun_error = ensure_tun_device()
+        if tun_error:
+            return self._fail(tun_error)
 
         if proto == "wireguard":
             return self._start_wireguard_uid()

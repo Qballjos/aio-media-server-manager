@@ -90,7 +90,7 @@ sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
 # scp wg0.conf into that directory
 ```
 
-Set `AMM_VPN_ENABLED=true` in the project compose, then start the project again. While VPN is on, Prowlarr and qBittorrent cannot use the house WAN: they only leave through the tunnel, and they stay stopped if the tunnel is down. Synology’s kernel often has no WireGuard module; the appliance image includes **wireguard-go** as a fallback. Recreate the container after pulling a current image, then save VPN in **Settings → Network**. OpenVPN works without that module if `/dev/net/tun` is present (privileged mode).
+Set `AMM_VPN_ENABLED=true` in the project compose, then start the project again. While VPN is on, Prowlarr and qBittorrent cannot use the house WAN: they only leave through the tunnel, and they stay stopped if the tunnel is down. Synology’s kernel often has no WireGuard module; the appliance image includes **wireguard-go** as a fallback and creates `/dev/net/tun` when it is missing. That only works if the project stays `privileged: true` (the install script sets this). Recreate the container after pulling a current image, then save VPN in **Settings → Network**. OpenVPN uses the same device node and also needs privileged mode.
 
 ## Cloudflare Tunnel
 

@@ -26,6 +26,7 @@ from core.vpn import (
     parse_vpn_underlay_hosts,
     rewrite_wireguard_endpoints,
     save_vpn_config_text,
+    ensure_tun_device,
     vpn_start_failure_detail,
 )
 
@@ -574,6 +575,51 @@ def test_write_netns_resolv_is_idempotent(tmp_path: Path, monkeypatch):
     write_resolv(["1.1.1.1"])
     assert writes["n"] == 1
     assert resolv.read_text(encoding="utf-8") == "nameserver 1.1.1.1\n"
+
+
+def test_ensure_tun_device_skips_non_linux(tmp_path: Path):
+    missing = tmp_path / "net" / "tun"
+    assert ensure_tun_device(missing, linux=False) is None
+    assert not missing.exists()
+
+
+def test_ensure_tun_device_creates_missing_node(tmp_path: Path, monkeypatch):
+    node = tmp_path / "net" / "tun"
+    created: list[Path] = []
+
+    def fake_mknod(path, mode, dev):
+        created.append(Path(path))
+        Path(path).write_bytes(b"")
+
+    monkeypatch.setattr("core.vpn.os.mknod", fake_mknod)
+    monkeypatch.setattr("core.vpn._tun_node_ready", lambda path: Path(path).is_file())
+
+    assert ensure_tun_device(node, linux=True) is None
+    assert created == [node]
+    assert node.is_file()
+
+
+def test_ensure_tun_device_reports_privileged_requirement(tmp_path: Path, monkeypatch):
+    node = tmp_path / "net" / "tun"
+
+    def fail_mknod(path, mode, dev):
+        raise OSError(1, "Operation not permitted")
+
+    monkeypatch.setattr("core.vpn.os.mknod", fail_mknod)
+    text = ensure_tun_device(node, linux=True)
+    assert text is not None
+    assert "privileged: true" in text
+
+
+def test_vpn_start_failure_explains_missing_wireguard_interface():
+    text = vpn_start_failure_detail(
+        1,
+        "[#] ip link add wg0 type wireguard\nError: Unknown device type.\n"
+        "[#] ip link delete dev wg0\nCannot find device \"wg0\"\n",
+        "",
+    )
+    assert "/dev/net/tun" in text
+    assert "privileged: true" in text
 
 
 def test_vpn_start_failure_explains_missing_wireguard_go():
