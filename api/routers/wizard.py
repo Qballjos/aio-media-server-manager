@@ -6,8 +6,10 @@ import asyncio
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 
+from core.integrations.lifecycle import bring_up_vpn
+from core.settings import settings
 from core.wizard import wizard_engine
 
 logger = logging.getLogger(__name__)
@@ -49,5 +51,10 @@ async def skip_wizard() -> dict[str, Any]:
 
 
 @router.post("/execute", summary="Execute wizard installation and automatic wiring")
-async def execute_wizard() -> dict[str, Any]:
-    return await wizard_engine.execute_installation()
+async def execute_wizard(background_tasks: BackgroundTasks) -> dict[str, Any]:
+    result = await wizard_engine.execute_installation()
+    if settings.vpn_enabled:
+        # The wizard only saved the VPN switch; bring the tunnel up now so
+        # qBittorrent/Prowlarr can start as soon as their installs finish.
+        background_tasks.add_task(bring_up_vpn)
+    return result

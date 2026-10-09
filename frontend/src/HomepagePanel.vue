@@ -56,6 +56,7 @@ const emptySnapshot = () => ({
   requests: [],
   trending: [],
   seerr: { available: false, url: null },
+  vpn: null,
   widgets: [],
 })
 
@@ -381,10 +382,24 @@ function syncCalViewToViewport() {
 }
 
 function launcherTitle(app) {
-  if (app.sick) return `${app.display_name} is unhealthy`
-  if (!app.running) return `${app.display_name} is stopped`
+  if (app.state_label) return `${app.display_name}: ${app.state_label}`
   return app.display_name
 }
+
+function launcherOpen(app) {
+  return app.running && !app.sick
+}
+
+const vpnNotice = computed(() => {
+  const vpn = snapshot.value.vpn
+  if (!vpn?.enabled || vpn.tunnel_up || !vpn.waiting?.length) return ''
+  const names = vpn.waiting.map(
+    (name) => (snapshot.value.apps || []).find((app) => app.name === name)?.display_name || name,
+  )
+  const verb = names.length === 1 ? 'stays' : 'stay'
+  const error = vpn.last_error ? ` Last VPN error: ${vpn.last_error}` : ''
+  return `VPN is on but not connected yet, so ${names.join(', ')} ${verb} stopped until it is.${error}`
+})
 
 function startOfWeek(value) {
   const dt = new Date(value)
@@ -614,6 +629,10 @@ onUnmounted(() => {
   <section class="home-shell">
     <p v-if="loading" class="home-muted">Loading Home…</p>
     <p v-if="snapshotError" class="home-notice">{{ snapshotError }}</p>
+    <p v-if="vpnNotice" class="home-notice">
+      {{ vpnNotice }}
+      <a href="#/settings/network" class="home-notice-link">Open Settings → Network</a>
+    </p>
 
     <div v-if="!loading && !snapshot.apps.length" class="home-empty glass-card">
       <h3>Nothing to launch yet</h3>
@@ -626,16 +645,15 @@ onUnmounted(() => {
         <section v-for="group in launcherGroups" :key="group.id" class="home-launcher-group glass-card">
           <h3 class="home-launcher-label">{{ group.label }}</h3>
           <div class="home-launcher">
-            <a
+            <component
+              :is="launcherOpen(app) ? 'a' : 'div'"
               v-for="app in group.apps"
               :key="app.name"
               class="home-app"
               :class="{ 'is-down': !app.running && !app.sick, 'is-sick': app.sick }"
-              :href="app.url"
-              target="_blank"
-              rel="noopener noreferrer"
+              v-bind="launcherOpen(app) ? { href: app.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
               :title="launcherTitle(app)"
-              @click="app.name === 'seerr' && openSeerr($event, app.url)"
+              @click="launcherOpen(app) && app.name === 'seerr' && openSeerr($event, app.url)"
             >
               <img
                 v-if="appIconSrc(app.name)"
@@ -645,9 +663,8 @@ onUnmounted(() => {
               />
               <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
               <span class="home-app-name">{{ app.display_name }}</span>
-              <span v-if="app.sick" class="home-app-state">Unhealthy</span>
-              <span v-else-if="!app.running" class="home-app-state">Stopped</span>
-            </a>
+              <span v-if="app.state_label" class="home-app-state">{{ app.state_label }}</span>
+            </component>
           </div>
         </section>
       </div>
@@ -1027,6 +1044,11 @@ onUnmounted(() => {
 }
 .home-app.is-down {
   opacity: 0.55;
+  cursor: default;
+}
+.home-notice-link {
+  margin-left: 0.35rem;
+  text-decoration: underline;
 }
 .home-app.is-sick,
 .home-app.is-sick:hover {

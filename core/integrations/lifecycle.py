@@ -249,3 +249,21 @@ async def _probe_url(url: str) -> bool:
         return resp.status_code < 500
     except Exception:
         return False
+
+
+async def bring_up_vpn(manager: Any = None) -> dict[str, Any]:
+    """Bring the tunnel up, then run every installed tunneled app on it.
+
+    Shared by the wizard, Settings → Network, and POST /api/vpn/start so they
+    behave the same. Nothing may have been running yet (fresh install), so a
+    tunnel that comes up starts all tunneled apps, not just the ones stopped here.
+    """
+    manager = manager or vpn_manager
+    stopped = await stop_tunneled_apps()
+    result = await asyncio.to_thread(manager.start)
+    if result.get("tunnel_up"):
+        result["started_apps"] = await start_tunneled_apps(stopped or None)
+    else:
+        await enforce_vpn_isolation()
+        result["started_apps"] = []
+    return result

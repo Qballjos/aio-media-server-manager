@@ -21,7 +21,10 @@ from core.integrations.jellyfin import jellyfin_auth_headers
 from core.integrations.nzbget import NZBGetClient
 from core.integrations.plex import PlexClient
 from core.integrations.qbittorrent import QBittorrentClient
+from core.install_jobs import get_job
+from core.settings import settings
 from core.supervisor import ProcessSupervisor
+from core.vpn import VPN_TUNNELED_APPS, vpn_manager
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +130,10 @@ def _launcher_shell(host: str, scheme: str = "http") -> dict[str, Any]:
     running = _running_names()
     seerr = catalog.has("seerr") and catalog.get("seerr").is_installed()
     seerr_running = seerr and "seerr" in running
+    apps = _launcher_apps(catalog, running, host, scheme=scheme)
     return {
-        "apps": _launcher_apps(catalog, running, host, scheme=scheme),
+        "apps": apps,
+        "vpn": _vpn_block(apps),
         "calendar": [],
         "downloads": [],
         "recent": [],
@@ -295,6 +300,7 @@ def _build_homepage_snapshot(host: str, scheme: str = "http") -> dict[str, Any]:
 
     return {
         "apps": apps,
+        "vpn": _vpn_block(apps),
         "calendar": calendar[:400],
         "downloads": downloads[:40],
         "recent": recent[:24],
@@ -403,6 +409,7 @@ def _launcher_apps(
     scheme: str = "http",
 ) -> list[dict[str, Any]]:
     states = processes if processes is not None else _process_states()
+    vpn_waiting = bool(settings.vpn_enabled) and not vpn_manager.tunneled_apps_allowed()
     apps: list[dict[str, Any]] = []
     for plugin in catalog.all_plugins():
         if plugin.name in _LAUNCHER_SKIP or not plugin.manifest.daemon:
@@ -412,6 +419,7 @@ def _launcher_apps(
         proc = states.get(plugin.name) or {}
         state = str(proc.get("state") or ("running" if plugin.name in running else "stopped"))
         sick = bool(proc.get("is_crash_loop")) or state in _SICK_STATES
+        tile_state, label = _launcher_state(plugin.name, plugin.name in running, sick, vpn_waiting)
         apps.append(
             {
                 "name": plugin.name,
@@ -420,6 +428,8 @@ def _launcher_apps(
                 "port": plugin.port,
                 "running": plugin.name in running,
                 "sick": sick,
+                "state": tile_state,
+                "state_label": label,
                 "url": _web_url(plugin.name, plugin.port, host, scheme),
             }
         )
@@ -431,6 +441,43 @@ def _launcher_apps(
         )
     )
     return apps
+
+
+_STATE_LABELS = {
+    "running": "",
+    "unhealthy": "Unhealthy",
+    "installing": "Installing…",
+    "waiting_for_vpn": "Waiting for VPN",
+    "stopped": "Stopped",
+}
+
+
+def _launcher_state(name: str, running: bool, sick: bool, vpn_waiting: bool) -> tuple[str, str]:
+    """Why a launcher tile cannot be opened right now, with its label."""
+    if sick:
+        state = "unhealthy"
+    elif running:
+        state = "running"
+    elif (get_job(name) or {}).get("status") in {"queued", "installing"}:
+        state = "installing"
+    elif vpn_waiting and name in VPN_TUNNELED_APPS:
+        state = "waiting_for_vpn"
+    else:
+        state = "stopped"
+    return state, _STATE_LABELS[state]
+
+
+def _vpn_block(apps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Tell Home why tunneled apps wait while the VPN switch is on but the tunnel is down."""
+    if not settings.vpn_enabled:
+        return {"enabled": False, "tunnel_up": True, "waiting": [], "last_error": ""}
+    status = vpn_manager.status()
+    return {
+        "enabled": True,
+        "tunnel_up": bool(status.get("tunnel_up")),
+        "waiting": [app["name"] for app in apps if app.get("state") == "waiting_for_vpn"],
+        "last_error": str(status.get("last_error") or ""),
+    }
 
 
 def _web_url(app_name: str, port: int, host: str, scheme: str = "http") -> str:
