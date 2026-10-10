@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 import zipfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -477,7 +478,8 @@ def test_transactional_activation(tmp_path):
     assert (install_target / "Sonarr").read_bytes() == b"#!/bin/sh\necho 'Sonarr v2'"
 
 
-def test_download_checksum_verification(tmp_path, monkeypatch):
+@pytest.mark.parametrize("known_length", [True, False])
+def test_download_checksum_verification(tmp_path, monkeypatch, known_length):
     test_settings = Settings(
         AMM_CONFIG_DIR=tmp_path / "config",
         AMM_DOWNLOAD_DIR=tmp_path / "downloads",
@@ -494,7 +496,7 @@ def test_download_checksum_verification(tmp_path, monkeypatch):
     class MockResponse:
         def __init__(self, content):
             self.content = content
-            self.headers = {"content-length": str(len(content))}
+            self.headers = {"content-length": str(len(content))} if known_length else {}
 
         def __enter__(self):
             return self
@@ -515,13 +517,78 @@ def test_download_checksum_verification(tmp_path, monkeypatch):
     dest = tmp_path / "downloaded_file.tar.gz"
 
     # Successful download with matching SHA
-    computed_sha = installer.download_file("http://fake.url/pkg.tar.gz", dest, expected_sha256=expected_hash)
+    progress = []
+    computed_sha = installer.download_file(
+        "http://fake.url/pkg.tar.gz", dest, expected_sha256=expected_hash,
+        progress_callback=lambda downloaded, total: progress.append((downloaded, total)),
+    )
     assert computed_sha == expected_hash
     assert dest.read_bytes() == payload
+    assert progress == [(len(payload), len(payload) if known_length else 0)]
 
     # Corrupted / mismatched SHA raises ValueError and removes temp file
     with pytest.raises(ValueError, match="Checksum verification failed"):
         installer.download_file("http://fake.url/pkg.tar.gz", dest, expected_sha256="wronghash00000000000000000000000000000000000000000000000000000000")
+
+
+@pytest.mark.parametrize("workflow", ["github", "url", "github_source"])
+@pytest.mark.parametrize("custom_callback", [False, True])
+def test_install_workflows_report_progress_and_preserve_callback(
+    tmp_path, monkeypatch, workflow, custom_callback
+):
+    from core.install_jobs import clear_jobs, get_job, set_job, update_job
+
+    cfg = Settings(config_dir=tmp_path / "config", install_dir=tmp_path / "apps")
+    github = MagicMock()
+    github.get_latest_release.return_value = {
+        "tag_name": "v1", "zipball_url": "https://example.org/source.zip"
+    }
+    github.select_asset.return_value = {
+        "name": "app.zip", "browser_download_url": "https://example.org/app.zip"
+    }
+    github.find_checksum.return_value = None
+    installer = AppInstaller(app_settings=cfg, github_client=github)
+    messages = []
+    callback = MagicMock() if custom_callback else None
+
+    def record(name, message):
+        update_job(name, message)
+        messages.append(get_job(name)["message"])
+
+    def download(*, destination, progress_callback, **kwargs):
+        assert get_job("app")["message"] == "Downloading package…"
+        if custom_callback:
+            assert progress_callback is callback
+        progress_callback(1_250_000, 2_000_000)
+        progress_callback(1_500_000, 0)
+        with zipfile.ZipFile(destination, "w") as archive:
+            archive.writestr("app", "executable content")
+        return "sha256"
+
+    def permissions(*args, **kwargs):
+        assert get_job("app")["message"] == "Setting file permissions…"
+
+    monkeypatch.setattr("core.installer.installer.update_job", record)
+    monkeypatch.setattr(installer, "download_file", download)
+    monkeypatch.setattr(installer.storage_manager, "apply_permissions", permissions)
+    set_job("app", "installing")
+    try:
+        method = getattr(installer, f"install_from_{workflow}")
+        source = "https://example.org/app.zip" if workflow == "url" else "owner/repo"
+        result = method(source, "app", "app", progress_callback=callback)
+        assert result.executable_path.read_text() == "executable content"
+        assert get_job("app")["status"] == "installing"
+        assert "Extracting archive…" in messages
+        if workflow != "url":
+            assert messages[0] == "Finding release…"
+        if custom_callback:
+            assert callback.call_count == 2
+            assert not any(message.startswith("Downloading:") for message in messages)
+        else:
+            assert "Downloading: 1.2 MB of 2.0 MB" in messages
+            assert "Downloading: 1.5 MB" in messages
+    finally:
+        clear_jobs()
 
 
 def test_find_venv_executable_names(tmp_path):

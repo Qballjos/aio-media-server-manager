@@ -229,6 +229,9 @@ def test_uid_routing_applies_ipv6_blackhole_and_output_ks(tmp_path: Path, monkey
         return CompletedProcess(["iptables", *args], 0, "", "")
 
     monkeypatch.setattr(mgr, "_main_tunnel_interface_names", lambda: ["wg0"])
+    monkeypatch.setattr(mgr, "_house_interface", lambda: "eth0")
+    mgr._active_wg_conf = tmp_path / "wg0.conf"
+    mgr._active_wg_conf.write_text("[Peer]\nEndpoint = 203.0.113.5:51820\n")
     monkeypatch.setattr(mgr, "_ip", fake_ip)
     monkeypatch.setattr(mgr, "_host_iptables", fake_iptables)
     monkeypatch.setattr(mgr, "_host_ip6tables", fake_iptables)
@@ -237,6 +240,113 @@ def test_uid_routing_applies_ipv6_blackhole_and_output_ks(tmp_path: Path, monkey
     assert any("uidrange" in row and "blackhole" in row and "-6" in row for row in flat)
     assert any("AMM-UID-KS" in row and "owner" in row for row in flat)
     assert any("REJECT" in row for row in flat)
+    # Replies to connections that came in from the house side (published WebUI
+    # ports) must leave the way they came in instead of vanishing into the tunnel.
+    assert any("mangle" in row and "PREROUTING" in row and "-i eth0" in row and "CONNMARK --set-mark 0x2a" in row for row in flat)
+    assert any("mangle" in row and "OUTPUT" in row and "--restore-mark" in row for row in flat)
+    assert any(row.startswith("rule add fwmark 0x2a lookup main") for row in flat)
+    ks_rows = [row for row in flat if "AMM-UID-KS" in row]
+    reply_ok = next(i for i, row in enumerate(ks_rows) if "connmark --mark 0x2a -j RETURN" in row)
+    reject = next(i for i, row in enumerate(ks_rows) if "REJECT" in row)
+    assert reply_ok < reject
+    # Kernel WireGuard attributes the encrypted UDP packets to the inner socket's
+    # owner, so the kill switch must let the VPN UID reach the endpoint itself.
+    endpoint_ok = next(i for i, row in enumerate(ks_rows) if "-p udp -d 203.0.113.5 --dport 51820 -j RETURN" in row)
+    assert endpoint_ok < reject
+
+
+@pytest.mark.parametrize(
+    ("profile", "expected", "fail_endpoint_rule"),
+    [
+        pytest.param(
+            "[Peer]\nEndpoint = 203.0.113.5:51820\n"
+            "[Peer]\nEndpoint = 198.51.100.7:1194\n"
+            "remote 192.0.2.9 443\nEndpoint = [2001:db8::1]:51820\n"
+            "Endpoint = unresolved.example:51820\n",
+            [("203.0.113.5", "51820"), ("198.51.100.7", "1194")],
+            False,
+            id="only-exact-ipv4-peer-pairs",
+        ),
+        pytest.param(
+            "remote 192.0.2.9 443\nEndpoint = [2001:db8::1]:51820\n"
+            "Endpoint = unresolved.example:51820\nEndpoint = 203.0.113.5:0\n",
+            [], False, id="no-valid-wireguard-endpoint",
+        ),
+        pytest.param(
+            "Endpoint = 203.0.113.5:51820\n",
+            [("203.0.113.5", "51820")], True, id="allow-rule-fails-closed",
+        ),
+    ],
+)
+def test_uid_kill_switch_limits_endpoint_rules(
+    tmp_path: Path, monkeypatch, profile, expected, fail_endpoint_rule, caplog
+):
+    mgr = VpnManager(Settings(config_dir=tmp_path / "config"))
+    mgr._active_wg_conf = tmp_path / "wg0.conf"
+    mgr._active_wg_conf.write_text(profile)
+    calls = {4: [], 6: []}
+
+    def firewall(family, args):
+        calls[family].append(args)
+        failed = fail_endpoint_rule and "--dport" in args
+        return subprocess.CompletedProcess(args, int(failed), "", "endpoint denied" if failed else "")
+
+    monkeypatch.setattr(mgr, "_host_iptables", lambda args: firewall(4, args))
+    monkeypatch.setattr(mgr, "_host_ip6tables", lambda args: firewall(6, args))
+    mgr._apply_uid_output_kill_switch("wg0")
+
+    assert [args for args in calls[4] if "--dport" in args] == [
+        ["-A", "AMM-UID-KS", "-p", "udp", "-d", host, "--dport", port, "-j", "RETURN"]
+        for host, port in expected
+    ]
+    assert not any("--dport" in args for args in calls[6])
+    for rules in calls.values():
+        reject = next(i for i, args in enumerate(rules) if "REJECT" in args)
+        assert all(i < reject for i, args in enumerate(rules) if "--dport" in args)
+    if fail_endpoint_rule:
+        assert "Could not allow WireGuard endpoint" in caplog.text
+
+
+@pytest.mark.parametrize("runtime_path", [None, "missing.conf", "."])
+def test_uid_kill_switch_without_readable_runtime_config(tmp_path: Path, monkeypatch, runtime_path):
+    mgr = VpnManager(Settings(config_dir=tmp_path / "config"))
+    mgr.config_path.parent.mkdir(parents=True, exist_ok=True)
+    mgr.config_path.write_text("Endpoint = 203.0.113.5:51820\n")
+    mgr._active_wg_conf = tmp_path / runtime_path if runtime_path is not None else None
+    calls = []
+
+    def firewall(args):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(mgr, "_host_iptables", firewall)
+    monkeypatch.setattr(mgr, "_host_ip6tables", firewall)
+    mgr._apply_uid_output_kill_switch("wg0")
+    assert not any("--dport" in args for args in calls)
+    assert sum("REJECT" in args for args in calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("203.0.113.5:1", ("203.0.113.5", 1)),
+        ("203.0.113.5:65535", ("203.0.113.5", 65535)),
+        ("203.0.113.5:51820 # comment", ("203.0.113.5", 51820)),
+        ("[2001:db8::1]:51820", ("2001:db8::1", 51820)),
+        ("203.0.113.5:0", None),
+        ("203.0.113.5:65536", None),
+        ("203.0.113.5:-1", None),
+        ("203.0.113.5:invalid", None),
+        ("203.0.113.5:", None),
+        ("[2001:db8::1]:", None),
+        (":51820", None),
+        ("", None),
+    ],
+)
+def test_parse_wireguard_endpoint_ports(value, expected):
+    from core.vpn import parse_wireguard_endpoint
+
+    assert parse_wireguard_endpoint(f"Endpoint = {value}\n") == expected
 
 
 def test_main_tunnel_interface_names_does_not_cache_empty(tmp_path: Path, monkeypatch):
@@ -983,3 +1093,16 @@ def test_reclaim_clearnet_spares_vpn_uid_processes(tmp_path: Path, monkeypatch):
     assert leaked == ["qbittorrent"]
     assert good.terminate_calls == 0
     assert bad.terminate_calls == 1
+
+
+def test_house_interface_comes_from_the_main_default_route(tmp_path: Path, monkeypatch):
+    from subprocess import CompletedProcess
+
+    cfg = Settings(config_dir=tmp_path / "config", download_dir=tmp_path / "dl", media_dir=tmp_path / "media")
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(
+        mgr, "_ip", lambda args: CompletedProcess(["ip", *args], 0, "default via 172.18.0.1 dev eth0 \n", "")
+    )
+    assert mgr._house_interface() == "eth0"
+    monkeypatch.setattr(mgr, "_ip", lambda args: CompletedProcess(["ip", *args], 0, "", ""))
+    assert mgr._house_interface() is None

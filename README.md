@@ -71,11 +71,11 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Install and catalog.** GitHub releases, official binaries (Jellyfin, Plex), and PyPI applications. The catalog and first-run wizard only list applications that support the host CPU architecture (Flaresolverr is x86_64-only).
 
-**First-run wizard.** Choose *Arr apps, download clients (including Usenet provider fields), media servers, VPN, and recommended tools. Persist paths and credentials, then install. Administrator setup requires an email address.
+**First-run wizard.** Choose *Arr apps, download clients (including Usenet provider fields), media servers, VPN, an optional Cloudflare Tunnel, and recommended tools. The tunnel and the VPN start as soon as the wizard finishes. Persist paths and credentials, then install. Administrator setup requires an email address.
 
-**Shared local login.** The manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin, Seerr). Plex still uses a Plex account.
+**Shared local login.** The manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin). Seerr's admin is created by signing in with that Jellyfin account (or the claimed Plex token), and its first-run wizard is completed for you. Plex still uses a Plex account.
 
-**Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr.
+**Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr. Prowlarr also gets a starter set of public indexers (1337x, The Pirate Bay, YTS, EZTV, Nyaa.si, TorrentGalaxy, LimeTorrents, Knaben, BitSearch, TheRARBG), and FlareSolverr is attached to the ones Cloudflare blocks. Remove any you do not want; they are not added back.
 
 **Home.** Launcher plus calendar, downloads, recently added, and Seerr search. Widget diagnostics live under **Settings → Homepage** (empty tiles explained; API keys never shown).
 
@@ -83,7 +83,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Operations.** `config` / `downloads` / `media` with `PUID` / `PGID` and hardlink checks. Optional WireGuard or OpenVPN isolation for qBittorrent, Prowlarr, and Flaresolverr (Usenet stays off the tunnel). Optional VAAPI / QSV / NVIDIA transcoding. Optional Cloudflare Tunnel (`cloudflared` inside this appliance). Configuration backups with verify, per-app restore, and a schedule.
 
-**Open UI.** Each catalog card opens `http://<host>:<app-port>`. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent uses [VueTorrent](https://github.com/VueTorrent/VueTorrent) by default (same port and WebAPI). Catalog → qBittorrent → Settings can switch to the stock WebUI or **Update VueTorrent** (re-downloads the latest UI zip; not part of Catalog app updates). Catalog → NeutArr → Settings shows NeutArr's first-run setup token while `/config/neutarr/.setup-token` exists. NeutArr removes that file after account creation.
+**Open UI.** Each catalog card opens `http://<host>:<app-port>`. On the LAN, apps with a local login (Sonarr, Radarr, Lidarr, Prowlarr, qBittorrent, SABnzbd, Bazarr, Seerr) open already signed in as the manager admin: the manager signs in server-side and hands the session to your browser. Jellyfin, Plex, and NZBGet keep their own login, and so does every app on public subdomains. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent uses [VueTorrent](https://github.com/VueTorrent/VueTorrent) by default (same port and WebAPI). Catalog → qBittorrent → Settings can switch to the stock WebUI or **Update VueTorrent** (re-downloads the latest UI zip; not part of Catalog app updates). Catalog → NeutArr → Settings shows NeutArr's first-run setup token while `/config/neutarr/.setup-token` exists. NeutArr removes that file after account creation.
 
 ---
 

@@ -4,7 +4,9 @@ import { useRoute } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
+import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
+import { formatUptime } from './format.js'
 import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepageDebug.js'
 
 const props = defineProps({
@@ -55,10 +57,13 @@ const emptySnapshot = () => ({
   requests: [],
   trending: [],
   seerr: { available: false, url: null },
+  vpn: null,
   widgets: [],
 })
 
 const snapshot = ref(emptySnapshot())
+const installJobs = ref({})
+const progressNow = ref(Date.now() / 1000)
 const loading = ref(true)
 const snapshotError = ref('')
 const widgetDebug = ref(false)
@@ -75,6 +80,7 @@ const requestsFilter = ref('all')
 const trendingFilter = ref('all')
 let poll = null
 let downloadsPoll = null
+let installPoll = null
 let searchTimer = null
 
 const hasMediaServer = computed(() =>
@@ -111,6 +117,8 @@ const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS)
 const launcherGroups = computed(() => {
   const groups = new Map()
   for (const app of snapshot.value.apps || []) {
+    const job = installJobs.value[app.name]
+    const busy = !app.sick && job && ['queued', 'installing', 'configuring'].includes(job.status)
     const id = app.category || 'other'
     if (!groups.has(id)) {
       groups.set(id, {
@@ -121,6 +129,10 @@ const launcherGroups = computed(() => {
     }
     groups.get(id).apps.push({
       ...app,
+      ...(job?.status === 'failed' ? { state: 'unhealthy', state_label: 'Setup failed', sick: true } : {}),
+      ...(busy ? { state: job.status, state_label: `${job.status[0].toUpperCase()}${job.status.slice(1)}…` } : {}),
+      progress_message: job && !busy && job.status !== 'failed' ? '' : job?.message ?? app.progress_message,
+      progress_updated_at: job?.updated_at ?? app.progress_updated_at,
       url: publicAppUrl(app.name, app.port, app.url || ''),
     })
   }
@@ -201,6 +213,28 @@ async function loadSnapshot(force = false) {
     loading.value = false
   }
   if (force) loadDownloads()
+}
+
+async function loadInstallJobs() {
+  progressNow.value = Date.now() / 1000
+  try {
+    const res = await apiRequest('/api/catalog/install-jobs')
+    if (!res.ok) return
+    const data = await readJson(res)
+    const jobs = data.jobs || []
+    const finished = jobs.some((job) =>
+      !['queued', 'installing', 'configuring'].includes(job.status)
+      && installJobs.value[job.name]?.status !== job.status
+      && (
+        ['queued', 'installing', 'configuring'].includes(installJobs.value[job.name]?.status)
+        || snapshot.value.apps.some((app) => app.name === job.name && ['queued', 'installing', 'configuring'].includes(app.state))
+      ),
+    )
+    installJobs.value = Object.fromEntries(jobs.map((job) => [job.name, job]))
+    if (finished) loadSnapshot(true)
+  } catch (_) {
+    /* keep last progress and let its age show that it is stale */
+  }
 }
 
 function mergeWidgetNotes(incoming) {
@@ -380,10 +414,24 @@ function syncCalViewToViewport() {
 }
 
 function launcherTitle(app) {
-  if (app.sick) return `${app.display_name} is unhealthy`
-  if (!app.running) return `${app.display_name} is stopped`
+  if (app.state_label) return `${app.display_name}: ${app.state_label}`
   return app.display_name
 }
+
+function launcherOpen(app) {
+  return app.state === 'running'
+}
+
+const vpnNotice = computed(() => {
+  const vpn = snapshot.value.vpn
+  if (!vpn?.enabled || vpn.tunnel_up || !vpn.waiting?.length) return ''
+  const names = vpn.waiting.map(
+    (name) => (snapshot.value.apps || []).find((app) => app.name === name)?.display_name || name,
+  )
+  const verb = names.length === 1 ? 'stays' : 'stay'
+  const error = vpn.last_error ? ` Last VPN error: ${vpn.last_error}` : ''
+  return `VPN is on but not connected yet, so ${names.join(', ')} ${verb} stopped until it is.${error}`
+})
 
 function startOfWeek(value) {
   const dt = new Date(value)
@@ -581,6 +629,7 @@ onMounted(() => {
   setTimeout(() => loadDownloads(), 750)
   poll = startGuardedInterval(loadSnapshot, 20000)
   downloadsPoll = startGuardedInterval(loadDownloads, 8000)
+  installPoll = startGuardedInterval(loadInstallJobs, 3000, { immediate: true })
 })
 watch(
   () => route.query.debug,
@@ -605,6 +654,7 @@ onUnmounted(() => {
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   if (poll) poll()
   if (downloadsPoll) downloadsPoll()
+  if (installPoll) installPoll()
   clearTimeout(searchTimer)
 })
 </script>
@@ -613,6 +663,10 @@ onUnmounted(() => {
   <section class="home-shell">
     <p v-if="loading" class="home-muted">Loading Home…</p>
     <p v-if="snapshotError" class="home-notice">{{ snapshotError }}</p>
+    <p v-if="vpnNotice" class="home-notice">
+      {{ vpnNotice }}
+      <a href="#/settings/network" class="home-notice-link">Open Settings → Network</a>
+    </p>
 
     <div v-if="!loading && !snapshot.apps.length" class="home-empty glass-card">
       <h3>Nothing to launch yet</h3>
@@ -625,15 +679,15 @@ onUnmounted(() => {
         <section v-for="group in launcherGroups" :key="group.id" class="home-launcher-group glass-card">
           <h3 class="home-launcher-label">{{ group.label }}</h3>
           <div class="home-launcher">
-            <a
+            <component
+              :is="launcherOpen(app) ? 'a' : 'div'"
               v-for="app in group.apps"
               :key="app.name"
               class="home-app"
-              :class="{ 'is-down': !app.running && !app.sick, 'is-sick': app.sick }"
-              :href="app.url"
-              target="_blank"
-              rel="noopener noreferrer"
+              :class="{ 'is-down': app.state !== 'running' && !app.sick, 'is-sick': app.sick, 'is-busy': ['queued', 'installing', 'configuring'].includes(app.state) }"
+              v-bind="launcherOpen(app) ? { href: app.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
               :title="launcherTitle(app)"
+              @click="launcherOpen(app) && openApp($event, app.name, app.url)"
             >
               <img
                 v-if="appIconSrc(app.name)"
@@ -643,9 +697,12 @@ onUnmounted(() => {
               />
               <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
               <span class="home-app-name">{{ app.display_name }}</span>
-              <span v-if="app.sick" class="home-app-state">Unhealthy</span>
-              <span v-else-if="!app.running" class="home-app-state">Stopped</span>
-            </a>
+              <span v-if="app.state_label" class="home-app-state">{{ app.state_label }}</span>
+              <span v-if="app.progress_message" class="home-app-progress" aria-live="polite">{{ app.progress_message }}</span>
+              <small v-if="app.progress_updated_at && ['queued', 'installing', 'configuring'].includes(app.state)" class="home-app-updated">
+                Last progress {{ formatUptime(progressNow - app.progress_updated_at) }} ago
+              </small>
+            </component>
           </div>
         </section>
       </div>
@@ -1025,6 +1082,30 @@ onUnmounted(() => {
 }
 .home-app.is-down {
   opacity: 0.55;
+  cursor: default;
+}
+.home-app.is-down:hover {
+  border-color: transparent;
+}
+.home-app.is-busy {
+  width: 10.5rem;
+  flex-basis: 10.5rem;
+  opacity: 1;
+}
+.home-app-progress,
+.home-app-updated {
+  text-align: center;
+  overflow-wrap: anywhere;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.home-app-updated {
+  font-size: 0.65rem;
+}
+.home-notice-link {
+  margin-left: 0.35rem;
+  text-decoration: underline;
 }
 .home-app.is-sick,
 .home-app.is-sick:hover {

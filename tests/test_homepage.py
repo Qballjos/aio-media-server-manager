@@ -666,3 +666,75 @@ def test_homepage_api_requires_session(tmp_path, monkeypatch):
         )
     assert ok.status_code == 200
     assert ok.json()["apps"] == []
+
+
+def test_homepage_launcher_explains_why_apps_are_stopped(tmp_path, monkeypatch):
+    from core.install_jobs import clear_jobs, set_job
+    from core.settings import settings
+
+    catalog = FakeCatalog(
+        [
+            _plugin("prowlarr", 9696, tmp_path, category="indexers"),
+            _plugin("seerr", 5055, tmp_path, category="requests"),
+            _plugin("sonarr", 8989, tmp_path),
+            _plugin("radarr", 7878, tmp_path),
+            _plugin("jellyfin", 8096, tmp_path, category="media"),
+        ]
+    )
+    clear_jobs()
+    set_job("seerr", "installing")
+    set_job("radarr", "configuring")  # process already runs, post-install wiring still busy
+    monkeypatch.setattr(settings, "vpn_enabled", True)
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"radarr", "jellyfin"}),
+        patch("core.homepage.vpn_manager.tunneled_apps_allowed", return_value=False),
+        patch("core.homepage.vpn_manager.status", return_value={"tunnel_up": False, "last_error": "handshake timed out"}),
+        patch("core.homepage.get_application_api_key", return_value=None),
+        patch("core.homepage._fetch_json", return_value=(None, "skipped")),
+    ):
+        snap = homepage_snapshot("nas.local", force=True)
+    clear_jobs()
+    by_name = {item["name"]: (item["state"], item["state_label"]) for item in snap["apps"]}
+    assert by_name["prowlarr"] == ("waiting_for_vpn", "Waiting for VPN")
+    assert by_name["seerr"] == ("installing", "Installing…")
+    assert by_name["sonarr"] == ("stopped", "Stopped")
+    assert by_name["radarr"] == ("configuring", "Configuring…")
+    assert by_name["jellyfin"] == ("running", "")
+    assert snap["vpn"] == {
+        "enabled": True,
+        "tunnel_up": False,
+        "waiting": ["prowlarr"],
+        "last_error": "handshake timed out",
+    }
+
+
+def test_stale_snapshot_still_reports_live_launcher_state(tmp_path, monkeypatch):
+    """A visitor who arrives after setup finished must not see tiles frozen in Configuring…"""
+    from core.install_jobs import clear_jobs, set_job
+
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path, category="requests")])
+    monkeypatch.setattr("core.homepage._CACHE_TTL", 0.0)
+    real_thread = threading.Thread
+
+    def fake_thread(*args, **kwargs):
+        if str(kwargs.get("name") or "").startswith("homepage-refresh-"):
+            return SimpleNamespace(start=lambda: None)
+        return real_thread(*args, **kwargs)
+
+    clear_jobs()
+    set_job("seerr", "configuring")
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value=None),
+        patch("core.homepage._fetch_json", return_value=(None, "skipped")),
+        patch("threading.Thread", side_effect=fake_thread),
+    ):
+        first = homepage_snapshot("nas.local", force=True)
+        assert first["apps"][0]["state"] == "configuring"
+        set_job("seerr", "started")
+        later = homepage_snapshot("nas.local")  # cache entry is stale now
+    clear_jobs()
+    assert later["apps"][0]["state"] == "running"
+    assert later["apps"][0]["state_label"] == ""

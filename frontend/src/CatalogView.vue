@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { catalogQueryFromState, catalogStateFromQuery, sameCatalogQuery } from './catalogQuery.js'
 import { appWebUrl } from './appWebUrl.js'
+import { openApp } from './appOpen.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { formatUpdateWhen, formatUptime } from './format.js'
 import { useToasts } from './useToasts.js'
@@ -89,6 +90,15 @@ const combinedServices = computed(() => {
   return props.catalogApps.filter((cat) => cat.current_arch_supported !== false).map(cat => {
     const live = appMap.get(cat.name)
     const port = live?.port || cat.port || cat.default_port
+    const webUrl = appWebUrl({
+      appName: cat.name,
+      port,
+      baseDomain: props.systemInfo?.public_app_base_domain || '',
+      subdomain: (() => {
+        const row = (props.systemInfo?.public_app_hostnames || {})[cat.name]
+        return row && row.enabled ? row.subdomain : ''
+      })(),
+    })
     return {
       name: cat.name,
       displayName: cat.display_name,
@@ -100,15 +110,11 @@ const combinedServices = computed(() => {
       defaultPort: cat.default_port,
       installed: cat.installed || (live && live.installed) || false,
       installedVersion: cat.installed_version || (live && live.version),
-      webUrl: appWebUrl({
-        appName: cat.name,
-        port,
-        baseDomain: props.systemInfo?.public_app_base_domain || '',
-        subdomain: (() => {
-          const row = (props.systemInfo?.public_app_hostnames || {})[cat.name]
-          return row && row.enabled ? row.subdomain : ''
-        })(),
-      }),
+      installJob: cat.install_job,
+      installBusy: ['queued', 'installing', 'configuring'].includes(cat.install_job),
+      installMessage: cat.install_message || cat.install_error || '',
+      installUpdatedAt: cat.install_updated_at,
+      webUrl,
       state: live ? live.state : (cat.installed ? 'stopped' : 'not_installed'),
       pid: live ? live.pid : null,
       uptime: live ? live.uptime_seconds : null,
@@ -435,12 +441,15 @@ async function syncRecyclarr() {
 }
 
 function statusLabel(service) {
+  if (service.installBusy || service.installJob === 'failed') return service.installJob.toUpperCase()
   if (service.is_crash_loop) return `CRASH LOOP (${service.recent_crashes || 5})`
   if (!service.daemon && !isServiceActive(service)) return 'CLI'
   return String(service.state || 'stopped').toUpperCase().replace('_', ' ')
 }
 
 function statusBadgeClass(service) {
+  if (service.installJob === 'failed') return 'badge-failed'
+  if (service.installBusy) return 'badge-stopped'
   if (service.is_crash_loop || service.state === 'crash_loop') return 'badge-failed font-bold'
   if (!service.daemon && !isServiceActive(service)) return 'badge-inactive'
   switch (service.state) {
@@ -774,6 +783,7 @@ onUnmounted(() => {
                       target="_blank"
                       rel="noopener noreferrer"
                       class="port-link"
+                      @click="openApp($event, service.name, service.webUrl)"
                       title="Open UI"
                     >
                       :{{ service.port }}
@@ -796,6 +806,12 @@ onUnmounted(() => {
 
             <!-- Description -->
             <p class="service-desc">{{ service.description }}</p>
+            <p v-if="service.installMessage && (service.installBusy || service.installJob === 'failed')" class="service-progress">
+              <span aria-live="polite">{{ service.installMessage }}</span>
+              <small v-if="service.installBusy && service.installUpdatedAt">
+                Last progress {{ formatUptime(Date.now() / 1000 - service.installUpdatedAt) }} ago
+              </small>
+            </p>
 
             <!-- Metadata footer -->
             <div class="service-meta font-mono">
@@ -815,9 +831,9 @@ onUnmounted(() => {
                 <button
                   @click="installApp(service.name, service.displayName)"
                   class="btn-action btn-install"
-                  :disabled="actionLoading[service.name] === 'install'"
+                  :disabled="actionLoading[service.name] === 'install' || service.installBusy"
                 >
-                  <span v-if="actionLoading[service.name] === 'install'" class="spinner spinner-sm"></span>
+                  <span v-if="actionLoading[service.name] === 'install' || service.installBusy" class="spinner spinner-sm" aria-label="Installing"></span>
                   <span v-else>Install</span>
                 </button>
                 <button type="button" class="btn-action btn-logs" @click.stop="openAppSettings(service)">
@@ -868,6 +884,7 @@ onUnmounted(() => {
                   target="_blank"
                   rel="noopener noreferrer"
                   class="btn-action btn-webui"
+                  @click="openApp($event, service.name, service.webUrl)"
                 >
                   Open UI
                 </a>
@@ -915,3 +932,15 @@ onUnmounted(() => {
         </div>
 
 </template>
+
+<style scoped>
+.service-progress {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0 0 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+</style>

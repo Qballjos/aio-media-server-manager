@@ -6,37 +6,62 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 import requests
 
+from core.install_jobs import set_wiring_progress
 from core.shared_credentials import shared_admin_credentials
 
 logger = logging.getLogger(__name__)
 
+_DISPLAY_NAMES = {
+    "qbittorrent": "qBittorrent",
+    "sabnzbd": "SABnzbd",
+    "nzbget": "NZBGet",
+    "neutarr": "NeutArr",
+}
+_servarr_auth_lock = threading.Lock()
 
-def set_servarr_forms_auth(base_url: str, api_key: Optional[str], username: str, password: str) -> bool:
+
+def set_servarr_forms_auth(
+    base_url: str,
+    api_key: Optional[str],
+    username: str,
+    password: str,
+    *,
+    name: str = "",
+) -> bool:
     if not api_key:
         return False
-    headers = {"Content-Type": "application/json", "X-Api-Key": api_key}
-    try:
-        resp = requests.get(f"{base_url}/config/host", headers=headers, timeout=5.0)
-        if resp.status_code != 200:
+    # Per-app startup and shared setup can reach the same auth transition together.
+    with _servarr_auth_lock:
+        headers = {"Content-Type": "application/json", "X-Api-Key": api_key}
+        try:
+            resp = requests.get(f"{base_url}/config/host", headers=headers, timeout=5.0)
+            if resp.status_code != 200:
+                return False
+            cfg = resp.json()
+            if not isinstance(cfg, dict):
+                return False
+            previous_method = str(cfg.get("authenticationMethod") or "").lower()
+            cfg["authenticationMethod"] = "forms"
+            cfg["authenticationRequired"] = "enabled"
+            cfg["username"] = username
+            cfg["password"] = password
+            cfg["passwordConfirmation"] = password
+            put = requests.put(f"{base_url}/config/host", headers=headers, json=cfg, timeout=8.0)
+            ok = put.status_code in (200, 201, 202)
+            if ok and name and previous_method != "forms":
+                # Servarr reads the authentication method once at startup; until a
+                # restart its login service rejects every password.
+                restart_app_if_running(name)
+            return ok
+        except Exception as exc:
+            logger.debug("Servarr forms auth at %s failed: %s", base_url, exc)
             return False
-        cfg = resp.json()
-        if not isinstance(cfg, dict):
-            return False
-        cfg["authenticationMethod"] = "forms"
-        cfg["authenticationRequired"] = "enabled"
-        cfg["username"] = username
-        cfg["password"] = password
-        cfg["passwordConfirmation"] = password
-        put = requests.put(f"{base_url}/config/host", headers=headers, json=cfg, timeout=8.0)
-        return put.status_code in (200, 201, 202)
-    except Exception as exc:
-        logger.debug("Servarr forms auth at %s failed: %s", base_url, exc)
-        return False
 
 
 def apply_shared_local_logins(
@@ -52,9 +77,13 @@ def apply_shared_local_logins(
     username, password = creds
     steps: list[dict[str, Any]] = []
 
+    def progress(name: str) -> None:
+        set_wiring_progress(f"Setting the AIO login in {_DISPLAY_NAMES.get(name, name.title())}")
+
     if installed("qbittorrent"):
         from core.integrations.qbittorrent import apply_qbittorrent_webui_login
 
+        progress("qbittorrent")
         ok = apply_qbittorrent_webui_login(
             config_dir_for("qbittorrent"),
             port_for("qbittorrent", 8081),
@@ -64,12 +93,14 @@ def apply_shared_local_logins(
     if installed("sabnzbd"):
         from core.integrations.sabnzbd import SABnzbdClient
 
+        progress("sabnzbd")
         client = SABnzbdClient(port=port_for("sabnzbd", 8085), api_key=api_key_for("sabnzbd"))
         steps.append(_step("sabnzbd", "set_shared_login", client.set_login(username, password), username))
 
     if installed("nzbget"):
         from core.integrations.nzbget import NZBGetClient
 
+        progress("nzbget")
         client = NZBGetClient(port=port_for("nzbget", 6789))
         steps.append(_step("nzbget", "set_shared_login", client.set_login(username, password), username))
 
@@ -81,13 +112,15 @@ def apply_shared_local_logins(
     ):
         if not installed(name):
             continue
+        progress(name)
         base = f"http://127.0.0.1:{port_for(name, fallback)}{prefix}"
-        ok = set_servarr_forms_auth(base, api_key_for(name), username, password)
+        ok = set_servarr_forms_auth(base, api_key_for(name), username, password, name=name)
         steps.append(_step(name, "set_shared_login", ok, username))
 
     if installed("bazarr"):
         from core.integrations.bazarr import BazarrClient
 
+        progress("bazarr")
         client = BazarrClient(port=port_for("bazarr", 6767), api_key=api_key_for("bazarr"))
         ok = client.set_ui_auth(username, password, config_dir_for("bazarr"))
         steps.append(_step("bazarr", "set_shared_login", ok, username))
@@ -95,6 +128,7 @@ def apply_shared_local_logins(
     if installed("jellyfin"):
         from core.integrations.jellyfin import JellyfinClient
 
+        progress("jellyfin")
         client = JellyfinClient(
             port=port_for("jellyfin", 8096),
             api_key=api_key_for("jellyfin"),
@@ -103,6 +137,7 @@ def apply_shared_local_logins(
         steps.append(_step("jellyfin", "set_shared_login", client.ensure_local_admin(username, password), username))
 
     if installed("neutarr"):
+        progress("neutarr")
         steps.append(
             _step(
                 "neutarr",
@@ -170,7 +205,31 @@ def patch_bazarr_auth_yaml(config_path: Path, username: str, password: str) -> b
     return False
 
 
+def _bazarr_auth_values(text: str) -> dict[str, str]:
+    """Current auth block as key → value, quotes stripped (Bazarr rewrites the file in its own style)."""
+    values: dict[str, str] = {}
+    in_block = False
+    for line in text.splitlines():
+        if re.match(r"^auth:\s*$", line):
+            in_block = True
+            continue
+        if in_block:
+            if line and not line[0].isspace():
+                break
+            key, sep, value = line.strip().partition(":")
+            if sep:
+                values[key.strip()] = value.strip().strip("'\"")
+    return values
+
+
 def _rewrite_bazarr_auth_block(text: str, username: str, hashed: str) -> str:
+    current = _bazarr_auth_values(text)
+    if (
+        current.get("type") == "form"
+        and current.get("username") == username
+        and current.get("password") == hashed
+    ):
+        return text  # already the shared login; rewriting would only restart Bazarr
     user_line = f"  username: {json.dumps(username)}"
     pass_line = f"  password: {hashed}"
     type_line = "  type: form"
@@ -217,16 +276,21 @@ def _rewrite_bazarr_auth_block(text: str, username: str, hashed: str) -> str:
     return result
 
 
-def restart_bazarr_if_running() -> None:
+def restart_app_if_running(name: str) -> None:
+    """Restart a managed app so a login change takes effect; no-op when it is not running."""
     try:
         from core.supervisor import ProcessSupervisor
 
         supervisor = ProcessSupervisor.get()
-        if supervisor.status("bazarr").value != "running":
+        if supervisor.status(name).value != "running":
             return
-        supervisor.run_coroutine_sync(supervisor.restart("bazarr"), timeout=90.0)
+        supervisor.run_coroutine_sync(supervisor.restart(name), timeout=90.0)
     except Exception as exc:
-        logger.debug("Bazarr restart after login seed skipped: %s", exc)
+        logger.debug("%s restart after login change skipped: %s", name, exc)
+
+
+def restart_bazarr_if_running() -> None:
+    restart_app_if_running("bazarr")
 
 
 def _step(target: str, action: str, ok: bool, detail: str) -> dict[str, Any]:

@@ -11,15 +11,20 @@ import asyncio
 import logging
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from applications.catalog import ApplicationCatalog, refresh_live_catalogs
 from core.app_prefs import AppPrefsError, autostart_for, set_app_option, update_app_prefs
 from core.app_web_url import app_web_ui_url_for_request
 from core.auth import auth_manager
+from core.integrations.sessions import app_session_cookies
+from core.integrations.jellyfin import JellyfinClient
+from core.shared_credentials import shared_admin_credentials
 from core.settings import settings
 from core.supervisor import ProcessSupervisor
 from core.uninstall import UninstallError, uninstall_application
@@ -48,6 +53,10 @@ class UninstallRequest(BaseModel):
     remove_application: bool = True
     remove_config: bool = False
     remove_data: bool = False
+
+
+class JellyfinQuickConnectRequest(BaseModel):
+    code: str = Field(pattern=r"^[0-9]{6}$")
 
 
 def _ensure_authenticated(request: Request) -> None:
@@ -105,6 +114,76 @@ async def list_applications(request: Request) -> dict[str, Any]:
         )
 
     return {"applications": results}
+
+
+@router.post("/{name}/session", summary="Sign the manager admin in to an app for this browser")
+async def app_session(name: str, request: Request) -> JSONResponse:
+    """Log the shared admin in to the app server-side and hand the browser the session.
+
+    The dashboard calls this before opening an app. Browsers do not isolate cookies
+    by port, so a host-only cookie set here is also sent to http://<same host>:<app
+    port>. Jellyfin uses Quick Connect instead because its browser token is stored
+    per origin; cookie apps on public subdomains keep their own login.
+    """
+    _ensure_authenticated(request)
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    target = app_web_ui_url_for_request(request, app_name=plugin.name, port=plugin.port)
+    if plugin.name == "jellyfin":
+        try:
+            ready = await asyncio.to_thread(plugin.prepare_browser_login)
+        except OSError:
+            ready = False
+        if ready:
+            return JSONResponse({
+                "url": f"{target.rstrip('/')}/web/aio-login.html",
+                "signed_in": False,
+                "handoff": "jellyfin-quick-connect",
+            })
+        return JSONResponse({
+            "url": target,
+            "signed_in": False,
+            "detail": "Automatic Jellyfin sign-in is unavailable. Sign in directly in Jellyfin.",
+        })
+    same_host = (urlparse(target).hostname or "") == (request.url.hostname or "")
+    jar = None
+    if same_host:
+        plex_dir = catalog.get("plex").config_dir if catalog.has("plex") else None
+        jar = await asyncio.to_thread(
+            app_session_cookies, plugin.name, plugin.port, plex_config_dir=plex_dir
+        )
+    response = JSONResponse({"url": target, "signed_in": bool(jar)})
+    for cookie in jar or []:
+        max_age = None
+        if cookie.expires:
+            max_age = max(0, int(cookie.expires - time.time()))
+        response.set_cookie(
+            cookie.name,
+            cookie.value,
+            max_age=max_age,
+            path="/",
+            secure=request.url.scheme == "https",
+            httponly=True,
+            samesite="lax",
+        )
+    return response
+
+
+@router.post("/jellyfin/quick-connect", summary="Authorize this browser's Jellyfin sign-in")
+async def jellyfin_quick_connect(payload: JellyfinQuickConnectRequest, request: Request) -> dict[str, bool]:
+    auth_manager.authenticate_request(request)
+    creds = shared_admin_credentials()
+    if not creds:
+        raise HTTPException(status_code=409, detail="The shared AIO account is not available for Jellyfin sign-in.")
+    plugin = catalog.get("jellyfin")
+    client = JellyfinClient(port=plugin.port, config_dir=plugin.config_dir)
+    if not await asyncio.to_thread(client.authenticate, *creds):
+        raise HTTPException(status_code=502, detail="Jellyfin could not sign in with the shared AIO account.")
+    if not await asyncio.to_thread(client.authorize_quick_connect, payload.code):
+        raise HTTPException(status_code=502, detail="Jellyfin could not authorize this sign-in. Open Jellyfin to sign in manually.")
+    return {"authorized": True}
 
 
 @router.post("/{name}/start", summary="Start an application process")
@@ -575,4 +654,3 @@ async def uninstall_managed_application(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Uninstall of '{name}' failed: {exc}",
         ) from exc
-
