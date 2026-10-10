@@ -263,3 +263,21 @@ def test_concurrent_servarr_login_setup_changes_auth_and_restarts_once(monkeypat
         assert second.result(timeout=2) is True
     assert methods == ["none", "forms"]
     assert restarted == ["prowlarr"]
+
+
+def test_shared_login_pass_reports_progress_per_app(monkeypatch):
+    from core.integrations import local_auth
+    from core.integrations.bazarr import BazarrClient
+
+    messages: list[str] = []
+    monkeypatch.setattr(local_auth, "set_wiring_progress", messages.append)
+    monkeypatch.setattr(local_auth, "shared_admin_credentials", lambda: ("amm", "pw"))
+    monkeypatch.setattr(local_auth, "set_servarr_forms_auth", lambda *args, **kwargs: True)
+    monkeypatch.setattr(BazarrClient, "set_ui_auth", lambda self, username, password, config_dir: True)
+    local_auth.apply_shared_local_logins(
+        installed=lambda name: name in {"sonarr", "bazarr"},
+        port_for=lambda name, fallback: fallback,
+        api_key_for=lambda name: "k",
+        config_dir_for=lambda name: Path("/tmp/aio-test"),
+    )
+    assert messages == ["Setting the AIO login in Sonarr", "Setting the AIO login in Bazarr"]

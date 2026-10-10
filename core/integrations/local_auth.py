@@ -12,9 +12,17 @@ from typing import Any, Callable, Optional
 
 import requests
 
+from core.install_jobs import set_wiring_progress
 from core.shared_credentials import shared_admin_credentials
 
 logger = logging.getLogger(__name__)
+
+_DISPLAY_NAMES = {
+    "qbittorrent": "qBittorrent",
+    "sabnzbd": "SABnzbd",
+    "nzbget": "NZBGet",
+    "neutarr": "NeutArr",
+}
 _servarr_auth_lock = threading.Lock()
 
 
@@ -69,9 +77,13 @@ def apply_shared_local_logins(
     username, password = creds
     steps: list[dict[str, Any]] = []
 
+    def progress(name: str) -> None:
+        set_wiring_progress(f"Setting the AIO login in {_DISPLAY_NAMES.get(name, name.title())}")
+
     if installed("qbittorrent"):
         from core.integrations.qbittorrent import apply_qbittorrent_webui_login
 
+        progress("qbittorrent")
         ok = apply_qbittorrent_webui_login(
             config_dir_for("qbittorrent"),
             port_for("qbittorrent", 8081),
@@ -81,12 +93,14 @@ def apply_shared_local_logins(
     if installed("sabnzbd"):
         from core.integrations.sabnzbd import SABnzbdClient
 
+        progress("sabnzbd")
         client = SABnzbdClient(port=port_for("sabnzbd", 8085), api_key=api_key_for("sabnzbd"))
         steps.append(_step("sabnzbd", "set_shared_login", client.set_login(username, password), username))
 
     if installed("nzbget"):
         from core.integrations.nzbget import NZBGetClient
 
+        progress("nzbget")
         client = NZBGetClient(port=port_for("nzbget", 6789))
         steps.append(_step("nzbget", "set_shared_login", client.set_login(username, password), username))
 
@@ -98,6 +112,7 @@ def apply_shared_local_logins(
     ):
         if not installed(name):
             continue
+        progress(name)
         base = f"http://127.0.0.1:{port_for(name, fallback)}{prefix}"
         ok = set_servarr_forms_auth(base, api_key_for(name), username, password, name=name)
         steps.append(_step(name, "set_shared_login", ok, username))
@@ -105,6 +120,7 @@ def apply_shared_local_logins(
     if installed("bazarr"):
         from core.integrations.bazarr import BazarrClient
 
+        progress("bazarr")
         client = BazarrClient(port=port_for("bazarr", 6767), api_key=api_key_for("bazarr"))
         ok = client.set_ui_auth(username, password, config_dir_for("bazarr"))
         steps.append(_step("bazarr", "set_shared_login", ok, username))
@@ -112,6 +128,7 @@ def apply_shared_local_logins(
     if installed("jellyfin"):
         from core.integrations.jellyfin import JellyfinClient
 
+        progress("jellyfin")
         client = JellyfinClient(
             port=port_for("jellyfin", 8096),
             api_key=api_key_for("jellyfin"),
@@ -120,6 +137,7 @@ def apply_shared_local_logins(
         steps.append(_step("jellyfin", "set_shared_login", client.ensure_local_admin(username, password), username))
 
     if installed("neutarr"):
+        progress("neutarr")
         steps.append(
             _step(
                 "neutarr",

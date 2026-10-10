@@ -259,7 +259,7 @@ async def _wait_wiring_prereqs(timeout: float = 90.0) -> None:
                 set_wiring_progress(f"Waiting for {plugin.manifest.display_name} to respond")
                 ready = False
                 break
-            if name in APPS_WITH_FILE_API_KEYS and not get_application_api_key(name):
+            if name in APPS_WITH_FILE_API_KEYS and not await asyncio.to_thread(get_application_api_key, name):
                 set_wiring_progress(f"Waiting for {plugin.manifest.display_name} connection details")
                 ready = False
                 break
