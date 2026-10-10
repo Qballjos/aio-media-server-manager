@@ -208,6 +208,8 @@ async function loadStep(id) {
       selections.request_system = data.selected || 'seerr'
     } else if (id === 10) {
       selections.recommended_preview = [...(data.selected || [])]
+    } else if (id === 11) {
+      loadCatalogNames().catch(() => {})
     }
   } catch (err) {
     error.value = err.message
@@ -367,6 +369,44 @@ function leaveToHome() {
 }
 
 const summary = computed(() => payload.value.summary || payload.value.selections || {})
+const catalogNames = ref({})
+
+async function loadCatalogNames() {
+  const res = await apiRequest('/api/catalog')
+  if (!res.ok) return
+  const data = await readJson(res)
+  catalogNames.value = Object.fromEntries(
+    (data.applications || []).map((row) => [row.name, row.display_name || row.name]),
+  )
+}
+
+function appLabel(id) {
+  return catalogNames.value[id] || displayName(id)
+}
+
+/** The chosen apps as the pipeline they form: find, download, automate, watch, request. */
+const reviewGroups = computed(() => {
+  const chosen = summary.value
+  const arr = [...(chosen.arr_apps || [])].sort((a, b) => (a === 'prowlarr' ? -1 : b === 'prowlarr' ? 1 : 0))
+  const media = [...(chosen.media_servers || [])]
+  if (chosen.request_system && chosen.request_system !== 'none') media.push(chosen.request_system)
+  let usenet = ''
+  if (chosen.usenet_host) usenet = `Usenet through ${chosen.usenet_host}`
+  else if (chosen.has_usenet_account) usenet = 'Usenet account saved'
+  return [
+    { id: 'automation', label: 'Indexers and automation', apps: arr, note: '' },
+    { id: 'downloads', label: 'Downloads', apps: chosen.download_clients || [], note: usenet },
+    { id: 'media', label: 'Media and requests', apps: media, note: '' },
+    { id: 'extras', label: 'Extras', apps: chosen.recommended_preview || [], note: '' },
+  ]
+})
+const reviewAppCount = computed(() => new Set(reviewGroups.value.flatMap((group) => group.apps)).size)
+const reviewVpn = computed(() => {
+  const provider = summary.value.vpn_provider
+  if (!provider || provider === 'none') return 'off'
+  const name = provider === 'privadovpn' ? 'PrivadoVPN' : provider === 'custom' ? 'your own WireGuard or OpenVPN profile' : provider
+  return summary.value.has_vpn_config ? `${name}, config saved` : name
+})
 const showPlexClaim = computed(() => (selections.media_servers || []).includes('plex'))
 const showQbitCreds = computed(() => (selections.download_clients || []).includes('qbittorrent'))
 const showUsenetCreds = computed(() => {
@@ -675,16 +715,29 @@ onUnmounted(() => {
         </template>
 
         <template v-else>
-          <dl class="wizard-dl">
-            <div><dt>*Arr</dt><dd>{{ (summary.arr_apps || []).join(', ') || '—' }}</dd></div>
-            <div><dt>Download</dt><dd>{{ (summary.download_clients || []).join(', ') || '—' }}</dd></div>
-            <div><dt>Usenet</dt><dd>{{ summary.usenet_host || (summary.has_usenet_account ? 'configured' : '—') }}</dd></div>
-            <div><dt>Media</dt><dd>{{ (summary.media_servers || []).join(', ') || '—' }}</dd></div>
-            <div><dt>Requests</dt><dd>{{ summary.request_system || '—' }}</dd></div>
-            <div><dt>VPN</dt><dd>{{ summary.vpn_provider || 'none' }}{{ summary.has_vpn_config ? ' · config saved' : '' }}</dd></div>
-            <div><dt>Remote access</dt><dd>{{ summary.cloudflare_tunnel_enabled ? 'Cloudflare Tunnel' : '—' }}</dd></div>
-            <div><dt>Recommended</dt><dd>{{ (summary.recommended_preview || []).join(', ') || 'none' }}</dd></div>
-          </dl>
+          <p class="wizard-review-lead">
+            Your stack: {{ reviewAppCount }} {{ reviewAppCount === 1 ? 'app' : 'apps' }}.
+            Save &amp; install sets them up with your AIO account.
+          </p>
+          <ul class="wizard-review">
+            <li v-for="group in reviewGroups" :key="group.id" class="wizard-review-row">
+              <span class="wizard-review-label">{{ group.label }}</span>
+              <span class="wizard-review-apps">
+                <span v-for="name in group.apps" :key="name" class="wizard-chip">
+                  <span class="wizard-app-badge">
+                    <img v-if="appIconSrc(name)" :src="appIconSrc(name)" alt="" class="wizard-icon" />
+                    <span v-else>{{ appLabel(name).slice(0, 2).toUpperCase() }}</span>
+                  </span>
+                  {{ appLabel(name) }}
+                </span>
+                <span v-if="!group.apps.length" class="wizard-review-empty">None</span>
+                <span v-if="group.note" class="wizard-review-note">{{ group.note }}</span>
+              </span>
+            </li>
+          </ul>
+          <p class="wizard-review-network">
+            VPN: {{ reviewVpn }}. Remote access: {{ summary.cloudflare_tunnel_enabled ? 'Cloudflare Tunnel' : 'off' }}.
+          </p>
         </template>
       </div>
 
@@ -886,31 +939,69 @@ onUnmounted(() => {
   background: var(--color-info-bg);
   flex-shrink: 0;
 }
-.wizard-dl {
+.wizard-review-lead {
+  margin: 0 0 0.9rem;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.wizard-review {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
   gap: 0.55rem;
 }
-.wizard-dl div {
+.wizard-review-row {
   display: grid;
-  grid-template-columns: 7.5rem 1fr;
-  gap: 0.6rem;
-  padding: 0.75rem 0.9rem;
+  grid-template-columns: 10rem 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.7rem 0.9rem;
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
 }
-.wizard-dl dt {
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.wizard-review-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.3;
+  padding-top: 0.5rem;
 }
-.wizard-dl dd {
-  margin: 0;
+.wizard-review-apps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.1rem;
+  min-width: 0;
+}
+.wizard-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   color: var(--text-main);
-  font-size: 0.88rem;
-  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+}
+.wizard-review-empty,
+.wizard-review-note {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+}
+.wizard-review-network {
+  margin: 0.9rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+@media (max-width: 520px) {
+  .wizard-review-row {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+  .wizard-review-label {
+    padding-top: 0;
+  }
 }
 .wizard-install {
   display: flex;
@@ -1058,9 +1149,6 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 @media (max-width: 560px) {
-  .wizard-dl div {
-    grid-template-columns: 1fr;
-  }
   .wizard-actions {
     flex-direction: column;
     align-items: stretch;
