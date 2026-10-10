@@ -7,10 +7,8 @@ so indexers configured in Prowlarr automatically push to Sonarr and Radarr.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
-from urllib.parse import urlparse
 from typing import Any, Callable, Iterable, Optional
 import requests
 
@@ -166,52 +164,6 @@ class ProwlarrClient:
             if self._put(f"/indexer/{indexer['id']}?forceSave=true", indexer):
                 updated.append(str(indexer["name"]))
         return updated
-
-    def usenet_indexers(self) -> list[dict[str, str]]:
-        rows = []
-        for indexer in self.list_indexers():
-            if indexer.get("protocol") != "usenet":
-                continue
-            fields = {field.get("name"): field.get("value") for field in indexer.get("fields") or []}
-            rows.append({"name": str(indexer.get("name") or ""), "url": str(fields.get("baseUrl") or "")})
-        return rows
-
-    def add_newznab_indexer(self, *, name: str, url: str, api_key: str) -> tuple[bool, str]:
-        """Add a Newznab indexer (NZBgeek, Usenet Crawler, …) with its API key; Prowlarr tests it first."""
-        base = (url or "").strip().rstrip("/")
-        if base.lower().endswith("/api"):
-            base = base[:-4]
-        parsed = urlparse(base if "://" in base else f"https://{base}")
-        if not parsed.netloc:
-            return False, "Enter the indexer's web address, for example https://www.usenet-crawler.com."
-        base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
-        label = (name or "").strip() or parsed.netloc.removeprefix("www.")
-        if any(str(item.get("name")) == label for item in self.list_indexers()):
-            return False, f"Prowlarr already has an indexer named {label}."
-        template = next(
-            (item for item in self._get("/indexer/schema", timeout=120.0) or [] if item.get("name") == "Generic Newznab"),
-            None,
-        )
-        if template is None:
-            return False, "Prowlarr has no Generic Newznab definition."
-        body = {key: value for key, value in template.items() if key not in ("presets", "id")}
-        body.update(name=label, enable=True, appProfileId=1, priority=body.get("priority") or 25, tags=[])
-        values = {"baseUrl": base, "apiPath": "/api", "apiKey": api_key.strip()}
-        fields = []
-        for field in template.get("fields") or []:
-            field = dict(field)
-            if field.get("name") in values:
-                field["value"] = values[field["name"]]
-            fields.append(field)
-        body["fields"] = fields
-        # Prowlarr tests the indexer before saving; through a VPN that can take a while,
-        # and giving up early would hide an indexer Prowlarr still adds.
-        resp = self._post("/indexer", body, timeout=180.0)
-        if resp is None:
-            return False, "Prowlarr did not answer in time. Check Prowlarr → Indexers before adding it again."
-        if resp.status_code in (200, 201):
-            return True, f"Added {label} to Prowlarr; it syncs to Sonarr and Radarr."
-        return False, _validation_message(resp.text) or f"Prowlarr refused the indexer (HTTP {resp.status_code})."
 
     def ensure_tag(self, label: str) -> int | None:
         for tag in self._get("/tag") or []:
@@ -413,19 +365,6 @@ class ProwlarrClient:
         if ok:
             self.ensure_flaresolverr_tag()
         return ok
-
-
-def _validation_message(text: str) -> str:
-    """First errorMessage from Prowlarr's validation reply, if it sent one."""
-    try:
-        data = json.loads(text or "")
-    except ValueError:
-        return ""
-    rows = data if isinstance(data, list) else [data]
-    for row in rows:
-        if isinstance(row, dict) and row.get("errorMessage"):
-            return str(row["errorMessage"])[:300]
-    return ""
 
 
 def _fill_seed_defaults(fields: list[dict[str, Any]]) -> bool:
