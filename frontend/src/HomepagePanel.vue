@@ -768,6 +768,7 @@ onUnmounted(() => {
               :href="item.url || undefined"
               :target="item.url ? '_blank' : undefined"
               rel="noopener noreferrer"
+              @click="item.url && openApp($event, item.source || 'jellyfin', item.url)"
             >
               <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
               <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
@@ -806,6 +807,7 @@ onUnmounted(() => {
               :href="item.url || seerrHomeUrl || undefined"
               :target="item.url || seerrHomeUrl ? '_blank' : undefined"
               rel="noopener noreferrer"
+              @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
             >
               <span class="home-tile-art">
                 <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
@@ -855,6 +857,7 @@ onUnmounted(() => {
                 :href="item.url || seerrHomeUrl || undefined"
                 :target="item.url || seerrHomeUrl ? '_blank' : undefined"
                 rel="noopener noreferrer"
+                @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
               >
                 <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
