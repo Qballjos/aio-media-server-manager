@@ -204,10 +204,21 @@ class IntegrationEngine:
         tagged: list[str] = []
         if handled and self._installed("flaresolverr"):
             tagged = prowlarr_client.attach_flaresolverr(handled, progress=progress)
+        # Seed defaults on the indexers AIO added, once each: installs from before this
+        # change get them too, and a value the user clears later is not put back.
+        options = (load_prefs(self._settings).get("options") or {}).get("prowlarr") or {}
+        seeded = set(options.get("seeded_indexers") or [])
+        candidates = (tried | set(handled)) - seeded
+        newly_seeded = prowlarr_client.ensure_seed_settings(candidates) if candidates else []
+        if newly_seeded:
+            set_app_option(
+                "prowlarr", "seeded_indexers", sorted(seeded | set(newly_seeded)), app_settings=self._settings
+            )
         ok = bool(handled) or not starter["missing"]
         detail = (
             f"added={','.join(starter['added']) or '-'} disabled={','.join(starter['disabled']) or '-'} "
-            f"missing={','.join(starter['missing']) or '-'} flaresolverr={','.join(tagged) or '-'}"
+            f"missing={','.join(starter['missing']) or '-'} flaresolverr={','.join(tagged) or '-'} "
+            f"seed_settings={','.join(newly_seeded) or '-'}"
         )
         return _step("prowlarr", "starter_indexers", ok, detail)
 
