@@ -16,6 +16,7 @@ from core.recyclarr import (
     default_prefs,
     ensure_git_path_setting,
     load_prefs,
+    run_sync,
     save_yaml,
     write_recyclarr_config,
 )
@@ -238,3 +239,27 @@ def test_ensure_git_path_setting_writes_and_updates(tmp_path: Path):
     updated = (root / "settings.yml").read_text(encoding="utf-8")
     assert 'git_path: "/usr/local/bin/git"' in updated
     assert updated.count("git_path:") == 1
+
+
+def test_failed_sync_names_recyclarrs_own_error(tmp_path: Path, monkeypatch):
+    cfg = _settings(tmp_path)
+    catalog = ApplicationCatalog(app_settings=cfg)
+    plugin = catalog.get("recyclarr")
+    plugin.install_dir.mkdir(parents=True, exist_ok=True)
+    (plugin.install_dir / "recyclarr").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr("core.recyclarr.ApplicationCatalog", lambda: catalog)
+    monkeypatch.setattr("core.recyclarr.get_application_api_key", lambda _name: "k")
+    monkeypatch.setattr("core.recyclarr.git_executable", lambda: "/usr/bin/git")
+    output = (
+        "[12:40:01 INF] Initializing provider: official (type: trash-guides)\n"
+        "[12:40:02 WRN] All references failed to fetch (will proceed with existing files)\n"
+        "[12:40:02 ERR] Git provider official failed initialization: fatal: unable to access the repository\n"
+        "[12:40:02 ERR] Exiting due to fatal error: fatal: unable to access the repository\n"
+    )
+    completed = MagicMock(returncode=1, stdout=output, stderr="")
+    with patch("core.recyclarr.subprocess.run", return_value=completed):
+        result = run_sync()
+    assert result["ok"] is False
+    assert result["detail"] == (
+        "Recyclarr exited 1: Git provider official failed initialization: fatal: unable to access the repository"
+    )
