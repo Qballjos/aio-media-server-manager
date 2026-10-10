@@ -48,6 +48,10 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const notice = ref('')
+const USENET_CLIENTS = { sabnzbd: 'SABnzbd', nzbget: 'NZBGet' }
+const usenet = ref({ server: null, clients: [] })
+const usenetForm = ref({ host: '', port: 563, ssl: true, username: '', password: '', connections: 8 })
+const usenetClientNames = computed(() => (usenet.value.clients || []).map((name) => USENET_CLIENTS[name] || name))
 const share = ref({ active: false, url: '', expires_at: null, ttl_hours: 24 })
 const errors = ref([])
 const copied = ref(false)
@@ -846,6 +850,56 @@ async function toggleVpn() {
   if (!ok) form.value.vpn_enabled = !next
 }
 
+async function loadUsenet() {
+  try {
+    const res = await apiRequest('/api/usenet')
+    if (!res.ok) return
+    const data = await readJson(res)
+    usenet.value = data
+    if (data.server) usenetForm.value = { ...usenetForm.value, ...data.server, password: '' }
+  } catch (_) {
+    /* the form still works without the saved values */
+  }
+}
+
+function usenetSavedNotice(applied) {
+  const names = Object.keys(applied || {})
+  if (!names.length) return 'Usenet server saved. Install SABnzbd or NZBGet from Catalog to use it.'
+  const sent = names.filter((name) => applied[name]).map((name) => USENET_CLIENTS[name] || name)
+  const later = names.filter((name) => !applied[name]).map((name) => USENET_CLIENTS[name] || name)
+  if (!later.length) return `Usenet server saved and sent to ${sent.join(' and ')}.`
+  return `Usenet server saved. ${later.join(' and ')} could not be reached and gets it on its next start.`
+}
+
+async function saveUsenet() {
+  saving.value = true
+  error.value = ''
+  notice.value = ''
+  const body = {
+    host: usenetForm.value.host,
+    port: Number(usenetForm.value.port) || 563,
+    ssl: !!usenetForm.value.ssl,
+    username: usenetForm.value.username || '',
+    connections: Number(usenetForm.value.connections) || 8,
+  }
+  if (usenetForm.value.password) body.password = usenetForm.value.password
+  try {
+    const res = await apiRequest('/api/usenet/server', { method: 'PUT', body: JSON.stringify(body) })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not save the Usenet server.')
+      return
+    }
+    usenet.value = { ...usenet.value, server: data.server }
+    usenetForm.value.password = ''
+    notice.value = usenetSavedNotice(data.applied)
+  } catch (err) {
+    error.value = err.message || 'Could not save the Usenet server.'
+  } finally {
+    saving.value = false
+  }
+}
+
 async function saveVpn() {
   // Do not resend vpn_enabled here — that would stop qBittorrent/Prowlarr and
   // bounce the tunnel. Enable/disable is only via the switch (toggleVpn).
@@ -1301,6 +1355,7 @@ watch(section, (s, prev) => {
     refreshTunnelStatus()
     refreshHostnames()
   }
+  if (s === 'usenet') loadUsenet()
 })
 
 onMounted(() => {
@@ -1313,6 +1368,7 @@ onMounted(() => {
   tickClock()
   stopClock = startGuardedInterval(tickClock, 1000)
   loadAll()
+  if (section.value === 'usenet') loadUsenet()
 })
 onBeforeUnmount(() => {
   if (stopPwa) stopPwa()
@@ -2251,6 +2307,68 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
+    <template v-else-if="section === 'usenet'">
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>Usenet provider</h3>
+          <p>The news server from your Usenet provider. Saving sends it to SABnzbd and NZBGet. Usenet downloads never use the VPN.</p>
+        </div>
+        <div class="setting-status">
+          <span class="setting-chip" :class="usenet.server ? 'is-on' : 'is-off'">{{ usenet.server ? 'Server saved' : 'No server yet' }}</span>
+          <span v-for="name in usenetClientNames" :key="name" class="setting-chip is-on">{{ name }}</span>
+          <span v-if="!usenetClientNames.length" class="setting-chip is-warn">No SABnzbd or NZBGet installed</span>
+        </div>
+        <form class="form-stack" @submit.prevent="saveUsenet">
+          <label class="ui-field">Server
+            <input v-model.trim="usenetForm.host" class="ui-input font-mono" placeholder="news.example.com" autocomplete="off" required />
+          </label>
+          <div class="usenet-pair">
+            <label class="ui-field">Port
+              <input v-model.number="usenetForm.port" class="ui-input font-mono" type="number" min="1" max="65535" />
+            </label>
+            <label class="ui-field">Connections
+              <input v-model.number="usenetForm.connections" class="ui-input font-mono" type="number" min="1" max="100" />
+            </label>
+          </div>
+          <div class="usenet-pair">
+            <label class="ui-field">Username
+              <input v-model.trim="usenetForm.username" class="ui-input font-mono" autocomplete="off" />
+            </label>
+            <label class="ui-field">Password
+              <input
+                v-model="usenetForm.password"
+                class="ui-input"
+                type="password"
+                autocomplete="new-password"
+                :placeholder="usenet.server?.has_password ? 'Saved — leave blank to keep' : ''"
+              />
+            </label>
+          </div>
+          <div class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong>SSL / TLS</strong>
+              <span>Encrypt the connection to the news server. Most providers use port 563 with SSL.</span>
+            </div>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="usenetForm.ssl ? 'true' : 'false'"
+              @click="usenetForm.ssl = !usenetForm.ssl"
+            >
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving || !usenetForm.host">
+            {{ saving ? 'Saving…' : 'Save Usenet server' }}
+          </button>
+          <p class="settings-hint">
+            NZB indexers such as NZBgeek or Usenet Crawler are added in Prowlarr → Indexers, as Generic Newznab with the site's API key.
+            Prowlarr shares them with Sonarr and Radarr.
+          </p>
+        </form>
+      </div>
+    </template>
     <template v-else-if="section === 'homepage'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
@@ -2477,6 +2595,16 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   background: rgba(var(--color-primary-rgb), 0.18);
   color: var(--color-primary-soft);
+}
+.usenet-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+@media (max-width: 560px) {
+  .usenet-pair {
+    grid-template-columns: 1fr;
+  }
 }
 .form-stack {
   display: flex;
