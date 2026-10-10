@@ -5,6 +5,7 @@ import { appWebUrl } from './appWebUrl.js'
 import { openApp } from './appOpen.js'
 import { copyText } from './clipboard.js'
 import { useToasts } from './useToasts.js'
+import UsenetSettings from './UsenetSettings.vue'
 
 const props = defineProps({
   service: { type: Object, default: null },
@@ -456,6 +457,7 @@ watch(
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
+          <UsenetSettings v-if="settingsApp.name === 'sabnzbd' || settingsApp.name === 'nzbget'" />
           <dl v-if="settingsMeta" class="app-settings-dl font-mono">
             <div><dt>Config</dt><dd>{{ settingsMeta.config_dir }}</dd></div>
             <div><dt>Install</dt><dd>{{ settingsMeta.install_dir }}</dd></div>
