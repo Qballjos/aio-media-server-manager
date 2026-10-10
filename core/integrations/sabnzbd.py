@@ -132,19 +132,14 @@ class SABnzbdClient:
         ssl: bool = True,
         connections: int = 8,
         displayname: str = "",
-        update: bool = False,
     ) -> bool:
-        """Add a single Usenet server (one set_config, never per-field rows).
-
-        With update=True an existing server for the host is rewritten (new password,
-        connections, …); otherwise an existing one is left alone.
-        """
+        """Add or update a single Usenet server (one set_config, never per-field rows)."""
         host = (host or "").strip()
         if not host:
             return False
         name = (displayname or host).strip()
         self._remove_accidental_servers()
-        if self._has_news_server(host) and not update:
+        if self._has_news_server(host):
             logger.info("SABnzbd already has Usenet server for '%s'.", host)
             return True
         # Do not pass `keyword` — SABnzbd treats it as the server identity.
@@ -182,16 +177,6 @@ class SABnzbdClient:
             seen.add(ident)
             unique.append(item)
         return unique
-
-    def remove_news_server(self, host: str) -> bool:
-        """Delete the server for a host (by name or host); True when none is left."""
-        want = (host or "").strip().lower()
-        if not want:
-            return True
-        for item in self.list_servers():
-            if want in (str(item.get("host") or "").strip().lower(), str(item.get("name") or "").strip().lower()):
-                self._request("del_config", {"section": "servers", "keyword": str(item.get("name") or host)})
-        return not self._has_news_server(host)
 
     def _has_news_server(self, host: str) -> bool:
         want = host.strip().lower()
