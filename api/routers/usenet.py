@@ -12,7 +12,13 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
-from core.integrations.usenet import load_usenet_server, public_usenet_server, push_usenet_server, save_usenet_server
+from core.integrations.usenet import (
+    import_usenet_server,
+    load_usenet_server,
+    public_usenet_server,
+    push_usenet_server,
+    save_usenet_server,
+)
 
 router = APIRouter(prefix="/api/usenet", tags=["Usenet"])
 
@@ -41,7 +47,12 @@ def _usenet_clients() -> list[str]:
 @router.get("", summary="Usenet provider and the clients that use it")
 async def get_usenet(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
-    return {"server": public_usenet_server(), "clients": await asyncio.to_thread(_usenet_clients)}
+    imported_from = await asyncio.to_thread(import_usenet_server)
+    return {
+        "server": public_usenet_server(),
+        "clients": await asyncio.to_thread(_usenet_clients),
+        "imported_from": imported_from,
+    }
 
 
 @router.put("/server", summary="Save the Usenet provider and send it to SABnzbd / NZBGet")

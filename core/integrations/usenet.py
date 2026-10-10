@@ -67,6 +67,29 @@ def public_usenet_server() -> Optional[dict[str, Any]]:
     return public
 
 
+def import_usenet_server() -> str:
+    """Adopt the server SABnzbd or NZBGet already has while AIO stores none; returns that app's name."""
+    if load_usenet_server():
+        return ""
+    from applications.catalog import ApplicationCatalog
+    from core.integrations.nzbget import read_nzbget_conf_server
+    from core.integrations.sabnzbd import read_sabnzbd_ini_server
+
+    catalog = ApplicationCatalog()
+    readers = {
+        "sabnzbd": lambda plugin: read_sabnzbd_ini_server(plugin.config_dir),
+        "nzbget": lambda plugin: read_nzbget_conf_server(plugin.config_file()),
+    }
+    for name, read in readers.items():
+        if not catalog.has(name) or not catalog.get(name).is_installed():
+            continue
+        server = read(catalog.get(name))
+        if server:
+            save_usenet_server(**server)
+            return name
+    return ""
+
+
 def push_usenet_server(previous_host: str = "") -> dict[str, bool]:
     """Send the stored provider to every installed Usenet client; False where it is not running."""
     server = load_usenet_server()

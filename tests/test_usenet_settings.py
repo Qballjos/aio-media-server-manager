@@ -106,3 +106,38 @@ def test_sabnzbd_update_rewrites_an_existing_server():
     sent.clear()
     assert client.add_news_server(host="news.example.net", password="new") is True
     assert not [mode for mode, _ in sent if mode == "set_config"]
+
+
+def test_settings_take_over_the_server_sabnzbd_already_has(monkeypatch, tmp_path):
+    (tmp_path / "sabnzbd.ini").write_text(
+        "[misc]\nusername = admin\npassword = adminpw\n"
+        "[servers]\n[[host]]\nhost = \"\"\n"
+        "[[Eweka]]\nenable = 1\nhost = news.eweka.nl\nport = 563\nusername = me\n"
+        "password = 'p#ss\"word'\nconnections = 16\nssl = 1\n"
+        "[categories]\n[[tv]]\nname = tv\n",
+        encoding="utf-8",
+    )
+    secrets = _Secrets()
+    monkeypatch.setattr(usenet, "secret_store", secrets)
+    plugin = SimpleNamespace(config_dir=tmp_path, is_installed=lambda: True)
+    catalog = SimpleNamespace(has=lambda name: name == "sabnzbd", get=lambda name: plugin)
+    with patch("applications.catalog.ApplicationCatalog", return_value=catalog):
+        assert usenet.import_usenet_server() == "sabnzbd"
+        assert usenet.import_usenet_server() == ""  # once AIO has a server it stays in charge
+    assert usenet.load_usenet_server() == {
+        "host": "news.eweka.nl", "port": 563, "ssl": True, "username": "me",
+        "password": 'p#ss"word', "connections": 16,
+    }
+
+
+def test_nzbget_template_placeholder_is_not_taken_over(tmp_path):
+    from core.integrations.nzbget import read_nzbget_conf_server
+
+    conf = tmp_path / "nzbget.conf"
+    conf.write_text("Server1.Active=yes\nServer1.Host=my.newsserver.com\nServer1.Password=pass\n", encoding="utf-8")
+    assert read_nzbget_conf_server(conf) is None
+    conf.write_text("Server1.Active=yes\nServer1.Host=news.eweka.nl\nServer1.Port=563\nServer1.Username=me\n"
+                    "Server1.Password=pw\nServer1.Encryption=yes\nServer1.Connections=16\n", encoding="utf-8")
+    assert read_nzbget_conf_server(conf) == {
+        "host": "news.eweka.nl", "port": 563, "ssl": True, "username": "me", "password": "pw", "connections": 16,
+    }
