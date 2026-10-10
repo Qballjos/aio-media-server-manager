@@ -281,3 +281,21 @@ def test_shared_login_pass_reports_progress_per_app(monkeypatch):
         config_dir_for=lambda name: Path("/tmp/aio-test"),
     )
     assert messages == ["Setting the AIO login in Sonarr", "Setting the AIO login in Bazarr"]
+
+
+def test_patch_bazarr_auth_yaml_leaves_bazarr_normalised_config_alone(tmp_path: Path):
+    """Bazarr rewrites config.yaml in its own style; an equal login must not count as a change."""
+    from core.integrations.local_auth import bazarr_password_hash
+
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "auth:\n  apikey: abc123\n  password: "
+        + bazarr_password_hash("SharedPass123!")
+        + "\n  type: form\n  username: amm\ngeneral:\n  base_url: ''\n",
+        encoding="utf-8",
+    )
+    before = config.read_text(encoding="utf-8")
+    assert patch_bazarr_auth_yaml(config, "amm", "SharedPass123!") is False
+    assert config.read_text(encoding="utf-8") == before
+    # A different password is still a real change.
+    assert patch_bazarr_auth_yaml(config, "amm", "OtherPass456!") is True

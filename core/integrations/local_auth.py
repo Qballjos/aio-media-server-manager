@@ -205,7 +205,31 @@ def patch_bazarr_auth_yaml(config_path: Path, username: str, password: str) -> b
     return False
 
 
+def _bazarr_auth_values(text: str) -> dict[str, str]:
+    """Current auth block as key → value, quotes stripped (Bazarr rewrites the file in its own style)."""
+    values: dict[str, str] = {}
+    in_block = False
+    for line in text.splitlines():
+        if re.match(r"^auth:\s*$", line):
+            in_block = True
+            continue
+        if in_block:
+            if line and not line[0].isspace():
+                break
+            key, sep, value = line.strip().partition(":")
+            if sep:
+                values[key.strip()] = value.strip().strip("'\"")
+    return values
+
+
 def _rewrite_bazarr_auth_block(text: str, username: str, hashed: str) -> str:
+    current = _bazarr_auth_values(text)
+    if (
+        current.get("type") == "form"
+        and current.get("username") == username
+        and current.get("password") == hashed
+    ):
+        return text  # already the shared login; rewriting would only restart Bazarr
     user_line = f"  username: {json.dumps(username)}"
     pass_line = f"  password: {hashed}"
     type_line = "  type: form"
