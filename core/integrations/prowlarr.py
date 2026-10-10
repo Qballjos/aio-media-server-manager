@@ -18,18 +18,22 @@ logger = logging.getLogger(__name__)
 
 # Public indexers Prowlarr starts with so searches work right after setup.
 # Definitions missing from Prowlarr's catalog are skipped and retried later.
+# EZTV keeps failing and gets disabled by Prowlarr; TorrentGalaxy, BitSearch and
+# TheRARBG are no longer in Prowlarr's catalog.
 STARTER_INDEXERS = (
     "1337x",
     "The Pirate Bay",
     "YTS",
-    "EZTV",
     "Nyaa.si",
-    "TorrentGalaxy",
     "LimeTorrents",
     "Knaben",
-    "BitSearch",
-    "TheRARBG",
 )
+# Seeding for public trackers: ratio 1, at least 48 hours, season packs a week.
+SEED_DEFAULTS = {
+    "torrentBaseSettings.seedRatio": 1,
+    "torrentBaseSettings.seedTime": 2880,
+    "torrentBaseSettings.packSeedTime": 10080,
+}
 FLARESOLVERR_TAG = "flaresolverr"
 _CLOUDFLARE_MARKERS = ("cloudflare", "flaresolverr")
 _MIN_PUBLIC_DEFINITIONS = 20  # fewer means Prowlarr has not downloaded its Cardigann catalog yet
@@ -147,6 +151,19 @@ class ProwlarrClient:
             return True
         logger.info("Prowlarr did not accept indexer '%s': %s", body.get("name"), (resp.text or "")[:200])
         return False
+
+    def ensure_seed_settings(self, names: Iterable[str]) -> list[str]:
+        """Fill empty seed settings on the named torrent indexers; values already set stay."""
+        wanted = set(names)
+        updated: list[str] = []
+        for indexer in self.list_indexers():
+            if indexer.get("name") not in wanted or indexer.get("protocol") != "torrent":
+                continue
+            if not _fill_seed_defaults(indexer.get("fields") or []):
+                continue
+            if self._put(f"/indexer/{indexer['id']}?forceSave=true", indexer):
+                updated.append(str(indexer["name"]))
+        return updated
 
     def ensure_tag(self, label: str) -> int | None:
         for tag in self._get("/tag") or []:
@@ -350,6 +367,16 @@ class ProwlarrClient:
         return ok
 
 
+def _fill_seed_defaults(fields: list[dict[str, Any]]) -> bool:
+    changed = False
+    for field in fields:
+        name = field.get("name")
+        if name in SEED_DEFAULTS and field.get("value") in (None, ""):
+            field["value"] = SEED_DEFAULTS[name]
+            changed = True
+    return changed
+
+
 def _public_count(definitions: list[dict[str, Any]]) -> int:
     return sum(1 for item in definitions if item.get("privacy") == "public")
 
@@ -369,5 +396,6 @@ def _starter_body(definition: dict[str, Any]) -> dict[str, Any]:
         if field.get("name") == "baseUrl" and not field.get("value") and urls:
             field["value"] = urls[0]
         fields.append(field)
+    _fill_seed_defaults(fields)
     body["fields"] = fields
     return body

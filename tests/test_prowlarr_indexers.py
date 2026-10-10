@@ -243,3 +243,52 @@ def test_starter_indexers_run_in_the_background_without_overlap(monkeypatch):
         threading.Event().wait(0.1)
     assert not engine_mod._starter_indexers_lock.locked()
     assert seen == ["prowlarr-starter-indexers"]
+
+
+def _torrent_fields(ratio=None, seed=None, pack=None):
+    return [
+        {"name": "baseUrl", "value": "https://example.org/"},
+        {"name": "torrentBaseSettings.seedRatio", "value": ratio},
+        {"name": "torrentBaseSettings.seedTime", "value": seed},
+        {"name": "torrentBaseSettings.packSeedTime", "value": pack},
+    ]
+
+
+def test_starter_set_leaves_out_eztv():
+    from core.integrations.prowlarr import STARTER_INDEXERS
+
+    assert "EZTV" not in STARTER_INDEXERS
+
+
+def test_starter_body_carries_seed_defaults():
+    from core.integrations.prowlarr import _starter_body
+
+    definition = {**_definition("1337x"), "fields": _torrent_fields()}
+    fields = {field["name"]: field["value"] for field in _starter_body(definition)["fields"]}
+    assert fields["torrentBaseSettings.seedRatio"] == 1
+    assert fields["torrentBaseSettings.seedTime"] == 2880
+    assert fields["torrentBaseSettings.packSeedTime"] == 10080
+
+
+@patch("requests.put")
+@patch("requests.get")
+def test_ensure_seed_settings_fills_only_empty_torrent_values(mock_get, mock_put):
+    indexers = [
+        {"id": 1, "name": "1337x", "protocol": "torrent", "fields": _torrent_fields()},
+        {"id": 2, "name": "Mine", "protocol": "torrent", "fields": _torrent_fields(ratio=2.5, seed=60, pack=120)},
+        {"id": 3, "name": "Partly", "protocol": "torrent", "fields": _torrent_fields(ratio=3)},
+        {"id": 4, "name": "NZBgeek", "protocol": "usenet", "fields": [{"name": "apiKey", "value": "k"}]},
+        {"id": 5, "name": "Added by hand", "protocol": "torrent", "fields": _torrent_fields()},
+    ]
+    mock_get.return_value = _resp(200, indexers)
+    mock_put.return_value = _resp(202, {})
+    client = ProwlarrClient(api_key="k")
+    assert client.ensure_seed_settings(["1337x", "Mine", "Partly", "NZBgeek"]) == ["1337x", "Partly"]
+    sent = {call.args[0].split("?")[0].rsplit("/", 1)[-1]: call for call in mock_put.call_args_list}
+    assert set(sent) == {"1", "3"}
+    first = {f["name"]: f["value"] for f in sent["1"].kwargs["json"]["fields"]}
+    assert (first["torrentBaseSettings.seedRatio"], first["torrentBaseSettings.seedTime"], first["torrentBaseSettings.packSeedTime"]) == (1, 2880, 10080)
+    partly = {f["name"]: f["value"] for f in sent["3"].kwargs["json"]["fields"]}
+    assert partly["torrentBaseSettings.seedRatio"] == 3  # a value the user set stays
+    assert partly["torrentBaseSettings.seedTime"] == 2880
+    assert all("forceSave=true" in call.args[0] for call in mock_put.call_args_list)
