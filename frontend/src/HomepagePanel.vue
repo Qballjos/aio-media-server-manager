@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
+import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { formatUptime } from './format.js'
@@ -61,10 +62,14 @@ const emptySnapshot = () => ({
   widgets: [],
 })
 
-const snapshot = ref(emptySnapshot())
+const snapshot = ref(homeSnapshotCache.snapshot || emptySnapshot())
 const installJobs = ref({})
 const progressNow = ref(Date.now() / 1000)
-const loading = ref(true)
+const loading = ref(!homeSnapshotCache.snapshot)
+// Widgets still on their way: the first response only carries the launcher.
+const widgetsPending = computed(() => loading.value || !!snapshot.value.partial)
+let partialAttempts = 0
+let partialTimer = null
 const snapshotError = ref('')
 const widgetDebug = ref(false)
 const query = ref('')
@@ -202,6 +207,19 @@ async function loadSnapshot(force = false) {
         trending: data.trending || [],
         widgets: mergeWidgetNotes(data.widgets || []),
         seerr: data.seerr || { available: false, url: null },
+      }
+      homeSnapshotCache.snapshot = snapshot.value
+      if (data.partial) {
+        // Ask again soon instead of waiting for the 20-second poll.
+        const delay = partialRetryDelay(partialAttempts++)
+        if (delay !== null && !partialTimer) {
+          partialTimer = setTimeout(() => {
+            partialTimer = null
+            return loadSnapshot()
+          }, delay)
+        }
+      } else {
+        partialAttempts = 0
       }
       snapshotError.value = ''
     } else {
@@ -655,13 +673,32 @@ onUnmounted(() => {
   if (poll) poll()
   if (downloadsPoll) downloadsPoll()
   if (installPoll) installPoll()
+  if (partialTimer) clearTimeout(partialTimer)
   clearTimeout(searchTimer)
 })
 </script>
 
 <template>
   <section class="home-shell">
-    <p v-if="loading" class="home-muted">Loading Home…</p>
+    <div v-if="loading" class="home-skeleton" role="status" aria-label="Loading Home">
+      <div class="home-launcher-groups" aria-hidden="true">
+        <section v-for="n in 4" :key="n" class="home-launcher-group glass-card">
+          <span class="home-skel home-skel-label"></span>
+          <div class="home-launcher">
+            <span v-for="m in (n === 2 ? 2 : 1)" :key="m" class="home-skel-app">
+              <span class="home-skel home-skel-icon"></span>
+              <span class="home-skel home-skel-text"></span>
+            </span>
+          </div>
+        </section>
+      </div>
+      <article class="home-widget glass-card" aria-hidden="true">
+        <span class="home-skel home-skel-label"></span>
+        <div class="home-rail">
+          <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
+        </div>
+      </article>
+    </div>
     <p v-if="snapshotError" class="home-notice">{{ snapshotError }}</p>
     <p v-if="vpnNotice" class="home-notice">
       {{ vpnNotice }}
@@ -776,6 +813,9 @@ onUnmounted(() => {
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
             </a>
           </div>
+          <div v-else-if="widgetsPending" class="home-rail" aria-hidden="true">
+            <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
+          </div>
           <p v-else class="home-muted">Nothing recently added.</p>
           <ul v-if="widgetDebug && notesFor('recent').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('recent')" :key="idx">
@@ -823,6 +863,9 @@ onUnmounted(() => {
               <span class="home-tile-title">{{ item.title }}</span>
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
             </a>
+          </div>
+          <div v-else-if="widgetsPending" class="home-rail" aria-hidden="true">
+            <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
           </div>
           <p v-else-if="snapshot.requests.length" class="home-muted">
             No {{ requestsFilter === 'movie' ? 'movie' : requestsFilter === 'tv' ? 'series' : '' }} requests in this filter.
@@ -876,6 +919,9 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
+          <div v-else-if="widgetsPending" class="home-rail" aria-hidden="true">
+            <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
+          </div>
           <p v-else-if="snapshot.trending.length" class="home-muted">
             No {{ trendingFilter === 'movie' ? 'movies' : trendingFilter === 'tv' ? 'series' : 'titles' }} in this filter.
           </p>
@@ -912,7 +958,10 @@ onUnmounted(() => {
             </div>
           </div>
           <div v-if="calView === 'list'" class="cal-list">
-            <p v-if="!calendarList.length" class="home-muted">Nothing in this range.</p>
+            <div v-if="!calendarList.length && widgetsPending" aria-hidden="true">
+              <span v-for="n in 4" :key="n" class="home-skel home-skel-line"></span>
+            </div>
+            <p v-else-if="!calendarList.length" class="home-muted">Nothing in this range.</p>
             <ul v-else>
               <li v-for="(row, idx) in calendarList" :key="idx" class="cal-event" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file }">
                 <span class="cal-event-time">{{ formatEventTime(row.item.when) }}</span>
@@ -1028,6 +1077,62 @@ onUnmounted(() => {
   gap: 1.25rem;
   width: 100%;
   min-width: 0;
+}
+/* Placeholders in the shape of what loads into them. */
+.home-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.home-skel {
+  display: block;
+  background: var(--pill-bg);
+  border-radius: var(--radius-md);
+  animation: home-skel-pulse 1.4s ease-in-out infinite;
+}
+.home-skel-label {
+  width: 5.5rem;
+  height: 0.7rem;
+  margin: 0 0 0.75rem;
+}
+.home-skel-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 6.35rem;
+  padding: 0.55rem 0.35rem;
+}
+.home-skel-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.65rem;
+}
+.home-skel-text {
+  width: 4.2rem;
+  height: 0.7rem;
+}
+.home-skel-poster {
+  flex: 0 0 7.25rem;
+  width: 7.25rem;
+  height: 10.6rem;
+}
+.home-skel-line {
+  height: 0.9rem;
+  margin: 0.6rem 0;
+}
+.home-skel-line:nth-child(2n) {
+  width: 65%;
+}
+@keyframes home-skel-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-skel {
+    animation: none;
+  }
 }
 .home-muted {
   color: var(--text-muted);

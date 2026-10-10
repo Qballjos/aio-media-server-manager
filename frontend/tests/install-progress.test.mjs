@@ -10,6 +10,7 @@ function setup(file, exports, apiRequest) {
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*\n/gm, '')
   return runInNewContext(`${script}\n;({${exports.join(',')}})`, {
     computed, reactive, ref, apiRequest,
+    homeSnapshotCache: { snapshot: null }, partialRetryDelay: () => null,
     readJson: async (response) => response.data,
     defineEmits: () => () => {},
     defineProps: () => ({}),
