@@ -895,14 +895,14 @@ def _collect_qbittorrent_queue(
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            if float(row.get("progress") or 0) >= 1:
+                continue  # finished; qBittorrent 5 calls it stoppedUP, 4 called it pausedUP
             state = str(row.get("state") or "")
-            if state in {"pausedUP", "stalledUP", "uploading", "queuedUP"} and float(row.get("progress") or 0) >= 1:
-                continue
             items.append(
                 {
                     "source": "qbittorrent",
                     "title": row.get("name") or "Torrent",
-                    "status": state,
+                    "status": _QBIT_STATUS.get(state, state),
                     "progress": int(round(float(row.get("progress") or 0) * 100)),
                     "speed_bps": _speed_bps(row.get("dlspeed")),
                     "eta": _eta_from_seconds(row.get("eta")),
@@ -910,6 +910,24 @@ def _collect_qbittorrent_queue(
             )
     error = None if isinstance(rows, list) else "unexpected torrents payload"
     return _finish_source(notes, "downloads", "qbittorrent", items, error, "no active torrents")
+
+
+_QBIT_STATUS = {
+    "downloading": "Downloading",
+    "forcedDL": "Downloading",
+    "metaDL": "Fetching metadata",
+    "forcedMetaDL": "Fetching metadata",
+    "stalledDL": "Stalled",
+    "queuedDL": "Queued",
+    "checkingDL": "Checking",
+    "checkingResumeData": "Checking",
+    "allocating": "Allocating",
+    "pausedDL": "Paused",
+    "stoppedDL": "Paused",
+    "moving": "Moving",
+    "missingFiles": "Missing files",
+    "error": "Error",
+}
 
 
 _RECENT_FIELDS = ("source", "title", "detail", "when", "poster", "url")
