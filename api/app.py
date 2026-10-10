@@ -25,6 +25,7 @@ from api.routers import recyclarr as recyclarr_router
 from api.routers import settings as settings_router
 from api.routers import system as system_router
 from api.routers import updates as updates_router
+from api.routers import usenet as usenet_router
 from api.routers import wizard as wizard_router
 from api.routers import vpn as vpn_router
 from api.routers import cloudflare_hostnames as cloudflare_hostnames_router
@@ -173,6 +174,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_router.router)
     app.include_router(branding_router.router)
     app.include_router(updates_router.router)
+    app.include_router(usenet_router.router)
     app.include_router(wizard_router.router)
     app.include_router(backups_router.router)
     app.include_router(vpn_router.router)
