@@ -82,7 +82,9 @@ def get_application_api_key(app_name: str, app_config_dir: Optional[Path] = None
         api_key = discover_jellyfin_api_key(cfg_dir if cfg_dir.exists() else None)
 
     if api_key:
-        secret_store.save_secret(secret_key_name, api_key)
+        # Only write when it changed: this runs on every poll and each save fsyncs the store.
+        if secret_store.get_secret(secret_key_name) != api_key:
+            secret_store.save_secret(secret_key_name, api_key)
         return api_key
 
     return None
