@@ -49,6 +49,50 @@ def read_sabnzbd_ini(config_dir: Path | None) -> dict[str, str]:
     return result
 
 
+def _ini_int(value: object, default: int) -> int:
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return default
+
+
+def read_sabnzbd_ini_server(config_dir: Path | None) -> dict[str, Any] | None:
+    """The first enabled news server in sabnzbd.ini; the API only shows its password as stars."""
+    if not config_dir:
+        return None
+    try:
+        text = (Path(config_dir) / "sabnzbd.ini").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    blocks: list[dict[str, str]] = []
+    in_servers = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if in_servers and stripped.startswith("[["):
+            blocks.append({"_name": stripped.strip("[]").strip().lower()})
+        elif stripped.startswith("["):
+            in_servers = stripped.lower() == "[servers]"
+        elif in_servers and blocks and "=" in stripped:
+            key, _, value = stripped.partition("=")
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            blocks[-1][key.strip().lower()] = value
+    for block in blocks:
+        host = block.get("host", "").strip()
+        if not host or block["_name"] in _JUNK_SERVER_NAMES or block.get("enable", "1") == "0":
+            continue
+        return {
+            "host": host,
+            "port": _ini_int(block.get("port"), 563),
+            "ssl": block.get("ssl", "1") != "0",
+            "username": block.get("username", ""),
+            "password": block.get("password", ""),
+            "connections": _ini_int(block.get("connections"), 8),
+        }
+    return None
+
+
 class SABnzbdClient:
     def __init__(self, host: str = "127.0.0.1", port: int = 8085, api_key: Optional[str] = None):
         self.base_url = f"http://{host}:{port}/api"

@@ -857,6 +857,7 @@ async function loadUsenet() {
     const data = await readJson(res)
     usenet.value = data
     if (data.server) usenetForm.value = { ...usenetForm.value, ...data.server, password: '' }
+    if (data.imported_from) notice.value = `Usenet server taken over from ${USENET_CLIENTS[data.imported_from] || data.imported_from}.`
   } catch (_) {
     /* the form still works without the saved values */
   }
@@ -2315,7 +2316,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="setting-status">
           <span class="setting-chip" :class="usenet.server ? 'is-on' : 'is-off'">{{ usenet.server ? 'Server saved' : 'No server yet' }}</span>
-          <span v-for="name in usenetClientNames" :key="name" class="setting-chip is-on">{{ name }}</span>
+          <span v-for="name in usenetClientNames" :key="name" class="setting-chip is-on">Sends to {{ name }}</span>
           <span v-if="!usenetClientNames.length" class="setting-chip is-warn">No SABnzbd or NZBGet installed</span>
         </div>
         <form class="form-stack" @submit.prevent="saveUsenet">
