@@ -209,3 +209,37 @@ def test_starter_indexer_progress_precedes_each_request(monkeypatch):
         "Saving unavailable indexer: 1337x",
         "Checking and adding indexer: YTS",
     ]
+
+
+def test_starter_indexers_run_in_the_background_without_overlap(monkeypatch):
+    import threading
+
+    from core.integrations import engine as engine_mod
+    from core.integrations.engine import IntegrationEngine
+
+    started = threading.Event()
+    release = threading.Event()
+    seen: list[str] = []
+
+    def fake_step(self, client, *, progress=None):
+        seen.append(threading.current_thread().name)
+        started.set()
+        release.wait(5)
+        return {"target": "prowlarr", "action": "starter_indexers", "status": "success", "detail": "added=YTS"}
+
+    monkeypatch.setattr(IntegrationEngine, "_starter_indexers_step", fake_step)
+    engine = IntegrationEngine()
+    first = engine._schedule_starter_indexers(object())
+    assert first["target"] == "prowlarr" and first["status"] == "success"
+    assert "background" in first["detail"]
+    assert started.wait(5)
+    # A second wiring pass while the first run is still busy must not start another.
+    second = engine._schedule_starter_indexers(object())
+    assert "already" in second["detail"]
+    release.set()
+    for _ in range(50):
+        if not engine_mod._starter_indexers_lock.locked():
+            break
+        threading.Event().wait(0.1)
+    assert not engine_mod._starter_indexers_lock.locked()
+    assert seen == ["prowlarr-starter-indexers"]

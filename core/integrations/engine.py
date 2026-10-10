@@ -7,8 +7,9 @@ Wires download clients, *Arr apps, Seerr, Bazarr, and optimization-tool configs.
 from __future__ import annotations
 
 import logging
+import threading
 import time
-from typing import Any
+from typing import Any, Callable
 from pathlib import Path
 
 from applications.catalog import ApplicationCatalog
@@ -79,6 +80,9 @@ _STATUS_APPS = (
     "recyclarr",
     "neutarr",
 )
+
+
+_starter_indexers_lock = threading.Lock()
 
 
 class IntegrationEngine:
@@ -152,14 +156,45 @@ class IntegrationEngine:
         )
         return True
 
-    def _starter_indexers_step(self, prowlarr_client: ProwlarrClient) -> dict[str, Any]:
+    def _schedule_starter_indexers(self, prowlarr_client: ProwlarrClient) -> dict[str, Any]:
+        """Run the starter-indexer step in one background thread.
+
+        Each indexer costs up to a minute when its tracker does not answer through
+        the VPN, and the wizard waits for every app's wiring before the next install,
+        so this must never sit on the wiring's critical path.
+        """
+        if not _starter_indexers_lock.acquire(blocking=False):
+            return _step("prowlarr", "starter_indexers", True, "already running in the background")
+
+        def _run() -> None:
+            try:
+                result = self._starter_indexers_step(
+                    prowlarr_client, progress=lambda message: logger.info("Prowlarr indexers: %s", message)
+                )
+                logger.info("Prowlarr starter indexers: %s", result.get("detail"))
+            except Exception:
+                logger.warning("Prowlarr starter indexers failed", exc_info=True)
+            finally:
+                _starter_indexers_lock.release()
+
+        threading.Thread(target=_run, name="prowlarr-starter-indexers", daemon=True).start()
+        return _step(
+            "prowlarr",
+            "starter_indexers",
+            True,
+            "running in the background; results in the log and under Prowlarr → Indexers",
+        )
+
+    def _starter_indexers_step(
+        self, prowlarr_client: ProwlarrClient, *, progress: Callable[[str], None] | None = None
+    ) -> dict[str, Any]:
         """Give Prowlarr its starter indexers once; names tried are remembered so removals stick."""
         from core.app_prefs import load_prefs, set_app_option
 
         options = (load_prefs(self._settings).get("options") or {}).get("prowlarr") or {}
         tried = set(options.get("starter_indexers") or [])
         starter = prowlarr_client.add_starter_indexers(
-            skip=tried, definitions_wait=0.0 if tried else 45.0
+            skip=tried, definitions_wait=0.0 if tried else 45.0, progress=progress
         )
         handled = starter["added"] + starter["disabled"]
         if handled:
@@ -168,7 +203,7 @@ class IntegrationEngine:
             )
         tagged: list[str] = []
         if handled and self._installed("flaresolverr"):
-            tagged = prowlarr_client.attach_flaresolverr(handled)
+            tagged = prowlarr_client.attach_flaresolverr(handled, progress=progress)
         ok = bool(handled) or not starter["missing"]
         detail = (
             f"added={','.join(starter['added']) or '-'} disabled={','.join(starter['disabled']) or '-'} "
@@ -579,7 +614,7 @@ class IntegrationEngine:
         # indexer, so it must not hold up Seerr, Bazarr, or the shared logins.
         if self._installed("prowlarr") and self._is_app_running("prowlarr"):
             steps.append(
-                self._starter_indexers_step(ProwlarrClient(port=prowlarr_port, api_key=prowlarr_key))
+                self._schedule_starter_indexers(ProwlarrClient(port=prowlarr_port, api_key=prowlarr_key))
             )
 
         if self._installed("shelfmark"):
