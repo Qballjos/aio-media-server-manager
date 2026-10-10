@@ -22,6 +22,7 @@ import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInsta
 import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
 import { migrateLocalVisualsIfNeeded } from './visualsProfile.js'
 import { lockThemeToSystem, unlockTheme } from './theme.js'
+import { tunnelChip, versionLabel, vpnChip } from './statusChips.js'
 
 const { toasts, showToast } = useToasts()
 const showPwaInstall = ref(false)
@@ -68,6 +69,16 @@ const currentView = computed(() => {
 })
 
 const transcodingAvailable = computed(() => systemInfo.value?.transcoding?.available)
+const healthInfo = ref(null)
+const versionText = computed(() => versionLabel(healthInfo.value))
+const statusChips = computed(() =>
+  [
+    ['vpn', vpnChip(vpnLive.value)],
+    ['tunnel', tunnelChip(cloudflareLive.value)],
+  ]
+    .filter(([, chip]) => chip)
+    .map(([key, chip]) => ({ key, ...chip })),
+)
 const availableUpdates = computed(() => updateStatus.value.available || [])
 const showUpdatesPill = computed(
   () =>
@@ -189,6 +200,15 @@ async function fetchVpnStatus() {
     if (res.ok) vpnLive.value = await readJson(res)
   } catch (err) {
     console.error('VPN status error:', err)
+  }
+}
+
+async function fetchHealthInfo() {
+  try {
+    const res = await apiRequest('/health')
+    if (res.ok) healthInfo.value = await readJson(res)
+  } catch (_) {
+    /* the version line is optional */
   }
 }
 
@@ -358,6 +378,7 @@ let stopPwa = null
 
 onMounted(() => {
   loadBranding()
+  fetchHealthInfo()
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
   stopLivePoll = startGuardedInterval(pollLiveStatus, 10000)
@@ -384,6 +405,11 @@ onUnmounted(() => {
         </div>
         <div class="brand-titles">
           <h1 class="brand-name">{{ brandTitle }}</h1>
+          <span
+            v-if="versionText"
+            class="brand-version font-mono"
+            :title="healthInfo?.git_sha ? `Build ${healthInfo.git_sha}` : undefined"
+          >{{ versionText }}</span>
         </div>
       </div>
 
@@ -396,6 +422,20 @@ onUnmounted(() => {
         >
           <span class="metric-val font-mono">{{ updatesPillLabel }}</span>
         </RouterLink>
+        <template v-if="authStatus.authenticated && wizardCompleted">
+          <RouterLink
+            v-for="chip in statusChips"
+            :key="chip.key"
+            :to="{ name: 'settings', params: { section: 'network' } }"
+            class="metric-pill status-chip"
+            :data-tone="chip.tone"
+            :title="chip.title"
+            :aria-label="chip.title"
+          >
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>{{ chip.label }}</span>
+          </RouterLink>
+        </template>
         <div v-if="transcodingAvailable" class="metric-pill hide-narrow" title="Hardware transcoding available">
           <span class="metric-label">GPU</span>
           <span class="metric-val font-mono">HW</span>
