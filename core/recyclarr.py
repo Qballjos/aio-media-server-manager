@@ -25,6 +25,7 @@ LAST_SYNC_NAME = "last-sync.json"
 MANAGED_MARK = "AMM Recyclarr managed"
 SETTINGS_NAME = "settings.yml"
 _GIT_PATH_RE = re.compile(r"^git_path:\s*.*$", re.MULTILINE)
+_ERROR_LINE_RE = re.compile(r"\[(?:[\d:]+ )?(?:ERR|FTL)\]\s*(.+)")
 _GIT_MISSING = (
     "Recyclarr needs git to clone TRaSH Guides. "
     "Install git on the host (native) or recreate the container from an image that includes git."
@@ -348,8 +349,14 @@ def _run_sync_unlocked(timeout: float = 180.0) -> dict[str, Any]:
         detail = "Sync finished."
     else:
         detail = f"Recyclarr exited {completed.returncode}."
+        error = _ERROR_LINE_RE.search(log)
+        if error:
+            # Recyclarr's own reason, e.g. a TRaSH Guides clone or Sonarr/Radarr connection error.
+            detail = f"Recyclarr exited {completed.returncode}: {error.group(1).strip()[:300]}"
         if "start process 'git'" in lowered or "file path 'git'" in lowered:
             detail = _GIT_MISSING
+    if not ok:
+        logger.warning("Recyclarr sync failed: %s", detail)
     result = {
         "ok": ok,
         "detail": detail,
