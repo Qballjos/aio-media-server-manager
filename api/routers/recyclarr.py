@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -62,7 +63,9 @@ async def reset_recyclarr(request: Request) -> dict[str, Any]:
 @router.post("/sync", summary="Run recyclarr sync once")
 async def sync_recyclarr(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
-    result = run_sync()
+    # Recyclarr clones TRaSH Guides and syncs for minutes; on the event loop that
+    # froze every other API call until it finished.
+    result = await asyncio.to_thread(run_sync)
     if not result.get("ok"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("detail"))
     return result

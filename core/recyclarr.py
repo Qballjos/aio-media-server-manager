@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -259,7 +260,25 @@ def apply_prefs_and_render(prefs: dict[str, Any], *, force: bool = True) -> dict
     return config_payload()
 
 
+_sync_lock = threading.Lock()
+
+
 def run_sync(timeout: float = 180.0) -> dict[str, Any]:
+    """Run one Recyclarr sync; a second request while one runs returns at once."""
+    if not _sync_lock.acquire(blocking=False):
+        return {
+            "ok": False,
+            "detail": "A Recyclarr sync is already running. Wait for it to finish.",
+            "log": "",
+            "returncode": None,
+        }
+    try:
+        return _run_sync_unlocked(timeout)
+    finally:
+        _sync_lock.release()
+
+
+def _run_sync_unlocked(timeout: float = 180.0) -> dict[str, Any]:
     catalog = ApplicationCatalog()
     if not catalog.has("recyclarr"):
         return _fail_sync(None, "Recyclarr is not in the catalog.")
