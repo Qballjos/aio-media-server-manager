@@ -1,9 +1,30 @@
 import { apiError, apiJson } from './api.js'
 import { useToasts } from './useToasts.js'
 
-function openJellyfin(tab, helperUrl) {
+/** Path, query and hash of a deep link, or '' when it only points at the app root. */
+function deepPath(link) {
+  try {
+    const url = new URL(link)
+    const path = `${url.pathname}${url.search}${url.hash}`
+    return path && path !== '/' ? path : ''
+  } catch (_) {
+    return ''
+  }
+}
+
+function withDeepPath(baseUrl, path) {
+  if (!path) return baseUrl
+  try {
+    return `${new URL(baseUrl).origin}${path}`
+  } catch (_) {
+    return baseUrl
+  }
+}
+
+function openJellyfin(tab, helperUrl, next = '') {
   const url = new URL(helperUrl)
   const origin = url.origin
+  if (next) url.searchParams.set('next', next)
   url.hash = encodeURIComponent(window.location.origin)
   let authorizing = false
   const controller = new AbortController()
@@ -48,18 +69,19 @@ function openJellyfin(tab, helperUrl) {
 export async function openApp(event, name, fallbackUrl) {
   event.preventDefault()
   const tab = window.open('about:blank', '_blank')
+  const path = deepPath(fallbackUrl)
   let url = fallbackUrl
   try {
     const { res, data } = await apiJson(`/api/applications/${encodeURIComponent(name)}/session`, {
       method: 'POST',
     })
-    if (res.ok && data?.url) url = data.url
     if (res.ok && data?.handoff === 'jellyfin-quick-connect') {
       if (tab) {
-        openJellyfin(tab, url)
+        openJellyfin(tab, data.url, path)
         return
       }
-      url = fallbackUrl
+    } else if (res.ok && data?.url) {
+      url = withDeepPath(data.url, path)
     }
     if (data?.detail && name === 'jellyfin') useToasts().showToast(data.detail, 'info')
   } catch (_) {

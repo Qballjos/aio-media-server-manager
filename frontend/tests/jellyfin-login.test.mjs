@@ -23,13 +23,14 @@ function browser() {
   }
 }
 
-async function helper({ disabled = false } = {}) {
+async function helper({ disabled = false, next = '' } = {}) {
   const env = browser(), sent = [], requests = [], status = { textContent: '' }
   const opener = { postMessage: (data, origin) => sent.push({ data, origin }) }
   env.window.opener = opener
+  const search = next ? `?next=${encodeURIComponent(next)}` : ''
   env.location = {
-    hash: '#http%3A%2F%2Flocalhost%3A8080', pathname: '/web/aio-login.html',
-    href: 'http://localhost:8096/web/aio-login.html', replace: (url) => { env.redirect = url },
+    hash: '#http%3A%2F%2Flocalhost%3A8080', pathname: '/web/aio-login.html', search,
+    href: `http://localhost:8096/web/aio-login.html${search}`, replace: (url) => { env.redirect = url },
   }
   env.history = { replaceState: (_, __, path) => { env.clearedPath = path } }
   env.document = { getElementById: () => status }
@@ -137,4 +138,49 @@ test('cookie-based app opening still navigates to the session endpoint URL', asy
   await openApp({ preventDefault() {} }, 'sonarr', 'http://fallback:8989')
   assert.equal(tab.location.href, 'http://localhost:8989')
   assert.equal(env.listeners.size, 0)
+})
+
+
+async function signIn(options) {
+  const result = await helper(options)
+  await result.env.listeners.get('message')({
+    source: result.opener, origin: 'http://localhost:8080', data: { type: 'aio-jellyfin-authorized', ok: true },
+  })
+  return result
+}
+
+test('Jellyfin helper returns to the requested Jellyfin page after sign-in', async () => {
+  const { env } = await signIn({ next: '/web/#/details?id=abc' })
+  assert.equal(env.redirect, '/web/#/details?id=abc')
+  assert.equal(env.clearedPath, '/web/aio-login.html')
+})
+
+test('Jellyfin helper ignores a next target outside its own web app', async () => {
+  for (const next of ['https://evil.test/x', '//evil.test/x', '/other/page', 'index.html']) {
+    const { env } = await signIn({ next })
+    assert.equal(env.redirect, 'index.html', next)
+  }
+})
+
+test('deep links keep their path when the session endpoint hands back the app URL', async () => {
+  const env = browser(), tab = { location: {} }
+  env.window.open = () => tab
+  env.apiJson = async () => ({ res: { ok: true }, data: { url: 'http://localhost:8989', signed_in: true } })
+  const { openApp } = runInNewContext(`${openerSource}\n;({openApp})`, env)
+  await openApp({ preventDefault() {} }, 'sonarr', 'http://fallback:8989/series/foo?x=1#frag')
+  assert.equal(tab.location.href, 'http://localhost:8989/series/foo?x=1#frag')
+})
+
+test('Jellyfin deep links travel to the helper as its next target', async () => {
+  const env = browser(), tab = { location: {}, postMessage() {} }
+  env.window.open = () => tab
+  env.apiJson = async () => ({
+    res: { ok: true }, data: { url: 'http://localhost:8096/web/aio-login.html', signed_in: false, handoff: 'jellyfin-quick-connect' },
+  })
+  const { openApp } = runInNewContext(`${openerSource}\n;({openApp})`, env)
+  await openApp({ preventDefault() {} }, 'jellyfin', 'http://fallback:8096/web/#/details?id=abc')
+  const opened = new URL(tab.location.href)
+  assert.equal(opened.pathname, '/web/aio-login.html')
+  assert.equal(opened.searchParams.get('next'), '/web/#/details?id=abc')
+  assert.equal(opened.hash, '#http%3A%2F%2Flocalhost%3A8080')
 })
