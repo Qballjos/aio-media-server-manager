@@ -106,10 +106,9 @@ def homepage_snapshot(host: str, *, force: bool = False, scheme: str = "http") -
     cached = _cached_copy(ident)
     if cached is not None:
         snap, age = cached
-        if age < _CACHE_TTL:
-            return snap
-        _schedule_refresh(host, scheme)
-        return snap
+        if age >= _CACHE_TTL:
+            _schedule_refresh(host, scheme)
+        return _with_live_launcher(snap, host, scheme)
 
     with _lock_for(ident):
         cached = _cached_copy(ident)
@@ -117,12 +116,23 @@ def homepage_snapshot(host: str, *, force: bool = False, scheme: str = "http") -
             snap, age = cached
             if age >= _CACHE_TTL:
                 _schedule_refresh(host, scheme)
-            return snap
+            return _with_live_launcher(snap, host, scheme)
         # Cold miss: return launcher immediately; fill widgets in the background.
         shell = _launcher_shell(host, scheme)
         _snapshots[ident] = _SnapshotEntry(shell, time.monotonic() - _CACHE_TTL)
         _schedule_refresh(host, scheme)
         return copy.deepcopy(shell)
+
+
+def _with_live_launcher(snapshot: dict[str, Any], host: str, scheme: str) -> dict[str, Any]:
+    """Widgets may come from the cache, but tile states are cheap and must be live.
+
+    Otherwise someone who opens Home after setup finished sees tiles frozen in
+    Configuring… until the next background refresh lands.
+    """
+    catalog = ApplicationCatalog()
+    apps = _launcher_apps(catalog, _running_names(), host, scheme=scheme)
+    return {**snapshot, "apps": apps, "vpn": _vpn_block(apps)}
 
 
 def _launcher_shell(host: str, scheme: str = "http") -> dict[str, Any]:
