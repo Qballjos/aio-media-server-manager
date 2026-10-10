@@ -132,3 +132,23 @@ def test_build_memory_target_rejects_unrecognized_upstream_config(tmp_path):
     with pytest.raises(RuntimeError, match="unrecognized next.config.ts"):
         _limit_build_memory(config)
     assert config.read_text() == source
+
+
+def test_build_config_skips_type_check_and_lint_for_released_tags(tmp_path):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required to execute Seerr's generated build configuration")
+    config = tmp_path / "next.config.ts"
+    config.write_text(
+        "const nextConfig = " + json.dumps({"experimental": {}, "typescript": {"tsconfigPath": "tsconfig.json"}})
+        + ";\nexport default nextConfig;\n"
+    )
+    _limit_build_memory(config)
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", config.read_text() + "\nconsole.log(JSON.stringify(nextConfig));"],
+        check=True, capture_output=True, text=True,
+    )
+    actual = json.loads(result.stdout)
+    # Next.js would otherwise run tsc and ESLint over all of Seerr; the released tag already passed both.
+    assert actual["typescript"] == {"tsconfigPath": "tsconfig.json", "ignoreBuildErrors": True}
+    assert actual["eslint"]["ignoreDuringBuilds"] is True

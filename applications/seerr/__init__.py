@@ -77,6 +77,9 @@ nextConfig.experimental = {
       ? aioBuildMemoryLimit
       : 512 * 1024 * 1024,
 };
+// AIO: a released tag already passed tsc and ESLint upstream; skip re-running them here.
+nextConfig.typescript = { ...nextConfig.typescript, ignoreBuildErrors: true };
+nextConfig.eslint = { ...nextConfig.eslint, ignoreDuringBuilds: true };
 
 """
     if patch not in source:

@@ -306,6 +306,25 @@ async function skip() {
   }
 }
 
+async function installOne(item) {
+  patchInstallItem(item.name, { status: 'installing' })
+  try {
+    const inst = await apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
+    const instData = await readJson(inst)
+    if (!inst.ok) {
+      patchInstallItem(item.name, { status: 'failed', detail: apiError(instData, 'Install failed') })
+      return
+    }
+    if (instData.status === 'already_installed') {
+      patchInstallItem(item.name, { status: 'already_installed' })
+      return
+    }
+    await waitForAppInstall(item.name)
+  } catch (err) {
+    patchInstallItem(item.name, { status: 'failed', detail: err.message })
+  }
+}
+
 async function finish() {
   installing.value = true
   error.value = ''
@@ -328,29 +347,18 @@ async function finish() {
     }))
     await nextTick()
     await refreshInstallProgress()
-    for (const item of [...installProgress.value]) {
-      if (finishAborted) return
-      if (item.installed || isInstallTerminal(item.status)) continue
-      patchInstallItem(item.name, { status: 'installing' })
-      try {
-        const inst = await apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
-        const instData = await readJson(inst)
-        if (!inst.ok) {
-          patchInstallItem(item.name, {
-            status: 'failed',
-            detail: apiError(instData, 'Install failed')
-          })
-          continue
-        }
-        if (instData.status === 'already_installed') {
-          patchInstallItem(item.name, { status: 'already_installed' })
-          continue
-        }
-        await waitForAppInstall(item.name)
-      } catch (err) {
-        patchInstallItem(item.name, { status: 'failed', detail: err.message })
+    // Two installs at a time: a long source build (Seerr) must not hold up the
+    // quick downloads queued behind it, while CPU and disk stay within reason.
+    const queue = [...installProgress.value].filter(
+      (item) => !(item.installed || isInstallTerminal(item.status))
+    )
+    const lane = async () => {
+      while (queue.length && !finishAborted) {
+        await installOne(queue.shift())
       }
     }
+    await Promise.all([lane(), lane()])
+    if (finishAborted) return
     if (!finishAborted && installProgress.value.length) {
       await refreshInstallProgress()
       await sleep(800)
