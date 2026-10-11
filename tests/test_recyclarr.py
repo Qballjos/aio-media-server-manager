@@ -263,3 +263,25 @@ def test_failed_sync_names_recyclarrs_own_error(tmp_path: Path, monkeypatch):
     assert result["detail"] == (
         "Recyclarr exited 1: Git provider official failed initialization: fatal: unable to access the repository"
     )
+
+
+def test_sonarr_accepts_every_1080p_source_by_default(tmp_path: Path):
+    def render(**changes):
+        path = write_recyclarr_config(
+            tmp_path / "recyclarr",
+            sonarr_url="http://127.0.0.1:8989",
+            sonarr_key="s",
+            radarr_url="http://127.0.0.1:7878",
+            radarr_key="r",
+            prefs={**default_prefs(), **changes},
+            force=True,
+        )
+        return path.read_text(encoding="utf-8")
+
+    text = render()
+    web_1080p = text.split("72dae194fc92bf828f32cde7744e51a1", 1)[1].split("- trash_id:", 1)[0]
+    for quality in ("WEBDL-1080p", "WEBRip-1080p", "Bluray-1080p", "HDTV-1080p"):
+        assert f"- {quality}" in web_1080p
+    assert "until_quality: 1080p" in web_1080p
+    assert text.count("qualities:") == 2  # only on WEB-1080p; Radarr keeps the guide's list
+    assert "Bluray-1080p" not in render(sonarr_any_1080p=False)
