@@ -16,7 +16,7 @@ from core.auth import auth_manager
 from core.homepage import (
     calendar_fetch_span,
     clear_homepage_snapshot_cache,
-    collapse_full_seasons,
+    collapse_recent_series,
     homepage_downloads,
     homepage_request,
     homepage_search,
@@ -391,22 +391,49 @@ def test_collapse_full_season_hides_member_episodes():
             "_kind": "movie",
         }
     )
-    out = collapse_full_seasons(rows)
+    out = collapse_recent_series(rows)
     assert [item["title"] for item in out] == ["Severance", "Dune"]
     assert out[0]["detail"] == "Season 01"
     assert out[0]["url"].endswith("id=season-1")
 
 
-def test_collapse_keeps_single_and_partial_season_episodes():
+def test_collapse_folds_a_partial_season_and_keeps_a_lone_episode():
     rows = [
         _episode("Show", 1, 4, "2026-09-30T20:00:00"),
         _episode("Show", 1, 5, "2026-09-30T20:01:00"),
         _episode("Other", 2, 1, "2026-09-29T18:00:00"),
         _episode("Show", 1, 6, "2026-09-20T10:00:00"),
     ]
-    out = collapse_full_seasons(rows)
-    details = [item["detail"] for item in out]
-    assert details == ["S01E05", "S01E04", "S02E01", "S01E06"]
+    out = collapse_recent_series(rows)
+    assert [(item["title"], item["detail"]) for item in out] == [
+        ("Show", "Season 01 · 3 episodes"),
+        ("Other", "S02E01"),
+    ]
+    assert out[0]["when"] == "2026-09-30T20:01:00"
+
+
+def test_collapse_shows_one_tile_for_a_series_across_seasons():
+    rows = [
+        _episode("Friends", 3, n, f"2026-10-11T1{n % 10}:00:00", _series_id="friends", _season_id="s3") for n in (1, 5, 9, 12, 19)
+    ] + [_episode("Friends", 2, n, "2026-10-11T08:00:00", _series_id="friends", _season_id="s2") for n in (20, 21, 22, 23, 24)]
+    rows.append(
+        {
+            "source": "jellyfin",
+            "title": "Friends",
+            "detail": "Season 04",
+            "when": "2026-10-11T21:00:00",
+            "poster": "/p",
+            "url": "http://nas/web/#/details?id=s4",
+            "_kind": "season",
+            "_series_id": "friends",
+            "_season": 4,
+            "_season_id": "s4",
+        }
+    )
+    out = collapse_recent_series(rows)
+    assert len(out) == 1
+    assert out[0]["detail"] == "3 seasons"
+    assert out[0]["url"].endswith("id=friends")
 
 
 def test_homepage_jellyfin_full_season_is_one_tile(tmp_path):
