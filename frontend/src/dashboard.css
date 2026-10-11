@@ -49,9 +49,9 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: var(--nav-bg);
-  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.1);
-  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.1);
+  background: var(--glass-shine, none), var(--nav-bg);
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.1));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.1));
 }
 
 .top-nav > * {
@@ -342,8 +342,8 @@ a.status-pill {
 /* Glass Card — blur/shine live on a background layer so text stays sharp */
 .glass-card {
   background: transparent;
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-glass, 14px);
   position: relative;
   overflow: hidden;
   isolation: isolate;
@@ -361,11 +361,12 @@ a.status-pill {
   z-index: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: var(--bg-card);
-  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.12);
-  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(1.12);
+  background: var(--glass-shine, none), var(--bg-card);
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
 }
 
+/* The lit rim: a 1px gradient ring just inside the (transparent) border; overflow clips the border box. */
 .glass-card::after {
   content: '';
   position: absolute;
@@ -373,7 +374,12 @@ a.status-pill {
   z-index: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: var(--glass-shine, none);
+  padding: 1px;
+  background: var(--glass-rim, var(--border-subtle));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  transition: opacity 0.25s ease;
 }
 
 .glass-card > * {
@@ -394,7 +400,11 @@ a.status-pill {
 }
 
 .glass-card:hover {
-  border-color: var(--border-strong);
+  border-color: transparent;
+}
+
+.glass-card:hover::after {
+  background: var(--glass-rim-hover, var(--glass-rim, var(--border-strong)));
 }
 
 [data-theme='light'] .glass-card:hover {
