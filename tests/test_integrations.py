@@ -768,7 +768,7 @@ def test_optimization_hooks(tmp_path: Path):
     assert "trash_id: 72dae194fc92bf828f32cde7744e51a1" in rec_text
     assert "trash_id: d1d67249d3890e49bc12e275d989a7e9" in rec_text
     assert "reset_unmatched_scores" in rec_text
-    assert "custom_format_groups:" not in rec_text
+    assert rec_text.count("custom_format_groups:") == 1  # only the older tv shows scores
     assert "plex-imdb" in rec_text
     neu = write_neutarr_config(
         tmp_path / "neutarr",
