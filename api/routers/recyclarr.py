@@ -16,7 +16,8 @@ router = APIRouter(prefix="/api/recyclarr", tags=["Recyclarr"])
 
 class RecyclarrPrefsBody(BaseModel):
     sonarr_web_1080p: bool | None = None
-    sonarr_any_1080p: bool | None = None
+    sonarr_all_sources: bool | None = None
+    sonarr_older_tv: bool | None = None
     sonarr_web_2160p: bool | None = None
     sonarr_anime: bool | None = None
     radarr_hd: bool | None = None
