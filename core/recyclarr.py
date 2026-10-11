@@ -38,11 +38,30 @@ _SONARR_ANIME_REMUX_1080P = "20e0fc959f1f1704bed501f23bdae76f"
 _RADARR_HD_BLURAY_WEB = "d1d67249d3890e49bc12e275d989a7e9"
 _RADARR_UHD_BLURAY_WEB = "64fb5f9858489bdac2af690e27c8f42f"
 
+_SONARR_ANY_1080P_BLOCK = """\
+        upgrade:
+          allowed: true
+          until_quality: 1080p
+          until_score: 10000
+        qualities:
+          - name: 1080p
+            qualities:
+              - WEBDL-1080p
+              - WEBRip-1080p
+              - Bluray-1080p
+              - HDTV-1080p"""
+
 PROFILE_OPTIONS = (
     {
         "id": "sonarr_web_1080p",
         "label": "Sonarr WEB-1080p",
         "guide": "https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles/#web-1080p",
+        "default": True,
+    },
+    {
+        "id": "sonarr_any_1080p",
+        "label": "Sonarr WEB-1080p: also accept Bluray and HDTV 1080p",
+        "guide": "https://recyclarr.dev/wiki/yaml/config-reference/quality-profiles/",
         "default": True,
     },
     {
@@ -462,12 +481,15 @@ def _service_instance(
     qdef: str,
     profiles: list[tuple[str, str]],
     naming: str,
+    overrides: dict[str, str] | None = None,
 ) -> str:
     profile_lines: list[str] = []
     for trash_id, comment in profiles:
         profile_lines.append(f"      - trash_id: {trash_id}  # {comment}")
         profile_lines.append("        reset_unmatched_scores:")
         profile_lines.append("          enabled: true")
+        if overrides and trash_id in overrides:
+            profile_lines.append(overrides[trash_id])
     return (
         f"  {name}:\n"
         f"    base_url: {url}\n"
@@ -505,6 +527,12 @@ def _render_yaml(
         if prefs.get("sonarr_web_1080p") or prefs.get("sonarr_web_2160p")
         else "anime"
     )
+    sonarr_overrides: dict[str, str] = {}
+    if prefs.get("sonarr_any_1080p"):
+        # Every 1080p source in one group: all are accepted and none replaces another just
+        # for its source; TRaSH scores still pick the best release. The guide's cutoff names
+        # its "WEB 1080p" group, which empties out here, so the cutoff points at the new group.
+        sonarr_overrides[_SONARR_WEB_1080P] = _SONARR_ANY_1080P_BLOCK
     radarr_profiles: list[tuple[str, str]] = []
     if prefs.get("radarr_hd"):
         radarr_profiles.append((_RADARR_HD_BLURAY_WEB, "HD Bluray + WEB"))
@@ -529,6 +557,7 @@ def _render_yaml(
                 qdef=sonarr_qdef,
                 profiles=sonarr_profiles,
                 naming=_naming_block("sonarr", naming),
+                overrides=sonarr_overrides,
             )
         )
     if radarr_profiles:
