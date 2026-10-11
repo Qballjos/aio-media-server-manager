@@ -931,7 +931,6 @@ _QBIT_STATUS = {
 
 
 _RECENT_FIELDS = ("source", "title", "detail", "when", "poster", "url")
-_SEASON_ADD_WINDOW = 7200.0
 
 
 def _as_int(value: Any) -> int | None:
@@ -951,28 +950,6 @@ def _season_label(season: int | None) -> str:
 
 def _public_recent(item: dict[str, Any]) -> dict[str, Any]:
     return {key: item.get(key) or "" for key in _RECENT_FIELDS}
-
-
-def _season_group_key(item: dict[str, Any]) -> tuple[str, str, int | None]:
-    series_id = str(item.get("_series_id") or item.get("title") or "")
-    return (str(item.get("source") or ""), series_id, item.get("_season"))
-
-
-def _cluster_recent_by_when(items: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
-    ordered = sorted(items, key=_when_sort_key)
-    clusters: list[list[dict[str, Any]]] = []
-    current: list[dict[str, Any]] = []
-    last_ts = 0.0
-    for item in ordered:
-        ts = _when_sort_key(item)
-        if current and abs(ts - last_ts) > _SEASON_ADD_WINDOW:
-            clusters.append(current)
-            current = []
-        current.append(item)
-        last_ts = ts
-    if current:
-        clusters.append(current)
-    return clusters
 
 
 def _episode_numbers(items: list[dict[str, Any]]) -> list[int]:
@@ -995,58 +972,52 @@ def _is_full_season_add(items: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _season_tile_from_episodes(items: list[dict[str, Any]]) -> dict[str, Any]:
-    newest = max(items, key=_when_sort_key)
-    season_id = next((str(item.get("_season_id") or "") for item in items if item.get("_season_id")), "")
-    url = newest.get("url") or ""
-    if season_id and newest.get("source") == "jellyfin" and "/details?id=" in url:
-        url = url.rsplit("id=", 1)[0] + f"id={quote(season_id, safe='')}"
-    elif season_id and newest.get("source") == "plex" and "/metadata/" in url:
-        url = url.rsplit("/metadata/", 1)[0] + f"/metadata/{quote(season_id, safe='')}"
-    return {
-        "source": newest.get("source") or "",
-        "title": newest.get("title") or "Series",
-        "detail": _season_label(newest.get("_season")),
-        "when": newest.get("when") or "",
-        "poster": newest.get("poster") or "",
-        "url": url,
-    }
+def _relink(item: dict[str, Any], target_id: str) -> str:
+    """The item's own URL, pointed at another Jellyfin/Plex item (its season or series)."""
+    url = item.get("url") or ""
+    if not target_id:
+        return url
+    if item.get("source") == "jellyfin" and "/details?id=" in url:
+        return url.rsplit("id=", 1)[0] + f"id={quote(target_id, safe='')}"
+    if item.get("source") == "plex" and "/metadata/" in url:
+        return url.rsplit("/metadata/", 1)[0] + f"/metadata/{quote(target_id, safe='')}"
+    return url
 
 
-def collapse_full_seasons(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Show one season tile when a whole season landed together; keep lone episodes."""
-    native_seasons: dict[tuple[str, str, int | None], dict[str, Any]] = {}
-    episodes: dict[tuple[str, str, int | None], list[dict[str, Any]]] = {}
-    other: list[dict[str, Any]] = []
+def _series_tile(group: list[dict[str, Any]]) -> dict[str, Any]:
+    newest = max(group, key=_when_sort_key)
+    episodes = [item for item in group if item.get("_kind") == "episode"]
+    if len(group) == 1 and episodes:
+        return _public_recent(newest)  # one new episode keeps its S01E05 line
+    tile = _public_recent(newest)
+    seasons = sorted({season for item in group if (season := _as_int(item.get("_season"))) is not None})
+    if len(seasons) > 1:
+        tile["detail"] = f"{len(seasons)} seasons"
+        tile["url"] = _relink(newest, str(newest.get("_series_id") or ""))
+        return tile
+    native = next((item for item in group if item.get("_kind") == "season"), None)
+    label = _season_label(seasons[0] if seasons else None)
+    count = len(_episode_numbers(episodes))
+    whole = native is not None or _is_full_season_add(episodes)
+    tile["detail"] = label if whole or count < 2 else f"{label} · {count} episodes"
+    if native:
+        tile["url"] = native.get("url") or tile["url"]
+    else:
+        tile["url"] = _relink(newest, next((str(e["_season_id"]) for e in episodes if e.get("_season_id")), ""))
+    return tile
+
+
+def collapse_recent_series(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One tile per series: its new seasons and episodes fold into one; movies stay as they are."""
+    series: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    public: list[dict[str, Any]] = []
     for item in items:
-        kind = item.get("_kind")
-        if kind == "season":
-            native_seasons[_season_group_key(item)] = item
-            continue
-        if kind == "episode" and item.get("_season") is not None:
-            episodes.setdefault(_season_group_key(item), []).append(item)
-            continue
-        other.append(item)
-
-    collapsed: list[dict[str, Any]] = []
-    used_native: set[tuple[str, str, int | None]] = set()
-    for key, group in episodes.items():
-        leftover: list[dict[str, Any]] = []
-        for cluster in _cluster_recent_by_when(group):
-            if _is_full_season_add(cluster):
-                native = native_seasons.get(key)
-                collapsed.append(_public_recent(native) if native else _season_tile_from_episodes(cluster))
-                used_native.add(key)
-            else:
-                leftover.extend(cluster)
-        other.extend(leftover)
-
-    for key, native in native_seasons.items():
-        if key not in used_native and key not in episodes:
-            collapsed.append(_public_recent(native))
-
-    public = [_public_recent(item) for item in other]
-    public.extend(collapsed)
+        if item.get("_kind") in ("season", "episode"):
+            key = (str(item.get("source") or ""), str(item.get("_series_id") or item.get("title") or ""))
+            series.setdefault(key, []).append(item)
+        else:
+            public.append(_public_recent(item))
+    public.extend(_series_tile(group) for group in series.values())
     public.sort(key=_when_sort_key, reverse=True)
     return public
 
@@ -1070,7 +1041,7 @@ def _collect_jellyfin_recent(
             "SortBy": "DateCreated",
             "SortOrder": "Descending",
             "IncludeItemTypes": "Movie,Episode,Season",
-            "Limit": "50",
+            "Limit": "100",
             "Fields": "DateCreated,PrimaryImageAspectRatio,SeriesName,ChildCount,RecursiveItemCount,IndexNumber,ParentIndexNumber",
         },
     )
@@ -1136,7 +1107,7 @@ def _collect_jellyfin_recent(
                     "_kind": "movie",
                 }
             )
-    items = collapse_full_seasons(items)[:20]
+    items = collapse_recent_series(items)[:20]
     payload_error = None if isinstance(data, dict) else "unexpected items payload"
     if error in ("HTTP 401", "HTTP 403"):
         error = f"{error} — Jellyfin rejected the API key; paste a new one in Settings → Homepage"
@@ -1177,7 +1148,7 @@ def _collect_plex_recent(
     rows = container.get("Metadata") if isinstance(container, dict) else None
     items: list[dict[str, Any]] = []
     if isinstance(rows, list):
-        for row in rows[:50]:
+        for row in rows[:100]:
             if not isinstance(row, dict):
                 continue
             kind = str(row.get("type") or "")
@@ -1237,7 +1208,7 @@ def _collect_plex_recent(
                     "_kind": "movie" if kind == "movie" else kind or "movie",
                 }
             )
-    items = collapse_full_seasons(items)[:20]
+    items = collapse_recent_series(items)[:20]
     error = None if isinstance(payload, dict) else "unexpected recently added payload"
     return _finish_source(
         notes,
