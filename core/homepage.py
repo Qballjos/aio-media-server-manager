@@ -241,11 +241,35 @@ def _refresh_snapshot(host: str, scheme: str = "http") -> None:
                 entry.refreshing = False
 
 
+_WIDGET_LISTS = ("calendar", "recent", "requests", "trending")
+
+
+def _keep_last_good(snapshot: dict[str, Any], previous: dict[str, Any] | None) -> list[str]:
+    """A widget whose source failed (a timeout on a busy host) keeps its last good items
+    instead of turning into "Nothing recently added". Returns the widgets still waiting."""
+    failed = {note.get("widget") for note in snapshot.get("widgets") or [] if note.get("state") == "error"}
+    waiting: list[str] = []
+    for widget in _WIDGET_LISTS:
+        if snapshot.get(widget) or widget not in failed:
+            continue
+        if previous and previous.get(widget):
+            snapshot[widget] = previous[widget]
+        else:
+            waiting.append(widget)
+    return waiting
+
+
 def _build_and_store(host: str, scheme: str = "http") -> dict[str, Any]:
     ident = _cache_ident(host, scheme)
     snapshot = _build_homepage_snapshot(host, scheme)
     with _cache_guard:
-        _snapshots[ident] = _SnapshotEntry(snapshot, time.monotonic())
+        entry = _snapshots.get(ident)
+        previous = entry.snapshot if entry is not None else None
+    snapshot["waiting"] = _keep_last_good(snapshot, previous)
+    # A widget still waiting on a source is fetched again on the next poll, not after the TTL.
+    built_at = time.monotonic() - (_CACHE_TTL if snapshot["waiting"] else 0)
+    with _cache_guard:
+        _snapshots[ident] = _SnapshotEntry(snapshot, built_at)
     return copy.deepcopy(snapshot)
 
 

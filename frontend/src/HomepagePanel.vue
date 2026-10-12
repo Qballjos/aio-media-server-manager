@@ -60,6 +60,7 @@ const emptySnapshot = () => ({
   seerr: { available: false, url: null },
   vpn: null,
   widgets: [],
+  waiting: [],
 })
 
 const snapshot = ref(homeSnapshotCache.snapshot || emptySnapshot())
@@ -195,6 +196,19 @@ function notesFor(widget) {
   return widgetNotes.value.filter((item) => item.widget === widget)
 }
 
+const SOURCE_NAMES = { jellyfin: 'Jellyfin', plex: 'Plex', seerr: 'Seerr', sonarr: 'Sonarr', radarr: 'Radarr' }
+
+/** Still loading: first load, a cold server cache, or a source that has not answered yet. */
+function isPending(widget) {
+  return widgetsPending.value || (snapshot.value.waiting || []).includes(widget)
+}
+
+function waitingLabel(widget) {
+  if (!(snapshot.value.waiting || []).includes(widget)) return ''
+  const names = [...new Set(notesFor(widget).filter((note) => note.state === 'error').map((note) => SOURCE_NAMES[note.source] || note.source))]
+  return names.length ? `Waiting for ${names.join(' and ')}…` : ''
+}
+
 function debugFlagFromRoute() {
   const raw = route.query.debug
   return raw === '1' || raw === 'true'
@@ -215,9 +229,10 @@ async function loadSnapshot(force = false) {
         trending: data.trending || [],
         widgets: mergeWidgetNotes(data.widgets || []),
         seerr: data.seerr || { available: false, url: null },
+        waiting: data.waiting || [],
       }
       homeSnapshotCache.snapshot = snapshot.value
-      if (data.partial) {
+      if (data.partial || (data.waiting || []).length) {
         // Ask again soon instead of waiting for the 20-second poll.
         const delay = partialRetryDelay(partialAttempts++)
         if (delay !== null && !partialTimer) {
@@ -836,9 +851,12 @@ onUnmounted(() => {
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
             </a>
           </div>
-          <div v-else-if="widgetsPending" class="home-rail" aria-hidden="true">
-            <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
-          </div>
+          <template v-else-if="isPending('recent')">
+            <div class="home-rail" aria-hidden="true">
+              <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
+            </div>
+            <p v-if="waitingLabel('recent')" class="home-muted">{{ waitingLabel('recent') }}</p>
+          </template>
           <p v-else class="home-muted">Nothing recently added.</p>
           <ul v-if="widgetDebug && notesFor('recent').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('recent')" :key="idx">
@@ -887,9 +905,12 @@ onUnmounted(() => {
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
             </a>
           </div>
-          <div v-else-if="widgetsPending" class="home-rail" aria-hidden="true">
-            <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
-          </div>
+          <template v-else-if="isPending('requests')">
+            <div class="home-rail" aria-hidden="true">
+              <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
+            </div>
+            <p v-if="waitingLabel('requests')" class="home-muted">{{ waitingLabel('requests') }}</p>
+          </template>
           <p v-else-if="snapshot.requests.length" class="home-muted">
             No {{ requestsFilter === 'movie' ? 'movie' : requestsFilter === 'tv' ? 'series' : '' }} requests in this filter.
           </p>
@@ -942,13 +963,16 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
-          <div v-else-if="widgetsPending" class="home-rail" aria-hidden="true">
-            <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
-          </div>
+          <template v-else-if="isPending('trending')">
+            <div class="home-rail" aria-hidden="true">
+              <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
+            </div>
+            <p v-if="waitingLabel('trending')" class="home-muted">{{ waitingLabel('trending') }}</p>
+          </template>
           <p v-else-if="snapshot.trending.length" class="home-muted">
             No {{ trendingFilter === 'movie' ? 'movies' : trendingFilter === 'tv' ? 'series' : 'titles' }} in this filter.
           </p>
-          <p v-else class="home-muted">Trending titles appear when Seerr is running.</p>
+          <p v-else class="home-muted">{{ snapshot.seerr?.available ? 'No trending titles right now.' : 'Trending titles appear when Seerr is running.' }}</p>
           <ul v-if="widgetDebug && notesFor('trending').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('trending')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -981,7 +1005,7 @@ onUnmounted(() => {
             </div>
           </div>
           <div v-if="calView === 'list'" class="cal-list">
-            <div v-if="!calendarList.length && widgetsPending" aria-hidden="true">
+            <div v-if="!calendarList.length && isPending('calendar')" aria-hidden="true">
               <span v-for="n in 4" :key="n" class="home-skel home-skel-line"></span>
             </div>
             <p v-else-if="!calendarList.length" class="home-muted">Nothing in this range.</p>
