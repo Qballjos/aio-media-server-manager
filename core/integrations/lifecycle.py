@@ -143,17 +143,36 @@ async def stop_tunneled_apps() -> list[str]:
     return stopped
 
 
-async def enforce_vpn_isolation() -> list[str]:
-    """If VPN is on without a tunnel, stop qBittorrent/Prowlarr/Flaresolverr."""
-    if vpn_manager.tunneled_apps_allowed():
+# Watchdog state. ponytail: in memory; after a container restart the boot start covers the apps.
+_down_checks = 0
+_stopped_for_tunnel: set[str] = set()
+
+
+async def enforce_vpn_isolation(grace: int = 0) -> list[str]:
+    """If VPN is on without a tunnel, stop qBittorrent/Prowlarr/Flaresolverr.
+
+    ``grace`` is how many failed checks in a row to ride out first: the 5 s watchdog passes 2,
+    so one slow ``wg show`` on a busy host stops nothing. Apps stopped here start again once
+    the tunnel is back.
+    """
+    global _down_checks
+    # The checks shell out (wg, ip, iptables); keep them off the event loop.
+    if await asyncio.to_thread(vpn_manager.tunneled_apps_allowed):
+        _down_checks = 0
         # Keep WebUI proxies alive while the tunnel is up (Docker may race start).
         try:
-            vpn_manager.refresh_local_forwards()
+            await asyncio.to_thread(vpn_manager.refresh_local_forwards)
         except Exception as exc:
             logger.debug("VPN WebUI forward refresh failed: %s", exc)
+        if _stopped_for_tunnel:
+            names = sorted(_stopped_for_tunnel)
+            _stopped_for_tunnel.clear()
+            restarted = await start_tunneled_apps(names)
+            if restarted:
+                logger.info("VPN tunnel is back; started %s again.", ", ".join(restarted))
         # Kill any leftover clearnet copies that bypass WireGuard UID routing.
         try:
-            leaked = vpn_manager.reclaim_clearnet_tunneled_processes()
+            leaked = await asyncio.to_thread(vpn_manager.reclaim_clearnet_tunneled_processes)
         except Exception as exc:
             logger.warning("Clearnet tunneled-process reclaim failed: %s", exc)
             leaked = []
@@ -166,20 +185,25 @@ async def enforce_vpn_isolation() -> list[str]:
                 )
             return leaked
         return []
+    _down_checks += 1
+    if _down_checks <= grace:
+        logger.warning("VPN tunnel check failed (%s of %s); not stopping tunneled apps yet.", _down_checks, grace + 1)
+        return []
     stopped = await stop_tunneled_apps()
     if stopped:
+        _stopped_for_tunnel.update(stopped)
         logger.error(
-            "Stopped %s because VPN is enabled but the tunnel is down.",
+            "Stopped %s because VPN is enabled but the tunnel is down; they start again when it is back.",
             ", ".join(stopped),
         )
     return stopped
 
 
-async def vpn_isolation_loop(interval: float = 5.0) -> None:
+async def vpn_isolation_loop(interval: float = 5.0, grace: int = 2) -> None:
     """Keep tunneled apps off the house WAN if the tunnel drops after they started."""
     while True:
         try:
-            await enforce_vpn_isolation()
+            await enforce_vpn_isolation(grace=grace)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
