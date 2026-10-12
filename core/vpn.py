@@ -2167,7 +2167,7 @@ class VpnManager:
                 ["wg", "show", "all", "latest-handshakes"],
                 capture_output=True,
                 text=True,
-                timeout=3,
+                timeout=10,  # a busy NAS can take seconds to spawn it; a timeout reads as "tunnel down"
             )
         except (OSError, subprocess.TimeoutExpired):
             self._handshake_cache = False
