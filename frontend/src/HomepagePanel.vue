@@ -81,6 +81,14 @@ const searchedFor = ref('')
 const notice = ref('')
 const requestBusy = ref('')
 const downloadsFresh = ref(false)
+const downloadPause = ref({ paused: false, resume_at: null })
+const pauseFor = ref('60')
+const pauseBusy = ref(false)
+const pausedLabel = computed(() => {
+  const at = downloadPause.value.resume_at
+  if (!at) return 'Paused until you resume'
+  return `Paused · resumes ${new Date(at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+})
 const requestsFilter = ref('all')
 const trendingFilter = ref('all')
 let poll = null
@@ -263,12 +271,27 @@ function mergeWidgetNotes(incoming) {
   ]
 }
 
+async function setDownloadsPaused(pause) {
+  pauseBusy.value = true
+  try {
+    const body = pause ? { minutes: pauseFor.value === 'until' ? null : Number(pauseFor.value) } : {}
+    const res = await apiRequest(`/api/downloads/${pause ? 'pause' : 'resume'}`, { method: 'POST', body: JSON.stringify(body) })
+    if (res.ok) downloadPause.value = await readJson(res)
+  } catch (_) {
+    /* the next poll shows the real state */
+  } finally {
+    pauseBusy.value = false
+    loadDownloads()
+  }
+}
+
 async function loadDownloads() {
   try {
     const res = await apiRequest('/api/homepage/downloads')
     if (!res.ok) return
     const data = await readJson(res)
     snapshot.value.downloads = data.downloads || []
+    if (data.pause) downloadPause.value = data.pause
     downloadsFresh.value = true
     if (Array.isArray(data.widgets) && data.widgets.length) {
       snapshot.value.widgets = [
@@ -1026,8 +1049,23 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="snapshot.downloads.length || widgetDebug" class="home-widget glass-card">
-          <h3>Downloading</h3>
+        <article v-if="snapshot.downloads.length || downloadPause.paused || widgetDebug" class="home-widget glass-card">
+          <div class="home-widget-head">
+            <h3>Downloading</h3>
+            <div v-if="downloadPause.paused" class="home-pause">
+              <span class="home-muted">{{ pausedLabel }}</span>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(false)">Resume all</button>
+            </div>
+            <div v-else-if="snapshot.downloads.length" class="home-pause">
+              <select v-model="pauseFor" class="ui-input" aria-label="Pause for">
+                <option value="30">30 min</option>
+                <option value="60">1 hour</option>
+                <option value="180">3 hours</option>
+                <option value="until">Until I resume</option>
+              </select>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(true)">Pause all</button>
+            </div>
+          </div>
           <ul v-if="snapshot.downloads.length">
             <li v-for="(item, idx) in snapshot.downloads" :key="idx">
               <strong>{{ item.title }}</strong>
@@ -1696,6 +1734,26 @@ onUnmounted(() => {
 .home-widget h3 {
   margin-bottom: 0.75rem;
   font-size: 0.95rem;
+}
+.home-widget-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.home-widget-head h3 {
+  margin-bottom: 0;
+}
+.home-pause {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.home-pause .ui-input {
+  width: auto;
+  padding-block: 0.3rem;
 }
 .home-widget ul {
   list-style: none;

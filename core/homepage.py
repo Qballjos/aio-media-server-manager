@@ -172,7 +172,9 @@ def homepage_downloads() -> dict[str, Any]:
     catalog = ApplicationCatalog()
     running = _running_names()
     items, notes = _collect_download_queues(catalog, running)
-    return {"downloads": items[:40], "widgets": notes}
+    from core.downloads_pause import pause_state
+
+    return {"downloads": items[:40], "widgets": notes, "pause": pause_state()}
 
 
 def _collect_download_queues(

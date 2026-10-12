@@ -16,6 +16,7 @@ from api.routers import auth as auth_router
 from api.routers import backups as backups_router
 from api.routers import branding as branding_router
 from api.routers import catalog as catalog_router
+from api.routers import downloads as downloads_router
 from api.routers import diagnostics as diagnostics_router
 from api.routers import health as health_router
 from api.routers import homepage as homepage_router
@@ -123,8 +124,11 @@ def create_app() -> FastAPI:
         from core.integrations.lifecycle import vpn_isolation_loop
         from core.update_schedule import scheduler_loop
 
+        from core.downloads_pause import resume_when_due_loop
+
         asyncio.create_task(vpn_isolation_loop())
         asyncio.create_task(scheduler_loop())
+        asyncio.create_task(resume_when_due_loop())
         yield
         logger.info("FastAPI application shutting down.")
 
@@ -164,6 +168,7 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     app.include_router(health_router.router)
     app.include_router(homepage_router.router)
+    app.include_router(downloads_router.router)
     app.include_router(auth_router.router)
     app.include_router(catalog_router.router)
     app.include_router(applications_router.router)
