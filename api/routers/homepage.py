@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
 from core.homepage import homepage_art, homepage_downloads, homepage_request, homepage_search, homepage_snapshot
+from core.integrations.seerr import sync_seerr_external_links
 
 router = APIRouter(prefix="/api/homepage", tags=["Homepage"])
 
@@ -30,6 +31,8 @@ async def get_homepage(request: Request, refresh: bool = False) -> dict[str, Any
     _ensure_authenticated(request)
     host = request.url.hostname or "127.0.0.1"
     scheme = request.url.scheme or "http"
+    # Seerr's links to Radarr/Sonarr/Jellyfin need the address the browser uses; fire and forget.
+    asyncio.get_running_loop().run_in_executor(None, sync_seerr_external_links, host)
     return await asyncio.to_thread(homepage_snapshot, host, force=refresh, scheme=scheme)
 
 
