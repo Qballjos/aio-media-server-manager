@@ -132,7 +132,7 @@ RUN set -eux; \
       arm) cfarch=arm ;; \
       *) cfarch=amd64 ;; \
     esac; \
-    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfarch}" \
+    curl -fsSL --retry 5 --retry-delay 5 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfarch}" \
       -o /usr/local/bin/cloudflared; \
     chmod +x /usr/local/bin/cloudflared; \
     cloudflared --version
@@ -147,7 +147,7 @@ RUN set -eux; \
       arm) par2arch=armhf ;; \
       *) par2arch=amd64 ;; \
     esac; \
-    curl -fsSL "https://github.com/animetosho/par2cmdline-turbo/releases/download/v${PAR2_TURBO_VERSION}/par2cmdline-turbo-${PAR2_TURBO_VERSION}-linux-${par2arch}.zip" \
+    curl -fsSL --retry 5 --retry-delay 5 "https://github.com/animetosho/par2cmdline-turbo/releases/download/v${PAR2_TURBO_VERSION}/par2cmdline-turbo-${PAR2_TURBO_VERSION}-linux-${par2arch}.zip" \
       -o /tmp/par2cmdline-turbo.zip; \
     python -m zipfile -e /tmp/par2cmdline-turbo.zip /tmp/par2cmdline-turbo; \
     install -m 0755 /tmp/par2cmdline-turbo/par2 /usr/local/bin/par2; \
