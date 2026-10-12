@@ -765,3 +765,24 @@ def test_stale_snapshot_still_reports_live_launcher_state(tmp_path, monkeypatch)
     clear_jobs()
     assert later["apps"][0]["state"] == "running"
     assert later["apps"][0]["state_label"] == ""
+
+
+def test_a_failing_source_keeps_the_last_good_items():
+    from core.homepage import _keep_last_good
+
+    fresh = {
+        "recent": [],
+        "trending": [],
+        "requests": [],
+        "calendar": [],
+        "widgets": [
+            {"widget": "recent", "source": "jellyfin", "state": "error", "detail": "timed out"},
+            {"widget": "trending", "source": "seerr", "state": "error", "detail": "timed out"},
+            {"widget": "requests", "source": "seerr", "state": "empty", "detail": "no requests"},
+        ],
+    }
+    previous = {"recent": [{"title": "Friends"}], "trending": [], "requests": [{"title": "Old"}]}
+    waiting = _keep_last_good(fresh, previous)
+    assert fresh["recent"] == [{"title": "Friends"}]  # kept instead of "Nothing recently added"
+    assert waiting == ["trending"]  # failed and nothing to fall back on: show it as loading
+    assert fresh["requests"] == []  # really empty stays empty
