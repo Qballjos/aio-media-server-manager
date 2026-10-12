@@ -161,3 +161,20 @@ def test_visual_preferences_persist_on_profile(tmp_path: Path, monkeypatch):
     assert cleared.json()["has_wallpaper_image"] is False
     assert cleared.json()["wallpaper"] == "default"
 
+
+
+def test_home_layout_is_kept_on_the_profile(tmp_path: Path, monkeypatch):
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    assert client.get("/api/auth/me", headers=headers).json()["homepage_layout"] == []
+
+    saved = client.patch(
+        "/api/auth/visuals",
+        json={"homepage_layout": ["downloads", "apps", "downloads", " search "]},
+        headers=headers,
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["homepage_layout"] == ["downloads", "apps", "search"]
+    assert client.get("/api/auth/status").json()["homepage_layout"] == ["downloads", "apps", "search"]
+    # Saving the layout leaves the other visuals alone.
+    assert client.get("/api/auth/me", headers=headers).json()["theme"] == "dark"

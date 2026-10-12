@@ -45,6 +45,7 @@ class AuthStatusResponse(BaseModel):
     wallpaper_url: Optional[str] = None
     has_wallpaper_image: Optional[bool] = None
     homepage_widget_debug: Optional[bool] = None
+    homepage_layout: Optional[list[str]] = None
 
 
 def _avatar_url() -> str | None:
@@ -68,6 +69,7 @@ def _empty_auth(*, setup_required: bool) -> dict:
         "wallpaper_url": None,
         "has_wallpaper_image": None,
         "homepage_widget_debug": None,
+        "homepage_layout": None,
     }
 
 
@@ -218,15 +220,16 @@ class VisualsPatch(BaseModel):
     theme: Optional[str] = None
     wallpaper: Optional[str] = None
     homepage_widget_debug: Optional[bool] = None
+    homepage_layout: Optional[list[str]] = Field(default=None, max_length=20)
 
 
 @router.patch("/visuals", summary="Update admin visual preferences")
 async def patch_visuals(body: VisualsPatch, request: Request) -> dict:
     auth_manager.authenticate_request(request)
-    if body.theme is None and body.wallpaper is None and body.homepage_widget_debug is None:
+    if all(value is None for value in (body.theme, body.wallpaper, body.homepage_widget_debug, body.homepage_layout)):
         raise HTTPException(
             status_code=422,
-            detail="Provide theme, wallpaper, and/or homepage_widget_debug.",
+            detail="Provide theme, wallpaper, homepage_widget_debug and/or homepage_layout.",
         )
     if body.theme is not None and body.theme not in profile_mod.THEMES:
         raise HTTPException(status_code=422, detail="theme must be dark, light, or system.")
@@ -239,6 +242,7 @@ async def patch_visuals(body: VisualsPatch, request: Request) -> dict:
         theme=body.theme,
         wallpaper=body.wallpaper,
         homepage_widget_debug=body.homepage_widget_debug,
+        homepage_layout=body.homepage_layout,
     )
     return {"status": "ok", **visuals}
 

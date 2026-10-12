@@ -2,6 +2,7 @@
 
 import { setThemePreference } from './theme.js'
 import { applyHomepageWidgetDebugFromProfile, readHomepageWidgetDebug } from './homepageDebug.js'
+import { applyHomeLayoutFromProfile } from './homeLayout.js'
 
 const PREF_KEY = 'amm-wallpaper'
 const IMAGE_KEY = 'amm-wallpaper-image'
@@ -167,6 +168,7 @@ export function applyVisualsFromProfile(payload = {}) {
   }
   applyWallpaper(getWallpaperPreference(), getWallpaperImage())
   applyHomepageWidgetDebugFromProfile(payload)
+  applyHomeLayoutFromProfile(payload)
 }
 
 /** One-time migrate browser-only prefs into the profile when the profile is still default. */
