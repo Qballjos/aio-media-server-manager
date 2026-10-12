@@ -86,6 +86,28 @@ const downloadsFresh = ref(false)
 const downloadPause = ref({ paused: false, resume_at: null })
 const pauseFor = ref('60')
 const pauseBusy = ref(false)
+const SORT_KEY = 'amm-downloads-sort'
+const downloadSort = ref((() => {
+  try {
+    return localStorage.getItem(SORT_KEY) || 'queue'
+  } catch (_) {
+    return 'queue'
+  }
+})())
+// Stable sort, so equal percentages keep their queue order.
+const sortedDownloads = computed(() => {
+  const list = [...snapshot.value.downloads]
+  if (downloadSort.value === 'queue') return list
+  const dir = downloadSort.value === 'asc' ? 1 : -1
+  return list.sort((a, b) => dir * ((a.progress || 0) - (b.progress || 0)))
+})
+watch(downloadSort, (value) => {
+  try {
+    localStorage.setItem(SORT_KEY, value)
+  } catch (_) {
+    /* only this session remembers it */
+  }
+})
 const pausedLabel = computed(() => {
   const at = downloadPause.value.resume_at
   if (!at) return 'Paused until you resume'
@@ -1148,6 +1170,11 @@ onUnmounted(() => {
         <article v-if="visibleBlocks.downloads" class="home-widget glass-card home-widget-downloads" :style="blockStyle('downloads')">
           <div class="home-widget-head">
             <h3>Downloading</h3>
+            <select v-if="snapshot.downloads.length > 1" v-model="downloadSort" class="ui-input home-sort" aria-label="Sort downloads">
+              <option value="queue">Queue order</option>
+              <option value="desc">Most done first</option>
+              <option value="asc">Least done first</option>
+            </select>
             <div v-if="downloadPause.paused" class="home-pause">
               <span class="home-muted">{{ pausedLabel }}</span>
               <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(false)">Resume all</button>
@@ -1163,7 +1190,7 @@ onUnmounted(() => {
             </div>
           </div>
           <ul v-if="snapshot.downloads.length">
-            <li v-for="(item, idx) in snapshot.downloads" :key="idx">
+            <li v-for="(item, idx) in sortedDownloads" :key="idx">
               <strong>{{ item.title }}</strong>
               <span class="home-muted">
                 {{ item.source }} · {{ item.status }} · {{ item.progress }}%
@@ -1884,6 +1911,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+.home-widget-head .home-sort {
+  width: auto;
+  margin-left: auto;
+  padding-block: 0.3rem;
 }
 .home-pause .ui-input {
   width: auto;
