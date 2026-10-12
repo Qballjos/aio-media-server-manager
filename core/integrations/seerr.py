@@ -117,6 +117,54 @@ def discover_seerr_api_key(config_dir: Path | None = None, port: int = 5055) -> 
     return client.main_api_key() if client else ""
 
 
+# Host the Seerr links were last pointed at. ponytail: in memory, so one write per host per run.
+_external_links_host: str | None = None
+
+
+def sync_seerr_external_links(host: str) -> None:
+    """Point Seerr's "Open in Radarr/Sonarr" and "Play on Jellyfin" links at the address the
+    browser reaches AIO on. AIO links Seerr to the apps over 127.0.0.1, which only works
+    inside the container. Only LAN access tells us that address, so other hosts are skipped.
+    """
+    global _external_links_host
+    from applications.catalog import ApplicationCatalog
+    from core.app_web_url import is_lan_hostname
+    from core.integrations.credentials import get_application_api_key
+
+    host = (host or "").strip().lower()
+    if host in {"", "127.0.0.1", "localhost", "::1"} or not is_lan_hostname(host) or host == _external_links_host:
+        return
+    catalog = ApplicationCatalog()
+    if not catalog.has("seerr") or not catalog.get("seerr").is_installed():
+        return
+    plugin = catalog.get("seerr")
+    key = get_application_api_key("seerr", plugin.config_dir)
+    if not key:
+        return
+    base = f"http://127.0.0.1:{plugin.port}/api/v1"
+    headers = {"X-Api-Key": key}
+    try:
+        for kind in ("radarr", "sonarr"):
+            for server in requests.get(f"{base}/settings/{kind}", headers=headers, timeout=10).json():
+                want = f"http://{host}:{server.get('port')}"
+                if server.get("externalUrl") == want:
+                    continue
+                server_id = server.pop("id")
+                server["externalUrl"] = want
+                requests.put(f"{base}/settings/{kind}/{server_id}", headers=headers, json=server, timeout=15).raise_for_status()
+        jellyfin = requests.get(f"{base}/settings/jellyfin", headers=headers, timeout=10).json()
+        want = f"http://{host}:{jellyfin.get('port') or 8096}"
+        if jellyfin.get("ip") and jellyfin.get("externalHostname") != want:
+            body = {k: jellyfin[k] for k in ("ip", "port", "useSsl", "urlBase", "jellyfinForgotPasswordUrl") if k in jellyfin}
+            body["externalHostname"] = want
+            requests.post(f"{base}/settings/jellyfin", headers=headers, json=body, timeout=15).raise_for_status()
+    except (requests.RequestException, ValueError, TypeError, AttributeError) as exc:
+        logger.debug("Seerr external links not updated yet: %s", exc)
+        return
+    _external_links_host = host
+    logger.info("Seerr links to Radarr, Sonarr and Jellyfin now use %s.", host)
+
+
 class SeerrClient:
     def __init__(
         self,
