@@ -25,7 +25,20 @@ _DEFAULT_META: dict[str, Any] = {
     "wallpaper": "default",
     "wallpaper_image": None,
     "homepage_widget_debug": False,
+    "homepage_layout": [],
 }
+
+
+def _normalize_layout(value: Any) -> list[str]:
+    """Home block ids in the order the user arranged them; the frontend fills in the rest."""
+    if not isinstance(value, list):
+        return []
+    seen: list[str] = []
+    for item in value:
+        name = str(item).strip()[:32]
+        if name and name not in seen:
+            seen.append(name)
+    return seen[:20]
 
 
 def profile_dir(*, create: bool = True) -> Path:
@@ -71,6 +84,7 @@ def _load_meta() -> dict[str, Any]:
     if data.get("wallpaper_image"):
         meta["wallpaper_image"] = str(data["wallpaper_image"])
     meta["homepage_widget_debug"] = bool(data.get("homepage_widget_debug", False))
+    meta["homepage_layout"] = _normalize_layout(data.get("homepage_layout"))
     return meta
 
 
@@ -82,6 +96,7 @@ def _save_meta(meta: dict[str, Any]) -> None:
         "wallpaper": _normalize_wallpaper(meta.get("wallpaper")),
         "wallpaper_image": meta.get("wallpaper_image") or None,
         "homepage_widget_debug": bool(meta.get("homepage_widget_debug", False)),
+        "homepage_layout": _normalize_layout(meta.get("homepage_layout")),
     }
     _meta_path().write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -128,6 +143,7 @@ def visual_preferences() -> dict[str, Any]:
         "wallpaper_url": url,
         "has_wallpaper_image": url is not None,
         "homepage_widget_debug": bool(meta.get("homepage_widget_debug", False)),
+        "homepage_layout": _normalize_layout(meta.get("homepage_layout")),
     }
 
 
@@ -151,6 +167,7 @@ def save_visual_preferences(
     theme: str | None = None,
     wallpaper: str | None = None,
     homepage_widget_debug: bool | None = None,
+    homepage_layout: list[str] | None = None,
 ) -> dict[str, Any]:
     meta = _load_meta()
     if theme is not None:
@@ -164,6 +181,8 @@ def save_visual_preferences(
             pass
     if homepage_widget_debug is not None:
         meta["homepage_widget_debug"] = bool(homepage_widget_debug)
+    if homepage_layout is not None:
+        meta["homepage_layout"] = _normalize_layout(homepage_layout)
     _save_meta(meta)
     return visual_preferences()
 

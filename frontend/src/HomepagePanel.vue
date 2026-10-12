@@ -5,6 +5,7 @@ import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
+import { HOME_BLOCKS, homeLayout, saveHomeLayout } from './homeLayout.js'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { formatUptime } from './format.js'
@@ -114,7 +115,51 @@ const hasWidgets = computed(
     hasCalendarSource.value ||
     snapshot.value.seerr.available,
 )
-const showWidgets = computed(() => hasWidgets.value || widgetDebug.value)
+const editing = ref(false)
+const showWidgets = computed(() => hasWidgets.value || widgetDebug.value || editing.value)
+const layout = computed(() => homeLayout.value)
+const dragBlock = ref('')
+const BLOCK_LABELS = Object.fromEntries(HOME_BLOCKS)
+
+function blockStyle(id) {
+  return { order: layout.value.indexOf(id) }
+}
+
+function moveBlock(id, delta) {
+  const list = [...layout.value]
+  const from = list.indexOf(id)
+  const to = from + delta
+  if (from < 0 || to < 0 || to >= list.length) return
+  list.splice(to, 0, list.splice(from, 1)[0])
+  saveHomeLayout(list)
+}
+
+function dropBlock(target) {
+  const id = dragBlock.value
+  dragBlock.value = ''
+  if (!id || id === target) return
+  const list = layout.value.filter((item) => item !== id)
+  list.splice(list.indexOf(target), 0, id)
+  saveHomeLayout(list)
+}
+
+/** Shown outside edit mode only when there is something in it (or it is still loading). */
+const visibleBlocks = computed(() => {
+  const show = (has, pending) => has || pending || editing.value || widgetDebug.value
+  const s = snapshot.value
+  return {
+    recent: show(s.recent.length, hasMediaServer.value && isPending('recent')),
+    requests: show(s.requests.length, s.seerr.available && isPending('requests')),
+    trending: show(s.trending.length, s.seerr.available && isPending('trending')),
+    calendar: show(s.calendar.length, hasCalendarSource.value && isPending('calendar')),
+    downloads: show(s.downloads.length || downloadPause.value.paused, false),
+  }
+})
+// Downloads sits next to the calendar on wide screens only when they are neighbours.
+const pairCalendar = computed(
+  () => visibleBlocks.value.calendar && visibleBlocks.value.downloads
+    && Math.abs(layout.value.indexOf('calendar') - layout.value.indexOf('downloads')) === 1,
+)
 const widgetNotes = computed(() => snapshot.value.widgets || [])
 const CATEGORY_LABELS = {
   media: 'Media',
@@ -750,7 +795,34 @@ onUnmounted(() => {
     </div>
 
     <template v-else-if="!loading">
-      <div class="home-launcher-groups">
+      <div class="home-toolbar">
+        <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': editing }" :aria-pressed="editing" @click="editing = !editing">
+          {{ editing ? 'Done' : 'Edit layout' }}
+        </button>
+      </div>
+      <section v-if="editing" class="home-arrange glass-card" aria-label="Arrange Home">
+        <h3>Arrange Home</h3>
+        <p class="home-muted">Drag a row or use the arrows. Outside this mode, blocks without activity are hidden.</p>
+        <ol class="home-arrange-list">
+          <li
+            v-for="(id, idx) in layout"
+            :key="id"
+            draggable="true"
+            :class="{ 'is-dragging': dragBlock === id }"
+            @dragstart="dragBlock = id"
+            @dragend="dragBlock = ''"
+            @dragover.prevent
+            @drop.prevent="dropBlock(id)"
+          >
+            <span class="home-arrange-handle" aria-hidden="true">⠿</span>
+            <span class="home-arrange-name">{{ BLOCK_LABELS[id] }}</span>
+            <button type="button" class="ui-btn ui-btn-ghost" :disabled="idx === 0" :aria-label="`Move ${BLOCK_LABELS[id]} up`" @click="moveBlock(id, -1)">↑</button>
+            <button type="button" class="ui-btn ui-btn-ghost" :disabled="idx === layout.length - 1" :aria-label="`Move ${BLOCK_LABELS[id]} down`" @click="moveBlock(id, 1)">↓</button>
+          </li>
+        </ol>
+      </section>
+      <div class="home-blocks" :class="{ 'is-editing': editing, 'is-pair': pairCalendar }">
+      <div class="home-launcher-groups" :style="blockStyle('apps')">
         <section v-for="group in launcherGroups" :key="group.id" class="home-launcher-group glass-card">
           <h3 class="home-launcher-label">{{ group.label }}</h3>
           <div class="home-launcher">
@@ -782,7 +854,7 @@ onUnmounted(() => {
         </section>
       </div>
 
-      <form class="home-search glass-card" @submit.prevent="runSearch">
+      <form class="home-search glass-card" :style="blockStyle('search')" @submit.prevent="runSearch">
         <label class="home-search-label" for="home-search">Search</label>
         <div class="home-search-row">
           <input
@@ -827,7 +899,7 @@ onUnmounted(() => {
       </form>
 
       <div v-if="showWidgets" class="home-widgets">
-        <article v-if="snapshot.recent.length || hasMediaServer || widgetDebug" class="home-widget glass-card home-widget-rail">
+        <article v-if="visibleBlocks.recent" class="home-widget glass-card home-widget-rail" :style="blockStyle('recent')">
           <div class="home-rail-head">
             <h3>Recently added</h3>
             <div v-if="snapshot.recent.length" class="home-rail-nav">
@@ -865,7 +937,7 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="snapshot.requests.length || snapshot.seerr.available || widgetDebug" class="home-widget glass-card home-widget-rail">
+        <article v-if="visibleBlocks.requests" class="home-widget glass-card home-widget-rail" :style="blockStyle('requests')">
           <div class="home-rail-head">
             <h3>Requests</h3>
             <div class="home-rail-tools">
@@ -922,7 +994,7 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="snapshot.trending.length || snapshot.seerr.available || widgetDebug" class="home-widget glass-card home-widget-rail">
+        <article v-if="visibleBlocks.trending" class="home-widget glass-card home-widget-rail" :style="blockStyle('trending')">
           <div class="home-rail-head">
             <h3>Trending</h3>
             <div class="home-rail-tools">
@@ -980,7 +1052,7 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="snapshot.calendar.length || hasCalendarSource || widgetDebug" class="home-widget glass-card home-widget-calendar">
+        <article v-if="visibleBlocks.calendar" class="home-widget glass-card home-widget-calendar" :style="blockStyle('calendar')">
           <div class="cal-head">
             <div class="cal-nav">
               <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" aria-label="Previous">‹</button>
@@ -1073,7 +1145,7 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="snapshot.downloads.length || downloadPause.paused || widgetDebug" class="home-widget glass-card">
+        <article v-if="visibleBlocks.downloads" class="home-widget glass-card home-widget-downloads" :style="blockStyle('downloads')">
           <div class="home-widget-head">
             <h3>Downloading</h3>
             <div v-if="downloadPause.paused" class="home-pause">
@@ -1114,6 +1186,7 @@ onUnmounted(() => {
         Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.
         Turn on Widget debug in Settings → Homepage to see why a source is skipped or failing.
       </p>
+      </div>
     </template>
     <article v-if="!loading && widgetDebug" class="home-widget glass-card home-debug-panel">
       <h3>Widget debug</h3>
@@ -1381,40 +1454,77 @@ onUnmounted(() => {
 .home-status.is-missing {
   color: var(--color-danger-fg);
 }
-.home-widgets {
+.home-blocks {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
 }
-.home-widget-rail,
-.home-widget-calendar {
+.home-blocks > *,
+.home-widgets > * {
   grid-column: 1 / -1;
+  min-width: 0;
 }
-@media (min-width: 1280px) {
-  .home-widgets {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    gap: 1.1rem 1.15rem;
-  }
-  .home-widget-rail,
-  .home-widget-calendar,
-  .home-widget:not(.home-widget-rail):not(.home-widget-calendar) {
-    grid-column: span 12;
-  }
+/* The widgets join the block grid so every block can be ordered against every other. */
+.home-widgets {
+  display: contents;
+}
+.home-blocks.is-editing .glass-card,
+.home-blocks.is-editing .home-launcher-groups {
+  outline: 1px dashed rgba(var(--color-primary-rgb), 0.45);
+  outline-offset: 3px;
 }
 @media (min-width: 1600px) {
+  .home-blocks {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1.2rem 1.25rem;
+  }
   .home-launcher-groups {
     gap: 0.9rem;
   }
-  .home-widgets {
-    gap: 1.2rem 1.25rem;
-  }
-  .home-widgets:has(.home-widget:not(.home-widget-rail):not(.home-widget-calendar)) .home-widget-calendar {
+  .home-blocks.is-pair .home-widget-calendar {
     grid-column: span 8;
   }
-  .home-widget:not(.home-widget-rail):not(.home-widget-calendar) {
+  .home-blocks.is-pair .home-widget-downloads {
     grid-column: span 4;
     align-self: stretch;
   }
+}
+.home-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -0.5rem;
+}
+.home-arrange {
+  padding: 1rem 1.15rem;
+}
+.home-arrange h3 {
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+.home-arrange-list {
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+.home-arrange-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--pill-bg);
+  cursor: grab;
+}
+.home-arrange-list li.is-dragging {
+  opacity: 0.5;
+}
+.home-arrange-handle {
+  color: var(--text-dim);
+}
+.home-arrange-name {
+  flex: 1;
 }
 .home-rail-head {
   display: flex;
