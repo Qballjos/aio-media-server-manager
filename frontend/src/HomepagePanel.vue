@@ -116,12 +116,32 @@ const stuckSummary = computed(() => {
   }
   return Object.entries(counts).map(([label, n]) => `${n} ${label}`).join(' · ')
 })
-const queueLinks = computed(() =>
-  ['sonarr', 'radarr']
-    .map((name) => (snapshot.value.apps || []).find((app) => app.name === name && app.url))
-    .filter(Boolean)
-    .map((app) => ({ name: app.display_name || app.name, url: `${publicAppUrl(app.name, app.port, app.url).replace(/\/+$/, '')}/activity/queue` })),
+const stuckItems = computed(() =>
+  downloadPause.value.paused ? [] : snapshot.value.downloads.filter((item) => item.status in STUCK_STATUSES),
 )
+const removeBusy = ref(new Set())
+
+/** Sonarr/Radarr blocklist a removed download and search for another release; the rest leave the client. */
+async function removeDownloads(items, confirmFirst = false) {
+  const list = items.filter((item) => item.download_id)
+  if (!list.length) return
+  const what = `${list.length} stuck download${list.length === 1 ? '' : 's'}`
+  if (confirmFirst && !window.confirm(`Remove ${what}? Sonarr and Radarr search for another release.`)) return
+  removeBusy.value = new Set([...removeBusy.value, ...list.map((item) => item.download_id)])
+  try {
+    await apiRequest('/api/downloads/remove', {
+      method: 'POST',
+      body: JSON.stringify({ items: list.map((item) => ({ source: item.source, download_id: item.download_id })) }),
+    })
+  } catch (_) {
+    /* the next poll shows what is left */
+  } finally {
+    const next = new Set(removeBusy.value)
+    for (const item of list) next.delete(item.download_id)
+    removeBusy.value = next
+    loadDownloads()
+  }
+}
 watch(downloadSort, (value) => {
   try {
     localStorage.setItem(SORT_KEY, value)
@@ -1222,13 +1242,33 @@ onUnmounted(() => {
             </li>
           </ul>
           <p v-else class="home-muted">No active downloads.</p>
-          <p v-if="stuckSummary" class="home-muted home-stuck">
-            Not moving: {{ stuckSummary }}.
-            <template v-if="queueLinks.length">
-              Clean up in
-              <template v-for="(link, idx) in queueLinks" :key="link.url"><span v-if="idx"> · </span><a :href="link.url" target="_blank" rel="noopener noreferrer">{{ link.name }}</a></template>
-            </template>
-          </p>
+          <details v-if="stuckItems.length" class="home-stuck">
+            <summary class="home-muted">Not moving: {{ stuckSummary }}</summary>
+            <div class="home-stuck-head">
+              <span class="home-muted">Removing blocklists the release; Sonarr and Radarr search for another.</span>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="removeBusy.size > 0" @click="removeDownloads(stuckItems, true)">Remove all</button>
+            </div>
+            <ul>
+              <li v-for="item in stuckItems" :key="item.download_id || item.title" class="home-stuck-item">
+                <span class="home-stuck-title">
+                  {{ item.title }}
+                  <small class="home-muted">{{ item.source }} · {{ item.status }} · {{ item.progress }}%</small>
+                </span>
+                <button
+                  type="button"
+                  class="home-stuck-remove"
+                  :aria-label="`Remove ${item.title}`"
+                  :title="`Remove ${item.title}`"
+                  :disabled="!item.download_id || removeBusy.has(item.download_id)"
+                  @click="removeDownloads([item])"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
+                  </svg>
+                </button>
+              </li>
+            </ul>
+          </details>
           <ul v-if="widgetDebug && notesFor('downloads').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('downloads')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1942,10 +1982,53 @@ onUnmounted(() => {
 }
 .home-stuck {
   margin-top: 0.75rem;
+}
+.home-stuck summary {
+  cursor: pointer;
   font-size: 0.85rem;
 }
-.home-stuck a {
-  color: var(--color-primary-soft);
+.home-stuck-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin: 0.6rem 0;
+  font-size: 0.82rem;
+}
+.home-widget .home-stuck-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.home-stuck-title {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.88rem;
+}
+.home-stuck-remove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  padding: 0.4rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.home-stuck-remove:hover:not(:disabled) {
+  color: var(--color-danger-fg);
+  border-color: var(--color-danger);
+}
+.home-stuck-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.home-stuck-remove svg {
+  width: 16px;
+  height: 16px;
 }
 .home-widget-head .home-sort {
   width: auto;
