@@ -101,6 +101,27 @@ const sortedDownloads = computed(() => {
   const dir = downloadSort.value === 'asc' ? 1 : -1
   return list.sort((a, b) => dir * ((a.progress || 0) - (b.progress || 0)))
 })
+// Stuck items (no peers, files gone, paused) never move; list what is moving and count the rest.
+// Paused by Pause all is different: then the list shows everything.
+const STUCK_STATUSES = { Stalled: 'stalled', 'Missing files': 'missing files', Paused: 'paused', Error: 'error' }
+const movingDownloads = computed(() =>
+  downloadPause.value.paused ? sortedDownloads.value : sortedDownloads.value.filter((item) => !(item.status in STUCK_STATUSES)),
+)
+const stuckSummary = computed(() => {
+  if (downloadPause.value.paused) return ''
+  const counts = {}
+  for (const item of snapshot.value.downloads) {
+    const label = STUCK_STATUSES[item.status]
+    if (label) counts[label] = (counts[label] || 0) + 1
+  }
+  return Object.entries(counts).map(([label, n]) => `${n} ${label}`).join(' · ')
+})
+const queueLinks = computed(() =>
+  ['sonarr', 'radarr']
+    .map((name) => (snapshot.value.apps || []).find((app) => app.name === name && app.url))
+    .filter(Boolean)
+    .map((app) => ({ name: app.display_name || app.name, url: `${publicAppUrl(app.name, app.port, app.url).replace(/\/+$/, '')}/activity/queue` })),
+)
 watch(downloadSort, (value) => {
   try {
     localStorage.setItem(SORT_KEY, value)
@@ -1170,7 +1191,7 @@ onUnmounted(() => {
         <article v-if="visibleBlocks.downloads" class="home-widget glass-card home-widget-downloads" :style="blockStyle('downloads')">
           <div class="home-widget-head">
             <h3>Downloading</h3>
-            <select v-if="snapshot.downloads.length > 1" v-model="downloadSort" class="ui-input home-sort" aria-label="Sort downloads">
+            <select v-if="movingDownloads.length > 1" v-model="downloadSort" class="ui-input home-sort" aria-label="Sort downloads">
               <option value="queue">Queue order</option>
               <option value="desc">Most done first</option>
               <option value="asc">Least done first</option>
@@ -1189,8 +1210,8 @@ onUnmounted(() => {
               <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(true)">Pause all</button>
             </div>
           </div>
-          <ul v-if="snapshot.downloads.length">
-            <li v-for="(item, idx) in sortedDownloads" :key="idx">
+          <ul v-if="movingDownloads.length">
+            <li v-for="(item, idx) in movingDownloads" :key="idx">
               <strong>{{ item.title }}</strong>
               <span class="home-muted">
                 {{ item.source }} · {{ item.status }} · {{ item.progress }}%
@@ -1201,6 +1222,13 @@ onUnmounted(() => {
             </li>
           </ul>
           <p v-else class="home-muted">No active downloads.</p>
+          <p v-if="stuckSummary" class="home-muted home-stuck">
+            Not moving: {{ stuckSummary }}.
+            <template v-if="queueLinks.length">
+              Clean up in
+              <template v-for="(link, idx) in queueLinks" :key="link.url"><span v-if="idx"> · </span><a :href="link.url" target="_blank" rel="noopener noreferrer">{{ link.name }}</a></template>
+            </template>
+          </p>
           <ul v-if="widgetDebug && notesFor('downloads').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('downloads')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1911,6 +1939,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+.home-stuck {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+.home-stuck a {
+  color: var(--color-primary-soft);
 }
 .home-widget-head .home-sort {
   width: auto;
