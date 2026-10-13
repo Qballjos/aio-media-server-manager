@@ -829,6 +829,7 @@ def _collect_sabnzbd_queue(
             items.append(
                 {
                     "source": "sabnzbd",
+                    "download_id": str(row.get("nzo_id") or ""),
                     "title": row.get("filename") or row.get("name") or "Download",
                     "status": status,
                     "progress": _pct(row.get("percentage")),
@@ -883,6 +884,7 @@ def _collect_nzbget_queue(
             items.append(
                 {
                     "source": "nzbget",
+                    "download_id": str(row.get("NZBID") or ""),
                     "title": row.get("NZBName") or "Download",
                     "status": status,
                     "progress": max(0, min(100, int(round(100 * (1.0 - remaining / total))))),
@@ -927,6 +929,7 @@ def _collect_qbittorrent_queue(
             items.append(
                 {
                     "source": "qbittorrent",
+                    "download_id": str(row.get("hash") or ""),
                     "title": row.get("name") or "Torrent",
                     "status": _QBIT_STATUS.get(state, state),
                     "progress": int(round(float(row.get("progress") or 0) * 100)),
