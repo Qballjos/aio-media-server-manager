@@ -272,7 +272,12 @@ class WizardEngine:
                         and Path(str(selections.get("vpn_config_path"))).is_file()
                     )
                 ),
-                "cloudflare_tunnel_enabled": bool(selections.get("cloudflare_tunnel_enabled")),
+                # Until the wizard saves a choice, show the live setting: a tunnel switched on in
+                # Settings or by AMM_CLOUDFLARE_TUNNEL_ENABLED must not come back unticked, or
+                # finishing the wizard writes false to amm_config.json, which beats the env var.
+                "cloudflare_tunnel_enabled": bool(
+                    selections.get("cloudflare_tunnel_enabled", self._settings.cloudflare_tunnel_enabled)
+                ),
                 "has_cloudflare_token": CloudflareTunnelManager(self._settings).token_present(),
             }
 
@@ -338,7 +343,9 @@ class WizardEngine:
             summary = dict(selections)
             summary.pop("qbittorrent_password", None)
             summary.pop("usenet_password", None)
-            summary["cloudflare_tunnel_enabled"] = bool(selections.get("cloudflare_tunnel_enabled"))
+            summary["cloudflare_tunnel_enabled"] = bool(
+                selections.get("cloudflare_tunnel_enabled", self._settings.cloudflare_tunnel_enabled)
+            )
             summary["has_vpn_config"] = bool(
                 selections.get("has_vpn_config")
                 or (
