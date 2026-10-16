@@ -747,7 +747,7 @@ onUnmounted(() => {
             v-for="service in visibleServices"
             :key="service.name"
             class="service-card glass-card"
-            :class="{ 'is-running': service.state === 'running' || service.state === 'healthy' }"
+            :class="{ 'is-running': service.state === 'running' || service.state === 'healthy', 'has-open-menu': openCardMenu === service.name }"
           >
             <!-- Card Header -->
             <div class="service-header">
