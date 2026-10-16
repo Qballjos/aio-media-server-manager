@@ -9,6 +9,7 @@ import CatalogView from './CatalogView.vue'
 import LogsModal from './LogsModal.vue'
 import HealthModal from './HealthModal.vue'
 import AppSettingsModal from './AppSettingsModal.vue'
+import WallpaperLayer from './WallpaperLayer.vue'
 import { startGuardedInterval } from './pageVisible.js'
 import {
   apiRequest,
@@ -394,8 +395,9 @@ onUnmounted(() => {
 
 <template>
   <div class="app-container">
+    <WallpaperLayer />
     <header class="top-nav">
-      <div class="nav-brand">
+      <div class="nav-brand glass-pill">
         <div class="logo-orb">
           <img
             :src="brandHeaderUrl"
@@ -412,6 +414,35 @@ onUnmounted(() => {
           >{{ versionText }}</span>
         </div>
       </div>
+
+      <nav v-if="authStatus.authenticated && wizardCompleted" class="nav-tabs glass-pill" aria-label="Pages">
+        <RouterLink
+          :to="{ name: 'home', query: route.name === 'home' ? route.query : {} }"
+          class="metric-pill metric-pill-action"
+          :class="{ 'is-active': currentView === 'home' }"
+          title="Home"
+        >
+          Home
+        </RouterLink>
+        <RouterLink
+          :to="{ name: 'catalog', query: route.name === 'catalog' ? route.query : {} }"
+          class="metric-pill metric-pill-action"
+          :class="{ 'is-active': currentView === 'catalog' }"
+          title="Install and manage applications"
+        >
+          Catalog
+        </RouterLink>
+        <RouterLink
+          :to="route.name === 'settings'
+            ? { name: 'settings', params: { section: route.params.section } }
+            : { name: 'settings', params: { section: 'account' } }"
+          class="metric-pill metric-pill-action"
+          :class="{ 'is-active': currentView === 'settings' }"
+          title="Appliance settings"
+        >
+          Settings
+        </RouterLink>
+      </nav>
 
       <div class="nav-metrics">
         <RouterLink
@@ -440,35 +471,6 @@ onUnmounted(() => {
           <span class="metric-label">GPU</span>
           <span class="metric-val font-mono">HW</span>
         </div>
-        <RouterLink
-          v-if="authStatus.authenticated && wizardCompleted"
-          :to="{ name: 'home', query: route.name === 'home' ? route.query : {} }"
-          class="metric-pill metric-pill-action"
-          :class="{ 'is-active': currentView === 'home' }"
-          title="Home"
-        >
-          Home
-        </RouterLink>
-        <RouterLink
-          v-if="authStatus.authenticated && wizardCompleted"
-          :to="{ name: 'catalog', query: route.name === 'catalog' ? route.query : {} }"
-          class="metric-pill metric-pill-action"
-          :class="{ 'is-active': currentView === 'catalog' }"
-          title="Install and manage applications"
-        >
-          Catalog
-        </RouterLink>
-        <RouterLink
-          v-if="authStatus.authenticated && wizardCompleted"
-          :to="route.name === 'settings'
-            ? { name: 'settings', params: { section: route.params.section } }
-            : { name: 'settings', params: { section: 'account' } }"
-          class="metric-pill metric-pill-action"
-          :class="{ 'is-active': currentView === 'settings' }"
-          title="Appliance settings"
-        >
-          Settings
-        </RouterLink>
         <button
           v-if="authStatus.authenticated && currentView === 'catalog'"
           @click="runAutomatedWiring"
@@ -488,7 +490,7 @@ onUnmounted(() => {
         >
           Install
         </button>
-        <div v-if="authStatus.authenticated" class="user-pill">
+        <div v-if="authStatus.authenticated" class="user-pill glass-pill">
           <span class="user-avatar" aria-hidden="true">
             <img
               v-if="authStatus.avatar_url"
@@ -535,6 +537,7 @@ onUnmounted(() => {
         <HomepagePanel
           v-else-if="currentView === 'home'"
           :system-info="systemInfo"
+          :username="authStatus.username || ''"
           @manage="openCatalog"
         />
         <CatalogView

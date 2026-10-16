@@ -62,7 +62,7 @@ def test_public_branding_defaults(tmp_path: Path, monkeypatch):
     data = res.json()
     assert data["title"] == "AIO Media Server Manager"
     assert data["login_message"] == ""
-    assert data["accent_color"] == "#f97316"
+    assert data["accent_color"] == "#0a6cff"
     assert data["header_url"].endswith("logo-aio-media-manager.png")
     assert data["slots"]["favicon"]["recommended"]
 
@@ -82,7 +82,7 @@ def test_brand_title_and_image_upload(tmp_path: Path, monkeypatch):
 
     reset_accent = client.patch("/api/branding", json={"accent_color": "default"}, headers=headers)
     assert reset_accent.status_code == 200
-    assert reset_accent.json()["accent_color"] == "#f97316"
+    assert reset_accent.json()["accent_color"] == "#0a6cff"
 
     message = client.patch(
         "/api/branding",

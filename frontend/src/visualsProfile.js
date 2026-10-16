@@ -11,6 +11,7 @@ import {
   setWallpaperPreference,
 } from './background.js'
 import { getThemePreference, setThemePreference } from './theme.js'
+import { applyGlass, glassProfileBody } from './glass.js'
 import {
   cacheHomepageWidgetDebug,
   readHomepageWidgetDebug,
@@ -38,6 +39,11 @@ export async function saveThemeToProfile(theme) {
 export async function saveWallpaperToProfile(wallpaper) {
   setWallpaperPreference(wallpaper)
   return patchVisuals({ wallpaper })
+}
+
+export async function saveGlassToProfile(values) {
+  applyGlass(values)
+  return patchVisuals(glassProfileBody())
 }
 
 export async function saveHomepageWidgetDebugToProfile(enabled) {

@@ -5,7 +5,7 @@ import { apiRequest, readJson } from './api.js'
 
 const DEFAULT_TITLE = 'AIO Media Server Manager'
 const DEFAULT_LOGO = '/logo-aio-media-manager.png'
-export const DEFAULT_ACCENT = '#f97316'
+export const DEFAULT_ACCENT = '#0a6cff'
 const ACCENT_CACHE_KEY = 'amm-accent'
 
 export const brandTitle = ref(DEFAULT_TITLE)
@@ -17,12 +17,13 @@ export const brandLoginMessage = ref('')
 export const brandSlots = ref({})
 
 export const ACCENT_PRESETS = [
+  ['#0a6cff', 'Blue'],
+  ['#5aa2ff', 'Sky'],
   ['#f97316', 'Orange'],
   ['#f59e0b', 'Amber'],
   ['#ef4444', 'Red'],
   ['#ec4899', 'Pink'],
   ['#8b5cf6', 'Violet'],
-  ['#3b82f6', 'Blue'],
   ['#06b6d4', 'Cyan'],
   ['#10b981', 'Emerald'],
 ]

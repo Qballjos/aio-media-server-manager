@@ -5,7 +5,8 @@ import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
-import { HOME_BLOCKS, homeLayout, saveHomeLayout } from './homeLayout.js'
+import { HOME_BLOCKS, homeHidden, homeLayout, homeSizes, saveHomeHidden, saveHomeLayout, saveHomeSizes } from './homeLayout.js'
+import HomeBlockTools from './HomeBlockTools.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { formatUptime } from './format.js'
@@ -13,6 +14,7 @@ import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepage
 
 const props = defineProps({
   systemInfo: { type: Object, default: null },
+  username: { type: String, default: '' },
 })
 const emit = defineEmits(['manage'])
 const route = useRoute()
@@ -184,8 +186,45 @@ const layout = computed(() => homeLayout.value)
 const dragBlock = ref('')
 const BLOCK_LABELS = Object.fromEntries(HOME_BLOCKS)
 
-function blockStyle(id) {
-  return { order: layout.value.indexOf(id) }
+function isHidden(id) {
+  return homeHidden.value.includes(id)
+}
+
+function toggleHidden(id) {
+  saveHomeHidden(isHidden(id) ? homeHidden.value.filter((item) => item !== id) : [...homeHidden.value, id])
+}
+
+/** Order, hidden state and — in edit mode — the drag handlers of a block; bound with v-bind. */
+function blockProps(id) {
+  const props = {
+    style: { order: layout.value.indexOf(id), '--span': spans.value[id] || 12, '--span-md': (spans.value[id] || 12) === 12 ? 12 : 6 },
+    class: { 'is-hidden': isHidden(id), 'is-dragging': dragBlock.value === id, 'is-wide': (spans.value[id] || 12) === 12 },
+  }
+  if (editing.value) {
+    Object.assign(props, {
+      draggable: true,
+      onDragstart: () => (dragBlock.value = id),
+      onDragend: () => (dragBlock.value = ''),
+      onDragover: (event) => event.preventDefault(),
+      onDrop: (event) => {
+        event.preventDefault()
+        dropBlock(id)
+      },
+    })
+  }
+  return props
+}
+
+function toolsFor(id) {
+  const idx = layout.value.indexOf(id)
+  return {
+    label: BLOCK_LABELS[id],
+    hidden: isHidden(id),
+    first: idx === 0,
+    last: idx === layout.value.length - 1,
+    sizable: CARD_IDS.includes(id),
+    size: homeSizes.value[id] || 0,
+  }
 }
 
 function moveBlock(id, delta) {
@@ -206,23 +245,100 @@ function dropBlock(target) {
   saveHomeLayout(list)
 }
 
-/** Shown outside edit mode only when there is something in it (or it is still loading). */
+/** Shown outside edit mode only when not hidden and there is something in it (or it is still loading). */
 const visibleBlocks = computed(() => {
-  const show = (has, pending) => has || pending || editing.value || widgetDebug.value
   const s = snapshot.value
-  return {
-    recent: show(s.recent.length, hasMediaServer.value && isPending('recent')),
-    requests: show(s.requests.length, s.seerr.available && isPending('requests')),
-    trending: show(s.trending.length, s.seerr.available && isPending('trending')),
-    calendar: show(s.calendar.length, hasCalendarSource.value && isPending('calendar')),
-    downloads: show(s.downloads.length || downloadPause.value.paused, false),
+  const has = {
+    apps: true,
+    search: true,
+    recent: s.recent.length || (hasMediaServer.value && isPending('recent')),
+    requests: s.requests.length || (s.seerr.available && isPending('requests')),
+    trending: s.trending.length || (s.seerr.available && isPending('trending')),
+    calendar: s.calendar.length || (hasCalendarSource.value && isPending('calendar')),
+    downloads: s.downloads.length || downloadPause.value.paused,
   }
+  return Object.fromEntries(HOME_BLOCKS.map(([id]) => [id, editing.value || widgetDebug.value || (!!has[id] && !isHidden(id))]))
 })
-// Downloads sits next to the calendar on wide screens only when they are neighbours.
-const pairCalendar = computed(
-  () => visibleBlocks.value.calendar && visibleBlocks.value.downloads
-    && Math.abs(layout.value.indexOf('calendar') - layout.value.indexOf('downloads')) === 1,
-)
+// Cards pack into rows of 12 columns. A card with a chosen width (4, 6 or 12) keeps it; the
+// others share what is left of their row. Other blocks always take a full row.
+const CARD_IDS = ['recent', 'calendar', 'downloads', 'requests', 'trending']
+const SIZE_STEPS = [0, 4, 6, 12]
+const spans = computed(() => {
+  const out = {}
+  const fixed = homeSizes.value
+  let row = []
+  let used = 0
+  const flush = () => {
+    const autos = row.filter((id) => !fixed[id])
+    const free = 12 - row.reduce((sum, id) => sum + (fixed[id] || 0), 0)
+    const per = autos.length ? Math.max(3, Math.floor(free / autos.length)) : 0
+    for (const id of row) out[id] = fixed[id] || per
+    row = []
+    used = 0
+  }
+  for (const id of layout.value) {
+    if (!visibleBlocks.value[id]) continue
+    if (!CARD_IDS.includes(id)) {
+      flush()
+      continue
+    }
+    const want = fixed[id] || 4
+    if (used + want > 12) flush()
+    row.push(id)
+    used += want
+  }
+  flush()
+  return out
+})
+
+function cycleSize(id) {
+  const current = homeSizes.value[id] || 0
+  const next = SIZE_STEPS[(SIZE_STEPS.indexOf(current) + 1) % SIZE_STEPS.length]
+  const sizes = { ...homeSizes.value }
+  if (next) sizes[id] = next
+  else delete sizes[id]
+  saveHomeSizes(sizes)
+}
+
+const todayLabel = computed(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  const part = hour < 6 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const name = props.username ? `, ${props.username}` : ''
+  return `${part}${name}.`
+})
+/** One line under the greeting: what is moving and what needs a look. */
+const heroSummary = computed(() => {
+  const parts = []
+  const n = movingDownloads.value.length
+  if (downloadPause.value.paused) parts.push(pausedLabel.value)
+  else if (n) parts.push(`${n} download${n === 1 ? '' : 's'} on the way`)
+  const sick = (snapshot.value.apps || []).filter((app) => app.sick).map((app) => app.display_name)
+  if (sick.length) parts.push(`${sick.join(', ')} need${sick.length === 1 ? 's' : ''} a look`)
+  if (!parts.length) parts.push(snapshot.value.apps?.length ? 'Everything is running.' : 'Nothing running yet.')
+  return parts.join('. ').replace(/\.?$/, '.')
+})
+const totalSpeed = computed(() => {
+  // SABnzbd repeats the queue speed on every slot, torrent clients report per torrent: max per Usenet source, sum for the rest.
+  const bySource = {}
+  for (const item of movingDownloads.value) {
+    const bps = Number(item.speed_bps) || 0
+    const key = String(item.source || '')
+    bySource[key] = key === 'sabnzbd' || key === 'nzbget' ? Math.max(bySource[key] || 0, bps) : (bySource[key] || 0) + bps
+  }
+  return formatSpeed(Object.values(bySource).reduce((sum, bps) => sum + bps, 0))
+})
+const mediaServerLink = computed(() => {
+  const app = (snapshot.value.apps || []).find((item) => item.name === 'jellyfin' || item.name === 'plex')
+  if (!app) return null
+  return { name: app.name, label: `Open ${app.display_name}`, url: publicAppUrl(app.name, app.port, app.url || '') }
+})
+function chipDay(dt) {
+  return dt.toLocaleDateString(undefined, { weekday: 'short' }).replace('.', '').toUpperCase()
+}
+function isToday(dt) {
+  return dayKey(dt) === dayKey(new Date())
+}
 const widgetNotes = computed(() => snapshot.value.widgets || [])
 const CATEGORY_LABELS = {
   media: 'Media',
@@ -264,6 +380,13 @@ const launcherGroups = computed(() => {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
   })
 })
+// The dock shows every app in group order; anything busy or unhealthy gets a line under it.
+const dockApps = computed(() => launcherGroups.value.flatMap((group) => group.apps))
+const dockNotes = computed(() =>
+  dockApps.value
+    .filter((app) => app.sick || ['queued', 'installing', 'configuring'].includes(app.state))
+    .map((app) => [`${app.display_name}: ${app.state_label || app.state}`, app.progress_message].filter(Boolean).join(' — ')),
+)
 
 const recentItems = computed(() =>
   (snapshot.value.recent || []).map((item) => withPublicUrls(item, item.source)),
@@ -547,10 +670,16 @@ const requestsRail = ref(null)
 const trendingRail = ref(null)
 
 function defaultCalView() {
-  const width = typeof window === 'undefined' ? 1024 : window.innerWidth
-  if (width < 768) return 'day'
-  return 'week'
+  return 'list'
 }
+
+watch(
+  () => spans.value.calendar,
+  (span) => {
+    if (!calViewPicked.value) calView.value = span === 12 ? 'week' : 'list'
+  },
+  { immediate: true },
+)
 
 function setCalView(view) {
   calViewPicked.value = true
@@ -639,9 +768,10 @@ const calendarRangeLabel = computed(() => {
   if (calView.value === 'month') {
     return calCursor.value.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   }
-  if (calView.value === 'day' || calView.value === 'list') {
+  if (calView.value === 'day') {
     return calCursor.value.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })
   }
+  if (calView.value === 'list' && calendarListInfo.value.label) return calendarListInfo.value.label
   const start = startOfWeek(calCursor.value)
   const end = addDays(start, 6)
   const opts = { day: 'numeric', month: 'short' }
@@ -732,13 +862,52 @@ const calendarWeeks = computed(() => {
   return weeks
 })
 
-const calendarList = computed(() => {
-  const start = calView.value === 'list' ? startOfWeek(calCursor.value) : calCursor.value
-  const end = calView.value === 'list' ? addDays(start, 7) : addDays(calCursor.value, 1)
-  return filteredCalendar.value
+const calendarListInfo = computed(() => {
+  const rows = filteredCalendar.value
     .map((item) => ({ item, dt: parseWhen(item.when) }))
-    .filter((row) => row.dt && row.dt >= start && row.dt < end)
+    .filter((row) => row.dt)
     .sort((a, b) => a.dt - b.dt)
+  if (calView.value !== 'list') {
+    const end = addDays(calCursor.value, 1)
+    return { rows: rows.filter((row) => row.dt >= calCursor.value && row.dt < end), label: '' }
+  }
+  const weekStart = startOfWeek(calCursor.value)
+  const thisWeek = dayKey(weekStart) === dayKey(startOfWeek(new Date()))
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const start = thisWeek ? today : weekStart
+  const end = addDays(weekStart, 7)
+  const inWeek = groupSameDay(rows.filter((row) => row.dt >= start && row.dt < end))
+  if (inWeek.length || !thisWeek) return { rows: inWeek, label: thisWeek ? 'This week' : '' }
+  // ponytail: nothing left this week → the next few releases instead of an empty card
+  return { rows: groupSameDay(rows.filter((row) => row.dt >= start)).slice(0, 8), label: 'Coming up' }
+})
+
+/** Episodes of one series on one day collapse into a single row ("S03E01 – S03E05 · 5 episodes"). */
+function groupSameDay(rows) {
+  const out = []
+  for (const row of rows) {
+    const prev = out[out.length - 1]
+    if (prev && prev.item.title === row.item.title && dayKey(prev.dt) === dayKey(row.dt)) {
+      prev.count += 1
+      prev.last = row
+      continue
+    }
+    out.push({ ...row, count: 1, last: row })
+  }
+  return out.map((row) => {
+    if (row.count === 1) return row
+    const code = (r) => String(r.item.detail || '').split(' ')[0]
+    const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
+    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes` } }
+  })
+}
+const calendarList = computed(() => calendarListInfo.value.rows)
+const calOnToday = computed(() => {
+  const now = new Date()
+  if (calView.value === 'month') return calCursor.value.getMonth() === now.getMonth() && calCursor.value.getFullYear() === now.getFullYear()
+  if (calView.value === 'day') return dayKey(calCursor.value) === dayKey(now)
+  return dayKey(startOfWeek(calCursor.value)) === dayKey(startOfWeek(now))
 })
 
 function shiftCalendar(direction) {
@@ -827,16 +996,10 @@ onUnmounted(() => {
 <template>
   <section class="home-shell">
     <div v-if="loading" class="home-skeleton" role="status" aria-label="Loading Home">
-      <div class="home-launcher-groups" aria-hidden="true">
-        <section v-for="n in 4" :key="n" class="home-launcher-group glass-card">
-          <span class="home-skel home-skel-label"></span>
-          <div class="home-launcher">
-            <span v-for="m in (n === 2 ? 2 : 1)" :key="m" class="home-skel-app">
-              <span class="home-skel home-skel-icon"></span>
-              <span class="home-skel home-skel-text"></span>
-            </span>
-          </div>
-        </section>
+      <div class="home-dock glass-pill" aria-hidden="true">
+        <div class="home-dock-row">
+          <span v-for="n in 8" :key="n" class="home-skel home-skel-icon"></span>
+        </div>
       </div>
       <article class="home-widget glass-card" aria-hidden="true">
         <span class="home-skel home-skel-label"></span>
@@ -859,78 +1022,53 @@ onUnmounted(() => {
 
     <template v-else-if="!loading">
       <div class="home-toolbar">
+        <p v-if="editing" class="home-muted">Drag a panel onto another to swap places, or use its arrows. Hidden panels stay dimmed here and disappear when you are done.</p>
         <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': editing }" :aria-pressed="editing" @click="editing = !editing">
           {{ editing ? 'Done' : 'Edit layout' }}
         </button>
       </div>
-      <section v-if="editing" class="home-arrange glass-card" aria-label="Arrange Home">
-        <h3>Arrange Home</h3>
-        <p class="home-muted">Drag a row or use the arrows. Outside this mode, blocks without activity are hidden.</p>
-        <ol class="home-arrange-list">
-          <li
-            v-for="(id, idx) in layout"
-            :key="id"
-            draggable="true"
-            :class="{ 'is-dragging': dragBlock === id }"
-            @dragstart="dragBlock = id"
-            @dragend="dragBlock = ''"
-            @dragover.prevent
-            @drop.prevent="dropBlock(id)"
+      <div class="home-blocks" :class="{ 'is-editing': editing }">
+      <nav v-if="visibleBlocks.apps" class="home-block home-dock glass-pill" v-bind="blockProps('apps')" aria-label="Apps">
+        <HomeBlockTools v-if="editing" v-bind="toolsFor('apps')" @move="moveBlock('apps', $event)" @toggle="toggleHidden('apps')" />
+        <div class="home-dock-row">
+          <component
+            :is="launcherOpen(app) ? 'a' : 'span'"
+            v-for="app in dockApps"
+            :key="app.name"
+            class="home-app"
+            :class="{ 'is-down': app.state !== 'running' && !app.sick, 'is-sick': app.sick, 'is-busy': ['queued', 'installing', 'configuring'].includes(app.state) }"
+            v-bind="launcherOpen(app) ? { href: app.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
+            :title="launcherTitle(app)"
+            :aria-label="launcherTitle(app)"
+            @click="launcherOpen(app) && openApp($event, app.name, app.url)"
           >
-            <span class="home-arrange-handle" aria-hidden="true">⠿</span>
-            <span class="home-arrange-name">{{ BLOCK_LABELS[id] }}</span>
-            <button type="button" class="ui-btn ui-btn-ghost" :disabled="idx === 0" :aria-label="`Move ${BLOCK_LABELS[id]} up`" @click="moveBlock(id, -1)">↑</button>
-            <button type="button" class="ui-btn ui-btn-ghost" :disabled="idx === layout.length - 1" :aria-label="`Move ${BLOCK_LABELS[id]} down`" @click="moveBlock(id, 1)">↓</button>
-          </li>
-        </ol>
-      </section>
-      <div class="home-blocks" :class="{ 'is-editing': editing, 'is-pair': pairCalendar }">
-      <div class="home-launcher-groups" :style="blockStyle('apps')">
-        <section v-for="group in launcherGroups" :key="group.id" class="home-launcher-group glass-card">
-          <h3 class="home-launcher-label">{{ group.label }}</h3>
-          <div class="home-launcher">
-            <component
-              :is="launcherOpen(app) ? 'a' : 'div'"
-              v-for="app in group.apps"
-              :key="app.name"
-              class="home-app"
-              :class="{ 'is-down': app.state !== 'running' && !app.sick, 'is-sick': app.sick, 'is-busy': ['queued', 'installing', 'configuring'].includes(app.state) }"
-              v-bind="launcherOpen(app) ? { href: app.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
-              :title="launcherTitle(app)"
-              @click="launcherOpen(app) && openApp($event, app.name, app.url)"
-            >
-              <img
-                v-if="appIconSrc(app.name)"
-                :src="appIconSrc(app.name)"
-                :alt="app.display_name"
-                class="home-app-icon"
-              />
-              <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
-              <span class="home-app-name">{{ app.display_name }}</span>
-              <span v-if="app.state_label" class="home-app-state">{{ app.state_label }}</span>
-              <span v-if="app.progress_message" class="home-app-progress" aria-live="polite">{{ app.progress_message }}</span>
-              <small v-if="app.progress_updated_at && ['queued', 'installing', 'configuring'].includes(app.state)" class="home-app-updated">
-                Last progress {{ formatUptime(progressNow - app.progress_updated_at) }} ago
-              </small>
-            </component>
-          </div>
-        </section>
-      </div>
+            <img v-if="appIconSrc(app.name)" :src="appIconSrc(app.name)" alt="" class="home-app-icon" />
+            <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
+          </component>
+        </div>
+        <p v-if="dockNotes.length" class="home-dock-notes" aria-live="polite">{{ dockNotes.join(' · ') }}</p>
+      </nav>
 
-      <form class="home-search glass-card" :style="blockStyle('search')" @submit.prevent="runSearch">
-        <label class="home-search-label" for="home-search">Search</label>
-        <div class="home-search-row">
+      <section v-if="visibleBlocks.search" class="home-block home-hero" v-bind="blockProps('search')">
+        <HomeBlockTools v-if="editing" v-bind="toolsFor('search')" @move="moveBlock('search', $event)" @toggle="toggleHidden('search')" />
+        <span class="home-hero-date">{{ todayLabel }}</span>
+        <h2 class="home-hero-title">{{ greeting }}</h2>
+        <p class="home-hero-sub">{{ heroSummary }}</p>
+        <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          <label class="home-sr" for="home-search">Search</label>
           <input
             id="home-search"
             v-model="query"
-            class="ui-input"
+            class="home-search-input"
             type="search"
             autocomplete="off"
             :placeholder="snapshot.seerr.available ? 'Search movies and TV to request' : 'Search Sonarr and Radarr'"
             @input="onQueryInput"
           />
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="searching">Search</button>
-        </div>
+          <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :disabled="searching">Search</button>
+        </form>
+        <div class="home-hero-results">
         <p v-if="notice" class="home-notice">{{ notice }}</p>
         <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
         <p v-else-if="!snapshot.seerr.available && !notice" class="home-muted">
@@ -959,15 +1097,20 @@ onUnmounted(() => {
             </button>
           </li>
         </ul>
-      </form>
+        </div>
+      </section>
 
       <div v-if="showWidgets" class="home-widgets">
-        <article v-if="visibleBlocks.recent" class="home-widget glass-card home-widget-rail" :style="blockStyle('recent')">
+        <article v-if="visibleBlocks.recent" class="home-block home-card glass-card" v-bind="blockProps('recent')">
+          <HomeBlockTools v-if="editing" v-bind="toolsFor('recent')" @move="moveBlock('recent', $event)" @toggle="toggleHidden('recent')" @resize="cycleSize('recent')" />
           <div class="home-rail-head">
             <h3>Recently added</h3>
-            <div v-if="snapshot.recent.length" class="home-rail-nav">
-              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous recently added" @click="scrollRail('recent', -1)">‹</button>
-              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next recently added" @click="scrollRail('recent', 1)">›</button>
+            <div class="home-rail-tools">
+              <a v-if="mediaServerLink" class="home-card-link" :href="mediaServerLink.url" target="_blank" rel="noopener noreferrer" @click="openApp($event, mediaServerLink.name, mediaServerLink.url)">{{ mediaServerLink.label }}</a>
+              <div v-if="snapshot.recent.length" class="home-rail-nav">
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous recently added" @click="scrollRail('recent', -1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next recently added" @click="scrollRail('recent', 1)">›</button>
+              </div>
             </div>
           </div>
           <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail">
@@ -1000,7 +1143,8 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="visibleBlocks.requests" class="home-widget glass-card home-widget-rail" :style="blockStyle('requests')">
+        <article v-if="visibleBlocks.requests" class="home-block home-card glass-card" v-bind="blockProps('requests')">
+          <HomeBlockTools v-if="editing" v-bind="toolsFor('requests')" @move="moveBlock('requests', $event)" @toggle="toggleHidden('requests')" @resize="cycleSize('requests')" />
           <div class="home-rail-head">
             <h3>Requests</h3>
             <div class="home-rail-tools">
@@ -1009,13 +1153,14 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">Movies</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">Series</button>
               </div>
-              <div v-if="requestItems.length" class="home-rail-nav">
+              <a v-if="seerrHomeUrl" class="home-card-link" :href="seerrHomeUrl" target="_blank" rel="noopener noreferrer" @click="openApp($event, 'seerr', seerrHomeUrl)">Open Seerr</a>
+              <div v-if="requestItems.length && spans.requests === 12" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
               </div>
             </div>
           </div>
-          <div v-if="requestItems.length" ref="requestsRail" class="home-rail">
+          <div v-if="requestItems.length && spans.requests === 12" ref="requestsRail" class="home-rail">
             <a
               v-for="(item, idx) in requestItems"
               :key="idx"
@@ -1028,18 +1173,32 @@ onUnmounted(() => {
               <span class="home-tile-art">
                 <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
-                <span
-                  class="home-status-dot"
-                  :class="requestStatusDot(item).cls"
-                  :title="requestStatusDot(item).label"
-                  role="img"
-                  :aria-label="requestStatusDot(item).label"
-                ></span>
+                <span class="home-status-dot" :class="requestStatusDot(item).cls" :title="requestStatusDot(item).label" role="img" :aria-label="requestStatusDot(item).label"></span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
-              <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
+              <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
             </a>
           </div>
+          <ul v-else-if="requestItems.length" class="home-req-list">
+            <li v-for="(item, idx) in requestItems.slice(0, 6)" :key="idx">
+              <a
+                class="home-req"
+                :href="item.url || seerrHomeUrl || undefined"
+                :target="item.url || seerrHomeUrl ? '_blank' : undefined"
+                rel="noopener noreferrer"
+                @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
+              >
+                <span class="home-req-art">
+                  <img v-if="item.poster" :src="item.poster" alt="" />
+                  <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                </span>
+                <span class="home-req-body">
+                  <strong>{{ item.title }}</strong>
+                  <span class="home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}<template v-if="item.detail"> · {{ item.detail }}</template></span>
+                </span>
+              </a>
+            </li>
+          </ul>
           <template v-else-if="isPending('requests')">
             <div class="home-rail" aria-hidden="true">
               <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
@@ -1057,7 +1216,8 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="visibleBlocks.trending" class="home-widget glass-card home-widget-rail" :style="blockStyle('trending')">
+        <article v-if="visibleBlocks.trending" class="home-block home-card glass-card" v-bind="blockProps('trending')">
+          <HomeBlockTools v-if="editing" v-bind="toolsFor('trending')" @move="moveBlock('trending', $event)" @toggle="toggleHidden('trending')" @resize="cycleSize('trending')" />
           <div class="home-rail-head">
             <h3>Trending</h3>
             <div class="home-rail-tools">
@@ -1090,7 +1250,7 @@ onUnmounted(() => {
               <button
                 v-if="item.can_request"
                 type="button"
-                class="ui-btn ui-btn-primary home-tile-request"
+                class="ui-btn ui-btn-ghost home-tile-request"
                 :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
                 @click="requestTitle(item)"
               >
@@ -1115,27 +1275,27 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="visibleBlocks.calendar" class="home-widget glass-card home-widget-calendar" :style="blockStyle('calendar')">
+        <article v-if="visibleBlocks.calendar" class="home-block home-card glass-card home-card-calendar" v-bind="blockProps('calendar')">
+          <HomeBlockTools v-if="editing" v-bind="toolsFor('calendar')" @move="moveBlock('calendar', $event)" @toggle="toggleHidden('calendar')" @resize="cycleSize('calendar')" />
           <div class="cal-head">
-            <div class="cal-nav">
-              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" aria-label="Previous">‹</button>
-              <h3>{{ calendarRangeLabel }}</h3>
-              <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" aria-label="Next">›</button>
-              <button type="button" class="ui-btn ui-btn-ghost" @click="goToday">Today</button>
-            </div>
+            <h3>{{ calendarRangeLabel }}</h3>
             <div class="cal-tools">
-              <button type="button" class="ui-btn ui-btn-ghost" @click="loadSnapshot(true)">Refresh</button>
+              <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">Today</button>
               <select v-model="calFilter" class="ui-input cal-select" aria-label="Filter calendar">
                 <option value="all">All</option>
                 <option value="tv">TV</option>
                 <option value="movies">Movies</option>
                 <option value="missing">Not downloaded</option>
               </select>
-              <div class="cal-views">
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'month' }" @click="setCalView('month')">Month</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'week' }" @click="setCalView('week')">Week</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'day' }" @click="setCalView('day')">Day</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': calView === 'list' }" @click="setCalView('list')">List</button>
+              <select :value="calView" class="ui-input cal-select" aria-label="Calendar view" @change="setCalView($event.target.value)">
+                <option value="list">List</option>
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+              </select>
+              <div class="cal-nav">
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" aria-label="Previous">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" aria-label="Next">›</button>
               </div>
             </div>
           </div>
@@ -1145,10 +1305,12 @@ onUnmounted(() => {
             </div>
             <p v-else-if="!calendarList.length" class="home-muted">Nothing in this range.</p>
             <ul v-else>
-              <li v-for="(row, idx) in calendarList" :key="idx" class="cal-event" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file }">
-                <span class="cal-event-time">{{ formatEventTime(row.item.when) }}</span>
-                <strong>{{ row.item.title }}</strong>
-                <span v-if="row.item.detail" class="cal-event-detail">{{ row.item.detail }}</span>
+              <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
+                <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
+                <span class="cal-row-body">
+                  <strong>{{ row.item.title }}</strong>
+                  <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
+                </span>
               </li>
             </ul>
           </div>
@@ -1208,9 +1370,11 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="visibleBlocks.downloads" class="home-widget glass-card home-widget-downloads" :style="blockStyle('downloads')">
+        <article v-if="visibleBlocks.downloads" class="home-block home-card glass-card home-card-downloads" v-bind="blockProps('downloads')">
+          <HomeBlockTools v-if="editing" v-bind="toolsFor('downloads')" @move="moveBlock('downloads', $event)" @toggle="toggleHidden('downloads')" @resize="cycleSize('downloads')" />
           <div class="home-widget-head">
             <h3>Downloading</h3>
+            <span v-if="movingDownloads.length && !downloadPause.paused" class="home-card-stat">{{ movingDownloads.length }}<template v-if="totalSpeed"> · {{ totalSpeed }}</template></span>
             <select v-if="movingDownloads.length > 1" v-model="downloadSort" class="ui-input home-sort" aria-label="Sort downloads">
               <option value="queue">Queue order</option>
               <option value="desc">Most done first</option>
@@ -1227,18 +1391,23 @@ onUnmounted(() => {
                 <option value="180">3 hours</option>
                 <option value="until">Until I resume</option>
               </select>
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(true)">Pause all</button>
+              <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon" :disabled="pauseBusy" title="Pause all downloads" aria-label="Pause all downloads" @click="setDownloadsPaused(true)">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+              </button>
             </div>
           </div>
           <ul v-if="movingDownloads.length">
             <li v-for="(item, idx) in movingDownloads" :key="idx">
-              <strong>{{ item.title }}</strong>
-              <span class="home-muted">
-                {{ item.source }} · {{ item.status }} · {{ item.progress }}%
+              <span class="home-dl-row">
+                <strong>{{ item.title }}</strong>
+                <span class="home-dl-pct font-mono">{{ item.progress }}%</span>
+              </span>
+              <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
+              <span class="home-muted home-dl-meta">
+                {{ item.source }} · {{ item.status }}
                 <span v-if="formatSpeed(item.speed_bps)" class="home-speed"> · {{ formatSpeed(item.speed_bps) }}</span>
                 <span v-if="item.eta"> · {{ item.eta }}</span>
               </span>
-              <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
             </li>
           </ul>
           <p v-else class="home-muted">No active downloads.</p>
@@ -1320,27 +1489,11 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   animation: home-skel-pulse 1.4s ease-in-out infinite;
 }
-.home-skel-label {
-  width: 5.5rem;
-  height: 0.7rem;
-  margin: 0 0 0.75rem;
-}
-.home-skel-app {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  width: 6.35rem;
-  padding: 0.55rem 0.35rem;
-}
 .home-skel-icon {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 0.65rem;
-}
-.home-skel-text {
-  width: 4.2rem;
-  height: 0.7rem;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 15px;
+  flex: 0 0 auto;
 }
 .home-skel-poster {
   flex: 0 0 7.25rem;
@@ -1374,126 +1527,188 @@ onUnmounted(() => {
   gap: 0.75rem;
   justify-items: start;
 }
-.home-launcher-groups {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: 0.75rem;
-}
-.home-launcher-group.glass-card {
-  flex: 0 1 auto;
-  width: auto;
+/* The dock: one glass pill of app tiles that stays at the bottom of the window while you scroll. */
+.home-dock {
+  position: sticky;
+  bottom: 1rem;
+  z-index: 5;
+  justify-self: center;
+  margin-top: 1rem;
   max-width: 100%;
-  min-width: 0;
-  padding: 0.7rem 0.8rem 0.8rem;
-  overflow: visible;
-}
-.home-launcher-label {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  margin: 0 0 0.5rem;
-}
-.home-launcher {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 0.45rem;
-}
-.home-app {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  width: 6.35rem;
-  flex: 0 0 6.35rem;
-  padding: 0.55rem 0.35rem;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
+  gap: 0.3rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 2rem;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+}
+.home-dock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.15rem;
+  scrollbar-width: none;
+}
+.home-dock-row::-webkit-scrollbar {
+  display: none;
+}
+.home-app {
+  position: relative;
+  flex: 0 0 auto;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
   color: inherit;
   text-decoration: none;
-  min-width: 0;
+  transition: transform 0.2s, background 0.2s;
 }
 .home-app:hover {
-  border-color: var(--border-hover);
+  transform: translateY(-3px) scale(1.06);
+  background: var(--bg-surface-elevated);
+}
+/* Status dot on the tile's corner: green running, grey stopped, amber busy, red unhealthy. */
+.home-app::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.8);
 }
 .home-app.is-down {
   opacity: 0.55;
   cursor: default;
 }
 .home-app.is-down:hover {
-  border-color: transparent;
+  transform: none;
 }
-.home-app.is-busy {
-  width: 10.5rem;
-  flex-basis: 10.5rem;
-  opacity: 1;
+.home-app.is-down::after {
+  background: var(--text-dim);
 }
-.home-app-progress,
-.home-app-updated {
-  text-align: center;
-  overflow-wrap: anywhere;
-  font-size: 0.7rem;
-  line-height: 1.4;
-  color: var(--text-muted);
+.home-app.is-busy::after {
+  background: var(--color-warning);
+  animation: home-skel-pulse 1.4s ease-in-out infinite;
 }
-.home-app-updated {
-  font-size: 0.65rem;
+.home-app.is-sick {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning);
 }
-.home-notice-link {
-  margin-left: 0.35rem;
-  text-decoration: underline;
-}
-.home-app.is-sick,
-.home-app.is-sick:hover {
-  border-color: rgba(239, 68, 68, 0.85);
-  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
-}
-.home-app.is-sick .home-app-state {
-  color: var(--color-danger-fg);
+.home-app.is-sick::after {
+  background: var(--color-danger);
 }
 .home-app-icon,
 .home-app-fallback {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 0.65rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.5rem;
   object-fit: contain;
 }
 .home-app-fallback {
   display: grid;
   place-items: center;
+  font-weight: 700;
   background: var(--bg-surface-elevated);
-  font-weight: 600;
 }
-.home-app-name {
-  font-size: 0.82rem;
+.home-dock-notes {
+  margin: 0;
+  padding: 0 0.6rem 0.2rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
   text-align: center;
-  line-height: 1.2;
 }
-.home-app-state {
-  font-size: 0.7rem;
-  color: var(--text-dim);
+.home-notice-link {
+  margin-left: 0.35rem;
+  text-decoration: underline;
 }
-.home-search {
-  padding: 1rem 1.2rem;
-  display: grid;
-  gap: 0.65rem;
+/* Hero: date, greeting and the search pill, centred like the mockup. */
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.55rem;
+  padding: 0.75rem 0 0.25rem;
 }
-.home-search-label {
-  font-size: 0.78rem;
-  text-transform: uppercase;
+.home-hero-date {
+  font-size: 0.8rem;
+  font-weight: 700;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
-.home-search-row {
-  display: flex;
-  gap: 0.65rem;
-  flex-wrap: wrap;
+.home-hero-title {
+  margin: 0;
+  font-size: clamp(1.9rem, 4vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  color: var(--text-heading);
 }
-.home-search-row .ui-input {
-  flex: 1 1 12rem;
+.home-hero-sub {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.home-search-pill {
+  width: 100%;
+  max-width: 620px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: 3.5rem;
+  margin-top: 0.4rem;
+  padding: 0 0.5rem 0 1.25rem;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+}
+.home-search-pill svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.home-search-input {
+  flex: 1;
   min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1rem;
+}
+.home-search-input::placeholder {
+  color: var(--text-dim);
+}
+.home-search-btn {
+  min-height: 2.6rem;
+  padding: 0 1.1rem;
+}
+.home-hero-results {
+  width: 100%;
+  max-width: 720px;
+  text-align: left;
+  display: grid;
+  gap: 0.5rem;
+}
+.home-hero-results:empty {
+  display: none;
+}
+.home-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 .home-notice {
   color: var(--color-info);
@@ -1551,117 +1766,139 @@ onUnmounted(() => {
 }
 .home-blocks {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.25rem;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.15rem;
 }
 .home-blocks > *,
 .home-widgets > * {
   grid-column: 1 / -1;
   min-width: 0;
+  position: relative;
 }
 /* The widgets join the block grid so every block can be ordered against every other. */
 .home-widgets {
   display: contents;
 }
-.home-blocks.is-editing .glass-card,
-.home-blocks.is-editing .home-launcher-groups {
+/* Cards next to each other share a row; the span comes from the layout (blockProps). */
+@media (min-width: 720px) {
+  .home-blocks .home-card {
+    grid-column: span var(--span-md, 12);
+  }
+}
+@media (min-width: 1200px) {
+  .home-blocks .home-card {
+    grid-column: span var(--span, 12);
+  }
+}
+/* Edit mode: the whole block is the drag surface; its contents go inert so a click cannot open an app. */
+.home-blocks.is-editing .home-block {
   outline: 1px dashed rgba(var(--color-primary-rgb), 0.45);
   outline-offset: 3px;
+  cursor: grab;
+  transition: opacity 0.2s;
 }
-@media (min-width: 1600px) {
-  .home-blocks {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    gap: 1.2rem 1.25rem;
-  }
-  .home-launcher-groups {
-    gap: 0.9rem;
-  }
-  .home-blocks.is-pair .home-widget-calendar {
-    grid-column: span 8;
-  }
-  .home-blocks.is-pair .home-widget-downloads {
-    grid-column: span 4;
-    align-self: stretch;
-  }
+.home-blocks.is-editing .home-block > :not(.home-block-tools) {
+  pointer-events: none;
+}
+.home-blocks.is-editing .home-block :is(.home-rail-tools, .home-rail-nav, .cal-nav, .cal-tools, .home-widget-head > :not(h3)) {
+  visibility: hidden;
+}
+.home-blocks.is-editing .home-dock {
+  position: relative;
+  bottom: auto;
+  justify-self: stretch;
+  padding-top: 2.9rem;
+  border-radius: var(--radius-glass);
+}
+.home-blocks.is-editing .home-hero {
+  padding-top: 2.9rem;
+}
+.home-blocks.is-editing .home-block.is-hidden {
+  opacity: 0.45;
+}
+.home-blocks .home-block.is-dragging {
+  opacity: 0.3;
 }
 .home-toolbar {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 1rem;
   margin-bottom: -0.5rem;
 }
-.home-arrange {
-  padding: 1rem 1.15rem;
-}
-.home-arrange h3 {
-  font-size: 0.95rem;
-  margin-bottom: 0.25rem;
-}
-.home-arrange-list {
-  list-style: none;
-  display: grid;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
-}
-.home-arrange-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--pill-bg);
-  cursor: grab;
-}
-.home-arrange-list li.is-dragging {
-  opacity: 0.5;
-}
-.home-arrange-handle {
-  color: var(--text-dim);
-}
-.home-arrange-name {
+.home-toolbar .home-muted {
+  margin: 0;
   flex: 1;
 }
-.home-rail-head {
+/* Section heads: a bold title left, links and round buttons right. */
+.home-rail-head,
+.home-widget-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  gap: 0.5rem 0.75rem;
+  flex-wrap: wrap;
 }
-.home-rail-head h3 {
+.home-card h3 {
   margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 .home-rail-tools {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+.home-card-link {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.home-card-link:hover {
+  text-decoration: underline;
+}
 .home-type-filter {
   display: inline-flex;
-  gap: 0.25rem;
-  flex-wrap: wrap;
+  gap: 0.1rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
 }
 .home-type-filter .ui-btn {
-  font-size: 0.75rem;
-  min-height: 1.7rem;
-  padding: 0.2rem 0.55rem;
+  min-height: calc(var(--btn-h) - 0.5rem);
+  padding: 0 0.8rem;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
 }
 .home-type-filter .ui-btn.is-active {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--text-primary);
+  background: var(--pill-active);
+  color: var(--text-heading);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 .home-rail-nav {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.35rem;
+}
+.cal-nav-btn {
+  width: var(--btn-h);
+  min-width: var(--btn-h);
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.15rem;
 }
 .home-rail {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.85rem;
   overflow-x: auto;
-  padding-bottom: 0.35rem;
+  padding: 0.25rem 0.25rem 0.5rem;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -1672,20 +1909,18 @@ onUnmounted(() => {
   height: 0;
 }
 .home-tile {
-  flex: 0 0 7.25rem;
-  width: 7.25rem;
+  flex: 0 0 8rem;
+  width: 8rem;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
   color: inherit;
   text-decoration: none;
   min-width: 0;
   scroll-snap-align: start;
 }
 .home-tile-trending {
-  flex: 0 0 7.25rem;
-  width: 7.25rem;
-  min-height: 16.5rem;
+  min-height: 0;
 }
 .home-tile-link {
   display: flex;
@@ -1698,69 +1933,66 @@ onUnmounted(() => {
 }
 .home-tile-request {
   width: 100%;
-  margin-top: auto;
-  flex: 0 0 auto;
-  font-size: 0.72rem;
-  min-height: 1.85rem;
-  padding: 0.3rem 0.4rem;
-  white-space: nowrap;
+  margin-top: 0.4rem;
+  padding-inline: 0.5rem;
+  color: var(--color-primary);
 }
 .home-tile-art {
   position: relative;
   display: block;
-  width: 7.25rem;
-  height: 10.6rem;
-  flex: 0 0 auto;
-}
-.home-tile-art .home-tile-poster,
-.home-tile-art .home-tile-fallback {
   width: 100%;
-  height: 100%;
 }
 .home-status-dot {
   position: absolute;
-  top: 0.4rem;
-  left: 0.4rem;
-  width: 0.7rem;
-  height: 0.7rem;
+  top: 0.5rem;
+  left: 0.5rem;
+  width: 0.6rem;
+  height: 0.6rem;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.92);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
   pointer-events: none;
 }
 .home-status-dot.is-requested {
-  background: #3b82f6;
+  background: var(--color-primary);
 }
 .home-status-dot.is-available {
-  background: #22c55e;
+  background: var(--color-success);
 }
 .home-status-dot.is-partial {
-  background: #eab308;
+  background: var(--color-warning);
 }
 .home-status-dot.is-missing {
-  background: #ef4444;
+  background: var(--color-danger);
 }
+/* Posters: 2:3 glass tiles that lift a little on hover. */
 .home-tile-poster,
 .home-tile-fallback {
-  width: 7.25rem;
-  height: 10.6rem;
-  border-radius: 0.45rem;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 18px;
   object-fit: cover;
-  background: var(--bg-surface-elevated);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  flex: 0 0 auto;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  transition: transform 0.2s;
+}
+.home-tile:hover .home-tile-poster,
+.home-tile:hover .home-tile-fallback {
+  transform: translateY(-3px);
 }
 .home-tile-fallback {
   display: grid;
   place-items: center;
   font-size: 1.4rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-muted);
 }
 .home-tile-title {
-  font-size: 0.78rem;
-  line-height: 1.25;
-  height: 2.5rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+  height: calc(1.2em * 2);
+  padding-left: 0.25rem;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1768,14 +2000,87 @@ onUnmounted(() => {
   word-break: break-word;
 }
 .home-tile-meta {
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   line-height: 1.25;
-  height: 0.9rem;
+  height: 1.25em;
   color: var(--text-muted);
+  padding-left: 0.25rem;
+  white-space: nowrap;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+}
+/* Requests as rows: a small poster, the title and its status. */
+.home-req-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+.home-req {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.home-req-art {
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 3.3rem;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  display: grid;
+  place-items: center;
+}
+.home-req-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.home-req-art .home-tile-fallback {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 1rem;
+}
+.home-req-body {
+  display: grid;
+  min-width: 0;
+}
+.home-req-body strong {
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-req-status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-req-status.is-requested {
+  color: var(--color-primary);
+}
+.home-req-status.is-available {
+  color: var(--color-success-fg);
+}
+.home-req-status.is-partial {
+  color: var(--color-warning-fg);
+}
+.cal-nav {
+  gap: 0.3rem;
 }
 .cal-head {
   display: flex;
@@ -1956,36 +2261,179 @@ onUnmounted(() => {
 .cal-event[data-kind='movie'] {
   background: color-mix(in srgb, var(--color-primary) 16%, var(--bg-input));
 }
-.home-widget {
-  padding: 1rem 1.15rem;
+/* Calendar list rows: a day chip (accent for today), the title and its detail. */
+.cal-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.home-card li.cal-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   min-width: 0;
 }
-.home-widget h3 {
-  margin-bottom: 0.75rem;
-  font-size: 0.95rem;
+.cal-chip {
+  flex: 0 0 2.75rem;
+  display: grid;
+  text-align: center;
+  padding: 0.3rem 0;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
 }
-.home-widget-head {
+.cal-chip strong {
+  font-size: 0.9rem;
+}
+.cal-row.is-today .cal-chip {
+  background: var(--color-primary);
+  border-color: transparent;
+  color: var(--color-primary-contrast);
+}
+.cal-row-body {
+  display: grid;
+  min-width: 0;
+}
+.cal-row-body strong {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-row-meta {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-row.is-have .cal-row-meta {
+  color: var(--color-success-fg);
+}
+/* Cards: glass panels with a bold head, compact controls and lists with progress bars. */
+.home-card {
+  padding: 1.35rem 1.35rem 1.3rem;
+  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 0.75rem;
-  margin-bottom: 0.75rem;
+  flex-direction: column;
+  gap: 0.8rem;
 }
-.home-widget-head h3 {
-  margin-bottom: 0;
+.home-card .cal-head {
+  margin: 0;
+  gap: 0.4rem 0.6rem;
+}
+.home-card .cal-head h3 {
+  font-size: 1.05rem;
+}
+.home-card .ui-input {
+  width: auto;
+}
+.home-card .cal-select {
+  min-width: 0;
+  padding-left: 0.9rem;
+}
+.home-card-stat {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-success-fg);
+}
+.home-widget-head .home-sort {
+  margin-left: auto;
+}
+.home-widget-head .home-sort + .home-pause {
+  margin-left: 0;
 }
 .home-pause {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+.home-card ul {
+  list-style: none;
+  display: grid;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+}
+.home-card li {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.home-card-downloads.is-wide > ul {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 1.5rem;
+}
+/* Long lists scroll inside the card; the card itself stays a fixed height. */
+.home-card-downloads > ul,
+.home-card .cal-list,
+.home-req-list {
+  max-height: 22rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.35rem;
+  scrollbar-width: thin;
+}
+.home-dl-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.home-dl-row strong {
+  font-size: 0.85rem;
+  font-weight: 700;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-dl-pct {
+  flex: 0 0 auto;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+.home-dl-meta {
+  font-size: 0.74rem;
+}
+.home-when {
+  font-size: 0.75rem;
+  color: var(--color-info);
+  font-family: var(--font-mono);
+}
+.home-bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--switch-track);
+  overflow: hidden;
+}
+.home-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primary);
+}
+.home-speed {
+  color: var(--color-info);
+  font-variant-numeric: tabular-nums;
 }
 .home-stuck {
-  margin-top: 0.75rem;
+  margin-top: 0;
 }
 .home-stuck summary {
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 .home-stuck-head {
   display: flex;
@@ -1994,9 +2442,9 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.5rem 0.75rem;
   margin: 0.6rem 0;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
 }
-.home-widget .home-stuck-item {
+.home-card .home-stuck-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2006,14 +2454,14 @@ onUnmounted(() => {
   display: grid;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
 }
 .home-stuck-remove {
   flex: 0 0 auto;
   display: inline-flex;
   padding: 0.4rem;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -2029,52 +2477,6 @@ onUnmounted(() => {
 .home-stuck-remove svg {
   width: 16px;
   height: 16px;
-}
-.home-widget-head .home-sort {
-  width: auto;
-  margin-left: auto;
-  padding-block: 0.3rem;
-}
-.home-pause .ui-input {
-  width: auto;
-  padding-block: 0.3rem;
-}
-.home-widget ul {
-  list-style: none;
-  display: grid;
-  gap: 0.7rem;
-}
-.home-widget-calendar ul {
-  gap: 0.28rem;
-}
-.home-widget li {
-  display: grid;
-  gap: 0.15rem;
-  min-width: 0;
-}
-.home-widget strong {
-  overflow-wrap: anywhere;
-}
-.home-when {
-  font-size: 0.75rem;
-  color: var(--color-info);
-  font-family: var(--font-mono);
-}
-.home-bar {
-  display: block;
-  height: 4px;
-  border-radius: 99px;
-  background: var(--bg-input);
-  overflow: hidden;
-}
-.home-speed {
-  color: var(--color-info);
-  font-variant-numeric: tabular-nums;
-}
-.home-bar span {
-  display: block;
-  height: 100%;
-  background: var(--color-primary);
 }
 .home-debug-panel {
   padding: 1rem 1.15rem;
@@ -2110,8 +2512,5 @@ onUnmounted(() => {
 }
 .home-debug-state[data-state='empty'] {
   color: var(--color-warning, #e6b84d);
-}
-.home-widget-rail h3 {
-  margin-bottom: 0;
 }
 </style>
