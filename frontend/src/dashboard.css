@@ -399,6 +399,12 @@ a.status-pill {
   overflow: visible;
 }
 
+/* Each glass card is its own stacking layer, so a card's open More menu (it opens downward on
+   phones) would sit under the next card; lift the card while its menu is open. */
+.service-card.has-open-menu {
+  z-index: 20;
+}
+
 .glass-card:hover {
   border-color: transparent;
 }
@@ -1116,7 +1122,9 @@ a.status-pill {
   max-width: min(16rem, calc(100vw - 2rem));
   padding: 0.35rem;
   border-radius: 10px;
-  background: var(--menu-bg);
+  background: var(--modal-bg);
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-card);
   z-index: 5;
