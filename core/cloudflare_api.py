@@ -22,6 +22,7 @@ from core.settings import settings
 logger = logging.getLogger(__name__)
 
 API_TOKEN_SECRET = "cloudflare_api_token"
+_TOKEN_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
 CF_API = "https://api.cloudflare.com/client/v4"
 
 
@@ -79,33 +80,17 @@ def set_api_token(token: str | None) -> None:
             "Create an API Token instead: My Profile → API Tokens → Create Token → "
             "Edit zone DNS, then add Account → Cloudflare Tunnel → Edit."
         )
-    secret_store.save_secret(API_TOKEN_SECRET, value)
-
-
-async def refuse_malformed_api_token(token: str) -> None:
-    """Ask Cloudflare whether the value is shaped like an API token before it replaces the saved one.
-
-    Cloudflare answers 6003 "Invalid request headers" for anything that is not a token at all
-    (a password, an ID, a cut-off copy). That is refused, so a working token is never swapped
-    for one. Any other answer, or no answer, lets the save go ahead: an account-owned token can
-    fail the user-level verify and still be fine.
-    """
-    value = _normalize_api_token(token)
-    if not value:
-        return
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(f"{CF_API}/user/tokens/verify", headers={"Authorization": f"Bearer {value}"})
-        errors = (resp.json() or {}).get("errors") or []
-    except (httpx.HTTPError, ValueError):
-        return
-    codes = {e.get("code") for e in errors if isinstance(e, dict)}
-    if 6003 in codes:
+    # Checked here, not by asking Cloudflare: the value may be a password a browser filled in,
+    # and that must not leave the box. Cloudflare reads only 40+ characters of A-Z, a-z, 0-9, _ and -
+    # as a token and answers anything else with "Invalid request headers"; such a value never
+    # replaces the saved token.
+    if len(value) < 40 or any(c not in _TOKEN_CHARS for c in value):
         raise CloudflareApiError(
-            "Cloudflare says this is not an API token (Invalid request headers), so it was not saved "
-            "and the token you had stays in place. Check that the field holds the API token itself, "
-            "not a password your browser filled in, an ID, or a cut-off copy."
+            "That is not a Cloudflare API token (they are 40 or more letters, digits, _ and -), "
+            "so it was not saved and the token you had stays in place. Check that the field holds "
+            "the API token itself, not a password your browser filled in, an ID, or a cut-off copy."
         )
+    secret_store.save_secret(API_TOKEN_SECRET, value)
 
 
 def api_token_configured() -> bool:

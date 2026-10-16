@@ -29,42 +29,15 @@ def test_invalid_request_headers_gets_a_clear_message():
     assert "not an API token" in msg and "My Profile → API Tokens" in msg
 
 
-class _FakeClient:
-    def __init__(self, answer):
-        self.answer = answer
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    async def get(self, url, headers):
-        if isinstance(self.answer, Exception):
-            raise self.answer
-        return SimpleNamespace(json=lambda: self.answer)
-
-
-def test_a_value_cloudflare_calls_no_token_never_replaces_the_saved_one(monkeypatch):
-    import asyncio
-    import httpx
-
+def test_a_value_that_is_not_a_token_never_replaces_the_saved_one(monkeypatch):
     saved = {"cloudflare_api_token": "working-token"}
     monkeypatch.setattr(cloudflare_api.secret_store, "save_secret", lambda k, v: saved.update({k: v}))
-
-    def put(value, answer):
-        monkeypatch.setattr(cloudflare_api.httpx, "AsyncClient", lambda **kw: _FakeClient(answer))
-
-        async def run():
-            await cloudflare_api.refuse_malformed_api_token(value)
-            cloudflare_api.set_api_token(value)
-
-        asyncio.run(run())
-
-    with pytest.raises(CloudflareApiError, match="was not saved"):
-        put("my-browser-password", {"success": False, "errors": [{"code": 6003, "message": "Invalid request headers"}]})
+    # Checked locally: a password a browser filled in must not be sent anywhere.
+    monkeypatch.setattr(cloudflare_api.httpx, "AsyncClient", lambda **kw: pytest.fail("no network call"))
+    for not_a_token in ("Hunter2!pass", "short_but_clean_token", TOKEN[:39], TOKEN[:20] + "!" + TOKEN[21:]):
+        with pytest.raises(CloudflareApiError, match="not saved"):
+            cloudflare_api.set_api_token(not_a_token)
     assert saved["cloudflare_api_token"] == "working-token"
-    put(TOKEN, {"success": False, "errors": [{"code": 1000, "message": "Invalid API Token"}]})  # account token: allowed
+    cloudflare_api.set_api_token(TOKEN)
     assert saved["cloudflare_api_token"] == TOKEN
-    put(TOKEN[::-1], httpx.ConnectError("offline"))  # no answer: allowed
-    assert saved["cloudflare_api_token"] == TOKEN[::-1]
+    cloudflare_api.set_api_token("cfut_" + TOKEN + "ABCDEFGH")  # longer formats are fine
