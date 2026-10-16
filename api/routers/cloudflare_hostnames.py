@@ -13,6 +13,7 @@ from core.cloudflare_api import (
     api_token_configured,
     decode_tunnel_token,
     publish_hostnames,
+    refuse_malformed_api_token,
     set_api_token,
     verify_api_access,
 )
@@ -106,7 +107,9 @@ async def put_hostnames(request: Request, body: HostnamesPut) -> dict[str, Any]:
         settings.save()
     if body.cloudflare_api_token is not None:
         try:
-            # Empty string clears; omit field to keep.
+            # Empty string clears; omit field to keep. A value Cloudflare says is not a token at all
+            # never replaces the saved one.
+            await refuse_malformed_api_token(body.cloudflare_api_token)
             set_api_token(body.cloudflare_api_token)
         except CloudflareApiError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

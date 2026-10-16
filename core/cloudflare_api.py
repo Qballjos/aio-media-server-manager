@@ -82,6 +82,32 @@ def set_api_token(token: str | None) -> None:
     secret_store.save_secret(API_TOKEN_SECRET, value)
 
 
+async def refuse_malformed_api_token(token: str) -> None:
+    """Ask Cloudflare whether the value is shaped like an API token before it replaces the saved one.
+
+    Cloudflare answers 6003 "Invalid request headers" for anything that is not a token at all
+    (a password, an ID, a cut-off copy). That is refused, so a working token is never swapped
+    for one. Any other answer, or no answer, lets the save go ahead: an account-owned token can
+    fail the user-level verify and still be fine.
+    """
+    value = _normalize_api_token(token)
+    if not value:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{CF_API}/user/tokens/verify", headers={"Authorization": f"Bearer {value}"})
+        errors = (resp.json() or {}).get("errors") or []
+    except (httpx.HTTPError, ValueError):
+        return
+    codes = {e.get("code") for e in errors if isinstance(e, dict)}
+    if 6003 in codes:
+        raise CloudflareApiError(
+            "Cloudflare says this is not an API token (Invalid request headers), so it was not saved "
+            "and the token you had stays in place. Check that the field holds the API token itself, "
+            "not a password your browser filled in, an ID, or a cut-off copy."
+        )
+
+
 def api_token_configured() -> bool:
     return bool(get_api_token())
 
