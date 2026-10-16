@@ -2224,7 +2224,9 @@ onBeforeUnmount(() => {
               v-model="form.cloudflare_api_token"
               type="password"
               class="ui-input font-mono"
-              autocomplete="off"
+              autocomplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
               :placeholder="apiTokenConfigured ? '•••• token saved — paste to replace' : 'Cloudflare API token'"
             />
           </label>
