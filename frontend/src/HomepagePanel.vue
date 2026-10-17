@@ -345,11 +345,6 @@ const totalSpeed = computed(() => {
   }
   return formatSpeed(Object.values(bySource).reduce((sum, bps) => sum + bps, 0))
 })
-const mediaServerLink = computed(() => {
-  const app = (snapshot.value.apps || []).find((item) => item.name === 'jellyfin' || item.name === 'plex')
-  if (!app) return null
-  return { name: app.name, label: `Open ${app.display_name}`, url: publicAppUrl(app.name, app.port, app.url || '') }
-})
 function chipDay(dt) {
   return dt.toLocaleDateString(undefined, { weekday: 'short' }).replace('.', '').toUpperCase()
 }
@@ -1134,7 +1129,6 @@ onUnmounted(() => {
           <div class="home-rail-head">
             <h3>Recently added</h3>
             <div class="home-rail-tools">
-              <a v-if="mediaServerLink" class="home-card-link" :href="mediaServerLink.url" target="_blank" rel="noopener noreferrer" @click="openApp($event, mediaServerLink.name, mediaServerLink.url)">{{ mediaServerLink.label }}</a>
               <div v-if="snapshot.recent.length" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous recently added" @click="scrollRail('recent', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next recently added" @click="scrollRail('recent', 1)">›</button>
@@ -1181,14 +1175,13 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">Movies</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">Series</button>
               </div>
-              <a v-if="seerrHomeUrl" class="home-card-link" :href="seerrHomeUrl" target="_blank" rel="noopener noreferrer" @click="openApp($event, 'seerr', seerrHomeUrl)">Open Seerr</a>
-              <div v-if="requestItems.length && spans.requests === 12" class="home-rail-nav">
+              <div v-if="requestItems.length" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
               </div>
             </div>
           </div>
-          <div v-if="requestItems.length && spans.requests === 12" ref="requestsRail" class="home-rail">
+          <div v-if="requestItems.length" ref="requestsRail" class="home-rail">
             <a
               v-for="(item, idx) in requestItems"
               :key="idx"
@@ -1207,26 +1200,6 @@ onUnmounted(() => {
               <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
             </a>
           </div>
-          <ul v-else-if="requestItems.length" class="home-req-list">
-            <li v-for="(item, idx) in requestItems.slice(0, 6)" :key="idx">
-              <a
-                class="home-req"
-                :href="item.url || seerrHomeUrl || undefined"
-                :target="item.url || seerrHomeUrl ? '_blank' : undefined"
-                rel="noopener noreferrer"
-                @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
-              >
-                <span class="home-req-art">
-                  <img v-if="item.poster" :src="item.poster" alt="" />
-                  <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
-                </span>
-                <span class="home-req-body">
-                  <strong>{{ item.title }}</strong>
-                  <span class="home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}<template v-if="item.detail"> · {{ item.detail }}</template></span>
-                </span>
-              </a>
-            </li>
-          </ul>
           <template v-else-if="isPending('requests')">
             <div class="home-rail" aria-hidden="true">
               <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
@@ -1950,16 +1923,6 @@ onUnmounted(() => {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.home-card-link {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--color-primary-text);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.home-card-link:hover {
-  text-decoration: underline;
-}
 .home-type-filter {
   display: inline-flex;
   gap: 0.1rem;
@@ -2107,67 +2070,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Requests as rows: a small poster, the title and its status. */
-.home-req-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.65rem;
-}
-.home-req {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  color: inherit;
-  text-decoration: none;
-  min-width: 0;
-}
-.home-req-art {
-  flex: 0 0 auto;
-  width: 2.4rem;
-  height: 3.3rem;
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  display: grid;
-  place-items: center;
-}
-.home-req-art img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.home-req-art .home-tile-fallback {
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  font-size: 1rem;
-}
-.home-req-body {
-  display: grid;
-  min-width: 0;
-}
-.home-req-body strong {
-  font-size: 0.92rem;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.home-req-status {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* Request status under a poster. */
 .home-req-status.is-requested {
   color: var(--color-primary-text);
 }
@@ -2472,8 +2375,7 @@ onUnmounted(() => {
 }
 /* Long lists scroll inside the card; the card itself stays a fixed height. */
 .home-card-downloads > ul,
-.home-card .cal-list,
-.home-req-list {
+.home-card .cal-list {
   max-height: 22rem;
   overflow-y: auto;
   overscroll-behavior: contain;

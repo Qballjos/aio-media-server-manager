@@ -297,8 +297,9 @@ def test_pwa_public_assets():
     assert "/apple-touch-icon.png" in manifest
     assert "/pwa-192.png" in manifest
     index_html = (root.parent / "index.html").read_text(encoding="utf-8")
-    assert 'href="/logo-aio-media-manager.png"' in index_html
-    assert 'href="/apple-touch-icon.png"' in index_html
+    assert 'href="/api/branding/icon/favicon"' in index_html
+    assert 'href="/api/branding/icon/apple-touch-icon"' in index_html
+    assert 'href="/api/branding/manifest.webmanifest"' in index_html
     assert 'rel="icon"' in index_html
     assert 'rel="apple-touch-icon"' in index_html
     sw = (root / "sw.js").read_text(encoding="utf-8")

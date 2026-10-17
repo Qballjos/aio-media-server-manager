@@ -46,11 +46,11 @@ SLOTS: dict[str, dict[str, str]] = {
     "favicon": {
         "label": "Favicon",
         "help": (
-            "Browser tab icon (and home-screen shortcut when installed). "
-            "Starts as the built-in placeholder; upload a square PNG or ICO to replace it. "
-            "Recommended: 32 × 32 or 64 × 64 px; 180 × 180 px also works well for Apple touch icons."
+            "Browser tab icon, iPhone home-screen icon and the icon of the installed app. "
+            "Starts as the built-in placeholder; upload a square image to replace it — it is stored as a "
+            "512 × 512 PNG. Use an opaque background: iOS fills transparent corners with black."
         ),
-        "recommended": "32 × 32 or 64 × 64 px (square)",
+        "recommended": "512 × 512 px (square)",
         "basename": "favicon",
     },
 }
@@ -288,6 +288,55 @@ def clear_slot(slot: str) -> dict[str, Any]:
         except OSError as exc:
             logger.warning("Could not remove branding file %s: %s", path, exc)
     return public_branding()
+
+
+# The app icons the browser, iOS and installed PWAs fetch before any JavaScript runs.
+_DEFAULT_ICONS = {"favicon": "logo-aio-media-manager.png", "apple-touch-icon": "apple-touch-icon.png"}
+_DEFAULT_MANIFEST_ICONS = [
+    {"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any"},
+    {"src": "/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+]
+
+
+def app_icon(kind: str) -> tuple[Path | None, str, str]:
+    """(custom file or None, its mime, default static path) for the tab or home-screen icon."""
+    if kind not in _DEFAULT_ICONS:
+        raise ValueError(f"Unknown icon: {kind}")
+    custom = file_for_slot("favicon")
+    default = "/" + _DEFAULT_ICONS[kind]
+    if custom is None:
+        return None, "image/png", default
+    return custom[0], custom[1], default
+
+
+def web_manifest() -> dict[str, Any]:
+    """The PWA manifest with the configured title and favicon (iOS and installed apps read this)."""
+    meta = _load_meta()
+    title = normalize_title(meta.get("title"))
+    icons = list(_DEFAULT_MANIFEST_ICONS)
+    path = _resolve_file("favicon", meta)
+    if path is not None:
+        size = _png_size(path.read_bytes()[:32])
+        icons = [{
+            "src": asset_url("favicon", meta),
+            "sizes": f"{size[0]}x{size[1]}" if size else "any",
+            "type": _MIME_BY_EXT.get(path.suffix.lower(), "image/png"),
+            "purpose": "any",
+        }]
+    return {
+        "id": "/",
+        "name": title,
+        "short_name": "AIO Media" if title == DEFAULT_TITLE else title[:12],
+        "description": "Home, Catalog, and Settings for this media appliance.",
+        "start_url": "./",
+        "scope": "./",
+        "display": "standalone",
+        "background_color": "#090d1f",
+        "theme_color": "#090d1f",
+        "orientation": "any",
+        "icons": icons,
+    }
 
 
 def file_for_slot(slot: str) -> tuple[Path, str] | None:
