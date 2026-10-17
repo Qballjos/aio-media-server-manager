@@ -712,15 +712,7 @@ function selectCalDay(day) {
   }
 }
 
-const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth)
-// Requests: posters when the card is at least half the row, a list on phones and in a third.
-// Below 1200 px every card is at least half the row (see the .home-card grid rules).
-const requestsAsPosters = computed(
-  () => viewportWidth.value >= 720 && (viewportWidth.value < 1200 || (spans.value.requests || 12) >= 6),
-)
-
 function syncCalViewToViewport() {
-  viewportWidth.value = window.innerWidth
   if (calViewPicked.value) return
   const next = defaultCalView()
   if (calView.value !== next) calView.value = next
@@ -1183,13 +1175,13 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">Movies</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">Series</button>
               </div>
-              <div v-if="requestItems.length && requestsAsPosters" class="home-rail-nav">
+              <div v-if="requestItems.length" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
               </div>
             </div>
           </div>
-          <div v-if="requestItems.length && requestsAsPosters" ref="requestsRail" class="home-rail">
+          <div v-if="requestItems.length" ref="requestsRail" class="home-rail">
             <a
               v-for="(item, idx) in requestItems"
               :key="idx"
@@ -1208,26 +1200,6 @@ onUnmounted(() => {
               <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
             </a>
           </div>
-          <ul v-else-if="requestItems.length" class="home-req-list">
-            <li v-for="(item, idx) in requestItems.slice(0, 6)" :key="idx">
-              <a
-                class="home-req"
-                :href="item.url || seerrHomeUrl || undefined"
-                :target="item.url || seerrHomeUrl ? '_blank' : undefined"
-                rel="noopener noreferrer"
-                @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
-              >
-                <span class="home-req-art">
-                  <img v-if="item.poster" :src="item.poster" alt="" />
-                  <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
-                </span>
-                <span class="home-req-body">
-                  <strong>{{ item.title }}</strong>
-                  <span class="home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}<template v-if="item.detail"> · {{ item.detail }}</template></span>
-                </span>
-              </a>
-            </li>
-          </ul>
           <template v-else-if="isPending('requests')">
             <div class="home-rail" aria-hidden="true">
               <span v-for="n in 6" :key="n" class="home-skel home-skel-poster"></span>
@@ -2098,67 +2070,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Requests as rows: a small poster, the title and its status. */
-.home-req-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.65rem;
-}
-.home-req {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  color: inherit;
-  text-decoration: none;
-  min-width: 0;
-}
-.home-req-art {
-  flex: 0 0 auto;
-  width: 2.4rem;
-  height: 3.3rem;
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  display: grid;
-  place-items: center;
-}
-.home-req-art img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.home-req-art .home-tile-fallback {
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  font-size: 1rem;
-}
-.home-req-body {
-  display: grid;
-  min-width: 0;
-}
-.home-req-body strong {
-  font-size: 0.92rem;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.home-req-status {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* Request status under a poster. */
 .home-req-status.is-requested {
   color: var(--color-primary-text);
 }
@@ -2463,8 +2375,7 @@ onUnmounted(() => {
 }
 /* Long lists scroll inside the card; the card itself stays a fixed height. */
 .home-card-downloads > ul,
-.home-card .cal-list,
-.home-req-list {
+.home-card .cal-list {
   max-height: 22rem;
   overflow-y: auto;
   overscroll-behavior: contain;
