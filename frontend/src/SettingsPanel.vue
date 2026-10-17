@@ -37,6 +37,7 @@ import {
   ACCENT_PRESETS,
   DEFAULT_ACCENT,
   applyBranding,
+  squareIconPng,
 } from './branding.js'
 import { copyText } from './clipboard.js'
 
@@ -436,10 +437,12 @@ async function uploadBrandSlot(slot, event) {
   error.value = ''
   notice.value = ''
   try {
+    // The favicon is also the iPhone home-screen and installed-app icon: store it as a sharp 512 px PNG.
+    const body = slot === 'favicon' ? await squareIconPng(file).catch(() => file) : file
     const res = await apiRequest(`/api/branding/${slot}`, {
       method: 'PUT',
-      headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      body: file,
+      headers: { 'Content-Type': body.type || 'application/octet-stream' },
+      body,
     })
     const data = await readJson(res)
     if (!res.ok) {

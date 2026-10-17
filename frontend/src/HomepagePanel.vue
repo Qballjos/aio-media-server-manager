@@ -345,11 +345,6 @@ const totalSpeed = computed(() => {
   }
   return formatSpeed(Object.values(bySource).reduce((sum, bps) => sum + bps, 0))
 })
-const mediaServerLink = computed(() => {
-  const app = (snapshot.value.apps || []).find((item) => item.name === 'jellyfin' || item.name === 'plex')
-  if (!app) return null
-  return { name: app.name, label: `Open ${app.display_name}`, url: publicAppUrl(app.name, app.port, app.url || '') }
-})
 function chipDay(dt) {
   return dt.toLocaleDateString(undefined, { weekday: 'short' }).replace('.', '').toUpperCase()
 }
@@ -1134,7 +1129,6 @@ onUnmounted(() => {
           <div class="home-rail-head">
             <h3>Recently added</h3>
             <div class="home-rail-tools">
-              <a v-if="mediaServerLink" class="home-card-link" :href="mediaServerLink.url" target="_blank" rel="noopener noreferrer" @click="openApp($event, mediaServerLink.name, mediaServerLink.url)">{{ mediaServerLink.label }}</a>
               <div v-if="snapshot.recent.length" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous recently added" @click="scrollRail('recent', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next recently added" @click="scrollRail('recent', 1)">›</button>
@@ -1181,7 +1175,6 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">Movies</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">Series</button>
               </div>
-              <a v-if="seerrHomeUrl" class="home-card-link" :href="seerrHomeUrl" target="_blank" rel="noopener noreferrer" @click="openApp($event, 'seerr', seerrHomeUrl)">Open Seerr</a>
               <div v-if="requestItems.length && spans.requests === 12" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
@@ -1949,16 +1942,6 @@ onUnmounted(() => {
   gap: 0.5rem;
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-.home-card-link {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--color-primary-text);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.home-card-link:hover {
-  text-decoration: underline;
 }
 .home-type-filter {
   display: inline-flex;

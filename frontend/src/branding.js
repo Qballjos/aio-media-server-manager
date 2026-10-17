@@ -170,9 +170,37 @@ export function applyBranding(data) {
   const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]')
   if (appleTitle) appleTitle.setAttribute('content', title.slice(0, 12))
 
-  // Tab icon + Apple touch icon follow the favicon slot (placeholder or custom upload).
-  ensureLink('icon', { type: favicon.endsWith('.ico') ? 'image/x-icon' : 'image/png', href: favicon })
-  ensureLink('apple-touch-icon', { href: favicon })
+  // Tab icon + Apple touch icon follow the favicon slot; the version query makes a new upload show at once.
+  const version = favicon.includes('?') ? favicon.slice(favicon.indexOf('?')) : ''
+  ensureLink('icon', { type: null, href: `/api/branding/icon/favicon${version}` })
+  ensureLink('apple-touch-icon', { href: `/api/branding/icon/apple-touch-icon${version}` })
+}
+
+/** A square 512 px PNG of an uploaded icon (contained, centred), so every place that shows it gets a sharp image. */
+export function squareIconPng(file, size = 512) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return reject(new Error('Could not process the icon.'))
+      const scale = Math.min(size / img.width, size / img.height)
+      const w = img.width * scale
+      const h = img.height * scale
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h)
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not process the icon.'))), 'image/png')
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Could not read that image.'))
+    }
+    img.src = url
+  })
 }
 
 export async function loadBranding() {

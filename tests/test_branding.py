@@ -132,3 +132,32 @@ def test_branding_rejects_bad_payload(tmp_path: Path, monkeypatch):
         headers={**headers, "Content-Type": "application/octet-stream"},
     )
     assert bad.status_code == 422
+
+
+def test_app_icons_and_manifest_follow_the_favicon(tmp_path: Path, monkeypatch):
+    client, _cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+
+    # Default: the built-in icons, served without auth, revalidated on every load.
+    icon = client.get("/api/branding/icon/apple-touch-icon", follow_redirects=False)
+    assert icon.status_code in (200, 307)
+    assert client.get("/api/branding/icon/nope").status_code == 404
+    manifest = client.get("/api/branding/manifest.webmanifest")
+    assert manifest.status_code == 200
+    assert manifest.headers["content-type"].startswith("application/manifest+json")
+    body = manifest.json()
+    assert body["short_name"] == "AIO Media"
+    assert [i["src"] for i in body["icons"]] == ["/apple-touch-icon.png", "/pwa-192.png", "/pwa-512.png"]
+
+    # A custom favicon becomes the tab, home-screen and installed-app icon, and the title names the app.
+    assert client.put("/api/branding/favicon", content=_MIN_PNG, headers=headers).status_code == 200
+    assert client.patch("/api/branding", json={"title": "Ramon TV"}, headers=headers).status_code == 200
+    for kind in ("favicon", "apple-touch-icon"):
+        res = client.get(f"/api/branding/icon/{kind}")
+        assert res.status_code == 200 and res.content == _MIN_PNG
+        assert res.headers["cache-control"] == "no-cache"
+    body = client.get("/api/branding/manifest.webmanifest").json()
+    assert body["name"] == "Ramon TV" and body["short_name"] == "Ramon TV"
+    assert len(body["icons"]) == 1
+    assert body["icons"][0]["src"].startswith("/api/branding/file/favicon?v=")
+    assert body["icons"][0]["sizes"] == "1x1"
