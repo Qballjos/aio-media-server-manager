@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F3F6FB"/>
+      <stop offset="1" stop-color="#DCE8F6"/>
+    </linearGradient>
+    <path id="w" d="M-200 0c80-40 160-40 240 0s160 40 240 0 160-40 240 0 160 40 240 0 160-40 240 0 160 40 240 0 160-40 240 0 160 40 240 0 160-40 240 0 160 40 240 0"/>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <g fill="none" stroke="#1E5AA8" stroke-width="3" stroke-linecap="round">
+    <use href="#w" y="560" opacity=".10"/>
+    <use href="#w" x="-60" y="620" opacity=".14"/>
+    <use href="#w" x="40" y="680" opacity=".18"/>
+    <use href="#w" x="-110" y="740" opacity=".22"/>
+    <use href="#w" x="90" y="800" opacity=".26"/>
+    <use href="#w" x="-30" y="860" opacity=".30"/>
+    <use href="#w" x="120" y="920" opacity=".34"/>
+    <use href="#w" x="-80" y="980" opacity=".38"/>
+    <use href="#w" x="60" y="1040" opacity=".42"/>
+  </g>
+  <g fill="#1E5AA8" opacity=".12">
+    <circle cx="1560" cy="200" r="160"/>
+  </g>
+  <g fill="none" stroke="#1E5AA8" stroke-width="2.5" stroke-linecap="round" opacity=".16">
+    <path d="M300 330c40-60 120-60 160 0 30-50 90-50 120 0"/>
+    <path d="M1240 420c40-60 120-60 160 0 30-50 90-50 120 0"/>
+    <path d="M700 240c30-45 90-45 120 0"/>
+  </g>
+</svg>

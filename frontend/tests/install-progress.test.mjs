@@ -4,12 +4,13 @@ import { setImmediate } from 'node:timers/promises'
 import test from 'node:test'
 import { runInNewContext } from 'node:vm'
 import { computed, reactive, ref } from 'vue'
+import * as homeLayout from '../src/homeLayout.js'
 
 function setup(file, exports, apiRequest) {
   const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*\n/gm, '')
   return runInNewContext(`${script}\n;({${exports.join(',')}})`, {
-    computed, reactive, ref, apiRequest,
+    computed, reactive, ref, apiRequest, ...homeLayout,
     homeSnapshotCache: { snapshot: null }, partialRetryDelay: () => null,
     readJson: async (response) => response.data,
     defineEmits: () => () => {},

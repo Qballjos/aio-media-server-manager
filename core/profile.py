@@ -18,7 +18,14 @@ WALLPAPER_BASENAME = "wallpaper"
 MAX_BYTES = branding_mod.MAX_BYTES
 MAX_WALLPAPER_BYTES = 4 * 1024 * 1024
 THEMES = frozenset({"dark", "light", "system"})
-WALLPAPERS = frozenset({"default", "jellyfin", "plex", "personal"})
+WALLPAPERS = frozenset({
+    "default", "aurora", "candy", "mono", "jellyfin", "plex",
+    "forest", "northern", "city", "ocean", "alpine", "dunes", "lavender", "starry", "sunset", "nebula",
+    "tide", "retrowave", "personal",
+})
+# Liquid-glass tuning: panel opacity, backdrop blur (px), parallax depth and how blurred a photo wallpaper is (px).
+GLASS_DEFAULTS = {"glass_alpha": 0.5, "glass_blur": 28, "glass_depth": 1.0, "wallpaper_blur": 12}
+GLASS_RANGES = {"glass_alpha": (0.15, 0.9), "glass_blur": (0, 60), "glass_depth": (0.0, 2.0), "wallpaper_blur": (0, 40)}
 _DEFAULT_META: dict[str, Any] = {
     "avatar": None,
     "theme": "dark",
@@ -26,7 +33,39 @@ _DEFAULT_META: dict[str, Any] = {
     "wallpaper_image": None,
     "homepage_widget_debug": False,
     "homepage_layout": [],
+    "homepage_hidden": [],
+    "homepage_sizes": {},
+    **GLASS_DEFAULTS,
 }
+
+
+def _normalize_glass(key: str, value: Any) -> float | int:
+    low, high = GLASS_RANGES[key]
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = float(GLASS_DEFAULTS[key])
+    number = min(high, max(low, number))
+    return int(round(number)) if key.endswith("_blur") else round(number, 2)
+
+
+SPANS = frozenset({4, 6, 12})
+
+
+def _normalize_sizes(value: Any) -> dict[str, int]:
+    """Home card widths in grid columns (4 = a third, 6 = half, 12 = full); cards not listed share a row."""
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, int] = {}
+    for key, span in list(value.items())[:20]:
+        name = str(key).strip()[:32]
+        try:
+            columns = int(span)
+        except (TypeError, ValueError):
+            continue
+        if name and columns in SPANS:
+            out[name] = columns
+    return out
 
 
 def _normalize_layout(value: Any) -> list[str]:
@@ -85,6 +124,10 @@ def _load_meta() -> dict[str, Any]:
         meta["wallpaper_image"] = str(data["wallpaper_image"])
     meta["homepage_widget_debug"] = bool(data.get("homepage_widget_debug", False))
     meta["homepage_layout"] = _normalize_layout(data.get("homepage_layout"))
+    meta["homepage_hidden"] = _normalize_layout(data.get("homepage_hidden"))
+    meta["homepage_sizes"] = _normalize_sizes(data.get("homepage_sizes"))
+    for key in GLASS_DEFAULTS:
+        meta[key] = _normalize_glass(key, data.get(key, GLASS_DEFAULTS[key]))
     return meta
 
 
@@ -97,6 +140,9 @@ def _save_meta(meta: dict[str, Any]) -> None:
         "wallpaper_image": meta.get("wallpaper_image") or None,
         "homepage_widget_debug": bool(meta.get("homepage_widget_debug", False)),
         "homepage_layout": _normalize_layout(meta.get("homepage_layout")),
+        "homepage_hidden": _normalize_layout(meta.get("homepage_hidden")),
+        "homepage_sizes": _normalize_sizes(meta.get("homepage_sizes")),
+        **{key: _normalize_glass(key, meta.get(key)) for key in GLASS_DEFAULTS},
     }
     _meta_path().write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -144,6 +190,9 @@ def visual_preferences() -> dict[str, Any]:
         "has_wallpaper_image": url is not None,
         "homepage_widget_debug": bool(meta.get("homepage_widget_debug", False)),
         "homepage_layout": _normalize_layout(meta.get("homepage_layout")),
+        "homepage_hidden": _normalize_layout(meta.get("homepage_hidden")),
+        "homepage_sizes": _normalize_sizes(meta.get("homepage_sizes")),
+        **{key: _normalize_glass(key, meta.get(key)) for key in GLASS_DEFAULTS},
     }
 
 
@@ -168,6 +217,12 @@ def save_visual_preferences(
     wallpaper: str | None = None,
     homepage_widget_debug: bool | None = None,
     homepage_layout: list[str] | None = None,
+    homepage_hidden: list[str] | None = None,
+    homepage_sizes: dict[str, int] | None = None,
+    glass_alpha: float | None = None,
+    glass_blur: float | None = None,
+    glass_depth: float | None = None,
+    wallpaper_blur: float | None = None,
 ) -> dict[str, Any]:
     meta = _load_meta()
     if theme is not None:
@@ -183,6 +238,18 @@ def save_visual_preferences(
         meta["homepage_widget_debug"] = bool(homepage_widget_debug)
     if homepage_layout is not None:
         meta["homepage_layout"] = _normalize_layout(homepage_layout)
+    if homepage_hidden is not None:
+        meta["homepage_hidden"] = _normalize_layout(homepage_hidden)
+    if homepage_sizes is not None:
+        meta["homepage_sizes"] = _normalize_sizes(homepage_sizes)
+    for key, value in (
+        ("glass_alpha", glass_alpha),
+        ("glass_blur", glass_blur),
+        ("glass_depth", glass_depth),
+        ("wallpaper_blur", wallpaper_blur),
+    ):
+        if value is not None:
+            meta[key] = _normalize_glass(key, value)
     _save_meta(meta)
     return visual_preferences()
 

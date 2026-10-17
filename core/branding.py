@@ -14,7 +14,7 @@ from core.settings import settings
 logger = logging.getLogger(__name__)
 
 DEFAULT_TITLE = "AIO Media Server Manager"
-DEFAULT_ACCENT = "#f97316"
+DEFAULT_ACCENT = "#0a6cff"
 MAX_TITLE_LEN = 64
 MAX_LOGIN_MESSAGE_LEN = 280
 MAX_BYTES = 2 * 1024 * 1024

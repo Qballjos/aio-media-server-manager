@@ -18,16 +18,19 @@ import {
   getThemePreference,
 } from './theme.js'
 import {
-  WALLPAPER_OPTIONS,
   getWallpaperPreference,
   getWallpaperImage,
+  wallpaperCss,
 } from './background.js'
+import { GLASS_DEFAULTS, GLASS_RANGES, applyGlass, glass } from './glass.js'
+import { THEMES } from './themes.js'
 import {
   saveThemeToProfile,
   saveWallpaperToProfile,
   uploadWallpaperToProfile,
   removeWallpaperFromProfile,
   saveHomepageWidgetDebugToProfile,
+  saveGlassToProfile,
   applyVisualsFromProfile,
 } from './visualsProfile.js'
 import {
@@ -225,11 +228,65 @@ function chooseWallpaper(pref) {
     .then(() => {
       wallpaperPreference.value = getWallpaperPreference()
       wallpaperImage.value = getWallpaperImage()
-      notice.value = `Background set to ${WALLPAPER_OPTIONS.find((row) => row[0] === wallpaperPreference.value)?.[1] || wallpaperPreference.value}.`
+      notice.value = wallpaperPreference.value === 'personal' ? 'Using your own image.' : `Background set to ${wallpaperPreference.value}.`
     })
     .catch((err) => {
       error.value = err?.message || 'Could not save background.'
     })
+}
+
+const themeBusy = ref('')
+/** The card art: the night version with a diagonal slice of the day version; the dots are accent, night panel, day panel, warning. */
+function themeArt(theme, tone) {
+  return { background: wallpaperCss(theme.wallpaper, tone === 'day' ? 'light' : 'dark') }
+}
+function themeDots(theme) {
+  return [theme.accent, '#121628', '#ffffff', '#f59e0b']
+}
+const activeTheme = computed(() => THEMES.find((theme) => theme.wallpaper === wallpaperPreference.value)?.id || '')
+async function applyTheme(theme) {
+  error.value = ''
+  themeBusy.value = theme.id
+  try {
+    await saveThemeToProfile(theme.mode)
+    await saveWallpaperToProfile(theme.wallpaper)
+    await saveAccentColor(theme.accent)
+    await saveGlassToProfile(theme.glass).catch(() => {})
+    themePreference.value = getThemePreference()
+    wallpaperPreference.value = getWallpaperPreference()
+    wallpaperImage.value = getWallpaperImage()
+    notice.value = `Theme set to ${theme.name}.`
+  } catch (err) {
+    error.value = err?.message || 'Could not apply the theme.'
+  } finally {
+    themePreference.value = getThemePreference()
+    wallpaperPreference.value = getWallpaperPreference()
+    wallpaperImage.value = getWallpaperImage()
+    themeBusy.value = ''
+  }
+}
+
+const customArt = computed(() =>
+  wallpaperImage.value ? { background: `url("${wallpaperImage.value}") center / cover no-repeat` } : undefined,
+)
+
+// Sliders: transparency is shown the way people think of it (more = clearer), stored as alpha.
+const GLASS_SLIDERS = [
+  { key: 'alpha', label: 'Transparency', hint: 'How much of the wallpaper shows through a panel.', min: 1 - GLASS_RANGES.alpha[1], max: 1 - GLASS_RANGES.alpha[0], step: 0.01, get: () => 1 - glass.value.alpha, set: (v) => ({ alpha: 1 - v }), fmt: (v) => `${Math.round(v * 100)}%` },
+  { key: 'blur', label: 'Blur', hint: 'How soft the wallpaper is behind the glass.', min: GLASS_RANGES.blur[0], max: GLASS_RANGES.blur[1], step: 1, get: () => glass.value.blur, set: (v) => ({ blur: v }), fmt: (v) => `${Math.round(v)} px` },
+  { key: 'depth', label: 'Depth', hint: 'Parallax and shadow strength; 0 keeps the wallpaper still.', min: GLASS_RANGES.depth[0], max: GLASS_RANGES.depth[1], step: 0.05, get: () => glass.value.depth, set: (v) => ({ depth: v }), fmt: (v) => `${Number(v).toFixed(2)}×` },
+  { key: 'wallpaperBlur', label: 'Wallpaper blur', hint: 'How much a photo wallpaper is softened; 0 shows it sharp. Drawn wallpapers stay crisp.', min: GLASS_RANGES.wallpaperBlur[0], max: GLASS_RANGES.wallpaperBlur[1], step: 1, get: () => glass.value.wallpaperBlur, set: (v) => ({ wallpaperBlur: v }), fmt: (v) => `${Math.round(v)} px` },
+]
+let glassTimer = 0
+function tuneGlass(row, value) {
+  applyGlass(row.set(Number(value)))
+  clearTimeout(glassTimer)
+  // The browser applies and remembers the values at once; the profile write is best-effort.
+  glassTimer = setTimeout(() => saveGlassToProfile(glass.value).catch(() => {}), 500)
+}
+function resetGlass() {
+  clearTimeout(glassTimer)
+  saveGlassToProfile(GLASS_DEFAULTS).catch(() => {})
 }
 
 async function onWallpaperFileChange(event) {
@@ -1428,6 +1485,94 @@ onBeforeUnmount(() => {
     <template v-if="section === 'visuals'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
+          <span class="accent-badge">THEMES</span>
+          <h3>Themes</h3>
+          <p>A wallpaper, day or night, an accent colour and the glass tuning in one go — or make your own: upload an image and set the accent below. Everything can be fine-tuned afterwards.</p>
+        </div>
+        <div class="theme-gallery" role="group" aria-label="Themes">
+          <button
+            v-for="theme in THEMES"
+            :key="theme.id"
+            type="button"
+            class="theme-card"
+            :class="{ 'is-active': activeTheme === theme.id }"
+            :aria-pressed="activeTheme === theme.id"
+            :disabled="!!themeBusy"
+            @click="applyTheme(theme)"
+          >
+            <span class="theme-card-art" :style="themeArt(theme, 'night')">
+              <span class="theme-card-day" :style="themeArt(theme, 'day')"></span>
+              <span class="theme-card-dots" aria-hidden="true">
+                <span v-for="(dot, idx) in themeDots(theme)" :key="idx" :style="{ background: dot }"></span>
+              </span>
+            </span>
+            <span class="theme-card-name">{{ themeBusy === theme.id ? 'Applying…' : theme.name }}</span>
+          </button>
+          <div class="theme-card theme-card-custom" :class="{ 'is-active': wallpaperPreference === 'personal' }">
+            <button
+              type="button"
+              class="theme-card-art"
+              :style="customArt"
+              :disabled="!!themeBusy || wallpaperBusy"
+              :aria-pressed="wallpaperPreference === 'personal'"
+              :aria-label="wallpaperImage ? 'Use your own image' : 'Upload your own image'"
+              @click="wallpaperImage ? chooseWallpaper('personal') : wallpaperFileInput?.click()"
+            >
+              <span v-if="!wallpaperImage" class="theme-card-empty">+ Upload an image</span>
+              <span v-else class="theme-card-dots" aria-hidden="true">
+                <span v-for="(dot, idx) in [form.accent_color, '#121628', '#ffffff', '#f59e0b']" :key="idx" :style="{ background: dot }"></span>
+              </span>
+            </button>
+            <span class="theme-card-name">Your own</span>
+            <span class="theme-card-actions">
+              <label class="ui-btn ui-btn-ghost wallpaper-file-btn" :aria-disabled="wallpaperBusy">
+                {{ wallpaperBusy ? 'Saving…' : (wallpaperImage ? 'Replace' : 'Upload') }}
+                <input
+                  ref="wallpaperFileInput"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  :disabled="wallpaperBusy"
+                  @change="onWallpaperFileChange"
+                />
+              </label>
+              <button v-if="wallpaperImage" type="button" class="ui-btn ui-btn-ghost" :disabled="wallpaperBusy" @click="removeWallpaperImage">Remove</button>
+            </span>
+          </div>
+        </div>
+        <div class="theme-accent">
+          <div class="theme-accent-copy">
+            <strong>Accent colour</strong>
+            <span>Buttons, switches and active states — part of your own theme, saved for every browser on this appliance.</span>
+          </div>
+          <div class="accent-presets" role="group" aria-label="Accent presets">
+            <button
+              v-for="item in ACCENT_PRESETS"
+              :key="item[0]"
+              type="button"
+              class="accent-preset"
+              :class="{ 'is-active': form.accent_color === item[0] }"
+              :style="{ '--preset': item[0] }"
+              :title="item[1]"
+              :aria-label="item[1]"
+              @click="saveAccentColor(item[0])"
+            ></button>
+          </div>
+          <div class="accent-picker">
+            <label class="accent-swatch-input" title="Pick a color">
+              <input v-model="form.accent_color" type="color" @change="saveAccentColor(form.accent_color)" />
+            </label>
+            <label class="ui-field accent-hex-field">Hex
+              <input v-model="form.accent_color" class="ui-input font-mono" maxlength="7" placeholder="#0a6cff" @change="saveAccentColor(form.accent_color)" />
+            </label>
+            <button type="button" class="ui-btn ui-btn-primary" :disabled="saving" @click="saveAccentColor(form.accent_color)">
+              {{ saving ? 'Saving…' : 'Save accent' }}
+            </button>
+            <button v-if="branding.accent_custom" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="resetAccentColor">Reset</button>
+          </div>
+        </div>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
           <span class="accent-badge">THEME</span>
           <h3>Color mode</h3>
           <p>Dark, light, or follow the system preference. Saved on your profile for every browser on this appliance.</p>
@@ -1448,102 +1593,29 @@ onBeforeUnmount(() => {
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <span class="accent-badge">BACKGROUND</span>
-          <h3>Personal background</h3>
-          <p>Pick a gradient style or upload your own image. Saved on your profile — panels stay translucent so the wallpaper shows through.</p>
+          <span class="accent-badge">GLASS</span>
+          <h3>Glass</h3>
+          <p>How clear, how soft and how deep the panels feel. Changes show as you drag and are saved on your profile.</p>
         </div>
-        <div class="wallpaper-picker" role="group" aria-label="Background style">
-          <button
-            v-for="item in WALLPAPER_OPTIONS"
-            :key="item[0]"
-            type="button"
-            class="wallpaper-option"
-            :class="{ 'is-active': wallpaperPreference === item[0] }"
-            :aria-pressed="wallpaperPreference === item[0]"
-            @click="chooseWallpaper(item[0])"
-          >
-            <span
-              class="wallpaper-swatch"
-              :data-preset="item[0]"
-              :class="{ 'has-image': item[0] === 'personal' && wallpaperImage }"
-              :style="item[0] === 'personal' && wallpaperImage ? { '--wallpaper-preview': `url('${wallpaperImage}')` } : undefined"
-            />
-            <span class="wallpaper-option-meta">
-              <strong>{{ item[1] }}</strong>
-              <span>{{ item[2] }}</span>
+        <div class="glass-sliders">
+          <label v-for="row in GLASS_SLIDERS" :key="row.key" class="glass-slider">
+            <span class="glass-slider-head">
+              <span>{{ row.label }}</span>
+              <output class="font-mono">{{ row.fmt(row.get()) }}</output>
             </span>
-          </button>
+            <input
+              type="range"
+              :min="row.min"
+              :max="row.max"
+              :step="row.step"
+              :value="row.get()"
+              @input="tuneGlass(row, $event.target.value)"
+            />
+            <span class="glass-slider-hint">{{ row.hint }}</span>
+          </label>
         </div>
         <div class="wallpaper-personal-actions">
-          <label class="ui-btn ui-btn-primary wallpaper-file-btn" :aria-disabled="wallpaperBusy">
-            {{ wallpaperBusy ? 'Saving…' : (wallpaperImage ? 'Replace image' : 'Upload image') }}
-            <input
-              ref="wallpaperFileInput"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              :disabled="wallpaperBusy"
-              @change="onWallpaperFileChange"
-            />
-          </label>
-          <button
-            v-if="wallpaperImage"
-            type="button"
-            class="ui-btn ui-btn-ghost"
-            :disabled="wallpaperBusy"
-            @click="removeWallpaperImage"
-          >
-            Remove image
-          </button>
-        </div>
-      </div>
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <span class="accent-badge">ACCENT</span>
-          <h3>Accent color</h3>
-          <p>Highlight color for buttons, switches, and active states. Saved on this appliance for every browser.</p>
-        </div>
-        <div class="accent-picker">
-          <label class="accent-swatch-input" title="Pick a color">
-            <input
-              v-model="form.accent_color"
-              type="color"
-              @change="saveAccentColor(form.accent_color)"
-            />
-          </label>
-          <label class="ui-field accent-hex-field">Hex
-            <input
-              v-model="form.accent_color"
-              class="ui-input font-mono"
-              maxlength="7"
-              placeholder="#f97316"
-              @change="saveAccentColor(form.accent_color)"
-            />
-          </label>
-          <button type="button" class="ui-btn ui-btn-primary" :disabled="saving" @click="saveAccentColor(form.accent_color)">
-            {{ saving ? 'Saving…' : 'Save accent' }}
-          </button>
-          <button
-            v-if="branding.accent_custom"
-            type="button"
-            class="ui-btn ui-btn-ghost"
-            :disabled="saving"
-            @click="resetAccentColor"
-          >
-            Reset
-          </button>
-        </div>
-        <div class="accent-presets" role="group" aria-label="Accent presets">
-          <button
-            v-for="item in ACCENT_PRESETS"
-            :key="item[0]"
-            type="button"
-            class="accent-preset"
-            :class="{ 'is-active': form.accent_color === item[0] }"
-            :style="{ '--preset': item[0] }"
-            :title="item[1]"
-            :aria-label="item[1]"
-            @click="saveAccentColor(item[0])"
-          ></button>
+          <button type="button" class="ui-btn ui-btn-ghost" @click="resetGlass">Reset to defaults</button>
         </div>
       </div>
       <div class="glass-card settings-card">
@@ -2559,22 +2631,6 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 0.45rem;
 }
-.settings-nav-btn {
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  padding: 0.4rem 0.85rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-}
-.settings-nav-btn.active {
-  color: var(--color-primary-soft);
-  background: rgba(var(--color-primary-rgb), 0.16);
-  border-color: rgba(var(--color-primary-rgb), 0.45);
-}
 .settings-card {
   padding: 1.4rem 1.5rem;
   min-width: 0;
@@ -2597,7 +2653,7 @@ onBeforeUnmount(() => {
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
   background: rgba(var(--color-primary-rgb), 0.18);
-  color: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
 .usenet-pair {
   display: grid;
@@ -2896,7 +2952,7 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 .brand-asset-size {
-  color: var(--color-primary-soft) !important;
+  color: var(--color-primary-text) !important;
   font-weight: 600;
 }
 .brand-asset-actions {
@@ -2914,7 +2970,7 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--color-primary);
+  background: var(--color-primary-button);
   color: var(--color-primary-contrast);
   display: inline-flex;
   align-items: center;
@@ -2939,6 +2995,24 @@ onBeforeUnmount(() => {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+.theme-accent {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.theme-accent-copy {
+  display: grid;
+  gap: 0.15rem;
+}
+.theme-accent-copy strong {
+  font-size: 0.95rem;
+}
+.theme-accent-copy span {
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 .accent-picker {
   display: flex;

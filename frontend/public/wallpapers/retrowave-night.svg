@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#120A2E"/>
+      <stop offset=".55" stop-color="#3A1458"/>
+      <stop offset="1" stop-color="#7A1F6B"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE27A"/>
+      <stop offset="1" stop-color="#FF4FA3"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1A0B3A"/>
+      <stop offset="1" stop-color="#0B0620"/>
+    </linearGradient>
+    <mask id="stripes">
+      <rect width="1920" height="1080" fill="#fff"/>
+      <rect x="560" y="470" width="800" height="14" fill="#000"/>
+      <rect x="560" y="505" width="800" height="18" fill="#000"/>
+      <rect x="560" y="545" width="800" height="22" fill="#000"/>
+      <rect x="560" y="590" width="800" height="26" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <g fill="#FFFFFF" opacity=".6">
+    <circle cx="200" cy="120" r="2"/><circle cx="380" cy="300" r="1.5"/><circle cx="700" cy="90" r="2"/><circle cx="1500" cy="140" r="2"/>
+    <circle cx="1720" cy="280" r="1.5"/><circle cx="1240" cy="60" r="1.5"/><circle cx="90" cy="420" r="1.5"/><circle cx="1840" cy="80" r="2"/>
+  </g>
+  <circle cx="960" cy="470" r="230" fill="#FF4FA3" opacity=".25"/>
+  <circle cx="960" cy="470" r="190" fill="url(#sun)" mask="url(#stripes)"/>
+  <path d="M0 660l160-110 140 70 180-130 200 110 160-60 180 120 200-150 220 130 180-80 300 100v160H0z" fill="#23104A"/>
+  <path d="M0 660l160-110 140 70 180-130 200 110 160-60 180 120 200-150 220 130 180-80 300 100" fill="none" stroke="#FF4FA3" stroke-width="3" opacity=".8"/>
+  <rect y="700" width="1920" height="380" fill="url(#floor)"/>
+  <g stroke="#FF4FA3" stroke-width="2" opacity=".55">
+    <line x1="960" y1="700" x2="-600" y2="1080"/><line x1="960" y1="700" x2="-200" y2="1080"/><line x1="960" y1="700" x2="200" y2="1080"/>
+    <line x1="960" y1="700" x2="600" y2="1080"/><line x1="960" y1="700" x2="960" y2="1080"/><line x1="960" y1="700" x2="1320" y2="1080"/>
+    <line x1="960" y1="700" x2="1720" y2="1080"/><line x1="960" y1="700" x2="2120" y2="1080"/><line x1="960" y1="700" x2="2520" y2="1080"/>
+    <line x1="0" y1="712" x2="1920" y2="712"/><line x1="0" y1="730" x2="1920" y2="730"/><line x1="0" y1="756" x2="1920" y2="756"/>
+    <line x1="0" y1="792" x2="1920" y2="792"/><line x1="0" y1="842" x2="1920" y2="842"/><line x1="0" y1="910" x2="1920" y2="910"/><line x1="0" y1="1000" x2="1920" y2="1000"/>
+  </g>
+  <rect y="700" width="1920" height="6" fill="#FF4FA3" opacity=".9"/>
+</svg>

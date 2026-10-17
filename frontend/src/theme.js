@@ -3,8 +3,8 @@
 const STORAGE_KEY = 'amm-theme'
 const PREFS = new Set(['dark', 'light', 'system'])
 const THEME_COLORS = {
-  dark: '#0b0f17',
-  light: '#f4f6fb',
+  dark: '#090D1F',
+  light: '#E6EEFF',
 }
 
 let mediaQuery = null

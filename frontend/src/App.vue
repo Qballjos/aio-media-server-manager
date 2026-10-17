@@ -9,6 +9,7 @@ import CatalogView from './CatalogView.vue'
 import LogsModal from './LogsModal.vue'
 import HealthModal from './HealthModal.vue'
 import AppSettingsModal from './AppSettingsModal.vue'
+import WallpaperLayer from './WallpaperLayer.vue'
 import { startGuardedInterval } from './pageVisible.js'
 import {
   apiRequest,
@@ -394,8 +395,9 @@ onUnmounted(() => {
 
 <template>
   <div class="app-container">
+    <WallpaperLayer />
     <header class="top-nav">
-      <div class="nav-brand">
+      <div class="nav-brand glass-pill">
         <div class="logo-orb">
           <img
             :src="brandHeaderUrl"
@@ -404,7 +406,7 @@ onUnmounted(() => {
           />
         </div>
         <div class="brand-titles">
-          <h1 class="brand-name">{{ brandTitle }}</h1>
+          <h1 class="brand-name" :title="brandTitle">{{ brandTitle }}</h1>
           <span
             v-if="versionText"
             class="brand-version font-mono"
@@ -413,7 +415,36 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="nav-metrics">
+      <nav v-if="authStatus.authenticated && wizardCompleted" class="nav-tabs glass-pill" aria-label="Pages">
+        <RouterLink
+          :to="{ name: 'home', query: route.name === 'home' ? route.query : {} }"
+          class="metric-pill metric-pill-action"
+          :class="{ 'is-active': currentView === 'home' }"
+          title="Home"
+        >
+          Home
+        </RouterLink>
+        <RouterLink
+          :to="{ name: 'catalog', query: route.name === 'catalog' ? route.query : {} }"
+          class="metric-pill metric-pill-action"
+          :class="{ 'is-active': currentView === 'catalog' }"
+          title="Install and manage applications"
+        >
+          Catalog
+        </RouterLink>
+        <RouterLink
+          :to="route.name === 'settings'
+            ? { name: 'settings', params: { section: route.params.section } }
+            : { name: 'settings', params: { section: 'account' } }"
+          class="metric-pill metric-pill-action"
+          :class="{ 'is-active': currentView === 'settings' }"
+          title="Appliance settings"
+        >
+          Settings
+        </RouterLink>
+      </nav>
+
+      <div class="nav-metrics" :class="{ 'nav-metrics-authenticated': authStatus.authenticated }">
         <RouterLink
           v-if="showUpdatesPill"
           :to="{ name: 'settings', params: { section: 'updates' } }"
@@ -440,35 +471,6 @@ onUnmounted(() => {
           <span class="metric-label">GPU</span>
           <span class="metric-val font-mono">HW</span>
         </div>
-        <RouterLink
-          v-if="authStatus.authenticated && wizardCompleted"
-          :to="{ name: 'home', query: route.name === 'home' ? route.query : {} }"
-          class="metric-pill metric-pill-action"
-          :class="{ 'is-active': currentView === 'home' }"
-          title="Home"
-        >
-          Home
-        </RouterLink>
-        <RouterLink
-          v-if="authStatus.authenticated && wizardCompleted"
-          :to="{ name: 'catalog', query: route.name === 'catalog' ? route.query : {} }"
-          class="metric-pill metric-pill-action"
-          :class="{ 'is-active': currentView === 'catalog' }"
-          title="Install and manage applications"
-        >
-          Catalog
-        </RouterLink>
-        <RouterLink
-          v-if="authStatus.authenticated && wizardCompleted"
-          :to="route.name === 'settings'
-            ? { name: 'settings', params: { section: route.params.section } }
-            : { name: 'settings', params: { section: 'account' } }"
-          class="metric-pill metric-pill-action"
-          :class="{ 'is-active': currentView === 'settings' }"
-          title="Appliance settings"
-        >
-          Settings
-        </RouterLink>
         <button
           v-if="authStatus.authenticated && currentView === 'catalog'"
           @click="runAutomatedWiring"
@@ -488,7 +490,7 @@ onUnmounted(() => {
         >
           Install
         </button>
-        <div v-if="authStatus.authenticated" class="user-pill">
+        <div v-if="authStatus.authenticated" class="user-pill glass-pill">
           <span class="user-avatar" aria-hidden="true">
             <img
               v-if="authStatus.avatar_url"
@@ -508,6 +510,66 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
+
+      <details v-if="authStatus.authenticated" class="nav-mobile-account" @keydown.esc="$event.currentTarget.removeAttribute('open')">
+        <summary class="glass-pill" :aria-label="`${authStatus.username} account. ${wizardCompleted ? statusChips.map(chip => chip.title).join('. ') : ''}`">
+          <span v-if="wizardCompleted && statusChips.length" class="nav-mobile-status">
+            <span v-for="chip in statusChips" :key="chip.key" class="status-chip" :data-tone="chip.tone" :title="chip.title">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span>{{ chip.label }}</span>
+            </span>
+          </span>
+          <span class="user-avatar" aria-hidden="true">
+            <img v-if="authStatus.avatar_url" :src="authStatus.avatar_url" alt="" class="user-avatar-img" />
+            <template v-else>{{ authStatus.username?.[0]?.toUpperCase() || 'A' }}</template>
+          </span>
+          <svg class="nav-account-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </summary>
+        <div class="nav-account-menu glass-pill">
+          <RouterLink
+            v-if="wizardCompleted"
+            :to="{ name: 'settings', params: { section: 'account' } }"
+            class="metric-pill metric-pill-action"
+            @click="$event.currentTarget.closest('details').removeAttribute('open')"
+          >{{ authStatus.username }} · Account</RouterLink>
+          <template v-if="wizardCompleted">
+            <RouterLink
+              v-for="chip in statusChips"
+              :key="chip.key"
+              :to="{ name: 'settings', params: { section: 'network' } }"
+              class="metric-pill status-chip"
+              :data-tone="chip.tone"
+              :title="chip.title"
+              :aria-label="chip.title"
+              @click="$event.currentTarget.closest('details').removeAttribute('open')"
+            >
+              <span class="status-dot" aria-hidden="true"></span>
+              <span>{{ chip.label }}</span>
+            </RouterLink>
+          </template>
+          <RouterLink
+            v-if="showUpdatesPill"
+            :to="{ name: 'settings', params: { section: 'updates' } }"
+            class="metric-pill is-updates"
+            @click="$event.currentTarget.closest('details').removeAttribute('open')"
+          >{{ updatesPillLabel }}</RouterLink>
+          <button
+            v-if="currentView === 'catalog'"
+            @click="runAutomatedWiring"
+            class="metric-pill metric-pill-action"
+            :disabled="wiringRunning"
+            title="Wire installed apps to each other"
+          >
+            <span v-if="wiringRunning" class="spinner spinner-sm"></span>
+            <span v-else>⚡</span>
+            Auto-Wire
+          </button>
+          <button v-if="showPwaInstall" type="button" class="metric-pill metric-pill-action" @click="installPwa">Install app</button>
+          <button type="button" @click="handleLogout" class="metric-pill metric-pill-action">Log out</button>
+        </div>
+      </details>
     </header>
 
     <main class="content-wrapper">
@@ -535,6 +597,7 @@ onUnmounted(() => {
         <HomepagePanel
           v-else-if="currentView === 'home'"
           :system-info="systemInfo"
+          :username="authStatus.username || ''"
           @manage="openCatalog"
         />
         <CatalogView

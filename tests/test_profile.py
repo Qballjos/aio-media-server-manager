@@ -178,3 +178,28 @@ def test_home_layout_is_kept_on_the_profile(tmp_path: Path, monkeypatch):
     assert client.get("/api/auth/status").json()["homepage_layout"] == ["downloads", "apps", "search"]
     # Saving the layout leaves the other visuals alone.
     assert client.get("/api/auth/me", headers=headers).json()["theme"] == "dark"
+
+
+def test_glass_tuning_and_hidden_blocks_are_kept_on_the_profile(tmp_path: Path, monkeypatch):
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    me = client.get("/api/auth/me", headers=headers).json()
+    assert (me["glass_alpha"], me["glass_blur"], me["glass_depth"], me["wallpaper_blur"], me["homepage_hidden"]) == (0.5, 28, 1.0, 12, [])
+
+    saved = client.patch(
+        "/api/auth/visuals",
+        json={"glass_alpha": 0.33, "glass_blur": 40, "glass_depth": 1.5, "wallpaper_blur": 6, "homepage_hidden": ["trending"], "wallpaper": "ocean"},
+        headers=headers,
+    )
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert (body["glass_alpha"], body["glass_blur"], body["glass_depth"], body["wallpaper_blur"]) == (0.33, 40, 1.5, 6)
+    assert body["homepage_hidden"] == ["trending"] and body["wallpaper"] == "ocean"
+    assert client.patch("/api/auth/visuals", json={"glass_blur": 500}, headers=headers).status_code == 422
+    assert client.get("/api/auth/status").json()["glass_blur"] == 40
+
+    # Card widths: a third, a half or the full row; anything else is dropped.
+    sized = client.patch("/api/auth/visuals", json={"homepage_sizes": {"requests": 12, "calendar": 5, "downloads": "6"}}, headers=headers)
+    assert sized.status_code == 200, sized.text
+    assert sized.json()["homepage_sizes"] == {"requests": 12, "downloads": 6}
+    assert client.get("/api/auth/status").json()["homepage_sizes"] == {"requests": 12, "downloads": 6}
