@@ -712,7 +712,15 @@ function selectCalDay(day) {
   }
 }
 
+const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth)
+// Requests: posters when the card is at least half the row, a list on phones and in a third.
+// Below 1200 px every card is at least half the row (see the .home-card grid rules).
+const requestsAsPosters = computed(
+  () => viewportWidth.value >= 720 && (viewportWidth.value < 1200 || (spans.value.requests || 12) >= 6),
+)
+
 function syncCalViewToViewport() {
+  viewportWidth.value = window.innerWidth
   if (calViewPicked.value) return
   const next = defaultCalView()
   if (calView.value !== next) calView.value = next
@@ -1175,13 +1183,13 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">Movies</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">Series</button>
               </div>
-              <div v-if="requestItems.length && spans.requests === 12" class="home-rail-nav">
+              <div v-if="requestItems.length && requestsAsPosters" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
               </div>
             </div>
           </div>
-          <div v-if="requestItems.length && spans.requests === 12" ref="requestsRail" class="home-rail">
+          <div v-if="requestItems.length && requestsAsPosters" ref="requestsRail" class="home-rail">
             <a
               v-for="(item, idx) in requestItems"
               :key="idx"
