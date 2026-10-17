@@ -4,12 +4,13 @@ import test from 'node:test'
 import { runInNewContext } from 'node:vm'
 import { computed, reactive, ref } from 'vue'
 import { homeSnapshotCache, partialRetryDelay } from '../src/homeSnapshotCache.js'
+import * as homeLayout from '../src/homeLayout.js'
 
 function panel(apiRequest, timers) {
   const source = readFileSync(new URL('../src/HomepagePanel.vue', import.meta.url), 'utf8')
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*\n/gm, '')
   return runInNewContext(`${script}\n;({snapshot, loading, widgetsPending, loadSnapshot})`, {
-    computed, reactive, ref, apiRequest, homeSnapshotCache, partialRetryDelay,
+    computed, reactive, ref, apiRequest, homeSnapshotCache, partialRetryDelay, ...homeLayout,
     readJson: async (response) => response.data,
     defineEmits: () => () => {},
     defineProps: () => ({}),

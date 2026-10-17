@@ -181,6 +181,19 @@ const hasWidgets = computed(
     snapshot.value.seerr.available,
 )
 const editing = ref(false)
+const homeOptions = ref(null)
+const dockElement = ref(null)
+const dockHeight = ref(72)
+let dockObserver = null
+// Reserve the real dock height, including any installation or health notices.
+watch(dockElement, (element) => {
+  dockObserver?.disconnect()
+  if (!element) return
+  dockObserver = new ResizeObserver(() => {
+    dockHeight.value = element.getBoundingClientRect().height
+  })
+  dockObserver.observe(element)
+})
 const showWidgets = computed(() => hasWidgets.value || widgetDebug.value || editing.value)
 const layout = computed(() => homeLayout.value)
 const dragBlock = ref('')
@@ -259,6 +272,10 @@ const visibleBlocks = computed(() => {
   }
   return Object.fromEntries(HOME_BLOCKS.map(([id]) => [id, editing.value || widgetDebug.value || (!!has[id] && !isHidden(id))]))
 })
+const compactHomeToolbar = computed(() =>
+  !snapshotError.value && !vpnNotice.value &&
+  layout.value.find((id) => id !== 'apps' && visibleBlocks.value[id]) === 'search',
+)
 // Cards pack into rows of 12 columns. A card with a chosen width (4, 6 or 12) keeps it; the
 // others share what is left of their row. Other blocks always take a full row.
 const CARD_IDS = ['recent', 'calendar', 'downloads', 'requests', 'trending']
@@ -983,6 +1000,7 @@ watch(calView, (view) => {
   }
 })
 onUnmounted(() => {
+  dockObserver?.disconnect()
   window.removeEventListener('resize', syncCalViewToViewport)
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   if (poll) poll()
@@ -994,7 +1012,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="home-shell">
+  <section class="home-shell" :class="{ 'has-floating-dock': !loading && snapshot.apps.length && visibleBlocks.apps && !editing }" :style="{ '--home-dock-height': `${dockHeight}px` }">
     <div v-if="loading" class="home-skeleton" role="status" aria-label="Loading Home">
       <div class="home-dock glass-pill" aria-hidden="true">
         <div class="home-dock-row">
@@ -1021,14 +1039,23 @@ onUnmounted(() => {
     </div>
 
     <template v-else-if="!loading">
-      <div class="home-toolbar">
+      <div class="home-toolbar" :class="{ 'is-editing': editing, 'is-compact': compactHomeToolbar }">
         <p v-if="editing" class="home-muted">Drag a panel onto another to swap places, or use its arrows. Hidden panels stay dimmed here and disappear when you are done.</p>
-        <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': editing }" :aria-pressed="editing" @click="editing = !editing">
+        <button type="button" class="ui-btn ui-btn-ghost home-edit-toggle" :class="{ 'is-active': editing }" :aria-pressed="editing" @click="editing = !editing">
           {{ editing ? 'Done' : 'Edit layout' }}
         </button>
+        <details v-if="!editing" ref="homeOptions" class="home-layout-menu" @keydown.esc="homeOptions.open = false">
+          <summary class="ui-btn ui-btn-icon" aria-label="Home options" title="Home options">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
+          </summary>
+          <div class="home-layout-popover">
+            <button type="button" class="ui-btn" @click="editing = true; homeOptions.open = false">Edit layout</button>
+          </div>
+        </details>
       </div>
       <div class="home-blocks" :class="{ 'is-editing': editing }">
-      <nav v-if="visibleBlocks.apps" class="home-block home-dock glass-pill" v-bind="blockProps('apps')" aria-label="Apps">
+      <Teleport to=".app-container" defer :disabled="editing">
+      <nav v-if="visibleBlocks.apps" ref="dockElement" class="home-block home-dock glass-pill" :class="{ 'is-floating': !editing }" v-bind="blockProps('apps')" aria-label="Apps">
         <HomeBlockTools v-if="editing" v-bind="toolsFor('apps')" @move="moveBlock('apps', $event)" @toggle="toggleHidden('apps')" />
         <div class="home-dock-row">
           <component
@@ -1048,6 +1075,7 @@ onUnmounted(() => {
         </div>
         <p v-if="dockNotes.length" class="home-dock-notes" aria-live="polite">{{ dockNotes.join(' · ') }}</p>
       </nav>
+      </Teleport>
 
       <section v-if="visibleBlocks.search" class="home-block home-hero" v-bind="blockProps('search')">
         <HomeBlockTools v-if="editing" v-bind="toolsFor('search')" @move="moveBlock('search', $event)" @toggle="toggleHidden('search')" />
@@ -1471,11 +1499,15 @@ onUnmounted(() => {
 
 <style scoped>
 .home-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   width: 100%;
   min-width: 0;
+}
+.home-shell.has-floating-dock {
+  padding-bottom: calc(var(--home-dock-height) + 2rem + env(safe-area-inset-bottom, 0px));
 }
 /* Placeholders in the shape of what loads into them. */
 .home-skeleton {
@@ -1529,8 +1561,7 @@ onUnmounted(() => {
 }
 /* The dock: one glass pill of app tiles that stays at the bottom of the window while you scroll. */
 .home-dock {
-  position: sticky;
-  bottom: 1rem;
+  position: relative;
   z-index: 5;
   justify-self: center;
   margin-top: 1rem;
@@ -1541,7 +1572,18 @@ onUnmounted(() => {
   gap: 0.3rem;
   padding: 0.5rem 0.65rem;
   border-radius: 2rem;
+  background: var(--control-bg);
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+}
+.home-dock.is-floating {
+  position: fixed;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  margin: 0;
 }
 .home-dock-row {
   display: flex;
@@ -1646,7 +1688,8 @@ onUnmounted(() => {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-main);
+  text-shadow: var(--wallpaper-text-shadow);
 }
 .home-hero-title {
   margin: 0;
@@ -1655,13 +1698,16 @@ onUnmounted(() => {
   letter-spacing: -0.035em;
   line-height: 1.02;
   color: var(--text-heading);
+  text-shadow: var(--wallpaper-text-shadow);
 }
 .home-hero-sub {
   margin: 0;
   font-size: 1rem;
-  color: var(--text-muted);
+  color: var(--text-main);
+  text-shadow: var(--wallpaper-text-shadow);
 }
 .home-search-pill {
+  background: var(--control-bg);
   width: 100%;
   max-width: 620px;
   display: flex;
@@ -1830,6 +1876,58 @@ onUnmounted(() => {
   margin: 0;
   flex: 1;
 }
+.home-layout-menu {
+  display: none;
+}
+.home-layout-menu summary {
+  list-style: none;
+}
+.home-layout-menu summary::-webkit-details-marker {
+  display: none;
+}
+.home-layout-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  padding: 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--menu-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--glass-shadow);
+}
+@media (max-width: 720px) {
+  .home-toolbar.is-compact:not(.is-editing) {
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 6;
+    margin: 0;
+  }
+  .home-toolbar:not(.is-editing) .home-edit-toggle {
+    display: none;
+  }
+  .home-layout-menu {
+    display: block;
+  }
+  .home-layout-menu summary {
+    min-width: 44px;
+    min-height: 44px;
+    background: var(--control-bg);
+  }
+  .home-hero-date {
+    max-width: calc(100% - 6rem);
+    min-height: 2rem;
+    display: flex;
+    align-items: center;
+  }
+  .home-hero {
+    padding-top: 0.35rem;
+  }
+  .home-toolbar.is-editing {
+    align-items: flex-start;
+  }
+}
 /* Section heads: a bold title left, links and round buttons right. */
 .home-rail-head,
 .home-widget-head {
@@ -1855,7 +1953,7 @@ onUnmounted(() => {
 .home-card-link {
   font-size: 0.82rem;
   font-weight: 700;
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -1935,7 +2033,7 @@ onUnmounted(() => {
   width: 100%;
   margin-top: 0.4rem;
   padding-inline: 0.5rem;
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 .home-tile-art {
   position: relative;
@@ -2071,7 +2169,7 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 .home-req-status.is-requested {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 .home-req-status.is-available {
   color: var(--color-success-fg);
@@ -2113,7 +2211,7 @@ onUnmounted(() => {
 .cal-views .ui-btn.is-active {
   border-color: rgba(var(--color-primary-rgb), 0.45);
   background: rgba(var(--color-primary-rgb), 0.14);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 .cal {
   display: grid;
@@ -2219,7 +2317,7 @@ onUnmounted(() => {
   color: var(--color-info);
 }
 .cal-day.is-selected .cal-num {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 .cal-events,
 .cal-list ul {
@@ -2292,7 +2390,7 @@ onUnmounted(() => {
   font-size: 0.9rem;
 }
 .cal-row.is-today .cal-chip {
-  background: var(--color-primary);
+  background: var(--color-primary-button);
   border-color: transparent;
   color: var(--color-primary-contrast);
 }

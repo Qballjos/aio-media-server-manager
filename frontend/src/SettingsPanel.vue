@@ -2653,7 +2653,7 @@ onBeforeUnmount(() => {
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
   background: rgba(var(--color-primary-rgb), 0.18);
-  color: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
 .usenet-pair {
   display: grid;
@@ -2952,7 +2952,7 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 .brand-asset-size {
-  color: var(--color-primary-soft) !important;
+  color: var(--color-primary-text) !important;
   font-weight: 600;
 }
 .brand-asset-actions {
@@ -2970,7 +2970,7 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--color-primary);
+  background: var(--color-primary-button);
   color: var(--color-primary-contrast);
   display: inline-flex;
   align-items: center;

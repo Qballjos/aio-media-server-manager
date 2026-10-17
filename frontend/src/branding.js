@@ -68,15 +68,44 @@ function mixChannel(from, to, amount) {
   return from + (to - from) * amount
 }
 
+function mixAccent(hex, target, amount) {
+  const { r, g, b } = hexToRgb(hex)
+  return toHex(mixChannel(r, target, amount), mixChannel(g, target, amount), mixChannel(b, target, amount))
+}
+
+function luminance(hex) {
+  const channels = Object.values(hexToRgb(hex)).map((channel) => {
+    const value = channel / 255
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  })
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+}
+
+function readableAccent(hex, background, target) {
+  const backgroundLuminance = luminance(background)
+  // Adjust only functional colors; the saved accent still drives decorative glass and glow.
+  for (let step = 0; step <= 100; step += 1) {
+    const candidate = mixAccent(hex, target, step / 100)
+    const value = luminance(candidate)
+    if ((Math.max(value, backgroundLuminance) + 0.05) / (Math.min(value, backgroundLuminance) + 0.05) >= 4.5) return candidate
+  }
+  return target === 0 ? '#000000' : '#ffffff'
+}
+
 export function deriveAccent(hex) {
   const primary = normalizeHex(hex)
   const { r, g, b } = hexToRgb(primary)
-  const hover = toHex(mixChannel(r, 0, 0.18), mixChannel(g, 0, 0.18), mixChannel(b, 0, 0.18))
-  const soft = toHex(mixChannel(r, 255, 0.28), mixChannel(g, 255, 0.28), mixChannel(b, 255, 0.28))
+  const hover = mixAccent(primary, 0, 0.18)
+  const soft = mixAccent(primary, 255, 0.28)
+  const button = readableAccent(primary, '#ffffff', 0)
   return {
     primary,
     hover,
     soft,
+    button,
+    buttonHover: mixAccent(button, 0, 0.18),
+    textLight: readableAccent(primary, '#e2e8f0', 0),
+    textDark: readableAccent(primary, '#475569', 255),
     rgb: `${r}, ${g}, ${b}`,
     gradient: `linear-gradient(135deg, ${hover} 0%, ${soft} 100%)`,
   }
@@ -94,6 +123,10 @@ export function applyAccentColor(hex) {
   root.style.setProperty('--color-primary', accent.primary)
   root.style.setProperty('--color-primary-hover', accent.hover)
   root.style.setProperty('--color-primary-soft', accent.soft)
+  root.style.setProperty('--color-primary-button', accent.button)
+  root.style.setProperty('--color-primary-button-hover', accent.buttonHover)
+  root.style.setProperty('--color-primary-text-light', accent.textLight)
+  root.style.setProperty('--color-primary-text-dark', accent.textDark)
   root.style.setProperty('--color-primary-rgb', accent.rgb)
   root.style.setProperty('--gradient-primary', accent.gradient)
   root.style.setProperty('--border-active', accent.primary)
