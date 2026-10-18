@@ -10,6 +10,7 @@ import LogsModal from './LogsModal.vue'
 import HealthModal from './HealthModal.vue'
 import AppSettingsModal from './AppSettingsModal.vue'
 import WallpaperLayer from './WallpaperLayer.vue'
+import AppLoader from './AppLoader.vue'
 import { startGuardedInterval } from './pageVisible.js'
 import {
   apiRequest,
@@ -579,7 +580,7 @@ onUnmounted(() => {
         @session="onAuthSession"
       />
       <section v-else-if="!wizardStatusLoaded" class="auth-card-wrapper animate-fade">
-        <p class="wizard-muted" style="text-align:center;">Loading setup…</p>
+        <AppLoader label="Loading setup" />
       </section>
       <WizardPanel
         v-else-if="!wizardCompleted"
