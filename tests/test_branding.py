@@ -146,6 +146,8 @@ def test_app_icons_and_manifest_follow_the_favicon(tmp_path: Path, monkeypatch):
     assert manifest.status_code == 200
     assert manifest.headers["content-type"].startswith("application/manifest+json")
     body = manifest.json()
+    # The manifest is served from /api/branding/, so these must be absolute or the app opens on a 404.
+    assert (body["id"], body["start_url"], body["scope"]) == ("/", "/", "/")
     assert body["short_name"] == "AIO Media"
     assert [i["src"] for i in body["icons"]] == ["/apple-touch-icon.png", "/pwa-192.png", "/pwa-512.png"]
 

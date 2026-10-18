@@ -324,13 +324,14 @@ def web_manifest() -> dict[str, Any]:
             "type": _MIME_BY_EXT.get(path.suffix.lower(), "image/png"),
             "purpose": "any",
         }]
+    # Absolute paths: the manifest lives under /api/branding/, so "./" would start the app there (a 404).
     return {
         "id": "/",
         "name": title,
         "short_name": "AIO Media" if title == DEFAULT_TITLE else title[:12],
         "description": "Home, Catalog, and Settings for this media appliance.",
-        "start_url": "./",
-        "scope": "./",
+        "start_url": "/",
+        "scope": "/",
         "display": "standalone",
         "background_color": "#090d1f",
         "theme_color": "#090d1f",
