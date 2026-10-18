@@ -11,6 +11,7 @@ import HealthModal from './HealthModal.vue'
 import AppSettingsModal from './AppSettingsModal.vue'
 import WallpaperLayer from './WallpaperLayer.vue'
 import AppLoader from './AppLoader.vue'
+import { homeEditing } from './homeLayout.js'
 import { startGuardedInterval } from './pageVisible.js'
 import {
   apiRequest,
@@ -443,6 +444,21 @@ onUnmounted(() => {
         >
           Settings
         </RouterLink>
+        <template v-if="currentView === 'home'">
+          <span class="nav-tabs-divider" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="metric-pill metric-pill-action nav-edit-btn"
+            :class="{ 'is-active': homeEditing }"
+            :aria-pressed="homeEditing"
+            :title="homeEditing ? 'Done arranging Home' : 'Edit the Home layout'"
+            :aria-label="homeEditing ? 'Done arranging Home' : 'Edit the Home layout'"
+            @click="homeEditing = !homeEditing"
+          >
+            <svg v-if="!homeEditing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="9" rx="2" /><rect x="13" y="3" width="8" height="5" rx="2" /><rect x="13" y="12" width="8" height="9" rx="2" /><rect x="3" y="16" width="8" height="5" rx="2" /></svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+          </button>
+        </template>
       </nav>
 
       <div class="nav-metrics" :class="{ 'nav-metrics-authenticated': authStatus.authenticated }">
