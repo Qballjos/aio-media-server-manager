@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { apiError, apiJson, applySession } from './api.js'
 import { brandLogoUrl, brandLoginMessage, brandTitle } from './branding.js'
 import { useToasts } from './useToasts.js'
+import AppLoader from './AppLoader.vue'
 
 const emit = defineEmits(['status', 'session'])
 const { showToast } = useToasts()
@@ -131,7 +132,7 @@ onMounted(() => {
 
 <template>
       <section v-if="!authReady" class="auth-card-wrapper animate-fade">
-        <p class="wizard-muted" style="text-align:center;">Connecting to manager…</p>
+        <AppLoader label="Connecting to the manager" />
       </section>
       <section v-else-if="authStatusError" class="auth-card-wrapper animate-fade">
         <div class="glass-card auth-card">
