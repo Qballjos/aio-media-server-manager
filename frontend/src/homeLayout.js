@@ -45,6 +45,9 @@ function read(key, fn) {
   }
 }
 
+/** Home's edit mode; the toggle lives in the page tabs (App.vue), the panels in HomepagePanel. */
+export const homeEditing = ref(false)
+
 export const homeLayout = ref(read(KEY, complete))
 export const homeHidden = ref(read(HIDDEN_KEY, known))
 export const homeSizes = ref(read(SIZES_KEY, sizes))

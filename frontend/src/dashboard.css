@@ -108,6 +108,31 @@
   padding: 0 0.85rem;
 }
 
+/* Home's layout toggle sits at the end of the page tabs, behind a hairline. */
+.nav-tabs-divider {
+  width: 1px;
+  height: 1.3rem;
+  margin: 0 0.15rem;
+  background: var(--border-strong);
+}
+
+.nav-tabs .nav-edit-btn {
+  width: 2.15rem;
+  min-width: 2.15rem;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.nav-edit-btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.nav-tabs .metric-pill.nav-edit-btn.is-active {
+  background: var(--color-primary-button, var(--color-primary));
+  color: var(--color-primary-contrast);
+}
+
 .nav-tabs .metric-pill.is-active {
   background: var(--pill-active);
   color: var(--text-heading);

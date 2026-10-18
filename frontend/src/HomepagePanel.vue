@@ -5,7 +5,7 @@ import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
-import { HOME_BLOCKS, homeHidden, homeLayout, homeSizes, saveHomeHidden, saveHomeLayout, saveHomeSizes } from './homeLayout.js'
+import { HOME_BLOCKS, homeEditing, homeHidden, homeLayout, homeSizes, saveHomeHidden, saveHomeLayout, saveHomeSizes } from './homeLayout.js'
 import HomeBlockTools from './HomeBlockTools.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
@@ -180,8 +180,7 @@ const hasWidgets = computed(
     hasCalendarSource.value ||
     snapshot.value.seerr.available,
 )
-const editing = ref(false)
-const homeOptions = ref(null)
+const editing = homeEditing
 const dockElement = ref(null)
 const dockHeight = ref(72)
 let dockObserver = null
@@ -272,10 +271,6 @@ const visibleBlocks = computed(() => {
   }
   return Object.fromEntries(HOME_BLOCKS.map(([id]) => [id, editing.value || widgetDebug.value || (!!has[id] && !isHidden(id))]))
 })
-const compactHomeToolbar = computed(() =>
-  !snapshotError.value && !vpnNotice.value &&
-  layout.value.find((id) => id !== 'apps' && visibleBlocks.value[id]) === 'search',
-)
 // Cards pack into rows of 12 columns. A card with a chosen width (4, 6 or 12) keeps it; the
 // others share what is left of their row. Other blocks always take a full row.
 const CARD_IDS = ['recent', 'calendar', 'downloads', 'requests', 'trending']
@@ -995,6 +990,7 @@ watch(calView, (view) => {
   }
 })
 onUnmounted(() => {
+  homeEditing.value = false
   dockObserver?.disconnect()
   window.removeEventListener('resize', syncCalViewToViewport)
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
@@ -1034,19 +1030,9 @@ onUnmounted(() => {
     </div>
 
     <template v-else-if="!loading">
-      <div class="home-toolbar" :class="{ 'is-editing': editing, 'is-compact': compactHomeToolbar }">
-        <p v-if="editing" class="home-muted">Drag a panel onto another to swap places, or use its arrows. Hidden panels stay dimmed here and disappear when you are done.</p>
-        <button type="button" class="ui-btn ui-btn-ghost home-edit-toggle" :class="{ 'is-active': editing }" :aria-pressed="editing" @click="editing = !editing">
-          {{ editing ? 'Done' : 'Edit layout' }}
-        </button>
-        <details v-if="!editing" ref="homeOptions" class="home-layout-menu" @keydown.esc="homeOptions.open = false">
-          <summary class="ui-btn ui-btn-icon" aria-label="Home options" title="Home options">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
-          </summary>
-          <div class="home-layout-popover">
-            <button type="button" class="ui-btn" @click="editing = true; homeOptions.open = false">Edit layout</button>
-          </div>
-        </details>
+      <div v-if="editing" class="home-toolbar">
+        <p class="home-muted">Drag a panel onto another to swap places, or use its arrows. Hidden panels stay dimmed here and disappear when you are done.</p>
+        <button type="button" class="ui-btn ui-btn-primary" @click="editing = false">Done</button>
       </div>
       <div class="home-blocks" :class="{ 'is-editing': editing }">
       <Teleport to=".app-container" defer :disabled="editing">
@@ -1838,66 +1824,26 @@ onUnmounted(() => {
 .home-blocks .home-block.is-dragging {
   opacity: 0.3;
 }
+/* Edit mode's banner: what to do, and the way out. */
 .home-toolbar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 1rem;
-  margin-bottom: -0.5rem;
+  padding: 0.75rem 0.75rem 0.75rem 1.1rem;
+  border-radius: var(--radius-glass);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
 .home-toolbar .home-muted {
   margin: 0;
   flex: 1;
 }
-.home-layout-menu {
-  display: none;
-}
-.home-layout-menu summary {
-  list-style: none;
-}
-.home-layout-menu summary::-webkit-details-marker {
-  display: none;
-}
-.home-layout-popover {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 0.4rem);
-  padding: 0.4rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--menu-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  box-shadow: var(--glass-shadow);
-}
 @media (max-width: 720px) {
-  .home-toolbar.is-compact:not(.is-editing) {
-    position: absolute;
-    right: 0;
-    top: 0;
-    z-index: 6;
-    margin: 0;
-  }
-  .home-toolbar:not(.is-editing) .home-edit-toggle {
-    display: none;
-  }
-  .home-layout-menu {
-    display: block;
-  }
-  .home-layout-menu summary {
-    min-width: 44px;
-    min-height: 44px;
-    background: var(--control-bg);
-  }
-  .home-hero-date {
-    max-width: calc(100% - 6rem);
-    min-height: 2rem;
-    display: flex;
-    align-items: center;
-  }
-  .home-hero {
-    padding-top: 0.35rem;
-  }
-  .home-toolbar.is-editing {
+  .home-toolbar {
     align-items: flex-start;
   }
 }
