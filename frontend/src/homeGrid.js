@@ -20,7 +20,7 @@ export const WIDGETS = {
   calendar: { label: 'Calendar', min: [3, 3], max: [12, 8], size: { desktop: [12, 4], tablet: [8, 4], phone: [4, 5] }, presets: [[4, 4, 'Agenda'], [12, 4, 'Week'], [12, 6, 'Large']] },
   downloads: { label: 'Downloading', min: [2, 2], max: [12, 8], size: { desktop: [4, 4], tablet: [4, 4], phone: [4, 4] }, presets: [[2, 2, 'Counter'], [4, 4, 'List'], [6, 4, 'Wide']] },
   requests: { label: 'Requests', min: [3, 3], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [6, 3, 'Half'], [12, 3, 'Full']] },
-  trending: { label: 'Trending', min: [3, 3], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [6, 3, 'Half'], [12, 3, 'Full']] },
+  trending: { label: 'Trending', min: [3, 4], max: [12, 6], size: { desktop: [6, 4], tablet: [4, 4], phone: [4, 4] }, presets: [[4, 4, 'Small'], [6, 4, 'Half'], [12, 4, 'Full']] },
 }
 export const GRID_IDS = Object.keys(WIDGETS)
 

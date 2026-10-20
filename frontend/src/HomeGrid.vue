@@ -34,16 +34,21 @@ const cols = computed(() => BREAKPOINTS[props.bp]?.cols || 12)
 const gap = computed(() => BREAKPOINTS[props.bp]?.gap || 16)
 const cell = computed(() => (width.value > 0 ? (width.value - (cols.value - 1) * gap.value) / cols.value : 0))
 const pitch = computed(() => cell.value + gap.value)
+// Cells are square until a row would pass MAX_ROW; on wide screens they get wider instead of taller.
+const MAX_ROW = 104
+const rowCell = computed(() => Math.min(cell.value, MAX_ROW))
+const rowPitch = computed(() => rowCell.value + gap.value)
 const shown = computed(() => live.value || props.layout)
 const rowCount = computed(() => shown.value.reduce((most, item) => Math.max(most, item.y + item.h), 0) + (props.editing ? 3 : 0))
-const height = computed(() => (rowCount.value ? rowCount.value * pitch.value - gap.value : 0))
+const height = computed(() => (rowCount.value ? rowCount.value * rowPitch.value - gap.value : 0))
 
 const span = (n) => n * cell.value + (n - 1) * gap.value
+const spanRows = (n) => n * rowCell.value + (n - 1) * gap.value
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value))
 const label = (id) => WIDGETS[id]?.label || id
 
 function box(item) {
-  return { x: item.x * pitch.value, y: item.y * pitch.value, w: span(item.w), h: span(item.h) }
+  return { x: item.x * pitch.value, y: item.y * rowPitch.value, w: span(item.w), h: spanRows(item.h) }
 }
 
 function itemStyle(item) {
@@ -148,7 +153,7 @@ function updateDrag() {
   const y = act.ly - rootRect.top - act.offY
   float.value = { ...float.value, x, y }
   const tx = clamp(Math.round(x / pitch.value), 0, cols.value - act.orig.w)
-  const ty = Math.max(0, Math.round(y / pitch.value))
+  const ty = Math.max(0, Math.round(y / rowPitch.value))
   if (tx === act.target.x && ty === act.target.y) return
   act.target = { ...act.orig, x: tx, y: ty }
   live.value = resolve(base, act.id, act.target, cols.value, act.orig)
@@ -178,10 +183,10 @@ function updateResize() {
   const dx = act.lx - act.sx
   const dy = act.ly - act.sy + (window.scrollY - act.scroll0)
   const w = clamp(act.w0 + dx, span(minW), span(maxW))
-  const h = clamp(act.h0 + dy, span(minH), span(maxH))
+  const h = clamp(act.h0 + dy, spanRows(minH), spanRows(maxH))
   float.value = { ...float.value, w, h }
   const cw = clamp(Math.round((w + gap.value) / pitch.value), minW, maxW)
-  const ch = clamp(Math.round((h + gap.value) / pitch.value), minH, maxH)
+  const ch = clamp(Math.round((h + gap.value) / rowPitch.value), minH, maxH)
   if (cw === act.target.w && ch === act.target.h) return
   act.target = { ...act.orig, w: cw, h: ch }
   live.value = resolve(base, act.id, act.target, cols.value, null)
@@ -321,8 +326,8 @@ function onKey(event, id) {
   >
     <svg v-if="editing && cell > 0" class="hg-cells" :width="width" :height="height" aria-hidden="true">
       <defs>
-        <pattern :id="patternId" patternUnits="userSpaceOnUse" :width="pitch" :height="pitch">
-          <rect class="hg-cell" x="0.75" y="0.75" :width="cell - 1.5" :height="cell - 1.5" rx="18" />
+        <pattern :id="patternId" patternUnits="userSpaceOnUse" :width="pitch" :height="rowPitch">
+          <rect class="hg-cell" x="0.75" y="0.75" :width="cell - 1.5" :height="rowCell - 1.5" rx="18" />
         </pattern>
       </defs>
       <rect width="100%" height="100%" :fill="`url(#${patternId})`" />

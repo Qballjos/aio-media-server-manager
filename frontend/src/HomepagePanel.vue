@@ -724,7 +724,7 @@ function selectCalDay(day) {
 
 function syncCalViewToViewport() {
   if (calViewPicked.value) return
-  const next = defaultCalView()
+  const next = calendarWide.value ? 'week' : defaultCalView()
   if (calView.value !== next) calView.value = next
 }
 
@@ -1953,6 +1953,12 @@ onUnmounted(() => {
   display: flex;
   gap: 0.35rem;
 }
+/* In a narrow card you swipe the rail, so the arrows go and the filter keeps the head on one line. */
+@container (max-width: 400px) {
+  .home-rail-nav {
+    display: none;
+  }
+}
 .cal-nav-btn {
   width: var(--btn-h);
   min-width: var(--btn-h);
@@ -1978,7 +1984,7 @@ onUnmounted(() => {
   height: 0;
 }
 .home-tile {
-  --tile-w: clamp(4.75rem, calc((100cqh - var(--rail-chrome)) * 2 / 3), 9.5rem);
+  --tile-w: clamp(4rem, calc((100cqh - var(--rail-chrome)) * 2 / 3), 9.5rem);
   flex: 0 0 var(--tile-w);
   width: var(--tile-w);
   display: flex;
@@ -2329,7 +2335,7 @@ onUnmounted(() => {
 }
 /* Cards: glass panels with a bold head, compact controls and lists with progress bars. */
 .home-card {
-  --rail-chrome: 7.6rem;
+  --rail-chrome: 7.9rem;
   height: 100%;
   overflow: hidden;
   container-type: size;
@@ -2354,7 +2360,7 @@ onUnmounted(() => {
   scrollbar-width: thin;
 }
 .home-card-trending {
-  --rail-chrome: 10.4rem;
+  --rail-chrome: 12.4rem;
 }
 .home-card .cal-head {
   margin: 0;
