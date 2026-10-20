@@ -218,6 +218,8 @@ def test_status_route_needs_a_session_and_returns_every_part(tmp_path: Path, mon
     monkeypatch.setattr(status_mod, "_attention_cache", None)
     auth_manager._rate._hits.clear()
     client = TestClient(create_app())
+    # Before the admin exists the host's numbers are not for anyone on the network, like /api/system/info.
+    assert client.get("/api/homepage/status").status_code == 401
     token = client.post(
         "/api/auth/setup",
         json={"username": "admin", "email": "admin@example.com", "password": "StrongPassword123!"},
@@ -229,3 +231,31 @@ def test_status_route_needs_a_session_and_returns_every_part(tmp_path: Path, mon
     assert body["playing"] == []
     assert body["server"]["memory_total"] > 0
     assert {label for volume in body["storage"] for label in volume["labels"]} == {"Config", "Downloads", "Media"}
+
+
+def test_attention_never_writes_into_the_data_folders(monkeypatch):
+    """The notifications snapshot's disk check writes a test file; Home asks every few seconds and does not need it."""
+    from core.storage import StorageManager
+
+    calls = []
+    monkeypatch.setattr(StorageManager, "validate_all", lambda self: calls.append(self) or {})
+    monkeypatch.setattr(status_mod, "_attention_cache", None)
+    snap = status_mod._attention_snapshot()
+    assert set(snap) >= {"sick_apps", "vpn_up", "tunnel_up", "updates"}
+    assert calls == [], "validate_all writes a test file into config, downloads and media"
+
+
+def test_now_playing_leaves_finding_the_jellyfin_key_to_the_home_snapshot(tmp_path: Path, monkeypatch):
+    """Without a stored key, discovery logs in to Jellyfin (and may restart it); the status poll must not do that."""
+    from core.crypto import secret_store
+    from core.integrations import jellyfin as jellyfin_mod
+
+    plugin = SimpleNamespace(name="jellyfin", port=8096, config_dir=tmp_path / "jellyfin", is_installed=lambda: True)
+    catalog = SimpleNamespace(has=lambda name: name == "jellyfin", get=lambda name: plugin)
+    discovered = []
+    monkeypatch.setattr(status_mod, "ApplicationCatalog", lambda: catalog)
+    monkeypatch.setattr(status_mod, "_running_names", lambda: {"jellyfin"})
+    monkeypatch.setattr(secret_store, "get_secret", lambda name: None)
+    monkeypatch.setattr(jellyfin_mod, "discover_jellyfin_api_key", lambda *args, **kwargs: discovered.append(args) or None)
+    assert status_mod.now_playing("nas") == []
+    assert discovered == []

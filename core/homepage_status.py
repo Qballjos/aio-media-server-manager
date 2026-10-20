@@ -15,7 +15,7 @@ import requests
 
 from applications.catalog import ApplicationCatalog
 from core.homepage import _TIMEOUT, _as_int, _fetch_json, _running_names, _web_url
-from core.integrations.credentials import get_application_api_key
+from core.crypto import secret_store
 from core.integrations.jellyfin import jellyfin_auth_headers
 from core.integrations.plex import PlexClient
 from core.metrics import collect_metrics
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 JELLYFIN_TICKS_PER_MINUTE = 600_000_000
 PLEX_MS_PER_MINUTE = 60_000
 FULL_PERCENT = 90
-# The notifications snapshot inspects the data paths with a test write; Home asks every few seconds.
+# Process states, VPN/tunnel and updates change slowly; Home asks every few seconds.
 _ATTENTION_TTL = 60.0
 _attention_cache: tuple[float, dict[str, Any]] | None = None
 _attention_lock = threading.Lock()
@@ -165,7 +165,8 @@ def now_playing(host: str, scheme: str = "http") -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     if _installed_and_running(catalog, running, "jellyfin"):
         plugin = catalog.get("jellyfin")
-        key = get_application_api_key("jellyfin", plugin.config_dir)
+        # Only the stored key: finding one logs in to Jellyfin, which the Home snapshot already does single-flight.
+        key = secret_store.get_secret("jellyfin_api_key")
         if key:
             data, error = _fetch_json(
                 f"http://127.0.0.1:{plugin.port}/Sessions",
@@ -302,7 +303,8 @@ def _attention_snapshot() -> dict[str, Any]:
         now = time.monotonic()
         if _attention_cache and now - _attention_cache[0] < _ATTENTION_TTL:
             return _attention_cache[1]
-        snap = notifications.snapshot()
+        # Without its disk check: that writes a test file into each data folder, and Home has the volumes already.
+        snap = notifications.snapshot(disks=False)
         _attention_cache = (now, snap)
         return snap
 
