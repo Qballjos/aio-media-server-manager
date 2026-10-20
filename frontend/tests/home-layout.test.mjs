@@ -34,3 +34,47 @@ test('arranging one screen size keeps desktop and leaves the others derived', ()
   home.restoreGrid({})
   assert.deepEqual(home.homeGrid.value, {})
 })
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+test('grid saves reach the server one at a time and in order', async () => {
+  await wait(400) // let earlier tests' saves go out first
+  const realFetch = globalThis.fetch
+  const sent = []
+  const answers = []
+  globalThis.fetch = (url, options) => {
+    sent.push(JSON.parse(options.body).homepage_grid.phone[0].x)
+    return new Promise((resolve) => answers.push(() => resolve({ ok: true, status: 200 })))
+  }
+  try {
+    home.saveGridLayout('phone', [{ id: 'downloads', x: 0, y: 0, w: 2, h: 2 }])
+    await wait(350)
+    assert.deepEqual(sent, [0])
+    home.saveGridLayout('phone', [{ id: 'downloads', x: 2, y: 0, w: 2, h: 2 }])
+    await wait(350)
+    assert.deepEqual(sent, [0], 'the second save waits until the first one is answered')
+    answers.shift()()
+    await wait(20)
+    assert.deepEqual(sent, [0, 2])
+    answers.shift()()
+    await wait(20)
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})
+
+test('a grid save the server never got is not overwritten by an older copy from the profile', async () => {
+  await wait(50)
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    throw new Error('offline')
+  }
+  try {
+    home.saveGridLayout('phone', [{ id: 'downloads', x: 1, y: 0, w: 2, h: 2 }])
+    await wait(350)
+    home.applyHomeLayoutFromProfile({ homepage_grid: {} })
+    assert.deepEqual(home.layoutFor('phone'), [{ id: 'downloads', x: 1, y: 0, w: 2, h: 2 }])
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})

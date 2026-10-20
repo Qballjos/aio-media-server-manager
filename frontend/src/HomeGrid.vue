@@ -5,7 +5,7 @@
  * resizes it and the keyboard does both. The parent saves what `change` hands it.
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { BREAKPOINTS, WIDGETS, resolve } from './homeGrid.js'
+import { BREAKPOINTS, GRID_IDS, WIDGETS, resolve } from './homeGrid.js'
 
 const props = defineProps({
   layout: { type: Array, required: true },
@@ -38,7 +38,8 @@ const pitch = computed(() => cell.value + gap.value)
 const MAX_ROW = 104
 const rowCell = computed(() => Math.min(cell.value, MAX_ROW))
 const rowPitch = computed(() => rowCell.value + gap.value)
-const shown = computed(() => live.value || props.layout)
+// Render in a fixed order: a node Vue moves loses its running transition and keyboard focus.
+const shown = computed(() => [...(live.value || props.layout)].sort((a, b) => GRID_IDS.indexOf(a.id) - GRID_IDS.indexOf(b.id)))
 const rowCount = computed(() => shown.value.reduce((most, item) => Math.max(most, item.y + item.h), 0) + (props.editing ? 3 : 0))
 const height = computed(() => (rowCount.value ? rowCount.value * rowPitch.value - gap.value : 0))
 
@@ -93,7 +94,11 @@ onUnmounted(() => {
   observer?.disconnect()
   finish()
 })
-watch(() => props.bp, settle)
+// A drag that started on one screen size must not land on another.
+watch(() => props.bp, () => {
+  if (act) end(false)
+  settle()
+})
 watch(() => props.editing, (on) => {
   if (!on && act) end(false)
 })

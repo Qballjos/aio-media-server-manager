@@ -90,6 +90,7 @@ function cache(key, value) {
 let gridPending = false
 let gridTimer = null
 let gridSeq = 0
+let gridSending = Promise.resolve()
 
 export function applyHomeLayoutFromProfile(payload = {}) {
   if (Array.isArray(payload?.homepage_layout) && payload.homepage_layout.length) {
@@ -113,9 +114,11 @@ export function applyHomeLayoutFromProfile(payload = {}) {
 
 async function patch(body) {
   try {
-    await apiRequest('/api/auth/visuals', { method: 'PATCH', body: JSON.stringify(body) })
+    const response = await apiRequest('/api/auth/visuals', { method: 'PATCH', body: JSON.stringify(body) })
+    return response.ok
   } catch (_) {
     /* kept in this browser; the next save syncs it */
+    return false
   }
 }
 
@@ -136,9 +139,13 @@ function storeGrid(next) {
   gridPending = true
   clearTimeout(gridTimer)
   const seq = ++gridSeq
-  gridTimer = setTimeout(async () => {
-    await patch({ homepage_grid: homeGrid.value })
-    if (seq === gridSeq) gridPending = false
+  gridTimer = setTimeout(() => {
+    // One save at a time, so an older layout can never land after a newer one. Until the latest one is
+    // in, the grid counts as pending, so an older copy coming back from the profile does not replace it.
+    gridSending = gridSending.then(async () => {
+      const saved = await patch({ homepage_grid: homeGrid.value })
+      if (saved && seq === gridSeq) gridPending = false
+    })
   }, 300)
 }
 

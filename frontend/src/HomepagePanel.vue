@@ -696,6 +696,10 @@ watch(
   },
   { immediate: true },
 )
+// A smaller screen's preview that no longer fits the window gives way to the window's own layout.
+watch(viewportBp, () => {
+  if (previewBp.value && !previewOptions.value.includes(previewBp.value)) previewBp.value = ''
+})
 watch(editing, (on) => {
   if (on) return
   previewBp.value = ''
@@ -1401,7 +1405,7 @@ onUnmounted(() => {
               <option value="desc">Most done first</option>
               <option value="asc">Least done first</option>
             </select>
-            <div v-if="downloadPause.paused" class="home-pause">
+            <div v-if="downloadPause.paused" class="home-pause is-paused">
               <span class="home-muted">{{ pausedLabel }}</span>
               <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(false)">Resume all</button>
             </div>
@@ -2438,7 +2442,7 @@ onUnmounted(() => {
     display: flex;
   }
   .home-card-downloads .home-dl-compact + .home-card-body,
-  .home-card-downloads :is(.home-sort, .home-pause, .home-card-stat) {
+  .home-card-downloads :is(.home-sort, .home-pause:not(.is-paused), .home-card-stat) {
     display: none;
   }
 }
