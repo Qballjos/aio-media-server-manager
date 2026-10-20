@@ -22,6 +22,7 @@ from api.routers import health as health_router
 from api.routers import homepage as homepage_router
 from api.routers import integrations as integrations_router
 from api.routers import logs as logs_router
+from api.routers import notifications as notifications_router
 from api.routers import recyclarr as recyclarr_router
 from api.routers import settings as settings_router
 from api.routers import system as system_router
@@ -125,10 +126,12 @@ def create_app() -> FastAPI:
         from core.update_schedule import scheduler_loop
 
         from core.downloads_pause import resume_when_due_loop
+        from core.notifications import notifications_loop
 
         asyncio.create_task(vpn_isolation_loop())
         asyncio.create_task(scheduler_loop())
         asyncio.create_task(resume_when_due_loop())
+        asyncio.create_task(notifications_loop())
         yield
         logger.info("FastAPI application shutting down.")
 
@@ -186,6 +189,7 @@ def create_app() -> FastAPI:
     app.include_router(cloudflare_tunnel_router.router)
     app.include_router(cloudflare_hostnames_router.router)
     app.include_router(diagnostics_router.router)
+    app.include_router(notifications_router.router)
 
     @app.middleware("http")
     async def _no_cache_spa_shell(request, call_next):
