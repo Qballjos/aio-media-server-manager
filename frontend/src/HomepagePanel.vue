@@ -5,8 +5,8 @@ import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
-import { HOME_BLOCKS, homeEditing, homeHidden, homeLayout, homeSizes, saveHomeHidden, saveHomeLayout, saveHomeSizes } from './homeLayout.js'
-import HomeBlockTools from './HomeBlockTools.vue'
+import { BP_ORDER, BREAKPOINTS, collapseEmptyRows, dockHidden, homeEditing, layoutFor, saveGridLayout, viewportBp } from './homeLayout.js'
+import HomeGrid from './HomeGrid.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { formatUptime } from './format.js'
@@ -194,123 +194,43 @@ watch(dockElement, (element) => {
   dockObserver.observe(element)
 })
 const showWidgets = computed(() => hasWidgets.value || widgetDebug.value || editing.value)
-const layout = computed(() => homeLayout.value)
-const dragBlock = ref('')
-const BLOCK_LABELS = Object.fromEntries(HOME_BLOCKS)
 
-function isHidden(id) {
-  return homeHidden.value.includes(id)
-}
+/** Edit mode can show a smaller screen's layout on this one; outside it Home follows the window. */
+const previewBp = ref('')
+const activeBp = computed(() => (editing.value && previewBp.value) || viewportBp.value)
+const previewOptions = computed(() => BP_ORDER.slice(0, BP_ORDER.indexOf(viewportBp.value) + 1))
+const previewing = computed(() => activeBp.value !== viewportBp.value)
+/** A widget just added lights up for a moment. */
+const highlight = ref('')
+const gridLayout = computed(() => layoutFor(activeBp.value))
 
-function toggleHidden(id) {
-  saveHomeHidden(isHidden(id) ? homeHidden.value.filter((item) => item !== id) : [...homeHidden.value, id])
-}
-
-/** Order, hidden state and — in edit mode — the drag handlers of a block; bound with v-bind. */
-function blockProps(id) {
-  const props = {
-    style: { order: layout.value.indexOf(id), '--span': spans.value[id] || 12, '--span-md': (spans.value[id] || 12) === 12 ? 12 : 6 },
-    class: { 'is-hidden': isHidden(id), 'is-dragging': dragBlock.value === id, 'is-wide': (spans.value[id] || 12) === 12 },
-  }
-  if (editing.value) {
-    Object.assign(props, {
-      draggable: true,
-      onDragstart: () => (dragBlock.value = id),
-      onDragend: () => (dragBlock.value = ''),
-      onDragover: (event) => event.preventDefault(),
-      onDrop: (event) => {
-        event.preventDefault()
-        dropBlock(id)
-      },
-    })
-  }
-  return props
-}
-
-function toolsFor(id) {
-  const idx = layout.value.indexOf(id)
-  return {
-    label: BLOCK_LABELS[id],
-    hidden: isHidden(id),
-    first: idx === 0,
-    last: idx === layout.value.length - 1,
-    sizable: CARD_IDS.includes(id),
-    size: homeSizes.value[id] || 0,
-  }
-}
-
-function moveBlock(id, delta) {
-  const list = [...layout.value]
-  const from = list.indexOf(id)
-  const to = from + delta
-  if (from < 0 || to < 0 || to >= list.length) return
-  list.splice(to, 0, list.splice(from, 1)[0])
-  saveHomeLayout(list)
-}
-
-function dropBlock(target) {
-  const id = dragBlock.value
-  dragBlock.value = ''
-  if (!id || id === target) return
-  const list = layout.value.filter((item) => item !== id)
-  list.splice(list.indexOf(target), 0, id)
-  saveHomeLayout(list)
-}
-
-/** Shown outside edit mode only when not hidden and there is something in it (or it is still loading). */
-const visibleBlocks = computed(() => {
+/** Outside edit mode a widget shows when there is something in it, or it is still loading. */
+const widgetHasContent = computed(() => {
   const s = snapshot.value
-  const has = {
-    apps: true,
+  return {
     search: true,
-    recent: s.recent.length || (hasMediaServer.value && isPending('recent')),
-    requests: s.requests.length || (s.seerr.available && isPending('requests')),
-    trending: s.trending.length || (s.seerr.available && isPending('trending')),
-    calendar: s.calendar.length || (hasCalendarSource.value && isPending('calendar')),
-    downloads: s.downloads.length || downloadPause.value.paused,
+    recent: !!(s.recent.length || (hasMediaServer.value && isPending('recent'))),
+    requests: !!(s.requests.length || (s.seerr.available && isPending('requests'))),
+    trending: !!(s.trending.length || (s.seerr.available && isPending('trending'))),
+    calendar: !!(s.calendar.length || (hasCalendarSource.value && isPending('calendar'))),
+    downloads: !!(s.downloads.length || downloadPause.value.paused),
   }
-  return Object.fromEntries(HOME_BLOCKS.map(([id]) => [id, editing.value || widgetDebug.value || (!!has[id] && !isHidden(id))]))
 })
-// Cards pack into rows of 12 columns. A card with a chosen width (4, 6 or 12) keeps it; the
-// others share what is left of their row. Other blocks always take a full row.
-const CARD_IDS = ['recent', 'calendar', 'downloads', 'requests', 'trending']
-const SIZE_STEPS = [0, 4, 6, 12]
-const spans = computed(() => {
-  const out = {}
-  const fixed = homeSizes.value
-  let row = []
-  let used = 0
-  const flush = () => {
-    const autos = row.filter((id) => !fixed[id])
-    const free = 12 - row.reduce((sum, id) => sum + (fixed[id] || 0), 0)
-    const per = autos.length ? Math.max(3, Math.floor(free / autos.length)) : 0
-    for (const id of row) out[id] = fixed[id] || per
-    row = []
-    used = 0
-  }
-  for (const id of layout.value) {
-    if (!visibleBlocks.value[id]) continue
-    if (!CARD_IDS.includes(id)) {
-      flush()
-      continue
-    }
-    const want = fixed[id] || 4
-    if (used + want > 12) flush()
-    row.push(id)
-    used += want
-  }
-  flush()
-  return out
+// Empty widgets leave Home outside edit mode, and the rows they had to themselves close up.
+const shownLayout = computed(() => {
+  if (editing.value) return gridLayout.value
+  return collapseEmptyRows(gridLayout.value.filter((item) => widgetDebug.value || widgetHasContent.value[item.id]))
 })
 
-function cycleSize(id) {
-  const current = homeSizes.value[id] || 0
-  const next = SIZE_STEPS[(SIZE_STEPS.indexOf(current) + 1) % SIZE_STEPS.length]
-  const sizes = { ...homeSizes.value }
-  if (next) sizes[id] = next
-  else delete sizes[id]
-  saveHomeSizes(sizes)
+function onGridChange(layout) {
+  saveGridLayout(activeBp.value, layout)
 }
+
+function removeWidget(id) {
+  saveGridLayout(activeBp.value, gridLayout.value.filter((item) => item.id !== id))
+}
+
+function openWidget() {}
 
 const todayLabel = computed(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))
 const greeting = computed(() => {
@@ -339,6 +259,12 @@ const totalSpeed = computed(() => {
     bySource[key] = key === 'sabnzbd' || key === 'nzbget' ? Math.max(bySource[key] || 0, bps) : (bySource[key] || 0) + bps
   }
   return formatSpeed(Object.values(bySource).reduce((sum, bps) => sum + bps, 0))
+})
+/** How far the moving downloads are together, for the small Downloading card. */
+const downloadsProgress = computed(() => {
+  const list = movingDownloads.value
+  if (!list.length) return 0
+  return Math.round(list.reduce((sum, item) => sum + (Number(item.progress) || 0), 0) / list.length)
 })
 function chipDay(dt) {
   return dt.toLocaleDateString(undefined, { weekday: 'short' }).replace('.', '').toUpperCase()
@@ -595,6 +521,17 @@ async function runSearch() {
   }
 }
 
+/** Search results open over the widgets below the greeting instead of making it taller. */
+const searchOpen = computed(() => !!(notice.value || searchError.value || searching.value || searchedFor.value))
+
+function closeSearch() {
+  clearTimeout(searchTimer)
+  results.value = []
+  searchedFor.value = ''
+  searchError.value = ''
+  notice.value = ''
+}
+
 const STATUS_LABELS = {
   available: 'Available',
   partial: 'Partly available',
@@ -680,13 +617,21 @@ function defaultCalView() {
   return 'list'
 }
 
+// A calendar spanning more than half the grid shows the week; a narrower one (or any on a phone) the list.
+const calendarWide = computed(() => {
+  const item = gridLayout.value.find((entry) => entry.id === 'calendar')
+  return !!item && activeBp.value !== 'phone' && item.w * 12 >= 7 * BREAKPOINTS[activeBp.value].cols
+})
 watch(
-  () => spans.value.calendar,
-  (span) => {
-    if (!calViewPicked.value) calView.value = span === 12 ? 'week' : 'list'
+  calendarWide,
+  (wide) => {
+    if (!calViewPicked.value) calView.value = wide ? 'week' : 'list'
   },
   { immediate: true },
 )
+watch(editing, (on) => {
+  if (!on) previewBp.value = ''
+})
 
 function setCalView(view) {
   calViewPicked.value = true
@@ -1003,7 +948,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="home-shell" :class="{ 'has-floating-dock': !loading && snapshot.apps.length && visibleBlocks.apps && !editing }" :style="{ '--home-dock-height': `${dockHeight}px` }">
+  <section class="home-shell" :class="{ 'has-floating-dock': !loading && snapshot.apps.length && !dockHidden, 'is-arranging': editing }" :style="{ '--home-dock-height': `${dockHeight}px` }">
     <div v-if="loading" class="home-skeleton" role="status" aria-label="Loading Home">
       <div class="home-dock glass-pill" aria-hidden="true">
         <div class="home-dock-row">
@@ -1030,14 +975,8 @@ onUnmounted(() => {
     </div>
 
     <template v-else-if="!loading">
-      <div v-if="editing" class="home-toolbar">
-        <p class="home-muted">Drag a panel onto another to swap places, or use its arrows. Hidden panels stay dimmed here and disappear when you are done.</p>
-        <button type="button" class="ui-btn ui-btn-primary" @click="editing = false">Done</button>
-      </div>
-      <div class="home-blocks" :class="{ 'is-editing': editing }">
-      <Teleport to=".app-container" defer :disabled="editing">
-      <nav v-if="visibleBlocks.apps" ref="dockElement" class="home-block home-dock glass-pill" :class="{ 'is-floating': !editing }" v-bind="blockProps('apps')" aria-label="Apps">
-        <HomeBlockTools v-if="editing" v-bind="toolsFor('apps')" @move="moveBlock('apps', $event)" @toggle="toggleHidden('apps')" />
+      <Teleport to=".app-container" defer>
+      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating glass-pill" aria-label="Apps">
         <div class="home-dock-row">
           <component
             :is="launcherOpen(app) ? 'a' : 'span'"
@@ -1058,8 +997,20 @@ onUnmounted(() => {
       </nav>
       </Teleport>
 
-      <section v-if="visibleBlocks.search" class="home-block home-hero" v-bind="blockProps('search')">
-        <HomeBlockTools v-if="editing" v-bind="toolsFor('search')" @move="moveBlock('search', $event)" @toggle="toggleHidden('search')" />
+      <div class="home-grid-wrap" :class="{ 'is-preview': previewing }" :style="previewing ? { maxWidth: `${BREAKPOINTS[activeBp].preview}px` } : null">
+      <HomeGrid
+        :layout="shownLayout"
+        :bp="activeBp"
+        :editing="editing"
+        :highlight="highlight"
+        :raise="searchOpen && !editing ? 'search' : ''"
+        :bottom-inset="(dockHidden ? 0 : dockHeight) + (editing ? 96 : 24)"
+        @change="onGridChange"
+        @remove="removeWidget"
+        @open="openWidget"
+      >
+      <template #search>
+      <section class="home-hero">
         <span class="home-hero-date">{{ todayLabel }}</span>
         <h2 class="home-hero-title">{{ greeting }}</h2>
         <p class="home-hero-sub">{{ heroSummary }}</p>
@@ -1074,10 +1025,14 @@ onUnmounted(() => {
             autocomplete="off"
             :placeholder="snapshot.seerr.available ? 'Search movies and TV to request' : 'Search Sonarr and Radarr'"
             @input="onQueryInput"
+            @keydown.esc="closeSearch"
           />
           <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :disabled="searching">Search</button>
         </form>
-        <div class="home-hero-results">
+        <div v-if="searchOpen" class="home-hero-results glass-card">
+        <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" aria-label="Close search results" title="Close" @click="closeSearch">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
         <p v-if="notice" class="home-notice">{{ notice }}</p>
         <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
         <p v-else-if="!snapshot.seerr.available && !notice" class="home-muted">
@@ -1108,10 +1063,10 @@ onUnmounted(() => {
         </ul>
         </div>
       </section>
+      </template>
 
-      <div v-if="showWidgets" class="home-widgets">
-        <article v-if="visibleBlocks.recent" class="home-block home-card glass-card" v-bind="blockProps('recent')">
-          <HomeBlockTools v-if="editing" v-bind="toolsFor('recent')" @move="moveBlock('recent', $event)" @toggle="toggleHidden('recent')" @resize="cycleSize('recent')" />
+      <template #recent>
+        <article class="home-card glass-card">
           <div class="home-rail-head">
             <h3>Recently added</h3>
             <div class="home-rail-tools">
@@ -1151,8 +1106,9 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="visibleBlocks.requests" class="home-block home-card glass-card" v-bind="blockProps('requests')">
-          <HomeBlockTools v-if="editing" v-bind="toolsFor('requests')" @move="moveBlock('requests', $event)" @toggle="toggleHidden('requests')" @resize="cycleSize('requests')" />
+      </template>
+      <template #requests>
+        <article class="home-card glass-card">
           <div class="home-rail-head">
             <h3>Requests</h3>
             <div class="home-rail-tools">
@@ -1203,8 +1159,9 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="visibleBlocks.trending" class="home-block home-card glass-card" v-bind="blockProps('trending')">
-          <HomeBlockTools v-if="editing" v-bind="toolsFor('trending')" @move="moveBlock('trending', $event)" @toggle="toggleHidden('trending')" @resize="cycleSize('trending')" />
+      </template>
+      <template #trending>
+        <article class="home-card glass-card home-card-trending">
           <div class="home-rail-head">
             <h3>Trending</h3>
             <div class="home-rail-tools">
@@ -1262,8 +1219,9 @@ onUnmounted(() => {
             </li>
           </ul>
         </article>
-        <article v-if="visibleBlocks.calendar" class="home-block home-card glass-card home-card-calendar" v-bind="blockProps('calendar')">
-          <HomeBlockTools v-if="editing" v-bind="toolsFor('calendar')" @move="moveBlock('calendar', $event)" @toggle="toggleHidden('calendar')" @resize="cycleSize('calendar')" />
+      </template>
+      <template #calendar>
+        <article class="home-card glass-card home-card-calendar">
           <div class="cal-head">
             <h3>{{ calendarRangeLabel }}</h3>
             <div class="cal-tools">
@@ -1286,6 +1244,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
+          <div class="home-card-body">
           <div v-if="calView === 'list'" class="cal-list">
             <div v-if="!calendarList.length && isPending('calendar')" aria-hidden="true">
               <span v-for="n in 4" :key="n" class="home-skel home-skel-line"></span>
@@ -1356,9 +1315,11 @@ onUnmounted(() => {
               <span>{{ note.source }} — {{ note.detail }}</span>
             </li>
           </ul>
+          </div>
         </article>
-        <article v-if="visibleBlocks.downloads" class="home-block home-card glass-card home-card-downloads" v-bind="blockProps('downloads')">
-          <HomeBlockTools v-if="editing" v-bind="toolsFor('downloads')" @move="moveBlock('downloads', $event)" @toggle="toggleHidden('downloads')" @resize="cycleSize('downloads')" />
+      </template>
+      <template #downloads>
+        <article class="home-card glass-card home-card-downloads">
           <div class="home-widget-head">
             <h3>Downloading</h3>
             <span v-if="movingDownloads.length && !downloadPause.paused" class="home-card-stat">{{ movingDownloads.length }}<template v-if="totalSpeed"> · {{ totalSpeed }}</template></span>
@@ -1383,6 +1344,12 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
+          <div v-if="movingDownloads.length && !downloadPause.paused" class="home-dl-compact">
+            <span class="home-dl-count">{{ movingDownloads.length }}<small>active</small></span>
+            <span class="home-muted home-dl-meta">{{ totalSpeed || 'Waiting for speed' }}</span>
+            <span class="home-bar"><span :style="{ width: `${downloadsProgress}%` }" /></span>
+          </div>
+          <div class="home-card-body">
           <ul v-if="movingDownloads.length">
             <li v-for="(item, idx) in movingDownloads" :key="idx">
               <span class="home-dl-row">
@@ -1431,13 +1398,15 @@ onUnmounted(() => {
               <span>{{ note.source }} — {{ note.detail }}</span>
             </li>
           </ul>
+          </div>
         </article>
+      </template>
+      </HomeGrid>
       </div>
-      <p v-else class="home-muted">
+      <p v-if="!showWidgets" class="home-muted">
         Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.
         Turn on Widget debug in Settings → Diagnostics to see why a source is skipped or failing.
       </p>
-      </div>
     </template>
     <article v-if="!loading && widgetDebug" class="home-widget glass-card home-debug-panel">
       <h3>Widget debug</h3>
@@ -1635,12 +1604,15 @@ onUnmounted(() => {
 }
 /* Hero: date, greeting and the search pill, centred like the mockup. */
 .home-hero {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   text-align: center;
   gap: 0.55rem;
-  padding: 0.75rem 0 0.25rem;
+  padding: 0.5rem;
+  container-type: size;
 }
 .home-hero-date {
   font-size: 0.8rem;
@@ -1652,7 +1624,7 @@ onUnmounted(() => {
 }
 .home-hero-title {
   margin: 0;
-  font-size: clamp(1.9rem, 4vw, 3rem);
+  font-size: clamp(1.6rem, 5.5cqw, 3rem);
   font-weight: 800;
   letter-spacing: -0.035em;
   line-height: 1.02;
@@ -1699,14 +1671,57 @@ onUnmounted(() => {
   padding: 0 1.1rem;
 }
 .home-hero-results {
-  width: 100%;
-  max-width: 720px;
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(720px, 100%);
+  max-height: min(60vh, 34rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 1.1rem;
   text-align: left;
   display: grid;
   gap: 0.5rem;
 }
-.home-hero-results:empty {
-  display: none;
+.home-results-close {
+  justify-self: end;
+  margin: -0.4rem -0.5rem -0.6rem 0;
+}
+.home-results-close svg {
+  width: 16px;
+  height: 16px;
+}
+@container (max-height: 172px) {
+  .home-hero-sub {
+    display: none;
+  }
+}
+/* One row high: the greeting sits beside the search pill. */
+@container (max-height: 130px) {
+  .home-hero {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 1rem;
+    text-align: left;
+  }
+  .home-hero-date {
+    display: none;
+  }
+  .home-hero-title {
+    flex: 0 1 auto;
+    min-width: 0;
+    font-size: 1.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .home-search-pill {
+    flex: 1 1 auto;
+    margin-top: 0;
+    height: 3rem;
+  }
 }
 .home-sr {
   position: absolute;
@@ -1769,83 +1784,28 @@ onUnmounted(() => {
 .home-status.is-missing {
   color: var(--color-danger-fg);
 }
-.home-blocks {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 1.15rem;
-}
-.home-blocks > *,
-.home-widgets > * {
-  grid-column: 1 / -1;
+/* The grid itself lives in HomeGrid; a smaller screen previewed in edit mode sits centred in a dashed frame. */
+.home-grid-wrap {
+  width: 100%;
   min-width: 0;
-  position: relative;
 }
-/* The widgets join the block grid so every block can be ordered against every other. */
-.home-widgets {
-  display: contents;
+.home-grid-wrap.is-preview {
+  margin-inline: auto;
+  padding: 1rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: calc(var(--radius-glass) + 1rem);
 }
-/* Cards next to each other share a row; the span comes from the layout (blockProps). */
-@media (min-width: 720px) {
-  .home-blocks .home-card {
-    grid-column: span var(--span-md, 12);
-  }
+.home-shell.is-arranging {
+  padding-bottom: calc(var(--home-dock-height) + 8rem + env(safe-area-inset-bottom, 0px));
 }
-@media (min-width: 1200px) {
-  .home-blocks .home-card {
-    grid-column: span var(--span, 12);
-  }
-}
-/* Edit mode: the whole block is the drag surface; its contents go inert so a click cannot open an app. */
-.home-blocks.is-editing .home-block {
-  outline: 1px dashed rgba(var(--color-primary-rgb), 0.45);
-  outline-offset: 3px;
-  cursor: grab;
-  transition: opacity 0.2s;
-}
-.home-blocks.is-editing .home-block > :not(.home-block-tools) {
-  pointer-events: none;
-}
-.home-blocks.is-editing .home-block :is(.home-rail-tools, .home-rail-nav, .cal-nav, .cal-tools, .home-widget-head > :not(h3)) {
+/* While arranging, a card's own buttons step aside so the grip and corner are what you see. */
+.hg.is-editing :is(.home-rail-tools, .home-rail-nav, .cal-nav, .cal-tools, .home-widget-head > :not(h3)) {
   visibility: hidden;
 }
-.home-blocks.is-editing .home-dock {
-  position: relative;
-  bottom: auto;
-  justify-self: stretch;
-  padding-top: 2.9rem;
+.hg.is-editing .home-hero {
   border-radius: var(--radius-glass);
-}
-.home-blocks.is-editing .home-hero {
-  padding-top: 2.9rem;
-}
-.home-blocks.is-editing .home-block.is-hidden {
-  opacity: 0.45;
-}
-.home-blocks .home-block.is-dragging {
-  opacity: 0.3;
-}
-/* Edit mode's banner: what to do, and the way out. */
-.home-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 1rem;
-  padding: 0.75rem 0.75rem 0.75rem 1.1rem;
-  border-radius: var(--radius-glass);
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-}
-.home-toolbar .home-muted {
-  margin: 0;
-  flex: 1;
-}
-@media (max-width: 720px) {
-  .home-toolbar {
-    align-items: flex-start;
-  }
+  outline: 1px dashed var(--border-strong);
+  outline-offset: -1px;
 }
 /* Section heads: a bold title left, links and round buttons right. */
 .home-rail-head,
@@ -1902,6 +1862,9 @@ onUnmounted(() => {
   font-size: 1.15rem;
 }
 .home-rail {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: flex-start;
   display: flex;
   gap: 0.85rem;
   overflow-x: auto;
@@ -1916,8 +1879,9 @@ onUnmounted(() => {
   height: 0;
 }
 .home-tile {
-  flex: 0 0 8rem;
-  width: 8rem;
+  --tile-w: clamp(4.75rem, calc((100cqh - var(--rail-chrome)) * 2 / 3), 9.5rem);
+  flex: 0 0 var(--tile-w);
+  width: var(--tile-w);
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
@@ -2141,7 +2105,7 @@ onUnmounted(() => {
   height: 0;
 }
 .cal-weeks.is-week .cal-day {
-  min-height: clamp(14rem, 28vh, 22rem);
+  min-height: clamp(6rem, calc(100cqh - 6.5rem), 22rem);
 }
 .cal-weeks.is-week .cal-num {
   display: none;
@@ -2266,11 +2230,32 @@ onUnmounted(() => {
 }
 /* Cards: glass panels with a bold head, compact controls and lists with progress bars. */
 .home-card {
+  --rail-chrome: 7.6rem;
+  height: 100%;
+  overflow: hidden;
+  container-type: size;
   padding: 1.35rem 1.35rem 1.3rem;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+.home-card > :is(.home-rail-head, .home-widget-head, .cal-head) {
+  flex: 0 0 auto;
+}
+.home-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.35rem;
+  scrollbar-width: thin;
+}
+.home-card-trending {
+  --rail-chrome: 10.4rem;
 }
 .home-card .cal-head {
   margin: 0;
@@ -2315,18 +2300,42 @@ onUnmounted(() => {
   gap: 0.3rem;
   min-width: 0;
 }
-.home-card-downloads.is-wide > ul {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 1.5rem;
+@container (min-width: 760px) {
+  .home-card-downloads .home-card-body > ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+  }
 }
-/* Long lists scroll inside the card; the card itself stays a fixed height. */
-.home-card-downloads > ul,
-.home-card .cal-list {
-  max-height: 22rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 0.35rem;
-  scrollbar-width: thin;
+/* A small Downloading card shows how many are moving, how fast, and how far along together. */
+.home-dl-compact {
+  display: none;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  min-height: 0;
+}
+.home-dl-count {
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.home-dl-count small {
+  margin-left: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+@container (max-width: 260px) or (max-height: 220px) {
+  .home-card-downloads .home-dl-compact {
+    display: flex;
+  }
+  .home-card-downloads .home-dl-compact + .home-card-body,
+  .home-card-downloads :is(.home-sort, .home-pause, .home-card-stat) {
+    display: none;
+  }
 }
 .home-dl-row {
   display: flex;
