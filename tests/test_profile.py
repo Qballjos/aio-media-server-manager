@@ -203,3 +203,38 @@ def test_glass_tuning_and_hidden_blocks_are_kept_on_the_profile(tmp_path: Path, 
     assert sized.status_code == 200, sized.text
     assert sized.json()["homepage_sizes"] == {"requests": 12, "downloads": 6}
     assert client.get("/api/auth/status").json()["homepage_sizes"] == {"requests": 12, "downloads": 6}
+
+
+def test_home_grid_is_kept_on_the_profile(tmp_path: Path, monkeypatch):
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    assert client.get("/api/auth/me", headers=headers).json()["homepage_grid"] == {}
+
+    saved = client.patch(
+        "/api/auth/visuals",
+        json={
+            "homepage_grid": {
+                "desktop": [
+                    {"id": "search", "x": 0, "y": 0, "w": 12, "h": 2},
+                    {"id": "recent", "x": 10, "y": 2, "w": 4, "h": 3},
+                    {"id": "search", "x": 0, "y": 5, "w": 6, "h": 2},
+                    {"id": "calendar", "x": "1", "y": 2, "w": 7, "h": 4},
+                ],
+                "phone": [{"id": "downloads", "x": 0, "y": 0, "w": 9, "h": 2}],
+                "watch": [{"id": "search", "x": 0, "y": 0, "w": 1, "h": 1}],
+            }
+        },
+        headers=headers,
+    )
+    assert saved.status_code == 200, saved.text
+    # Past the right edge, a second copy of an id, a size that does not exist: dropped. Numeric strings count.
+    assert saved.json()["homepage_grid"] == {
+        "desktop": [
+            {"id": "search", "x": 0, "y": 0, "w": 12, "h": 2},
+            {"id": "calendar", "x": 1, "y": 2, "w": 7, "h": 4},
+        ],
+        "phone": [],
+    }
+    assert client.get("/api/auth/status").json()["homepage_grid"] == saved.json()["homepage_grid"]
+    # The grid lives next to the old order, which stays as it was.
+    assert client.get("/api/auth/me", headers=headers).json()["homepage_layout"] == []
