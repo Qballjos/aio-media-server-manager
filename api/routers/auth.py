@@ -7,7 +7,7 @@ Handles initial setup, login, logout, session status, and profile info.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
@@ -48,6 +48,7 @@ class AuthStatusResponse(BaseModel):
     homepage_layout: Optional[list[str]] = None
     homepage_hidden: Optional[list[str]] = None
     homepage_sizes: Optional[dict[str, int]] = None
+    homepage_grid: Optional[dict[str, list[dict[str, Any]]]] = None
     glass_alpha: Optional[float] = None
     glass_blur: Optional[int] = None
     glass_depth: Optional[float] = None
@@ -78,6 +79,7 @@ def _empty_auth(*, setup_required: bool) -> dict:
         "homepage_layout": None,
         "homepage_hidden": None,
         "homepage_sizes": None,
+        "homepage_grid": None,
         "glass_alpha": None,
         "glass_blur": None,
         "glass_depth": None,
@@ -235,6 +237,7 @@ class VisualsPatch(BaseModel):
     homepage_layout: Optional[list[str]] = Field(default=None, max_length=20)
     homepage_hidden: Optional[list[str]] = Field(default=None, max_length=20)
     homepage_sizes: Optional[dict[str, int]] = None
+    homepage_grid: Optional[dict[str, Any]] = None
     glass_alpha: Optional[float] = Field(default=None, ge=0.15, le=0.9)
     glass_blur: Optional[int] = Field(default=None, ge=0, le=60)
     glass_depth: Optional[float] = Field(default=None, ge=0, le=2)
@@ -247,7 +250,7 @@ async def patch_visuals(body: VisualsPatch, request: Request) -> dict:
     if all(value is None for value in body.model_dump().values()):
         raise HTTPException(
             status_code=422,
-            detail="Provide theme, wallpaper, homepage_widget_debug, homepage_layout, homepage_hidden, homepage_sizes or a glass_* value.",
+            detail="Provide theme, wallpaper, homepage_widget_debug, homepage_layout, homepage_hidden, homepage_sizes, homepage_grid or a glass_* value.",
         )
     if body.theme is not None and body.theme not in profile_mod.THEMES:
         raise HTTPException(status_code=422, detail="theme must be dark, light, or system.")
@@ -263,6 +266,7 @@ async def patch_visuals(body: VisualsPatch, request: Request) -> dict:
         homepage_layout=body.homepage_layout,
         homepage_hidden=body.homepage_hidden,
         homepage_sizes=body.homepage_sizes,
+        homepage_grid=body.homepage_grid,
         glass_alpha=body.glass_alpha,
         glass_blur=body.glass_blur,
         glass_depth=body.glass_depth,

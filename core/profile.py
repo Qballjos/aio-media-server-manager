@@ -35,6 +35,7 @@ _DEFAULT_META: dict[str, Any] = {
     "homepage_layout": [],
     "homepage_hidden": [],
     "homepage_sizes": {},
+    "homepage_grid": {},
     **GLASS_DEFAULTS,
 }
 
@@ -65,6 +66,38 @@ def _normalize_sizes(value: Any) -> dict[str, int]:
             continue
         if name and columns in SPANS:
             out[name] = columns
+    return out
+
+
+GRID_COLUMNS = {"phone": 4, "tablet": 8, "desktop": 12}
+
+
+def _normalize_grid(value: Any) -> dict[str, list[dict[str, int | str]]]:
+    """Home widgets per screen size: id plus place (x, y) and size (w, h) in grid cells; overlaps are the dashboard's job."""
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, list[dict[str, int | str]]] = {}
+    for size, columns in GRID_COLUMNS.items():
+        if size not in value:
+            continue
+        items = value[size] if isinstance(value[size], list) else []
+        kept: list[dict[str, int | str]] = []
+        seen: set[str] = set()
+        for item in items[:20]:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("id") or "").strip()[:32]
+            try:
+                x, y, w, h = (int(item.get(key)) for key in ("x", "y", "w", "h"))
+            except (TypeError, ValueError):
+                continue
+            if not name or name in seen:
+                continue
+            if x < 0 or w < 1 or x + w > columns or not 0 <= y <= 199 or not 1 <= h <= 12:
+                continue
+            seen.add(name)
+            kept.append({"id": name, "x": x, "y": y, "w": w, "h": h})
+        out[size] = kept
     return out
 
 
@@ -126,6 +159,7 @@ def _load_meta() -> dict[str, Any]:
     meta["homepage_layout"] = _normalize_layout(data.get("homepage_layout"))
     meta["homepage_hidden"] = _normalize_layout(data.get("homepage_hidden"))
     meta["homepage_sizes"] = _normalize_sizes(data.get("homepage_sizes"))
+    meta["homepage_grid"] = _normalize_grid(data.get("homepage_grid"))
     for key in GLASS_DEFAULTS:
         meta[key] = _normalize_glass(key, data.get(key, GLASS_DEFAULTS[key]))
     return meta
@@ -142,6 +176,7 @@ def _save_meta(meta: dict[str, Any]) -> None:
         "homepage_layout": _normalize_layout(meta.get("homepage_layout")),
         "homepage_hidden": _normalize_layout(meta.get("homepage_hidden")),
         "homepage_sizes": _normalize_sizes(meta.get("homepage_sizes")),
+        "homepage_grid": _normalize_grid(meta.get("homepage_grid")),
         **{key: _normalize_glass(key, meta.get(key)) for key in GLASS_DEFAULTS},
     }
     _meta_path().write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -192,6 +227,7 @@ def visual_preferences() -> dict[str, Any]:
         "homepage_layout": _normalize_layout(meta.get("homepage_layout")),
         "homepage_hidden": _normalize_layout(meta.get("homepage_hidden")),
         "homepage_sizes": _normalize_sizes(meta.get("homepage_sizes")),
+        "homepage_grid": _normalize_grid(meta.get("homepage_grid")),
         **{key: _normalize_glass(key, meta.get(key)) for key in GLASS_DEFAULTS},
     }
 
@@ -219,6 +255,7 @@ def save_visual_preferences(
     homepage_layout: list[str] | None = None,
     homepage_hidden: list[str] | None = None,
     homepage_sizes: dict[str, int] | None = None,
+    homepage_grid: dict[str, Any] | None = None,
     glass_alpha: float | None = None,
     glass_blur: float | None = None,
     glass_depth: float | None = None,
@@ -242,6 +279,8 @@ def save_visual_preferences(
         meta["homepage_hidden"] = _normalize_layout(homepage_hidden)
     if homepage_sizes is not None:
         meta["homepage_sizes"] = _normalize_sizes(homepage_sizes)
+    if homepage_grid is not None:
+        meta["homepage_grid"] = _normalize_grid(homepage_grid)
     for key, value in (
         ("glass_alpha", glass_alpha),
         ("glass_blur", glass_blur),
