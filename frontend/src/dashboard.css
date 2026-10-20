@@ -1845,3 +1845,11 @@ a.status-pill {
   width: auto;
   min-width: 11rem;
 }
+
+/* Home-screen web app (iOS): the system blurs a band below the status bar that reaches past the safe
+   area, so it softened the top half of the logo and the account pill. Keep the header clear of it. */
+@media (display-mode: standalone) {
+  .top-nav {
+    padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
+  }
+}
