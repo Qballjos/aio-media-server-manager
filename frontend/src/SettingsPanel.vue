@@ -1178,6 +1178,56 @@ async function runUpdateCheck() {
   }
 }
 
+/** Settings → Updates: update one app, or all of them one after another (each update restarts its app). */
+const updatingApp = ref('')
+const updateAllProgress = ref('')
+const catalogUpdates = computed(() => (snapshot.value.updates?.available || []).filter((item) => item.kind !== 'appliance'))
+
+function updateLabel(item) {
+  return item.display_name || item.name
+}
+
+async function applyAppUpdate(item) {
+  updatingApp.value = item.name
+  try {
+    const res = await apiRequest(`/api/applications/${item.name}/update`, { method: 'POST' })
+    const data = await readJson(res)
+    if (res.ok && data.status !== 'rolled_back') return { ok: true, version: data.version || item.latest_version }
+    return { ok: false, reason: apiError(data, 'update failed') }
+  } catch (err) {
+    return { ok: false, reason: err.message || 'update failed' }
+  } finally {
+    updatingApp.value = ''
+  }
+}
+
+async function updateOneApp(item) {
+  error.value = ''
+  notice.value = ''
+  const result = await applyAppUpdate(item)
+  if (result.ok) notice.value = `${updateLabel(item)} updated to ${result.version}.`
+  else error.value = `${updateLabel(item)} was not updated: ${result.reason}`
+  await loadAll()
+  emit('updates')
+}
+
+async function updateAllApps() {
+  error.value = ''
+  notice.value = ''
+  const items = [...catalogUpdates.value]
+  const failed = []
+  for (const [index, item] of items.entries()) {
+    updateAllProgress.value = `Updating ${index + 1} of ${items.length}: ${updateLabel(item)}…`
+    const result = await applyAppUpdate(item)
+    if (!result.ok) failed.push(`${updateLabel(item)} (${result.reason})`)
+  }
+  updateAllProgress.value = ''
+  if (failed.length) error.value = `Updated ${items.length - failed.length} of ${items.length}. Not updated: ${failed.join(', ')}.`
+  else notice.value = `Updated all ${items.length} apps.`
+  await loadAll()
+  emit('updates')
+}
+
 const backupJobRunning = computed(() => backupJob.value?.status === 'running')
 const backupOnConfigVolume = computed(() => {
   const dir = backupInfo.value.backup_dir || ''
@@ -1983,12 +2033,24 @@ onBeforeUnmount(() => {
             <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="runUpdateCheck">Check now</button>
           </div>
         </form>
+        <div v-if="catalogUpdates.length > 1" class="share-row update-all-row">
+          <button type="button" class="ui-btn ui-btn-primary" :disabled="!!updatingApp || !!updateAllProgress || saving" @click="updateAllApps">
+            Update all ({{ catalogUpdates.length }})
+          </button>
+          <span v-if="updateAllProgress" class="share-meta" role="status">{{ updateAllProgress }}</span>
+        </div>
         <ul v-if="(snapshot.updates?.available || []).length" class="backup-list">
           <li v-for="item in snapshot.updates.available" :key="item.name">
             <div>
               <strong>{{ item.display_name || item.name }}</strong>
               <span class="path-line font-mono">{{ item.installed_version || '—' }} → {{ item.latest_version }}</span>
               <span v-if="item.kind === 'appliance'" class="path-line">{{ item.apply_hint }}</span>
+            </div>
+            <div v-if="item.kind !== 'appliance'" class="share-row">
+              <a class="ui-btn ui-btn-ghost" :href="`#/catalog?q=${encodeURIComponent(item.name)}`">Open in Catalog</a>
+              <button type="button" class="ui-btn ui-btn-primary" :disabled="!!updatingApp || !!updateAllProgress" @click="updateOneApp(item)">
+                {{ updatingApp === item.name ? 'Updating…' : 'Update' }}
+              </button>
             </div>
           </li>
         </ul>
@@ -3018,6 +3080,10 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
+}
+.update-all-row {
+  margin-top: 1rem;
+  align-items: center;
 }
 .backup-warn {
   color: var(--color-warning-fg);
