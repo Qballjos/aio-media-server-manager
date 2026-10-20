@@ -379,7 +379,15 @@ async function installPwa() {
 
 let stopPwa = null
 
+// The account menu closes on a click outside it and when the page changes.
+function closeAccountMenu(event) {
+  const menu = document.querySelector('.nav-account[open]')
+  if (menu && !menu.contains(event?.target)) menu.removeAttribute('open')
+}
+watch(() => route.fullPath, () => closeAccountMenu())
+
 onMounted(() => {
+  document.addEventListener('click', closeAccountMenu)
   loadBranding()
   fetchHealthInfo()
   refreshPwaInstall()
@@ -389,6 +397,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('click', closeAccountMenu)
   if (stopPwa) stopPwa()
   if (stopLivePoll) stopLivePoll()
   if (stopSlowPoll) stopSlowPoll()
@@ -470,24 +479,6 @@ onUnmounted(() => {
         >
           <span class="metric-val font-mono">{{ updatesPillLabel }}</span>
         </RouterLink>
-        <template v-if="authStatus.authenticated && wizardCompleted">
-          <RouterLink
-            v-for="chip in statusChips"
-            :key="chip.key"
-            :to="{ name: 'settings', params: { section: 'network' } }"
-            class="metric-pill status-chip"
-            :data-tone="chip.tone"
-            :title="chip.title"
-            :aria-label="chip.title"
-          >
-            <span class="status-dot" aria-hidden="true"></span>
-            <span>{{ chip.label }}</span>
-          </RouterLink>
-        </template>
-        <div v-if="transcodingAvailable" class="metric-pill hide-narrow" title="Hardware transcoding available">
-          <span class="metric-label">GPU</span>
-          <span class="metric-val font-mono">HW</span>
-        </div>
         <button
           v-if="authStatus.authenticated && currentView === 'catalog'"
           @click="runAutomatedWiring"
@@ -498,39 +489,11 @@ onUnmounted(() => {
           <span v-if="wiringRunning" class="spinner spinner-sm"></span>
           <span v-else>⚡ <span class="hide-compact">Auto-Wire</span></span>
         </button>
-        <button
-          v-if="showPwaInstall"
-          type="button"
-          class="metric-pill metric-pill-action"
-          title="Install this manager as an app"
-          @click="installPwa"
-        >
-          Install
-        </button>
-        <div v-if="authStatus.authenticated" class="user-pill glass-pill">
-          <span class="user-avatar" aria-hidden="true">
-            <img
-              v-if="authStatus.avatar_url"
-              :src="authStatus.avatar_url"
-              alt=""
-              class="user-avatar-img"
-            />
-            <template v-else>{{ authStatus.username?.[0]?.toUpperCase() || 'A' }}</template>
-          </span>
-          <span class="user-name">{{ authStatus.username }}</span>
-          <button @click="handleLogout" class="btn-logout" title="Log out">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-          </button>
-        </div>
       </div>
 
-      <details v-if="authStatus.authenticated" class="nav-mobile-account" @keydown.esc="$event.currentTarget.removeAttribute('open')">
+      <details v-if="authStatus.authenticated" class="nav-account" @keydown.esc="$event.currentTarget.removeAttribute('open')">
         <summary class="glass-pill" :aria-label="`${authStatus.username} account. ${wizardCompleted ? statusChips.map(chip => chip.title).join('. ') : ''}`">
-          <span v-if="wizardCompleted && statusChips.length" class="nav-mobile-status">
+          <span v-if="wizardCompleted && statusChips.length" class="nav-account-status">
             <span v-for="chip in statusChips" :key="chip.key" class="status-chip" :data-tone="chip.tone" :title="chip.title">
               <span class="status-dot" aria-hidden="true"></span>
               <span>{{ chip.label }}</span>
@@ -566,16 +529,20 @@ onUnmounted(() => {
               <span>{{ chip.label }}</span>
             </RouterLink>
           </template>
+          <div v-if="transcodingAvailable" class="metric-pill nav-account-info" title="Hardware transcoding available">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>GPU · hardware transcoding</span>
+          </div>
           <RouterLink
             v-if="showUpdatesPill"
             :to="{ name: 'settings', params: { section: 'updates' } }"
-            class="metric-pill is-updates"
+            class="metric-pill is-updates nav-account-phone-only"
             @click="$event.currentTarget.closest('details').removeAttribute('open')"
           >{{ updatesPillLabel }}</RouterLink>
           <button
             v-if="currentView === 'catalog'"
             @click="runAutomatedWiring"
-            class="metric-pill metric-pill-action"
+            class="metric-pill metric-pill-action nav-account-phone-only"
             :disabled="wiringRunning"
             title="Wire installed apps to each other"
           >
