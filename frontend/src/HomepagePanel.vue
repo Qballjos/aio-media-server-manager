@@ -11,7 +11,7 @@ import HomeGrid from './HomeGrid.vue'
 import HomeGridSheet from './HomeGridSheet.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
-import { formatUptime } from './format.js'
+import { formatBytes, formatUptime } from './format.js'
 import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepageDebug.js'
 
 const props = defineProps({
@@ -162,6 +162,7 @@ const requestsFilter = ref('all')
 const trendingFilter = ref('all')
 let poll = null
 let downloadsPoll = null
+let statusPoll = null
 let installPoll = null
 let searchTimer = null
 
@@ -216,6 +217,10 @@ const widgetHasContent = computed(() => {
     trending: !!(s.trending.length || (s.seerr.available && isPending('trending'))),
     calendar: !!(s.calendar.length || (hasCalendarSource.value && isPending('calendar'))),
     downloads: !!(s.downloads.length || downloadPause.value.paused),
+    playing: hasMediaServer.value,
+    storage: true,
+    server: true,
+    attention: true,
   }
 })
 // Empty widgets leave Home outside edit mode, and the rows they had to themselves close up.
@@ -327,6 +332,37 @@ const totalSpeed = computed(() => {
   }
   return formatSpeed(Object.values(bySource).reduce((sum, bps) => sum + bps, 0))
 })
+/** Now playing, Storage, Server and Needs attention share one status call, made only while one of them is on Home. */
+const STATUS_IDS = ['playing', 'storage', 'server', 'attention']
+const homeStatus = ref({ playing: [], server: null, storage: [], attention: [] })
+const statusLoaded = ref(false)
+const statusWanted = computed(() => gridLayout.value.some((item) => STATUS_IDS.includes(item.id)))
+const fullestVolume = computed(() => homeStatus.value.storage[0] || null)
+
+async function loadStatus() {
+  if (!statusWanted.value) return
+  try {
+    const res = await apiRequest('/api/homepage/status')
+    if (!res.ok) return
+    const data = await readJson(res)
+    homeStatus.value = { playing: data.playing || [], server: data.server || null, storage: data.storage || [], attention: data.attention || [] }
+    statusLoaded.value = true
+  } catch (_) {
+    /* keep the last status */
+  }
+}
+
+function usageClass(percent) {
+  return percent >= 90 ? 'is-full' : percent >= 80 ? 'is-high' : ''
+}
+
+function upFor(seconds) {
+  const days = Math.floor(seconds / 86400)
+  if (days) return `${days} day${days === 1 ? '' : 's'}`
+  const hours = Math.floor(seconds / 3600)
+  return hours ? `${hours} h` : `${Math.max(1, Math.floor(seconds / 60))} min`
+}
+
 /** How far the moving downloads are together, for the small Downloading card. */
 const downloadsProgress = computed(() => {
   const list = movingDownloads.value
@@ -696,6 +732,9 @@ watch(
   },
   { immediate: true },
 )
+watch(statusWanted, (wanted) => {
+  if (wanted) loadStatus()
+})
 // A smaller screen's preview that no longer fits the window gives way to the window's own layout.
 watch(viewportBp, () => {
   if (previewBp.value && !previewOptions.value.includes(previewBp.value)) previewBp.value = ''
@@ -990,6 +1029,7 @@ onMounted(() => {
   poll = startGuardedInterval(loadSnapshot, 20000)
   downloadsPoll = startGuardedInterval(loadDownloads, 8000)
   installPoll = startGuardedInterval(loadInstallJobs, 3000, { immediate: true })
+  statusPoll = startGuardedInterval(loadStatus, 10000, { immediate: true })
 })
 watch(
   () => route.query.debug,
@@ -1019,6 +1059,7 @@ onUnmounted(() => {
   if (poll) poll()
   if (downloadsPoll) downloadsPoll()
   if (installPoll) installPoll()
+  if (statusPoll) statusPoll()
   if (partialTimer) clearTimeout(partialTimer)
   clearTimeout(searchTimer)
 })
@@ -1475,6 +1516,118 @@ onUnmounted(() => {
               <span>{{ note.source }} — {{ note.detail }}</span>
             </li>
           </ul>
+          </div>
+        </article>
+      </template>
+      <template #playing>
+        <article class="home-card glass-card home-card-playing">
+          <div class="home-widget-head">
+            <h3>Now playing</h3>
+            <span v-if="homeStatus.playing.length" class="home-card-stat">{{ homeStatus.playing.length }} watching</span>
+          </div>
+          <div class="home-card-body">
+            <ul v-if="homeStatus.playing.length" class="np-list">
+              <li v-for="(item, idx) in homeStatus.playing" :key="idx">
+                <component
+                  :is="item.url ? 'a' : 'span'"
+                  class="np-row"
+                  v-bind="item.url ? { href: item.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
+                  @click="item.url && openApp($event, item.source, item.url)"
+                >
+                  <img v-if="item.poster" :src="item.poster" alt="" class="np-poster" />
+                  <span class="np-body">
+                    <strong>{{ item.title }}</strong>
+                    <span v-if="item.detail" class="np-detail">{{ item.detail }}</span>
+                    <span class="np-meta">
+                      <span>{{ [item.user, item.device].filter(Boolean).join(' · ') }}</span>
+                      <span v-if="item.paused" class="np-chip">Paused</span>
+                      <span v-if="item.transcoding" class="np-chip is-transcode">Transcoding</span>
+                    </span>
+                    <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
+                    <span v-if="item.minutes_left != null" class="home-muted np-left">{{ item.minutes_left }} min left</span>
+                  </span>
+                </component>
+              </li>
+            </ul>
+            <p v-else-if="!statusLoaded" class="home-muted">Checking who is watching…</p>
+            <p v-else-if="hasMediaServer" class="home-muted">Nobody is watching right now.</p>
+            <p v-else class="home-muted">Install Jellyfin or Plex to see who is watching.</p>
+          </div>
+        </article>
+      </template>
+      <template #storage>
+        <article class="home-card glass-card home-card-storage">
+          <div class="home-widget-head">
+            <h3>Storage</h3>
+          </div>
+          <div v-if="fullestVolume" class="st-compact">
+            <span class="home-dl-count">{{ Math.round(fullestVolume.percent) }}<small>% used</small></span>
+            <span class="home-muted home-dl-meta">{{ fullestVolume.labels.join(' · ') }} · {{ formatBytes(fullestVolume.free) }} free</span>
+            <span class="home-bar" :class="usageClass(fullestVolume.percent)"><span :style="{ width: `${fullestVolume.percent}%` }" /></span>
+          </div>
+          <div class="home-card-body">
+            <ul v-if="homeStatus.storage.length">
+              <li v-for="volume in homeStatus.storage" :key="volume.labels.join()">
+                <span class="home-dl-row">
+                  <strong>{{ volume.labels.join(' · ') }}</strong>
+                  <span class="home-dl-pct font-mono">{{ formatBytes(volume.free) }} free</span>
+                </span>
+                <span class="home-bar" :class="usageClass(volume.percent)"><span :style="{ width: `${volume.percent}%` }" /></span>
+                <span class="home-muted home-dl-meta">{{ formatBytes(volume.used) }} of {{ formatBytes(volume.total) }} · {{ Math.round(volume.percent) }}% used</span>
+              </li>
+            </ul>
+            <p v-else class="home-muted">{{ statusLoaded ? 'No data folders found.' : 'Checking disks…' }}</p>
+          </div>
+        </article>
+      </template>
+      <template #server>
+        <article class="home-card glass-card home-card-server">
+          <div class="home-widget-head">
+            <h3>Server</h3>
+            <span v-if="homeStatus.server" class="home-muted sv-up">Up {{ upFor(homeStatus.server.uptime_seconds) }}</span>
+          </div>
+          <div v-if="homeStatus.server" class="sv-meters">
+            <div class="sv-meter">
+              <span class="sv-label">CPU</span>
+              <span class="sv-value">{{ Math.round(homeStatus.server.cpu_percent) }}<small>%</small></span>
+              <span class="home-bar" :class="usageClass(homeStatus.server.cpu_percent)"><span :style="{ width: `${homeStatus.server.cpu_percent}%` }" /></span>
+              <span class="home-muted sv-note">{{ homeStatus.server.cpu_count }} cores<template v-if="homeStatus.server.temperature != null"> · {{ Math.round(homeStatus.server.temperature) }} °C</template></span>
+            </div>
+            <div class="sv-meter">
+              <span class="sv-label">Memory</span>
+              <span class="sv-value">{{ Math.round(homeStatus.server.memory_percent) }}<small>%</small></span>
+              <span class="home-bar" :class="usageClass(homeStatus.server.memory_percent)"><span :style="{ width: `${homeStatus.server.memory_percent}%` }" /></span>
+              <span class="home-muted sv-note">{{ formatBytes(homeStatus.server.memory_used) }} of {{ formatBytes(homeStatus.server.memory_total) }}</span>
+            </div>
+          </div>
+          <p v-else class="home-muted">Reading the server…</p>
+        </article>
+      </template>
+      <template #attention>
+        <article class="home-card glass-card home-card-attention">
+          <div class="home-widget-head">
+            <h3>Needs attention</h3>
+            <span v-if="homeStatus.attention.length" class="at-count" :class="{ 'is-problem': homeStatus.attention.some((item) => item.level === 'problem') }">{{ homeStatus.attention.length }}</span>
+          </div>
+          <div class="home-card-body">
+            <ul v-if="homeStatus.attention.length" class="at-list">
+              <li v-for="(item, idx) in homeStatus.attention" :key="idx">
+                <a :href="item.href" class="at-row" :class="`is-${item.level}`">
+                  <span class="at-dot" aria-hidden="true"></span>
+                  <span class="at-body">
+                    <strong>{{ item.title }}</strong>
+                    <span class="home-muted">{{ item.detail }}</span>
+                  </span>
+                  <svg class="at-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+                </a>
+              </li>
+            </ul>
+            <div v-else-if="statusLoaded" class="at-ok">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+              <strong>Everything is running</strong>
+              <span class="home-muted">Apps, VPN, tunnel, updates and disks look fine.</span>
+            </div>
+            <p v-else class="home-muted">Checking…</p>
           </div>
         </article>
       </template>
@@ -2576,5 +2729,244 @@ onUnmounted(() => {
 }
 .home-debug-state[data-state='empty'] {
   color: var(--color-warning, #e6b84d);
+}
+/* Status widgets: bars turn amber from 80% and red from 90%, like the disk warning in Needs attention. */
+.home-bar.is-high span {
+  background: var(--color-warning);
+}
+.home-bar.is-full span {
+  background: var(--color-danger);
+}
+/* Now playing: poster, title, who and where, and how far along. */
+.home-card .np-list {
+  gap: 0.9rem;
+}
+.np-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.np-poster {
+  flex: 0 0 auto;
+  width: 3.4rem;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+.np-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+.np-body strong,
+.np-detail {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-body strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.np-detail {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.np-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+.np-chip {
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-weight: 600;
+}
+.np-chip.is-transcode {
+  color: var(--color-warning-fg);
+  border-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
+}
+.np-left {
+  font-size: 0.72rem;
+}
+@container (max-width: 300px) or (max-height: 220px) {
+  .np-poster,
+  .np-meta,
+  .np-left {
+    display: none;
+  }
+}
+/* Storage: one row per disk; a small card shows only the fullest one. */
+.st-compact {
+  display: none;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  min-height: 0;
+}
+@container (max-width: 260px) or (max-height: 140px) {
+  .home-card-storage .st-compact {
+    display: flex;
+  }
+  .home-card-storage .st-compact + .home-card-body {
+    display: none;
+  }
+}
+/* Server: CPU and memory side by side, stacked in a narrow card. */
+.sv-up {
+  font-size: 0.8rem;
+}
+.sv-meters {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: end;
+  gap: 0.6rem 1.2rem;
+}
+.sv-meter {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.sv-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.sv-value {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.sv-value small {
+  margin-left: 0.1rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+.sv-note {
+  font-size: 0.74rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@container (max-width: 300px) {
+  .sv-meters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sv-value {
+    font-size: 1.45rem;
+  }
+  .sv-note {
+    display: none;
+  }
+}
+/* Needs attention: a coloured dot per row, each row opens where to fix it; empty means all is well. */
+.at-count {
+  min-width: 1.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+}
+.at-count.is-problem {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+}
+.home-card .at-list {
+  gap: 0.4rem;
+}
+.at-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  color: inherit;
+  text-decoration: none;
+}
+.at-row:hover {
+  border-color: var(--border-hover);
+}
+.at-dot {
+  flex: 0 0 auto;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+.at-row.is-problem .at-dot {
+  background: var(--color-danger);
+}
+.at-row.is-warning .at-dot {
+  background: var(--color-warning);
+}
+.at-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.at-body strong,
+.at-body .home-muted {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.at-body strong {
+  font-size: 0.86rem;
+}
+.at-body .home-muted {
+  font-size: 0.76rem;
+}
+.at-go {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-dim);
+}
+.at-ok {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  text-align: center;
+}
+.at-ok svg {
+  width: 2rem;
+  height: 2rem;
+  padding: 0.4rem;
+  border-radius: 50%;
+  color: var(--color-success-fg);
+  background: var(--color-success-bg);
+}
+@container (max-height: 160px) {
+  .at-ok .home-muted {
+    display: none;
+  }
 }
 </style>

@@ -1,12 +1,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  BREAKPOINTS,
   GRID_IDS,
+  LEGACY_IDS,
+  WIDGETS,
   bpForWidth,
   collapseEmptyRows,
   collides,
   deriveLayout,
   firstFree,
+  fitItem,
   fromLegacy,
   normalizeLayout,
   resolve,
@@ -109,7 +113,7 @@ test('fromLegacy keeps order, widths and hidden cards', () => {
 
 test('fromLegacy with empty input gives the default arrangement', () => {
   const out = fromLegacy({})
-  assert.deepEqual(out.map((item) => item.id).sort(), [...GRID_IDS].sort())
+  assert.deepEqual(out.map((item) => item.id).sort(), ['calendar', 'downloads', 'recent', 'requests', 'search', 'trending'])
   assert.deepEqual(byId(out).search, { id: 'search', x: 0, y: 0, w: 12, h: 2 })
   assertNoOverlap(out)
 })
@@ -140,4 +144,22 @@ test('bpForWidth follows the existing breakpoints', () => {
   assert.equal(bpForWidth(720), 'tablet')
   assert.equal(bpForWidth(1199), 'tablet')
   assert.equal(bpForWidth(1200), 'desktop')
+})
+
+test('the status widgets wait in Add widget instead of joining an existing Home', () => {
+  for (const id of ['playing', 'storage', 'server', 'attention']) {
+    assert.ok(GRID_IDS.includes(id), `${id} is a widget`)
+    assert.ok(!LEGACY_IDS.includes(id), `${id} is not part of the old Home`)
+    assert.equal(fromLegacy({ order: ['search', id] }).some((item) => item.id === id), false)
+  }
+  assert.deepEqual(normalizeLayout([{ id: 'playing', x: 0, y: 0, w: 6, h: 3 }], 'desktop'), [{ id: 'playing', x: 0, y: 0, w: 6, h: 3 }])
+})
+
+test('every widget starts at a size it allows, on every screen size', () => {
+  for (const id of GRID_IDS) {
+    for (const [bp, { cols }] of Object.entries(BREAKPOINTS)) {
+      const [w, h] = WIDGETS[id].size[bp]
+      assert.deepEqual(fitItem({ id, x: 0, y: 0, w, h }, cols), { id, x: 0, y: 0, w, h }, `${id} on ${bp}`)
+    }
+  }
 })
