@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
 from core.homepage import homepage_art, homepage_downloads, homepage_request, homepage_search, homepage_snapshot
+from core.homepage_status import homepage_status
 from core.integrations.seerr import sync_seerr_external_links
 
 router = APIRouter(prefix="/api/homepage", tags=["Homepage"])
@@ -40,6 +41,14 @@ async def get_homepage(request: Request, refresh: bool = False) -> dict[str, Any
 async def get_homepage_downloads(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
     return await asyncio.to_thread(homepage_downloads)
+
+
+@router.get("/status", summary="Now playing, storage, server and attention for Home")
+async def get_homepage_status(request: Request) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    host = request.url.hostname or "127.0.0.1"
+    scheme = request.url.scheme or "http"
+    return await asyncio.to_thread(homepage_status, host, scheme)
 
 
 @router.get("/art", summary="Poster image for Home rails")
