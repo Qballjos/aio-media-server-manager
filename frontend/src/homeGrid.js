@@ -21,8 +21,14 @@ export const WIDGETS = {
   downloads: { label: 'Downloading', min: [2, 2], max: [12, 8], size: { desktop: [4, 4], tablet: [4, 4], phone: [4, 4] }, presets: [[2, 2, 'Counter'], [4, 4, 'List'], [6, 4, 'Wide']] },
   requests: { label: 'Requests', min: [3, 3], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [6, 3, 'Half'], [12, 3, 'Full']] },
   trending: { label: 'Trending', min: [3, 4], max: [12, 6], size: { desktop: [6, 4], tablet: [4, 4], phone: [4, 4] }, presets: [[4, 4, 'Small'], [6, 4, 'Half'], [12, 4, 'Full']] },
+  playing: { label: 'Now playing', min: [3, 2], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 2, 'Small'], [6, 3, 'List'], [12, 4, 'Large']] },
+  storage: { label: 'Storage', min: [2, 2], max: [12, 4], size: { desktop: [4, 2], tablet: [4, 2], phone: [4, 2] }, presets: [[2, 2, 'Counter'], [4, 2, 'List'], [6, 3, 'Wide']] },
+  server: { label: 'Server', min: [2, 2], max: [8, 4], size: { desktop: [4, 2], tablet: [4, 2], phone: [4, 2] }, presets: [[2, 2, 'Counter'], [4, 2, 'Standard'], [6, 2, 'Wide']] },
+  attention: { label: 'Needs attention', min: [3, 2], max: [12, 6], size: { desktop: [4, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[3, 2, 'Small'], [4, 3, 'List'], [8, 3, 'Wide']] },
 }
 export const GRID_IDS = Object.keys(WIDGETS)
+/** The blocks the old order-and-width Home had; newer widgets are added from Add widget, not slipped into an existing Home. */
+export const LEGACY_IDS = ['search', 'recent', 'calendar', 'downloads', 'requests', 'trending']
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value))
 
@@ -119,7 +125,7 @@ const LEGACY_SPANS = [4, 6, 12]
  */
 export function fromLegacy({ order = [], sizes = {}, hidden = [] } = {}) {
   const gone = new Set(Array.isArray(hidden) ? hidden : [])
-  const ids = [...new Set([...(Array.isArray(order) ? order : []), ...GRID_IDS])].filter((id) => WIDGETS[id] && !gone.has(id))
+  const ids = [...new Set([...(Array.isArray(order) ? order : []), ...LEGACY_IDS])].filter((id) => LEGACY_IDS.includes(id) && !gone.has(id))
   const fixed = (id) => (LEGACY_SPANS.includes(Number(sizes?.[id])) ? Number(sizes[id]) : 0)
   const out = []
   let y = 0
