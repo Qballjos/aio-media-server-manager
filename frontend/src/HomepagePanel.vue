@@ -1435,7 +1435,7 @@ onUnmounted(() => {
       </div>
       <p v-else class="home-muted">
         Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.
-        Turn on Widget debug in Settings → Homepage to see why a source is skipped or failing.
+        Turn on Widget debug in Settings → Diagnostics to see why a source is skipped or failing.
       </p>
       </div>
     </template>
@@ -1443,7 +1443,7 @@ onUnmounted(() => {
       <h3>Widget debug</h3>
       <p class="home-muted">
         Per-source status for Home. API keys are never shown. Toggle this under
-        Settings → Homepage, or add <code>?debug=1</code> to the URL.
+        Settings → Diagnostics, or add <code>?debug=1</code> to the URL.
       </p>
       <ul v-if="widgetNotes.length" class="home-debug">
         <li v-for="(note, idx) in widgetNotes" :key="idx">

@@ -237,6 +237,7 @@ function chooseWallpaper(pref) {
 }
 
 const themeBusy = ref('')
+const themesExpanded = ref(false)
 /** The card art: the night version with a diagonal slice of the day version; the dots are accent, night panel, day panel, warning. */
 function themeArt(theme, tone) {
   return { background: wallpaperCss(theme.wallpaper, tone === 'day' ? 'light' : 'dark') }
@@ -1492,7 +1493,7 @@ onBeforeUnmount(() => {
           <h3>Themes</h3>
           <p>A wallpaper, day or night, an accent colour and the glass tuning in one go — or make your own: upload an image and set the accent below. Everything can be fine-tuned afterwards.</p>
         </div>
-        <div class="theme-gallery" role="group" aria-label="Themes">
+        <div class="theme-gallery" :class="{ 'is-expanded': themesExpanded }" role="group" aria-label="Themes">
           <button
             v-for="theme in THEMES"
             :key="theme.id"
@@ -1542,6 +1543,9 @@ onBeforeUnmount(() => {
             </span>
           </div>
         </div>
+        <button type="button" class="ui-btn ui-btn-ghost theme-gallery-more" :aria-expanded="themesExpanded" @click="themesExpanded = !themesExpanded">
+          {{ themesExpanded ? 'Show fewer themes' : `Show all ${THEMES.length} themes` }}
+        </button>
         <div class="theme-accent">
           <div class="theme-accent-copy">
             <strong>Accent colour</strong>
@@ -2524,6 +2528,9 @@ onBeforeUnmount(() => {
           </div>
         </form>
       </div>
+    </template>
+
+    <template v-else-if="section === 'diagnostics'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Widget debug</h3>
@@ -2548,9 +2555,6 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
-    </template>
-
-    <template v-else-if="section === 'diagnostics'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Support share</h3>
