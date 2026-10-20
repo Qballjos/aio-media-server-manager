@@ -12,6 +12,7 @@ import HomeGridSheet from './HomeGridSheet.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { formatBytes, formatUptime } from './format.js'
+import { addNetSample } from './netRates.js'
 import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepageDebug.js'
 
 const props = defineProps({
@@ -338,6 +339,49 @@ const homeStatus = ref({ playing: [], server: null, storage: [], attention: [] }
 const statusLoaded = ref(false)
 const statusWanted = computed(() => gridLayout.value.some((item) => STATUS_IDS.includes(item.id)))
 const fullestVolume = computed(() => homeStatus.value.storage[0] || null)
+// The last 30 polls (5 minutes) of network use, drawn in the Server widget.
+const netHistory = ref([])
+const netHoverIdx = ref(-1)
+const netPoints = computed(() => netHistory.value.filter((point) => point.rxRate != null))
+const netShown = computed(() => netPoints.value[netHoverIdx.value] || netPoints.value.at(-1) || null)
+const netChart = computed(() => {
+  const points = netPoints.value
+  if (points.length < 2) return null
+  const first = points[0].at
+  const span = points.at(-1).at - first || 1
+  const top = Math.max(1, ...points.map((point) => Math.max(point.rxRate, point.txRate))) * 1.15
+  const x = (point) => ((point.at - first) / span) * 100
+  const y = (value) => 40 - (value / top) * 38
+  const line = (key) => points.map((point, i) => `${i ? 'L' : 'M'}${x(point).toFixed(2)} ${y(point[key]).toFixed(2)}`).join(' ')
+  const peak = (key) => formatSpeed(Math.max(...points.map((point) => point[key]))) || '0 B/s'
+  return {
+    down: line('rxRate'),
+    up: line('txRate'),
+    hoverX: netHoverIdx.value >= 0 && points[netHoverIdx.value] ? x(points[netHoverIdx.value]) : null,
+    label: `Network over the last ${Math.round(span / 60) || 1} min: download peak ${peak('rxRate')}, upload peak ${peak('txRate')}`,
+  }
+})
+const netAgo = computed(() => {
+  const point = netPoints.value[netHoverIdx.value]
+  return point ? `${Math.round(netPoints.value.at(-1).at - point.at)} s ago` : ''
+})
+
+function netRate(value) {
+  return value == null ? '—' : formatSpeed(value) || '0 B/s'
+}
+
+function onNetHover(event) {
+  const box = event.currentTarget.getBoundingClientRect()
+  const points = netPoints.value
+  if (points.length < 2 || !box.width) return
+  const first = points[0].at
+  const at = first + ((event.clientX - box.left) / box.width) * (points.at(-1).at - first)
+  let best = 0
+  points.forEach((point, i) => {
+    if (Math.abs(point.at - at) < Math.abs(points[best].at - at)) best = i
+  })
+  netHoverIdx.value = best
+}
 
 async function loadStatus() {
   if (!statusWanted.value) return
@@ -346,6 +390,8 @@ async function loadStatus() {
     if (!res.ok) return
     const data = await readJson(res)
     homeStatus.value = { playing: data.playing || [], server: data.server || null, storage: data.storage || [], attention: data.attention || [] }
+    const net = data.server?.network
+    if (net && data.server.sampled_at) netHistory.value = addNetSample(netHistory.value, { at: data.server.sampled_at, rx: net.rx_bytes, tx: net.tx_bytes })
     statusLoaded.value = true
   } catch (_) {
     /* keep the last status */
@@ -1542,6 +1588,7 @@ onUnmounted(() => {
                       <span>{{ [item.user, item.device].filter(Boolean).join(' · ') }}</span>
                       <span v-if="item.paused" class="np-chip">Paused</span>
                       <span v-if="item.transcoding" class="np-chip is-transcode">Transcoding</span>
+                      <span v-else class="np-chip">Direct play</span>
                     </span>
                     <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
                     <span v-if="item.minutes_left != null" class="home-muted np-left">{{ item.minutes_left }} min left</span>
@@ -1599,6 +1646,23 @@ onUnmounted(() => {
               <span class="home-bar" :class="usageClass(homeStatus.server.memory_percent)"><span :style="{ width: `${homeStatus.server.memory_percent}%` }" /></span>
               <span class="home-muted sv-note">{{ formatBytes(homeStatus.server.memory_used) }} of {{ formatBytes(homeStatus.server.memory_total) }}</span>
             </div>
+          </div>
+          <div v-if="homeStatus.server" class="sv-net">
+            <div class="sv-net-head">
+              <span class="sv-label">Network</span>
+              <span class="sv-net-rates">
+                <span><i class="sv-key is-down" aria-hidden="true"></i>↓ {{ netRate(netShown?.rxRate) }}</span>
+                <span><i class="sv-key is-up" aria-hidden="true"></i>↑ {{ netRate(netShown?.txRate) }}</span>
+                <span v-if="netAgo" class="home-muted">{{ netAgo }}</span>
+              </span>
+            </div>
+            <svg v-if="netChart" class="sv-spark" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="netChart.label" @pointermove="onNetHover" @pointerleave="netHoverIdx = -1">
+              <line class="sv-base" x1="0" y1="40" x2="100" y2="40" />
+              <path class="sv-line is-down" :d="netChart.down" />
+              <path class="sv-line is-up" :d="netChart.up" />
+              <line v-if="netChart.hoverX != null" class="sv-cross" :x1="netChart.hoverX" y1="0" :x2="netChart.hoverX" y2="40" />
+            </svg>
+            <p v-else class="home-muted sv-net-wait">Measuring network use…</p>
           </div>
           <p v-else class="home-muted">Reading the server…</p>
         </article>
@@ -2823,13 +2887,21 @@ onUnmounted(() => {
     display: none;
   }
 }
-/* Server: CPU and memory side by side, stacked in a narrow card. */
+/* Server: CPU and memory side by side, stacked in a narrow card; network use below when there is room.
+   Series colours: categorical slots 1 and 2 of the reference palette, validated on both card surfaces. */
+.home-card-server {
+  --series-down: #3987e5;
+  --series-up: #d95926;
+}
+:global([data-theme='light']) .home-card-server {
+  --series-down: #2a78d6;
+  --series-up: #eb6834;
+}
 .sv-up {
   font-size: 0.8rem;
 }
 .sv-meters {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: end;
@@ -2867,7 +2939,86 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.sv-net {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.sv-net-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.2rem 0.75rem;
+}
+.sv-net-rates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.75rem;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.sv-key {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.3rem;
+  border-radius: 2px;
+}
+.sv-key.is-down {
+  background: var(--series-down);
+}
+.sv-key.is-up {
+  background: var(--series-up);
+}
+.sv-spark {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: visible;
+  cursor: crosshair;
+}
+.sv-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.sv-line.is-down {
+  stroke: var(--series-down);
+}
+.sv-line.is-up {
+  stroke: var(--series-up);
+}
+.sv-base,
+.sv-cross {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.sv-net-wait {
+  margin: 0;
+  font-size: 0.78rem;
+}
+/* Two rows high: the rates stay, the graph goes. */
+@container (max-height: 200px) {
+  .sv-spark,
+  .sv-net-wait {
+    display: none;
+  }
+}
+@container (max-height: 150px) {
+  .sv-net {
+    display: none;
+  }
+}
 @container (max-width: 300px) {
+  .sv-net {
+    display: none;
+  }
   .sv-meters {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -249,6 +249,7 @@ def server_summary(metrics: dict[str, Any], boot_time: float, now: float) -> dic
         for entry in entries
         if isinstance(entry, dict) and isinstance(entry.get("current"), (int, float))
     ]
+    network = metrics.get("network") if isinstance(metrics.get("network"), dict) else {}
     return {
         "cpu_percent": float(metrics.get("cpu_percent") or 0),
         "cpu_count": int(metrics.get("cpu_count") or 1),
@@ -257,6 +258,9 @@ def server_summary(metrics: dict[str, Any], boot_time: float, now: float) -> dic
         "memory_total": total,
         "uptime_seconds": max(0, int(now - boot_time)) if boot_time else 0,
         "temperature": max(readings) if readings else None,
+        # Counters since boot; the dashboard turns two samples into a rate.
+        "network": {"rx_bytes": int(network.get("bytes_recv") or 0), "tx_bytes": int(network.get("bytes_sent") or 0)},
+        "sampled_at": now,
     }
 
 
