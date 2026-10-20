@@ -1,12 +1,14 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
-import { BP_ORDER, BREAKPOINTS, collapseEmptyRows, dockHidden, homeEditing, layoutFor, saveGridLayout, viewportBp } from './homeLayout.js'
+import { BP_ORDER, BREAKPOINTS, GRID_IDS, WIDGETS, collapseEmptyRows, dockHidden, firstFree, fitItem, homeEditing, homeGrid, homeGridSaves, layoutFor, resolve, restoreGrid, saveGridLayout, viewportBp } from './homeLayout.js'
+import HomeEditBar from './HomeEditBar.vue'
 import HomeGrid from './HomeGrid.vue'
+import HomeGridSheet from './HomeGridSheet.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { formatUptime } from './format.js'
@@ -226,11 +228,76 @@ function onGridChange(layout) {
   saveGridLayout(activeBp.value, layout)
 }
 
-function removeWidget(id) {
-  saveGridLayout(activeBp.value, gridLayout.value.filter((item) => item.id !== id))
+/** While arranging: the Add widget or widget sheet, and the note after a removal. */
+const sheet = ref(null)
+const sheetItem = computed(() => (sheet.value?.mode === 'widget' ? gridLayout.value.find((item) => item.id === sheet.value.id) || null : null))
+const missingIds = computed(() => GRID_IDS.filter((id) => !gridLayout.value.some((item) => item.id === id)))
+const elsewhere = computed(() => {
+  const out = {}
+  for (const id of missingIds.value) {
+    out[id] = BP_ORDER.filter((bp) => bp !== activeBp.value && layoutFor(bp).some((item) => item.id === id)).map((bp) => BREAKPOINTS[bp].label)
+  }
+  return out
+})
+const notOn = computed(() => missingIds.value.filter((id) => elsewhere.value[id].length).length)
+const toast = ref(null)
+let toastTimer = null
+
+function showToast(text, undo) {
+  clearTimeout(toastTimer)
+  toast.value = { text, undo }
+  toastTimer = setTimeout(() => {
+    toast.value = null
+  }, 5000)
 }
 
-function openWidget() {}
+function undoToast() {
+  const undo = toast.value?.undo
+  clearTimeout(toastTimer)
+  toast.value = null
+  undo?.()
+}
+
+function removeWidget(id) {
+  const before = JSON.parse(JSON.stringify(homeGrid.value))
+  saveGridLayout(activeBp.value, gridLayout.value.filter((item) => item.id !== id))
+  if (sheet.value?.id === id) sheet.value = null
+  showToast(`${WIDGETS[id].label} removed from ${BREAKPOINTS[activeBp.value].label}`, () => restoreGrid(before))
+}
+
+function openWidget(id) {
+  sheet.value = { mode: 'widget', id }
+}
+
+/** A widget lands in the first free spot of each chosen screen size, lights up and scrolls into view. */
+function addWidget(id, everySize) {
+  for (const bp of everySize ? BP_ORDER : [activeBp.value]) {
+    const layout = layoutFor(bp)
+    if (layout.some((item) => item.id === id)) continue
+    const cols = BREAKPOINTS[bp].cols
+    const [w, h] = WIDGETS[id].size[bp]
+    const fitted = fitItem({ id, x: 0, y: 0, w, h }, cols)
+    saveGridLayout(bp, [...layout, { ...fitted, ...firstFree(layout, fitted.w, fitted.h, cols) }])
+  }
+  sheet.value = null
+  highlight.value = id
+  setTimeout(() => {
+    if (highlight.value === id) highlight.value = ''
+  }, 1800)
+  nextTick(() => document.querySelector(`[data-widget="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+}
+
+function resizeWidget(w, h) {
+  const item = sheetItem.value
+  if (!item) return
+  const cols = BREAKPOINTS[activeBp.value].cols
+  const width = Math.min(w, cols)
+  saveGridLayout(activeBp.value, resolve(gridLayout.value, item.id, { ...item, w: width, h, x: Math.min(item.x, cols - width) }, cols, null))
+}
+
+function onArrangeKey(event) {
+  if (event.key === 'Escape' && editing.value && !sheet.value && !event.defaultPrevented) editing.value = false
+}
 
 const todayLabel = computed(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))
 const greeting = computed(() => {
@@ -630,7 +697,10 @@ watch(
   { immediate: true },
 )
 watch(editing, (on) => {
-  if (!on) previewBp.value = ''
+  if (on) return
+  previewBp.value = ''
+  sheet.value = null
+  toast.value = null
 })
 
 function setCalView(view) {
@@ -909,6 +979,7 @@ onMounted(() => {
   syncCalViewToViewport()
   window.addEventListener('resize', syncCalViewToViewport)
   window.addEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
+  window.addEventListener('keydown', onArrangeKey)
   loadSnapshot()
   // Defer live queues so first paint is the launcher snapshot.
   setTimeout(() => loadDownloads(), 750)
@@ -939,6 +1010,8 @@ onUnmounted(() => {
   dockObserver?.disconnect()
   window.removeEventListener('resize', syncCalViewToViewport)
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
+  window.removeEventListener('keydown', onArrangeKey)
+  clearTimeout(toastTimer)
   if (poll) poll()
   if (downloadsPoll) downloadsPoll()
   if (installPoll) installPoll()
@@ -1403,6 +1476,32 @@ onUnmounted(() => {
       </template>
       </HomeGrid>
       </div>
+      <HomeEditBar
+        v-if="editing"
+        :bp="activeBp"
+        :preview-options="previewOptions"
+        :not-on="notOn"
+        :toast="toast"
+        :dock-offset="dockHidden ? 0 : dockHeight"
+        :saves="homeGridSaves"
+        @preview="previewBp = $event === viewportBp ? '' : $event"
+        @add="sheet = { mode: 'add' }"
+        @done="editing = false"
+        @undo="undoToast"
+      />
+      <HomeGridSheet
+        v-if="editing && sheet && (sheet.mode === 'add' || sheetItem)"
+        :key="sheet.mode + (sheet.id || '')"
+        :mode="sheet.mode"
+        :bp="activeBp"
+        :item="sheetItem"
+        :missing="missingIds"
+        :elsewhere="elsewhere"
+        @add="addWidget"
+        @resize="resizeWidget"
+        @remove="removeWidget(sheet.id)"
+        @close="sheet = null"
+      />
       <p v-if="!showWidgets" class="home-muted">
         Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.
         Turn on Widget debug in Settings → Diagnostics to see why a source is skipped or failing.

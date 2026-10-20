@@ -5,7 +5,7 @@ import { apiRequest } from './api.js'
 import { BP_ORDER, bpForWidth, deriveLayout, fromLegacy, normalizeLayout } from './homeGrid.js'
 
 // HomepagePanel takes everything layout-related from here.
-export { BREAKPOINTS, BP_ORDER, GRID_IDS, WIDGETS, collapseEmptyRows, firstFree, fitItem } from './homeGrid.js'
+export { BREAKPOINTS, BP_ORDER, GRID_IDS, WIDGETS, collapseEmptyRows, firstFree, fitItem, resolve } from './homeGrid.js'
 
 /** The blocks of the old order-and-width Home; still read to build the first grid. */
 export const HOME_BLOCKS = [
