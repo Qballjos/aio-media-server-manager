@@ -752,7 +752,7 @@ onUnmounted(() => {
             <!-- Card Header -->
             <div class="service-header">
               <div class="service-ident">
-                <div class="app-badge" :class="service.category">
+                <div class="app-badge" :class="[service.category, { 'has-icon': service.iconSrc && !iconFailed[service.name] }]">
                   <img
                     v-if="service.iconSrc && !iconFailed[service.name]"
                     :src="service.iconSrc"

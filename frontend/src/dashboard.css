@@ -139,7 +139,80 @@
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 2px 8px rgb(0 0 0 / 0.08);
 }
 
-.nav-mobile-account {
+/* The account pill: status dots, avatar and a menu (account, VPN/Tunnel, GPU, log out) on every width. */
+.nav-account {
+  position: relative;
+  flex: 0 0 auto;
+}
+.nav-account > summary {
+  background: var(--control-bg);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.nav-account > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-account > summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.nav-account-status {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.nav-account-status .status-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.nav-account-status .status-dot {
+  width: 0.35rem;
+  height: 0.35rem;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dot) 22%, transparent);
+}
+
+.nav-account[open] .nav-account-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-account-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: grid;
+  gap: 0.3rem;
+  width: min(18rem, calc(100vw - 1.7rem));
+  max-height: calc(100dvh - 5rem);
+  overflow-y: auto;
+  padding: 0.5rem;
+  border-radius: var(--radius-glass, 14px);
+  background: var(--control-bg, var(--pill-bg));
+}
+
+.nav-account-menu .metric-pill {
+  justify-content: flex-start;
+  min-height: 2.75rem;
+  height: auto;
+  padding: 0.65rem 0.75rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.nav-account-phone-only {
   display: none;
 }
 
@@ -880,6 +953,9 @@ a.status-pill {
 [data-theme="dark"] .app-badge.automation { color: #a5b4fc; border-color: rgba(129, 140, 248, 0.3); background: rgba(129, 140, 248, 0.1); }
 [data-theme="dark"] .app-badge.media { color: #f9a8d4; border-color: rgba(244, 114, 182, 0.3); background: rgba(244, 114, 182, 0.1); }
 [data-theme="dark"] .app-badge.subtitles { color: #d8b4fe; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.1); }
+/* A real app icon stands on its own; only the letter fallback gets the tinted frame. */
+.app-badge.has-icon,
+[data-theme] .app-badge.has-icon { background: none; border-color: transparent; border-radius: 0; }
 
 .service-name-row {
   display: flex;
@@ -1654,80 +1730,16 @@ a.status-pill {
     display: none;
   }
 
-  .nav-mobile-account {
-    display: block;
+  .nav-account {
     grid-column: 2;
     grid-row: 1;
     z-index: 2;
   }
 
-  .nav-mobile-account > summary {
-    background: var(--control-bg);
+  .nav-account-phone-only {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-height: 2.75rem;
-    padding: 0.3rem 0.6rem;
-    cursor: pointer;
-    list-style: none;
   }
 
-  .nav-mobile-account > summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .nav-mobile-account > summary:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 3px;
-  }
-
-  .nav-mobile-status {
-    display: grid;
-    gap: 0.35rem;
-    font-size: 0.65rem;
-    font-weight: 600;
-    line-height: 1.1;
-  }
-
-  .nav-mobile-status .status-chip {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    white-space: nowrap;
-  }
-
-  .nav-mobile-status .status-dot {
-    width: 0.35rem;
-    height: 0.35rem;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--dot) 22%, transparent);
-  }
-
-  .nav-mobile-account[open] .nav-account-chevron {
-    transform: rotate(180deg);
-  }
-
-  .nav-account-menu {
-    position: absolute;
-    top: calc(100% + 0.5rem);
-    right: 0;
-    display: grid;
-    gap: 0.3rem;
-    width: min(18rem, calc(100vw - 1.7rem));
-    max-height: calc(100dvh - 5rem);
-    overflow-y: auto;
-    padding: 0.5rem;
-    border-radius: var(--radius-glass, 14px);
-    background: var(--control-bg, var(--pill-bg));
-  }
-
-  .nav-account-menu .metric-pill {
-    justify-content: flex-start;
-    min-height: 2.75rem;
-    height: auto;
-    padding: 0.65rem 0.75rem;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
 
   .health-body {
     overflow: auto;
