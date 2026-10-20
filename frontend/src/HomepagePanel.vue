@@ -339,8 +339,8 @@ const homeStatus = ref({ playing: [], server: null, storage: [], attention: [] }
 const statusLoaded = ref(false)
 const statusWanted = computed(() => gridLayout.value.some((item) => STATUS_IDS.includes(item.id)))
 const fullestVolume = computed(() => homeStatus.value.storage[0] || null)
-// The last 30 polls (5 minutes) of network use, drawn in the Server widget.
-const netHistory = ref([])
+// The last 30 polls (5 minutes) of network use, drawn in the Server widget; kept for the tab, like the snapshot.
+const netHistory = ref(homeSnapshotCache.netHistory || [])
 const netHoverIdx = ref(-1)
 const netPoints = computed(() => netHistory.value.filter((point) => point.rxRate != null))
 const netShown = computed(() => netPoints.value[netHoverIdx.value] || netPoints.value.at(-1) || null)
@@ -391,7 +391,10 @@ async function loadStatus() {
     const data = await readJson(res)
     homeStatus.value = { playing: data.playing || [], server: data.server || null, storage: data.storage || [], attention: data.attention || [] }
     const net = data.server?.network
-    if (net && data.server.sampled_at) netHistory.value = addNetSample(netHistory.value, { at: data.server.sampled_at, rx: net.rx_bytes, tx: net.tx_bytes })
+    if (net && data.server.sampled_at) {
+      netHistory.value = addNetSample(netHistory.value, { at: data.server.sampled_at, rx: net.rx_bytes, tx: net.tx_bytes })
+      homeSnapshotCache.netHistory = netHistory.value
+    }
     statusLoaded.value = true
   } catch (_) {
     /* keep the last status */

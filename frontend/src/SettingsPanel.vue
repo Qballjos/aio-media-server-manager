@@ -1192,7 +1192,8 @@ async function applyAppUpdate(item) {
   try {
     const res = await apiRequest(`/api/applications/${item.name}/update`, { method: 'POST' })
     const data = await readJson(res)
-    if (res.ok && data.status !== 'rolled_back') return { ok: true, version: data.version || item.latest_version }
+    // Updated but not running again (the VPN it needs is down, say): the new version is in, the app is not.
+    if (res.ok && data.status !== 'rolled_back') return { ok: true, version: data.version || item.latest_version, stopped: data.start_error || '' }
     return { ok: false, reason: apiError(data, 'update failed') }
   } catch (err) {
     return { ok: false, reason: err.message || 'update failed' }
@@ -1208,7 +1209,8 @@ async function updateOneApp(item) {
   // Reload first: loadAll clears the error line.
   await loadAll()
   emit('updates')
-  if (result.ok) notice.value = `${updateLabel(item)} updated to ${result.version}.`
+  if (result.ok && result.stopped) error.value = `${updateLabel(item)} updated to ${result.version}, but it is stopped: ${result.stopped}`
+  else if (result.ok) notice.value = `${updateLabel(item)} updated to ${result.version}.`
   else error.value = `${updateLabel(item)} was not updated: ${result.reason}`
 }
 
@@ -1217,15 +1219,18 @@ async function updateAllApps() {
   notice.value = ''
   const items = [...catalogUpdates.value]
   const failed = []
+  const stopped = []
   for (const [index, item] of items.entries()) {
     updateAllProgress.value = `Updating ${index + 1} of ${items.length}: ${updateLabel(item)}…`
     const result = await applyAppUpdate(item)
     if (!result.ok) failed.push(`${updateLabel(item)} (${result.reason})`)
+    else if (result.stopped) stopped.push(`${updateLabel(item)} (${result.stopped})`)
   }
   updateAllProgress.value = ''
   await loadAll()
   emit('updates')
-  if (failed.length) error.value = `Updated ${items.length - failed.length} of ${items.length}. Not updated: ${failed.join(', ')}.`
+  const problems = [failed.length ? `Not updated: ${failed.join(', ')}.` : '', stopped.length ? `Updated but stopped: ${stopped.join(', ')}.` : ''].filter(Boolean)
+  if (problems.length) error.value = `Updated ${items.length - failed.length} of ${items.length}. ${problems.join(' ')}`
   else notice.value = `Updated all ${items.length} apps.`
 }
 
