@@ -169,38 +169,6 @@ const publicTunnelChip = computed(() => {
   return { cls: 'is-warn', label: 'Cloudflare tunnel needed' }
 })
 
-const currentTime = ref('')
-let stopClock = null
-
-const showVpnStatusPill = computed(() => !!vpnLive.value.enabled)
-const vpnStatusOk = computed(() => !!vpnLive.value.tunnel_up)
-
-const showCloudflareStatusPill = computed(() => {
-  const t = tunnelLive.value || {}
-  const meta = hostnameMeta.value || {}
-  return !!(
-    form.value.cloudflare_tunnel_enabled ||
-    t.enabled ||
-    meta.tunnel_enabled ||
-    t.token_present ||
-    t.token_saved ||
-    meta.tunnel_token_present
-  )
-})
-
-const cloudflareStatusOk = computed(() => {
-  const t = tunnelLive.value || {}
-  const meta = hostnameMeta.value || {}
-  return !!(t.connected || meta.tunnel_connected)
-})
-
-const cloudflareStatusTitle = computed(() => {
-  if (cloudflareStatusOk.value) {
-    return 'Cloudflare Tunnel connected'
-  }
-  const t = tunnelLive.value || {}
-  return t.summary || 'Cloudflare Tunnel not connected'
-})
 const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
 const seerrConfigured = ref(false)
@@ -1507,18 +1475,12 @@ onMounted(() => {
   widgetDebug.value = readHomepageWidgetDebug()
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
-  const tickClock = () => {
-    currentTime.value = new Date().toLocaleTimeString()
-  }
-  tickClock()
-  stopClock = startGuardedInterval(tickClock, 1000)
   loadAll()
   if (section.value === 'usenet') loadUsenet()
   if (section.value === 'notifications') loadNotifications()
 })
 onBeforeUnmount(() => {
   if (stopPwa) stopPwa()
-  if (stopClock) stopClock()
   stopJobPoll()
 })
 </script>
@@ -1529,29 +1491,6 @@ onBeforeUnmount(() => {
       <div>
         <h2 class="section-title">Settings</h2>
         <p class="section-subtitle">Manage this appliance after first-run. Bind mounts and the manager port stay in compose/env.</p>
-      </div>
-      <div class="settings-header-metrics" role="status" aria-label="Live status">
-        <div class="metric-pill status-pill" :title="currentTime">
-          <span class="metric-val font-mono">{{ currentTime }}</span>
-        </div>
-        <RouterLink
-          v-if="showVpnStatusPill"
-          :to="{ name: 'settings', params: { section: 'network' } }"
-          class="metric-pill status-pill"
-          :class="vpnStatusOk ? 'is-ok' : 'is-bad'"
-          :title="vpnStatusOk ? 'VPN tunnel up' : 'VPN tunnel down'"
-        >
-          <span class="metric-val font-mono">VPN</span>
-        </RouterLink>
-        <RouterLink
-          v-if="showCloudflareStatusPill"
-          :to="{ name: 'settings', params: { section: 'network' } }"
-          class="metric-pill status-pill"
-          :class="cloudflareStatusOk ? 'is-ok' : 'is-bad'"
-          :title="cloudflareStatusTitle"
-        >
-          <span class="metric-val font-mono">CF</span>
-        </RouterLink>
       </div>
     </div>
 
@@ -2851,13 +2790,6 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.75rem;
-}
-.settings-header-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.4rem;
 }
 .section-title {
   font-size: 1.25rem;
