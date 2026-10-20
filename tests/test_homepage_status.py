@@ -163,6 +163,7 @@ def test_server_summary_reads_cpu_memory_uptime_and_the_hottest_sensor():
         "cpu_percent": 12.5,
         "cpu_count": 4,
         "memory": {"total": 16 * GB, "available": 10 * GB, "percent": 37.5},
+        "network": {"bytes_sent": 2_000, "bytes_recv": 9_000_000},
         "temperatures": {"coretemp": [{"label": "Core 0", "current": 51.0}, {"label": "Core 1", "current": 55.5}]},
     }
     assert status_mod.server_summary(metrics, boot_time=1000.0, now=1000.0 + 3 * 86400) == {
@@ -173,8 +174,12 @@ def test_server_summary_reads_cpu_memory_uptime_and_the_hottest_sensor():
         "memory_total": 16 * GB,
         "uptime_seconds": 3 * 86400,
         "temperature": 55.5,
+        "network": {"rx_bytes": 9_000_000, "tx_bytes": 2_000},
+        "sampled_at": 1000.0 + 3 * 86400,
     }
-    assert status_mod.server_summary({}, boot_time=0, now=10)["temperature"] is None
+    empty = status_mod.server_summary({}, boot_time=0, now=10)
+    assert empty["temperature"] is None
+    assert empty["network"] == {"rx_bytes": 0, "tx_bytes": 0}
 
 
 def test_attention_lists_problems_first_then_full_disks_then_updates():
