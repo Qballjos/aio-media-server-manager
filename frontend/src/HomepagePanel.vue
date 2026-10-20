@@ -2893,7 +2893,7 @@ onUnmounted(() => {
   --series-down: #3987e5;
   --series-up: #d95926;
 }
-:global([data-theme='light']) .home-card-server {
+:global([data-theme='light'] .home-card-server) {
   --series-down: #2a78d6;
   --series-up: #eb6834;
 }
