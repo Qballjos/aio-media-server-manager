@@ -55,6 +55,15 @@ const notice = ref('')
 const USENET_CLIENTS = { sabnzbd: 'SABnzbd', nzbget: 'NZBGet' }
 const usenet = ref({ server: null, clients: [] })
 const usenetForm = ref({ host: '', port: 563, ssl: true, username: '', password: '', connections: 8 })
+// Settings → Notifications: the saved state (secrets only as "saved") and the editable form.
+const notif = ref(null)
+const notifForm = ref({
+  discord: { enabled: false, webhook_url: '' },
+  email: { enabled: false, host: '', port: 587, security: 'starttls', username: '', password: '', sender: '', recipients: '' },
+  events: {},
+})
+const notifTesting = ref('')
+const NOTIF_EVENT_NAMES = { apps: 'Apps', vpn: 'VPN', tunnel: 'Cloudflare tunnel', updates: 'Updates', disk: 'Storage' }
 const usenetClientNames = computed(() => (usenet.value.clients || []).map((name) => USENET_CLIENTS[name] || name))
 const share = ref({ active: false, url: '', expires_at: null, ttl_hours: 24 })
 const errors = ref([])
@@ -911,6 +920,71 @@ async function toggleVpn() {
   if (!ok) form.value.vpn_enabled = !next
 }
 
+function fillNotifForm(data) {
+  notif.value = data
+  notifForm.value = {
+    discord: { enabled: data.discord.enabled, webhook_url: '' },
+    email: { ...data.email, password: '', recipients: (data.email.recipients || []).join(', ') },
+    events: { ...data.events },
+  }
+}
+
+async function loadNotifications() {
+  try {
+    const res = await apiRequest('/api/notifications')
+    if (res.ok) fillNotifForm(await readJson(res))
+  } catch (_) {
+    /* the form still works without the saved values */
+  }
+}
+
+/** Blank secret fields keep what is saved; "Remove" sends an empty string. */
+async function saveNotifications(overrides = {}) {
+  saving.value = true
+  error.value = ''
+  notice.value = ''
+  const form = notifForm.value
+  const body = {
+    discord: { enabled: form.discord.enabled, webhook_url: form.discord.webhook_url.trim() || null },
+    email: { ...form.email, password: form.email.password || null },
+    events: form.events,
+  }
+  delete body.email.password_saved
+  if (overrides.removeWebhook) Object.assign(body.discord, { webhook_url: '', enabled: false })
+  if (overrides.removePassword) body.email.password = ''
+  try {
+    const res = await apiRequest('/api/notifications', { method: 'PUT', body: JSON.stringify(body) })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not save notifications.')
+      return false
+    }
+    fillNotifForm(data)
+    notice.value = 'Notifications saved.'
+    return true
+  } catch (err) {
+    error.value = err?.message || 'Could not save notifications.'
+    return false
+  } finally {
+    saving.value = false
+  }
+}
+
+async function testNotification(channel) {
+  if (!(await saveNotifications())) return
+  notifTesting.value = channel
+  try {
+    const res = await apiRequest('/api/notifications/test', { method: 'POST', body: JSON.stringify({ channel }) })
+    const data = await readJson(res)
+    if (!res.ok) error.value = apiError(data, 'Could not send the test message.')
+    else notice.value = channel === 'discord' ? 'Test message sent to Discord.' : 'Test e-mail sent.'
+  } catch (err) {
+    error.value = err?.message || 'Could not send the test message.'
+  } finally {
+    notifTesting.value = ''
+  }
+}
+
 async function loadUsenet() {
   try {
     const res = await apiRequest('/api/usenet')
@@ -1418,6 +1492,7 @@ watch(section, (s, prev) => {
     refreshHostnames()
   }
   if (s === 'usenet') loadUsenet()
+  if (s === 'notifications') loadNotifications()
 })
 
 onMounted(() => {
@@ -1431,6 +1506,7 @@ onMounted(() => {
   stopClock = startGuardedInterval(tickClock, 1000)
   loadAll()
   if (section.value === 'usenet') loadUsenet()
+  if (section.value === 'notifications') loadNotifications()
 })
 onBeforeUnmount(() => {
   if (stopPwa) stopPwa()
@@ -2389,6 +2465,137 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
+    <template v-else-if="section === 'notifications'">
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>Discord</h3>
+          <p>Messages go to a Discord channel through a webhook: in Discord open the channel's settings → Integrations → Webhooks → New Webhook, and copy its URL.</p>
+        </div>
+        <form class="form-stack" @submit.prevent="saveNotifications()">
+          <div class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong>Send to Discord</strong>
+              <span>{{ notif?.discord.webhook_saved ? 'A webhook is saved.' : 'No webhook saved yet.' }}</span>
+            </div>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="notifForm.discord.enabled ? 'true' : 'false'"
+              @click="notifForm.discord.enabled = !notifForm.discord.enabled"
+            >
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
+          <label class="ui-field">Webhook URL
+            <input
+              v-model="notifForm.discord.webhook_url"
+              class="ui-input font-mono"
+              type="password"
+              autocomplete="off"
+              :placeholder="notif?.discord.webhook_saved ? 'Saved — leave blank to keep' : 'https://discord.com/api/webhooks/…'"
+            />
+          </label>
+          <div class="notif-actions">
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('discord')">
+              {{ notifTesting === 'discord' ? 'Sending…' : 'Send a test' }}
+            </button>
+            <button v-if="notif?.discord.webhook_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removeWebhook: true })">Remove webhook</button>
+          </div>
+        </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>E-mail</h3>
+          <p>Messages go out through your own mail server or provider (SMTP). Gmail and Outlook need an app password.</p>
+        </div>
+        <form class="form-stack" @submit.prevent="saveNotifications()">
+          <div class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong>Send e-mail</strong>
+              <span>To every address under To.</span>
+            </div>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="notifForm.email.enabled ? 'true' : 'false'"
+              @click="notifForm.email.enabled = !notifForm.email.enabled"
+            >
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
+          <div class="usenet-pair">
+            <label class="ui-field">SMTP server
+              <input v-model.trim="notifForm.email.host" class="ui-input font-mono" placeholder="smtp.example.com" autocomplete="off" />
+            </label>
+            <label class="ui-field">Port
+              <input v-model.number="notifForm.email.port" class="ui-input font-mono" type="number" min="1" max="65535" />
+            </label>
+          </div>
+          <label class="ui-field">Security
+            <select v-model="notifForm.email.security" class="ui-input">
+              <option value="starttls">STARTTLS (usually port 587)</option>
+              <option value="ssl">SSL/TLS (usually port 465)</option>
+              <option value="none">None (local relay only)</option>
+            </select>
+          </label>
+          <div class="usenet-pair">
+            <label class="ui-field">Username
+              <input v-model.trim="notifForm.email.username" class="ui-input font-mono" autocomplete="off" />
+            </label>
+            <label class="ui-field">Password
+              <input
+                v-model="notifForm.email.password"
+                class="ui-input"
+                type="password"
+                autocomplete="new-password"
+                :placeholder="notif?.email.password_saved ? 'Saved — leave blank to keep' : ''"
+              />
+            </label>
+          </div>
+          <label class="ui-field">From
+            <input v-model.trim="notifForm.email.sender" class="ui-input font-mono" placeholder="Defaults to the username" autocomplete="off" />
+          </label>
+          <label class="ui-field">To
+            <input v-model="notifForm.email.recipients" class="ui-input font-mono" placeholder="you@example.com, family@example.com" autocomplete="off" />
+          </label>
+          <div class="notif-actions">
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('email')">
+              {{ notifTesting === 'email' ? 'Sending…' : 'Send a test' }}
+            </button>
+            <button v-if="notif?.email.password_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removePassword: true })">Remove password</button>
+          </div>
+        </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>What to send</h3>
+          <p>Checked every minute. Each problem is sent once, and again when it is solved.</p>
+        </div>
+        <div class="form-stack">
+          <div v-for="(label, key) in notif?.event_labels || {}" :key="key" class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong>{{ NOTIF_EVENT_NAMES[key] || key }}</strong>
+              <span>{{ label }}</span>
+            </div>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="notifForm.events[key] ? 'true' : 'false'"
+              :disabled="saving"
+              @click="notifForm.events[key] = !notifForm.events[key]; saveNotifications()"
+            >
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
     <template v-else-if="section === 'usenet'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
@@ -2661,6 +2868,11 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   background: rgba(var(--color-primary-rgb), 0.18);
   color: var(--color-primary-text);
+}
+.notif-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 .usenet-pair {
   display: grid;
