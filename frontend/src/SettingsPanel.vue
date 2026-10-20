@@ -5,6 +5,7 @@ import { resolveSettingsSection, SETTINGS_NAV } from './router'
 import { apiError, apiRequest, readJson } from './api.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug } from './homepageDebug.js'
+import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 import {
   canPromptInstall,
@@ -493,6 +494,13 @@ async function installPwaFromSettings() {
   const ok = await promptInstall()
   if (ok) notice.value = 'App installed on this device.'
   refreshPwaInstall()
+}
+
+/** The dock is the row of app icons at the bottom of Home; it is not part of Home's grid, so it is switched here. */
+async function toggleHomeDock() {
+  const hide = !dockHidden.value
+  await setDockHidden(hide)
+  notice.value = hide ? 'The app dock is hidden on Home.' : 'The app dock shows on Home again.'
 }
 
 async function toggleHomepageWidgetDebug() {
@@ -2678,6 +2686,28 @@ onBeforeUnmount(() => {
             {{ saving ? 'Saving…' : 'Save message' }}
           </button>
         </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>App dock</h3>
+          <p>The row of app icons at the bottom of Home. Arrange the rest of Home with the layout button in the page tabs.</p>
+        </div>
+        <div class="ui-switch-row">
+          <div class="ui-switch-copy">
+            <strong>Show the app dock on Home</strong>
+            <span>Saved on your profile, for every screen size.</span>
+          </div>
+          <button
+            type="button"
+            class="ui-switch"
+            role="switch"
+            aria-label="Show the app dock on Home"
+            :aria-checked="dockHidden ? 'false' : 'true'"
+            @click="toggleHomeDock"
+          >
+            <span class="ui-switch-thumb"></span>
+          </button>
+        </div>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
