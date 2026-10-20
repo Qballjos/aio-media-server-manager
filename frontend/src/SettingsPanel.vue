@@ -1205,10 +1205,11 @@ async function updateOneApp(item) {
   error.value = ''
   notice.value = ''
   const result = await applyAppUpdate(item)
-  if (result.ok) notice.value = `${updateLabel(item)} updated to ${result.version}.`
-  else error.value = `${updateLabel(item)} was not updated: ${result.reason}`
+  // Reload first: loadAll clears the error line.
   await loadAll()
   emit('updates')
+  if (result.ok) notice.value = `${updateLabel(item)} updated to ${result.version}.`
+  else error.value = `${updateLabel(item)} was not updated: ${result.reason}`
 }
 
 async function updateAllApps() {
@@ -1222,10 +1223,10 @@ async function updateAllApps() {
     if (!result.ok) failed.push(`${updateLabel(item)} (${result.reason})`)
   }
   updateAllProgress.value = ''
-  if (failed.length) error.value = `Updated ${items.length - failed.length} of ${items.length}. Not updated: ${failed.join(', ')}.`
-  else notice.value = `Updated all ${items.length} apps.`
   await loadAll()
   emit('updates')
+  if (failed.length) error.value = `Updated ${items.length - failed.length} of ${items.length}. Not updated: ${failed.join(', ')}.`
+  else notice.value = `Updated all ${items.length} apps.`
 }
 
 const backupJobRunning = computed(() => backupJob.value?.status === 'running')
