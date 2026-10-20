@@ -130,8 +130,32 @@ def test_storage_volumes_group_paths_on_one_disk_and_skip_missing_ones(tmp_path:
         {"Config": config, "Downloads": downloads, "Media": media},
         stat=lambda path: SimpleNamespace(st_dev=devices[str(path)]),
         usage=lambda path: Usage(8000 * GB, 7480 * GB, 520 * GB, 93.5),
+        partitions=[],
     )
     assert volumes == [{"labels": ["Downloads", "Media"], "total": 8000 * GB, "used": 7480 * GB, "free": 520 * GB, "percent": 93.5}]
+
+
+def test_storage_volumes_follow_the_mount_table_across_subvolumes(tmp_path: Path):
+    """On a Synology every shared folder is its own btrfs subvolume (own st_dev) on one disk."""
+    paths = {}
+    for name in ("config", "downloads", "media"):
+        (tmp_path / name).mkdir()
+        paths[name.title()] = tmp_path / name
+    Usage = namedtuple("Usage", "total used free percent")
+    st_dev = {str(path): number for number, path in enumerate(paths.values())}
+    mounts = [
+        SimpleNamespace(device="overlay", mountpoint="/"),
+        SimpleNamespace(device="/dev/mapper/cachedev_0", mountpoint=str(paths["Config"])),
+        SimpleNamespace(device="/dev/mapper/cachedev_0", mountpoint=str(paths["Downloads"])),
+        SimpleNamespace(device="/dev/sdq1", mountpoint=str(paths["Media"])),
+    ]
+    volumes = status_mod.storage_volumes(
+        paths,
+        stat=lambda path: SimpleNamespace(st_dev=st_dev[str(path)]),
+        usage=lambda path: Usage(100 * GB, 50 * GB, 50 * GB, 50.0),
+        partitions=mounts,
+    )
+    assert [volume["labels"] for volume in volumes] == [["Config", "Downloads"], ["Media"]]
 
 
 def test_server_summary_reads_cpu_memory_uptime_and_the_hottest_sensor():

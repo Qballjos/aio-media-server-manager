@@ -187,20 +187,44 @@ def now_playing(host: str, scheme: str = "http") -> list[dict[str, Any]]:
     return rows
 
 
+def _mount_device(path: Path, partitions: list[Any]) -> str:
+    """The device of the deepest mount holding `path`, or '' when the mount table does not say."""
+    text = str(path)
+    best, device = "", ""
+    for part in partitions:
+        mount = str(getattr(part, "mountpoint", "") or "")
+        if not mount:
+            continue
+        inside = mount == "/" or text == mount or text.startswith(mount.rstrip("/") + "/")
+        if inside and len(mount) > len(best):
+            best, device = mount, str(getattr(part, "device", "") or "")
+    return device
+
+
 def storage_volumes(
     paths: dict[str, Path],
     *,
     stat: Callable[[Path], Any] = os.stat,
     usage: Callable[[str], Any] = psutil.disk_usage,
+    partitions: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """One row per disk: data paths on the same device share it. Missing paths are left out. Fullest first."""
-    volumes: dict[int, dict[str, Any]] = {}
+    """
+    One row per disk: data paths on the same device share it. The mount table decides, because btrfs subvolumes
+    (every Synology shared folder) each get their own st_dev on one disk; st_dev is the fallback. Missing paths are
+    left out. Fullest first.
+    """
+    if partitions is None:
+        try:
+            partitions = psutil.disk_partitions(all=True)
+        except Exception:
+            partitions = []
+    volumes: dict[str, dict[str, Any]] = {}
     for label, raw in paths.items():
         path = Path(raw)
         try:
             if not path.exists():
                 continue
-            device = stat(path).st_dev
+            device = _mount_device(path.resolve(), partitions) or f"st_dev:{stat(path).st_dev}"
         except OSError:
             continue
         if device in volumes:
