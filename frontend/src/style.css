@@ -1019,6 +1019,12 @@ select.ui-input {
   color: var(--color-danger-fg);
 }
 
+.ui-alert-warning {
+  background: var(--color-warning-bg);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+  color: var(--color-warning-fg);
+}
+
 .ui-switch-row {
   display: flex;
   align-items: flex-start;

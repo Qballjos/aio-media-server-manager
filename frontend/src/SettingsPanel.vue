@@ -2315,6 +2315,10 @@ onBeforeUnmount(() => {
             {{ tunnelLive.binary_present ? 'cloudflared ready' : 'cloudflared missing' }}
           </span>
         </div>
+        <p class="ui-alert ui-alert-warning">
+          Run a tunnel token on one server only. If another server (say, the one this replaces) still runs it, Cloudflare
+          splits visitors between both and every login ends in "Session expired". Give a new server its own tunnel.
+        </p>
         <p class="share-meta">{{ tunnelLive.summary || 'Status loads when you open Network.' }}</p>
         <p v-if="tunnelLive.token_saved || tunnelLive.token_present" class="share-meta font-mono">
           Stored at {{ tunnelLive.token_file || '/config/cloudflare/tunnel.token' }}
