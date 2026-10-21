@@ -6,6 +6,7 @@ import { apiError, apiRequest, readJson } from './api.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug } from './homepageDebug.js'
 import { versionLabel } from './statusChips.js'
+import { formatUptime } from './format.js'
 import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 import {
@@ -1198,14 +1199,36 @@ async function runUpdateCheck() {
 /** Settings → Updates: update one app, or all of them one after another (each update restarts its app). */
 const updatingApp = ref('')
 const updateAllProgress = ref('')
+/** Where the running update is (the app's job message) and how long it has taken. */
+const updateStep = ref('')
+const updateElapsed = ref('')
+let updateTimer = null
 const catalogUpdates = computed(() => (snapshot.value.updates?.available || []).filter((item) => item.kind !== 'appliance'))
 
 function updateLabel(item) {
   return item.display_name || item.name
 }
 
+async function watchUpdate(name) {
+  const started = Date.now()
+  const tick = async () => {
+    updateElapsed.value = formatUptime((Date.now() - started) / 1000)
+    try {
+      const res = await apiRequest('/api/catalog/install-jobs')
+      const job = res.ok ? ((await readJson(res)).jobs || []).find((row) => row.name === name) : null
+      if (job?.status === 'updating' && updatingApp.value === name) updateStep.value = job.message
+    } catch (_) {
+      /* the next tick tries again */
+    }
+  }
+  updateStep.value = 'Starting the update…'
+  updateElapsed.value = ''
+  updateTimer = setInterval(tick, 2000)
+}
+
 async function applyAppUpdate(item) {
   updatingApp.value = item.name
+  watchUpdate(item.name)
   try {
     const res = await apiRequest(`/api/applications/${item.name}/update`, { method: 'POST' })
     const data = await readJson(res)
@@ -1215,7 +1238,9 @@ async function applyAppUpdate(item) {
   } catch (err) {
     return { ok: false, reason: err.message || 'update failed' }
   } finally {
+    clearInterval(updateTimer)
     updatingApp.value = ''
+    updateStep.value = ''
   }
 }
 
@@ -1556,6 +1581,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (stopPwa) stopPwa()
   stopJobPoll()
+  clearInterval(updateTimer)
 })
 </script>
 
@@ -2073,6 +2099,9 @@ onBeforeUnmount(() => {
               <strong>{{ item.display_name || item.name }}</strong>
               <span class="path-line font-mono">{{ item.installed_version || '—' }} → {{ item.latest_version }}</span>
               <span v-if="item.kind === 'appliance'" class="path-line">{{ item.apply_hint }}</span>
+              <span v-if="updatingApp === item.name && updateStep" class="path-line" role="status">
+                {{ updateStep }}<template v-if="updateElapsed"> · {{ updateElapsed }}</template>
+              </span>
             </div>
             <div v-if="item.kind !== 'appliance'" class="share-row">
               <a class="ui-btn ui-btn-ghost" :href="`#/catalog?q=${encodeURIComponent(item.name)}`">Open in Catalog</a>
@@ -2315,6 +2344,10 @@ onBeforeUnmount(() => {
             {{ tunnelLive.binary_present ? 'cloudflared ready' : 'cloudflared missing' }}
           </span>
         </div>
+        <p class="ui-alert ui-alert-warning">
+          Run a tunnel token on one server only. If another server (say, the one this replaces) still runs it, Cloudflare
+          splits visitors between both and every login ends in "Session expired". Give a new server its own tunnel.
+        </p>
         <p class="share-meta">{{ tunnelLive.summary || 'Status loads when you open Network.' }}</p>
         <p v-if="tunnelLive.token_saved || tunnelLive.token_present" class="share-meta font-mono">
           Stored at {{ tunnelLive.token_file || '/config/cloudflare/tunnel.token' }}

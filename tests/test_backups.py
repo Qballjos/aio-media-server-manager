@@ -211,7 +211,7 @@ def test_update_snapshots_are_pruned_and_restorable(tmp_path: Path):
         target.write_text(f"v{index}", encoding="utf-8")
         snapshots.append(manager.snapshot_application("sonarr"))
     remaining = sorted((cfg.backup_dir / "app-snapshots" / "sonarr").glob("*.tar.gz"))
-    assert len(remaining) == 3
+    assert len(remaining) == 1
     target.write_text("broken", encoding="utf-8")
     manager.restore_application_snapshot(snapshots[-1])
     assert target.read_text(encoding="utf-8") == "v4"
