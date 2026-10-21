@@ -356,14 +356,15 @@ const netChart = computed(() => {
   const first = points[0].at
   const span = points.at(-1).at - first || 1
   const top = Math.max(1, ...points.map((point) => Math.max(point.rxRate, point.txRate))) * 1.15
-  const x = (point) => ((point.at - first) / span) * 100
+  // ponytail: the line stops 4% short of the right edge so the marker on the latest point is not clipped.
+  const x = (point) => ((point.at - first) / span) * 96
   const y = (value) => 40 - (value / top) * 38
   const line = (key) => points.map((point, i) => `${i ? 'L' : 'M'}${x(point).toFixed(2)} ${y(point[key]).toFixed(2)}`).join(' ')
   const peak = (key) => formatSpeed(Math.max(...points.map((point) => point[key]))) || '0 B/s'
   const last = points.at(-1)
   return {
     down: line('rxRate'),
-    area: `${line('rxRate')} L 100 40 L 0 40 Z`,
+    area: `${line('rxRate')} L ${x(last).toFixed(2)} 40 L 0 40 Z`,
     end: { x: x(last), y: (y(last.rxRate) / 40) * 100 },
     minutes: Math.max(1, Math.round(span / 60)),
     hoverX: netHoverIdx.value >= 0 && points[netHoverIdx.value] ? x(points[netHoverIdx.value]) : null,
@@ -379,12 +380,17 @@ function netRate(value) {
   return value == null ? '—' : formatSpeed(value) || '0 B/s'
 }
 
+/** "12 MB/s" as figure and unit, for the big download number. */
+function netParts(value) {
+  return value == null ? ['—', ''] : netRate(value).split(' ')
+}
+
 function onNetHover(event) {
   const box = event.currentTarget.getBoundingClientRect()
   const points = netPoints.value
   if (points.length < 2 || !box.width) return
   const first = points[0].at
-  const at = first + ((event.clientX - box.left) / box.width) * (points.at(-1).at - first)
+  const at = first + ((event.clientX - box.left) / (box.width * 0.96)) * (points.at(-1).at - first)
   let best = 0
   points.forEach((point, i) => {
     if (Math.abs(point.at - at) < Math.abs(points[best].at - at)) best = i
@@ -1636,6 +1642,20 @@ onUnmounted(() => {
       </template>
       <template #server>
         <article class="home-card glass-card home-card-server">
+          <div v-if="homeStatus.server && netChart" class="sv-chart">
+            <svg class="sv-spark" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="netChart.label" @pointermove="onNetHover" @pointerleave="netHoverIdx = -1">
+              <defs>
+                <linearGradient id="sv-net-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="currentColor" stop-opacity="0.22" />
+                  <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <path class="sv-area" :d="netChart.area" fill="url(#sv-net-fill)" />
+              <path class="sv-line" :d="netChart.down" />
+              <line v-if="netChart.hoverX != null" class="sv-cross" :x1="netChart.hoverX" y1="0" :x2="netChart.hoverX" y2="40" />
+            </svg>
+            <span class="sv-end" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.y}%` }" aria-hidden="true"></span>
+          </div>
           <div class="gh-head">
             <h3>Server</h3>
             <span v-if="serverStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[serverStatus.level] }">{{ serverStatus.text }}</span>
@@ -1651,28 +1671,10 @@ onUnmounted(() => {
                 <span class="gh-big">{{ Math.round(homeStatus.server.memory_percent) }}<small>%</small></span>
                 <span class="gh-label">Memory<span class="sv-mem-bytes"> · {{ formatBytes(homeStatus.server.memory_used) }} of {{ formatBytes(homeStatus.server.memory_total) }}</span></span>
               </div>
-            </div>
-            <div class="sv-net">
-              <div class="sv-net-head">
-                <span class="gh-label">Network <span class="sv-rate">↓ {{ netRate(netShown?.rxRate) }}</span> <span class="sv-rate">↑ {{ netRate(netShown?.txRate) }}</span></span>
-                <span class="gh-label">{{ netAgo || (netChart ? `last ${netChart.minutes} min` : '') }}</span>
+              <div class="gh-figure sv-net-figure">
+                <span class="gh-big">{{ netParts(netShown?.rxRate)[0] }}<small>{{ netParts(netShown?.rxRate)[1] }} ↓</small></span>
+                <span class="gh-label">{{ netAgo || 'Network' }}<template v-if="netShown"> · ↑ {{ netRate(netShown.txRate) }}</template></span>
               </div>
-              <div v-if="netChart" class="sv-chart">
-                <svg class="sv-spark" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="netChart.label" @pointermove="onNetHover" @pointerleave="netHoverIdx = -1">
-                  <defs>
-                    <linearGradient id="sv-net-fill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stop-color="currentColor" stop-opacity="0.28" />
-                      <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
-                    </linearGradient>
-                  </defs>
-                  <line v-for="gx in [25, 50, 75]" :key="gx" class="sv-grid" :x1="gx" y1="0" :x2="gx" y2="40" />
-                  <path class="sv-area" :d="netChart.area" fill="url(#sv-net-fill)" />
-                  <path class="sv-line" :d="netChart.down" />
-                  <line v-if="netChart.hoverX != null" class="sv-cross" :x1="netChart.hoverX" y1="0" :x2="netChart.hoverX" y2="40" />
-                </svg>
-                <span class="sv-end" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.y}%` }" aria-hidden="true"></span>
-              </div>
-              <p v-else class="gh-label sv-net-wait">Measuring network use…</p>
             </div>
             <div class="gh-pills sv-pills">
               <span class="gh-pill">
@@ -3035,32 +3037,31 @@ onUnmounted(() => {
 .sv-figures {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
-.sv-net {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+/* Three figures side by side leave no room for the memory in bytes until the card is wide. */
+@container (max-width: 560px) {
+  .sv-mem-bytes {
+    display: none;
+  }
 }
-.sv-net-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-.sv-rate {
-  margin-left: 0.35rem;
+/* Network use is drawn behind the card along its bottom edge, so even a two-row card shows it. */
+.home-card-server > .sv-chart {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  height: 46%;
   color: var(--text-main);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
-.sv-chart {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  color: var(--text-main);
+/* The figures and pills sit on the chart; let the pointer through to it for the crosshair. */
+.home-card-server > :not(.sv-chart) {
+  pointer-events: none;
+}
+.sv-pills {
+  margin-top: auto;
 }
 .sv-spark {
   display: block;
@@ -3076,16 +3077,12 @@ onUnmounted(() => {
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
-  opacity: 0.8;
-}
-.sv-grid,
-.sv-cross {
-  stroke: var(--border-subtle);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
+  opacity: 0.45;
 }
 .sv-cross {
   stroke: var(--border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
 .sv-end {
   position: absolute;
@@ -3097,24 +3094,14 @@ onUnmounted(() => {
   background: var(--bg-card);
   pointer-events: none;
 }
-.sv-net-wait {
-  margin: 0;
-}
-/* Two rows high: figures and pills; the chart needs a third row. */
-@container (max-height: 200px) {
-  .sv-net {
-    display: none;
-  }
-  .sv-pills {
-    margin-top: auto;
-  }
-}
 @container (max-width: 300px) {
   .sv-pills,
-  .sv-mem-bytes {
+  .sv-net-figure,
+  .home-card-server > .sv-chart {
     display: none;
   }
   .sv-figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
   }
 }
