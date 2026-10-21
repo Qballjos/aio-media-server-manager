@@ -72,6 +72,8 @@ const emptySnapshot = () => ({
 
 const snapshot = ref(homeSnapshotCache.snapshot || emptySnapshot())
 const installJobs = ref({})
+/** Job states during which an app is being installed, set up or updated. */
+const BUSY_JOBS = ['queued', 'installing', 'configuring', 'updating']
 const progressNow = ref(Date.now() / 1000)
 const loading = ref(!homeSnapshotCache.snapshot)
 // Widgets still on their way: the first response only carries the launcher.
@@ -455,7 +457,7 @@ const launcherGroups = computed(() => {
   const groups = new Map()
   for (const app of snapshot.value.apps || []) {
     const job = installJobs.value[app.name]
-    const busy = !app.sick && job && ['queued', 'installing', 'configuring'].includes(job.status)
+    const busy = !app.sick && job && BUSY_JOBS.includes(job.status)
     const id = app.category || 'other'
     if (!groups.has(id)) {
       groups.set(id, {
@@ -483,7 +485,7 @@ const launcherGroups = computed(() => {
 const dockApps = computed(() => launcherGroups.value.flatMap((group) => group.apps))
 const dockNotes = computed(() =>
   dockApps.value
-    .filter((app) => app.sick || ['queued', 'installing', 'configuring'].includes(app.state))
+    .filter((app) => app.sick || BUSY_JOBS.includes(app.state))
     .map((app) => [`${app.display_name}: ${app.state_label || app.state}`, app.progress_message].filter(Boolean).join(' — ')),
 )
 
@@ -594,11 +596,11 @@ async function loadInstallJobs() {
     const data = await readJson(res)
     const jobs = data.jobs || []
     const finished = jobs.some((job) =>
-      !['queued', 'installing', 'configuring'].includes(job.status)
+      !BUSY_JOBS.includes(job.status)
       && installJobs.value[job.name]?.status !== job.status
       && (
-        ['queued', 'installing', 'configuring'].includes(installJobs.value[job.name]?.status)
-        || snapshot.value.apps.some((app) => app.name === job.name && ['queued', 'installing', 'configuring'].includes(app.state))
+        BUSY_JOBS.includes(installJobs.value[job.name]?.status)
+        || snapshot.value.apps.some((app) => app.name === job.name && BUSY_JOBS.includes(app.state))
       ),
     )
     installJobs.value = Object.fromEntries(jobs.map((job) => [job.name, job]))
@@ -1171,7 +1173,7 @@ onUnmounted(() => {
             v-for="app in dockApps"
             :key="app.name"
             class="home-app"
-            :class="{ 'is-down': app.state !== 'running' && !app.sick, 'is-sick': app.sick, 'is-busy': ['queued', 'installing', 'configuring'].includes(app.state) }"
+            :class="{ 'is-down': app.state !== 'running' && !app.sick, 'is-sick': app.sick, 'is-busy': BUSY_JOBS.includes(app.state) }"
             v-bind="launcherOpen(app) ? { href: app.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
             :title="launcherTitle(app)"
             :aria-label="launcherTitle(app)"

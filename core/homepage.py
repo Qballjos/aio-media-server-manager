@@ -486,6 +486,7 @@ _STATE_LABELS = {
     "running": "",
     "unhealthy": "Unhealthy",
     "installing": "Installing…",
+    "updating": "Updating…",
     "configuring": "Configuring…",
     "waiting_for_vpn": "Waiting for VPN",
     "stopped": "Stopped",
@@ -500,6 +501,8 @@ def _launcher_state(name: str, running: bool, sick: bool, vpn_waiting: bool) -> 
         state = "unhealthy"
     elif job in {"queued", "installing"}:
         state = "installing"
+    elif job == "updating":
+        state = "updating"
     elif job == "configuring":
         # The process may already run, but the post-install wiring is still busy.
         state = "configuring"

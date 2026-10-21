@@ -21,6 +21,9 @@ def set_job(name: str, status: str, message: str = "", *, wiring: bool = False) 
     }
     with _lock:
         previous = _jobs.get(name)
+        # An update runs the app's own install steps; they count as part of the update.
+        if previous and previous["status"] == "updating" and status == "installing":
+            row["status"] = "updating"
         if previous and all(previous.get(key) == row[key] for key in ("status", "message", "wiring")):
             row["updated_at"] = previous["updated_at"]
         _jobs[name] = row
@@ -30,7 +33,7 @@ def set_job(name: str, status: str, message: str = "", *, wiring: bool = False) 
 def update_job(name: str, message: str) -> None:
     with _lock:
         row = _jobs.get(name)
-        if row and row["status"] in {"queued", "installing", "configuring"} and row["message"] != message:
+        if row and row["status"] in {"queued", "installing", "configuring", "updating"} and row["message"] != message:
             row.update(message=message, updated_at=time.time())
 
 
