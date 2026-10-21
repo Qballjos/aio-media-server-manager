@@ -364,8 +364,10 @@ const netChart = computed(() => {
   const last = points.at(-1)
   return {
     down: line('rxRate'),
-    area: `${line('rxRate')} L ${x(last).toFixed(2)} 40 L 0 40 Z`,
-    end: { x: x(last), y: (y(last.rxRate) / 40) * 100 },
+    up: line('txRate'),
+    downArea: `${line('rxRate')} L ${x(last).toFixed(2)} 40 L 0 40 Z`,
+    upArea: `${line('txRate')} L ${x(last).toFixed(2)} 40 L 0 40 Z`,
+    end: { x: x(last), down: (y(last.rxRate) / 40) * 100, up: (y(last.txRate) / 40) * 100 },
     minutes: Math.max(1, Math.round(span / 60)),
     hoverX: netHoverIdx.value >= 0 && points[netHoverIdx.value] ? x(points[netHoverIdx.value]) : null,
     label: `Network over the last ${Math.round(span / 60) || 1} min: download peak ${peak('rxRate')}, upload peak ${peak('txRate')}`,
@@ -1645,16 +1647,23 @@ onUnmounted(() => {
           <div v-if="homeStatus.server && netChart" class="sv-chart">
             <svg class="sv-spark" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="netChart.label" @pointermove="onNetHover" @pointerleave="netHoverIdx = -1">
               <defs>
-                <linearGradient id="sv-net-fill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="currentColor" stop-opacity="0.22" />
-                  <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                <linearGradient id="sv-down-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" style="stop-color: var(--series-down); stop-opacity: 0.35" />
+                  <stop offset="100%" style="stop-color: var(--series-down); stop-opacity: 0" />
+                </linearGradient>
+                <linearGradient id="sv-up-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" style="stop-color: var(--series-up); stop-opacity: 0.3" />
+                  <stop offset="100%" style="stop-color: var(--series-up); stop-opacity: 0" />
                 </linearGradient>
               </defs>
-              <path class="sv-area" :d="netChart.area" fill="url(#sv-net-fill)" />
-              <path class="sv-line" :d="netChart.down" />
+              <path :d="netChart.downArea" fill="url(#sv-down-fill)" />
+              <path :d="netChart.upArea" fill="url(#sv-up-fill)" />
+              <path class="sv-line is-down" :d="netChart.down" />
+              <path class="sv-line is-up" :d="netChart.up" />
               <line v-if="netChart.hoverX != null" class="sv-cross" :x1="netChart.hoverX" y1="0" :x2="netChart.hoverX" y2="40" />
             </svg>
-            <span class="sv-end" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.y}%` }" aria-hidden="true"></span>
+            <span class="sv-end is-down" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.down}%` }" aria-hidden="true"></span>
+            <span class="sv-end is-up" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.up}%` }" aria-hidden="true"></span>
           </div>
           <div class="gh-head">
             <h3>Server</h3>
@@ -1672,8 +1681,8 @@ onUnmounted(() => {
                 <span class="gh-label">Memory<span class="sv-mem-bytes"> · {{ formatBytes(homeStatus.server.memory_used) }} of {{ formatBytes(homeStatus.server.memory_total) }}</span></span>
               </div>
               <div class="gh-figure sv-net-figure">
-                <span class="gh-big">{{ netParts(netShown?.rxRate)[0] }}<small>{{ netParts(netShown?.rxRate)[1] }} ↓</small></span>
-                <span class="gh-label">{{ netAgo || 'Network' }}<template v-if="netShown"> · ↑ {{ netRate(netShown.txRate) }}</template></span>
+                <span class="gh-big">{{ netParts(netShown?.rxRate)[0] }}<small>{{ netParts(netShown?.rxRate)[1] }} <b class="sv-key">↓</b></small></span>
+                <span class="gh-label">{{ netAgo || 'Network' }}<template v-if="netShown"> · <b class="sv-key is-up">↑</b> {{ netRate(netShown.txRate) }}</template></span>
               </div>
             </div>
             <div class="gh-pills sv-pills">
@@ -3046,7 +3055,23 @@ onUnmounted(() => {
     display: none;
   }
 }
-/* Network use is drawn behind the card along its bottom edge, so even a two-row card shows it. */
+/* Network use is drawn behind the card along its bottom edge, so even a two-row card shows it.
+   Download blue, upload pink: categorical slots of the reference palette, validated on both card surfaces. */
+.home-card-server {
+  --series-down: #3987e5;
+  --series-up: #d55181;
+}
+:global([data-theme='light'] .home-card-server) {
+  --series-down: #2a78d6;
+  --series-up: #e87ba4;
+}
+.sv-key {
+  color: var(--series-down);
+  font-weight: 700;
+}
+.sv-key.is-up {
+  color: var(--series-up);
+}
 .home-card-server > .sv-chart {
   position: absolute;
   left: 0;
@@ -3072,12 +3097,15 @@ onUnmounted(() => {
 }
 .sv-line {
   fill: none;
-  stroke: currentColor;
+  stroke: var(--series-down);
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
-  opacity: 0.45;
+  opacity: 0.85;
+}
+.sv-line.is-up {
+  stroke: var(--series-up);
 }
 .sv-cross {
   stroke: var(--border-strong);
@@ -3090,9 +3118,12 @@ onUnmounted(() => {
   height: 0.7rem;
   margin: -0.35rem 0 0 -0.35rem;
   border-radius: 50%;
-  border: 2px solid currentColor;
+  border: 2px solid var(--series-down);
   background: var(--bg-card);
   pointer-events: none;
+}
+.sv-end.is-up {
+  border-color: var(--series-up);
 }
 @container (max-width: 300px) {
   .sv-pills,
