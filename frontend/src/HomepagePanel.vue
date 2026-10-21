@@ -13,6 +13,7 @@ import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { formatBytes, formatUptime } from './format.js'
 import { addNetSample } from './netRates.js'
+import { MOOD_COLORS, attentionMood, serverMood, storageMood } from './statusMood.js'
 import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepageDebug.js'
 
 const props = defineProps({
@@ -339,6 +340,11 @@ const homeStatus = ref({ playing: [], server: null, storage: [], attention: [] }
 const statusLoaded = ref(false)
 const statusWanted = computed(() => gridLayout.value.some((item) => STATUS_IDS.includes(item.id)))
 const fullestVolume = computed(() => homeStatus.value.storage[0] || null)
+const fullestFree = computed(() => (fullestVolume.value ? formatBytes(fullestVolume.value.free).split(' ') : ['', '']))
+const serverStatus = computed(() => (homeStatus.value.server ? serverMood(homeStatus.value.server) : null))
+const storageStatus = computed(() => (fullestVolume.value ? storageMood(fullestVolume.value.percent) : null))
+const attentionStatus = computed(() => attentionMood(homeStatus.value.attention))
+const nowItem = computed(() => homeStatus.value.playing[0] || null)
 // The last 30 polls (5 minutes) of network use, drawn in the Server widget; kept for the tab, like the snapshot.
 const netHistory = ref(homeSnapshotCache.netHistory || [])
 const netHoverIdx = ref(-1)
@@ -354,9 +360,12 @@ const netChart = computed(() => {
   const y = (value) => 40 - (value / top) * 38
   const line = (key) => points.map((point, i) => `${i ? 'L' : 'M'}${x(point).toFixed(2)} ${y(point[key]).toFixed(2)}`).join(' ')
   const peak = (key) => formatSpeed(Math.max(...points.map((point) => point[key]))) || '0 B/s'
+  const last = points.at(-1)
   return {
     down: line('rxRate'),
-    up: line('txRate'),
+    area: `${line('rxRate')} L 100 40 L 0 40 Z`,
+    end: { x: x(last), y: (y(last.rxRate) / 40) * 100 },
+    minutes: Math.max(1, Math.round(span / 60)),
     hoverX: netHoverIdx.value >= 0 && points[netHoverIdx.value] ? x(points[netHoverIdx.value]) : null,
     label: `Network over the last ${Math.round(span / 60) || 1} min: download peak ${peak('rxRate')}, upload peak ${peak('txRate')}`,
   }
@@ -399,10 +408,6 @@ async function loadStatus() {
   } catch (_) {
     /* keep the last status */
   }
-}
-
-function usageClass(percent) {
-  return percent >= 90 ? 'is-full' : percent >= 80 ? 'is-high' : ''
 }
 
 function upFor(seconds) {
@@ -1569,132 +1574,147 @@ onUnmounted(() => {
         </article>
       </template>
       <template #playing>
-        <article class="home-card glass-card home-card-playing">
-          <div class="home-widget-head">
-            <h3>Now playing</h3>
-            <span v-if="homeStatus.playing.length" class="home-card-stat">{{ homeStatus.playing.length }} watching</span>
-          </div>
-          <div class="home-card-body">
-            <ul v-if="homeStatus.playing.length" class="np-list">
-              <li v-for="(item, idx) in homeStatus.playing" :key="idx">
-                <component
-                  :is="item.url ? 'a' : 'span'"
-                  class="np-row"
-                  v-bind="item.url ? { href: item.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
-                  @click="item.url && openApp($event, item.source, item.url)"
-                >
-                  <img v-if="item.poster" :src="item.poster" alt="" class="np-poster" />
-                  <span class="np-body">
-                    <strong>{{ item.title }}</strong>
-                    <span v-if="item.detail" class="np-detail">{{ item.detail }}</span>
-                    <span class="np-meta">
-                      <span>{{ [item.user, item.device].filter(Boolean).join(' · ') }}</span>
-                      <span v-if="item.paused" class="np-chip">Paused</span>
-                      <span v-if="item.transcoding" class="np-chip is-transcode">Transcoding</span>
-                      <span v-else class="np-chip">Direct play</span>
-                    </span>
-                    <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
-                    <span v-if="item.minutes_left != null" class="home-muted np-left">{{ item.minutes_left }} min left</span>
-                  </span>
-                </component>
-              </li>
-            </ul>
-            <p v-else-if="!statusLoaded" class="home-muted">Checking who is watching…</p>
-            <p v-else-if="hasMediaServer" class="home-muted">Nobody is watching right now.</p>
-            <p v-else class="home-muted">Install Jellyfin or Plex to see who is watching.</p>
-          </div>
+        <article class="home-card glass-card home-card-playing" :class="{ 'has-art': nowItem?.poster }">
+          <template v-if="nowItem">
+            <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" alt="" aria-hidden="true" />
+            <span v-if="nowItem.poster" class="np-shade" aria-hidden="true"></span>
+            <div class="np-top">
+              <span class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+                {{ nowItem.device || (nowItem.source === 'plex' ? 'Plex' : 'Jellyfin') }}
+              </span>
+              <span v-if="homeStatus.playing.length > 1" class="gh-pill">+{{ homeStatus.playing.length - 1 }} watching</span>
+            </div>
+            <component
+              :is="nowItem.url ? 'a' : 'div'"
+              class="np-bottom"
+              v-bind="nowItem.url ? { href: nowItem.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
+              @click="nowItem.url && openApp($event, nowItem.source, nowItem.url)"
+            >
+              <strong class="np-title">{{ nowItem.title }}</strong>
+              <span v-if="nowItem.detail" class="np-sub">{{ nowItem.detail }}</span>
+              <span class="np-progress"><span :style="{ width: `${nowItem.progress}%` }" /></span>
+              <span class="np-foot">
+                <span>{{ nowItem.user }}<template v-if="nowItem.paused"> · Paused</template></span>
+                <span>{{ nowItem.transcoding ? 'Transcoding' : 'Direct play' }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} min left</template></span>
+              </span>
+            </component>
+          </template>
+          <template v-else>
+            <div class="gh-head">
+              <h3>Now playing</h3>
+              <span class="gh-status is-idle">{{ !statusLoaded ? 'Checking who is watching…' : hasMediaServer ? 'Nobody is watching' : 'Install Jellyfin or Plex' }}</span>
+            </div>
+            <div v-if="statusLoaded && hasMediaServer" class="gh-empty">
+              <span class="gh-big">Nothing on</span>
+              <span class="gh-label">What plays on Jellyfin or Plex shows up here.</span>
+            </div>
+          </template>
         </article>
       </template>
       <template #storage>
         <article class="home-card glass-card home-card-storage">
-          <div class="home-widget-head">
+          <div class="gh-head">
             <h3>Storage</h3>
+            <span v-if="storageStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[storageStatus.level] }">{{ storageStatus.text }}</span>
+            <span v-else class="gh-status is-idle">{{ statusLoaded ? 'No data folders found' : 'Checking disks…' }}</span>
           </div>
-          <div v-if="fullestVolume" class="st-compact">
-            <span class="home-dl-count">{{ Math.round(fullestVolume.percent) }}<small>% used</small></span>
-            <span class="home-muted home-dl-meta">{{ fullestVolume.labels.join(' · ') }} · {{ formatBytes(fullestVolume.free) }} free</span>
-            <span class="home-bar" :class="usageClass(fullestVolume.percent)"><span :style="{ width: `${fullestVolume.percent}%` }" /></span>
-          </div>
-          <div class="home-card-body">
-            <ul v-if="homeStatus.storage.length">
-              <li v-for="volume in homeStatus.storage" :key="volume.labels.join()">
-                <span class="home-dl-row">
-                  <strong>{{ volume.labels.join(' · ') }}</strong>
-                  <span class="home-dl-pct font-mono">{{ formatBytes(volume.free) }} free</span>
-                </span>
-                <span class="home-bar" :class="usageClass(volume.percent)"><span :style="{ width: `${volume.percent}%` }" /></span>
-                <span class="home-muted home-dl-meta">{{ formatBytes(volume.used) }} of {{ formatBytes(volume.total) }} · {{ Math.round(volume.percent) }}% used</span>
-              </li>
-            </ul>
-            <p v-else class="home-muted">{{ statusLoaded ? 'No data folders found.' : 'Checking disks…' }}</p>
-          </div>
+          <template v-if="fullestVolume">
+            <div class="gh-figure">
+              <span class="gh-big">{{ fullestFree[0] }}<small>{{ fullestFree[1] }} free</small></span>
+              <span class="gh-label">of {{ formatBytes(fullestVolume.total) }} · {{ Math.round(fullestVolume.percent) }}% used</span>
+            </div>
+            <span class="gh-meter" :class="`is-${storageStatus.level}`"><span :style="{ width: `${fullestVolume.percent}%` }" /></span>
+            <div class="gh-pills">
+              <span v-for="volume in homeStatus.storage" :key="volume.labels.join()" class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2.5" /><path d="M7 14h.01M11 14h6" /></svg>
+                {{ volume.labels.join(' · ') }}<template v-if="homeStatus.storage.length > 1"> · {{ Math.round(volume.percent) }}%</template>
+              </span>
+            </div>
+          </template>
         </article>
       </template>
       <template #server>
         <article class="home-card glass-card home-card-server">
-          <div class="home-widget-head">
+          <div class="gh-head">
             <h3>Server</h3>
-            <span v-if="homeStatus.server" class="home-muted sv-up">Up {{ upFor(homeStatus.server.uptime_seconds) }}</span>
+            <span v-if="serverStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[serverStatus.level] }">{{ serverStatus.text }}</span>
+            <span v-else class="gh-status is-idle">Reading the server…</span>
           </div>
-          <div v-if="homeStatus.server" class="sv-meters">
-            <div class="sv-meter">
-              <span class="sv-label">CPU</span>
-              <span class="sv-value">{{ Math.round(homeStatus.server.cpu_percent) }}<small>%</small></span>
-              <span class="home-bar" :class="usageClass(homeStatus.server.cpu_percent)"><span :style="{ width: `${homeStatus.server.cpu_percent}%` }" /></span>
-              <span class="home-muted sv-note">{{ homeStatus.server.cpu_count }} cores<template v-if="homeStatus.server.temperature != null"> · {{ Math.round(homeStatus.server.temperature) }} °C</template></span>
+          <template v-if="homeStatus.server">
+            <div class="sv-figures">
+              <div class="gh-figure">
+                <span class="gh-big">{{ Math.round(homeStatus.server.cpu_percent) }}<small>%</small></span>
+                <span class="gh-label">CPU</span>
+              </div>
+              <div class="gh-figure">
+                <span class="gh-big">{{ Math.round(homeStatus.server.memory_percent) }}<small>%</small></span>
+                <span class="gh-label">Memory<span class="sv-mem-bytes"> · {{ formatBytes(homeStatus.server.memory_used) }} of {{ formatBytes(homeStatus.server.memory_total) }}</span></span>
+              </div>
             </div>
-            <div class="sv-meter">
-              <span class="sv-label">Memory</span>
-              <span class="sv-value">{{ Math.round(homeStatus.server.memory_percent) }}<small>%</small></span>
-              <span class="home-bar" :class="usageClass(homeStatus.server.memory_percent)"><span :style="{ width: `${homeStatus.server.memory_percent}%` }" /></span>
-              <span class="home-muted sv-note">{{ formatBytes(homeStatus.server.memory_used) }} of {{ formatBytes(homeStatus.server.memory_total) }}</span>
+            <div class="sv-net">
+              <div class="sv-net-head">
+                <span class="gh-label">Network <span class="sv-rate">↓ {{ netRate(netShown?.rxRate) }}</span> <span class="sv-rate">↑ {{ netRate(netShown?.txRate) }}</span></span>
+                <span class="gh-label">{{ netAgo || (netChart ? `last ${netChart.minutes} min` : '') }}</span>
+              </div>
+              <div v-if="netChart" class="sv-chart">
+                <svg class="sv-spark" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="netChart.label" @pointermove="onNetHover" @pointerleave="netHoverIdx = -1">
+                  <defs>
+                    <linearGradient id="sv-net-fill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="currentColor" stop-opacity="0.28" />
+                      <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <line v-for="gx in [25, 50, 75]" :key="gx" class="sv-grid" :x1="gx" y1="0" :x2="gx" y2="40" />
+                  <path class="sv-area" :d="netChart.area" fill="url(#sv-net-fill)" />
+                  <path class="sv-line" :d="netChart.down" />
+                  <line v-if="netChart.hoverX != null" class="sv-cross" :x1="netChart.hoverX" y1="0" :x2="netChart.hoverX" y2="40" />
+                </svg>
+                <span class="sv-end" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.y}%` }" aria-hidden="true"></span>
+              </div>
+              <p v-else class="gh-label sv-net-wait">Measuring network use…</p>
             </div>
-          </div>
-          <div v-if="homeStatus.server" class="sv-net">
-            <div class="sv-net-head">
-              <span class="sv-label">Network</span>
-              <span class="sv-net-rates">
-                <span><i class="sv-key is-down" aria-hidden="true"></i>↓ {{ netRate(netShown?.rxRate) }}</span>
-                <span><i class="sv-key is-up" aria-hidden="true"></i>↑ {{ netRate(netShown?.txRate) }}</span>
-                <span v-if="netAgo" class="home-muted">{{ netAgo }}</span>
+            <div class="gh-pills sv-pills">
+              <span class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" /></svg>
+                {{ homeStatus.server.cpu_count }} cores
+              </span>
+              <span v-if="homeStatus.server.temperature != null" class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0z" /></svg>
+                {{ Math.round(homeStatus.server.temperature) }} °C
+              </span>
+              <span class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                Up {{ upFor(homeStatus.server.uptime_seconds) }}
               </span>
             </div>
-            <svg v-if="netChart" class="sv-spark" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="netChart.label" @pointermove="onNetHover" @pointerleave="netHoverIdx = -1">
-              <line class="sv-base" x1="0" y1="40" x2="100" y2="40" />
-              <path class="sv-line is-down" :d="netChart.down" />
-              <path class="sv-line is-up" :d="netChart.up" />
-              <line v-if="netChart.hoverX != null" class="sv-cross" :x1="netChart.hoverX" y1="0" :x2="netChart.hoverX" y2="40" />
-            </svg>
-            <p v-else class="home-muted sv-net-wait">Measuring network use…</p>
-          </div>
-          <p v-else class="home-muted">Reading the server…</p>
+          </template>
         </article>
       </template>
       <template #attention>
         <article class="home-card glass-card home-card-attention">
-          <div class="home-widget-head">
+          <div class="gh-head">
             <h3>Needs attention</h3>
-            <span v-if="homeStatus.attention.length" class="at-count" :class="{ 'is-problem': homeStatus.attention.some((item) => item.level === 'problem') }">{{ homeStatus.attention.length }}</span>
+            <span v-if="statusLoaded" class="gh-status" :style="{ '--dot': MOOD_COLORS[attentionStatus.level] }">{{ attentionStatus.text }}</span>
+            <span v-else class="gh-status is-idle">Checking…</span>
           </div>
           <div class="home-card-body">
-            <ul v-if="homeStatus.attention.length" class="at-list">
+            <ol v-if="homeStatus.attention.length" class="at-timeline">
               <li v-for="(item, idx) in homeStatus.attention" :key="idx">
-                <a :href="item.href" class="at-row" :class="`is-${item.level}`">
+                <a :href="item.href" class="at-item" :class="`is-${item.level}`">
                   <span class="at-dot" aria-hidden="true"></span>
-                  <span class="at-body">
+                  <span class="at-text">
                     <strong>{{ item.title }}</strong>
-                    <span class="home-muted">{{ item.detail }}</span>
+                    <span class="gh-label">{{ item.detail }}</span>
                   </span>
-                  <svg class="at-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+                  <span class="at-kind">{{ item.level === 'problem' ? 'Problem' : item.level === 'warning' ? 'Warning' : 'Update' }}</span>
                 </a>
               </li>
-            </ul>
-            <div v-else-if="statusLoaded" class="at-ok">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-              <strong>Everything is running</strong>
-              <span class="home-muted">Apps, VPN, tunnel, updates and disks look fine.</span>
+            </ol>
+            <div v-else-if="statusLoaded" class="gh-empty">
+              <span class="gh-big">All clear</span>
+              <span class="gh-label">Apps, VPN, tunnel, updates and disks look fine.</span>
             </div>
-            <p v-else class="home-muted">Checking…</p>
           </div>
         </article>
       </template>
@@ -2797,329 +2817,386 @@ onUnmounted(() => {
 .home-debug-state[data-state='empty'] {
   color: var(--color-warning, #e6b84d);
 }
-/* Status widgets: bars turn amber from 80% and red from 90%, like the disk warning in Needs attention. */
-.home-bar.is-high span {
-  background: var(--color-warning);
+/* Status widgets, after GlassHome: a title with a one-line status, big light figures, quiet pills and charts. */
+.gh-head {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 0.15rem;
 }
-.home-bar.is-full span {
-  background: var(--color-danger);
+.gh-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.86rem;
+  color: var(--text-muted);
 }
-/* Now playing: poster, title, who and where, and how far along. */
-.home-card .np-list {
-  gap: 0.9rem;
+.gh-status::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--dot, var(--text-dim));
 }
-.np-row {
+.gh-status.is-idle::before {
+  display: none;
+}
+.gh-figure {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.gh-big {
+  font-size: clamp(2.2rem, 12cqw, 3.6rem);
+  font-weight: 300;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--text-heading);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gh-big small {
+  margin-left: 0.2em;
+  font-size: 0.32em;
+  font-weight: 500;
+  letter-spacing: 0;
+  vertical-align: top;
+  color: var(--text-muted);
+}
+.gh-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gh-pills {
+  flex: 0 0 auto;
   display: flex;
-  align-items: flex-start;
-  gap: 0.8rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.gh-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.38rem 0.75rem;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gh-pill svg {
+  flex: 0 0 auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  opacity: 0.75;
+}
+.gh-meter {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--switch-track);
+  overflow: hidden;
+}
+.gh-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-main);
+  opacity: 0.85;
+}
+.gh-meter.is-warn span {
+  background: var(--color-warning);
+  opacity: 1;
+}
+.gh-meter.is-crit span {
+  background: var(--color-danger);
+  opacity: 1;
+}
+/* Now playing: the poster fills the card, the title sits on it. */
+.home-card-playing.has-art {
+  color: #fff;
+}
+.home-card-playing > .np-art,
+.home-card-playing > .np-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.home-card-playing > .np-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+}
+.home-card-playing > .np-shade {
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.35) 0%, rgb(0 0 0 / 0) 30%, rgb(0 0 0 / 0.25) 50%, rgb(0 0 0 / 0.8) 100%);
+}
+.np-top {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.has-art .gh-pill {
+  color: #fff;
+  background: rgb(0 0 0 / 0.35);
+  border-color: rgb(255 255 255 / 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.np-bottom {
+  margin-top: auto;
+  display: grid;
+  gap: 0.35rem;
   min-width: 0;
   color: inherit;
   text-decoration: none;
 }
-.np-poster {
-  flex: 0 0 auto;
-  width: 3.4rem;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  border-radius: 10px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-}
-.np-body {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  gap: 0.25rem;
-}
-.np-body strong,
-.np-detail {
+.np-title {
+  font-size: clamp(1.25rem, 7cqw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.np-body strong {
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-.np-detail {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-.np-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.74rem;
-  color: var(--text-muted);
-}
-.np-chip {
-  padding: 0.05rem 0.45rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  font-weight: 600;
-}
-.np-chip.is-transcode {
-  color: var(--color-warning-fg);
-  border-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
-}
-.np-left {
+.np-sub {
   font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-@container (max-width: 300px) or (max-height: 220px) {
-  .np-poster,
-  .np-meta,
-  .np-left {
+.np-progress {
+  display: block;
+  height: 4px;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.25);
+  overflow: hidden;
+}
+.home-card-playing:not(.has-art) .np-progress {
+  background: var(--switch-track);
+}
+.np-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+}
+.np-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.np-foot span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@container (max-height: 200px) {
+  .np-sub,
+  .np-foot span:first-child {
     display: none;
   }
 }
-/* Storage: one row per disk; a small card shows only the fullest one. */
-.st-compact {
-  display: none;
-  flex: 1 1 auto;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 0.4rem;
-  min-height: 0;
+/* Storage: free space as the big figure, a meter, and a pill per disk. */
+.home-card-storage .gh-meter {
+  margin-top: auto;
 }
-@container (max-width: 260px) or (max-height: 140px) {
-  .home-card-storage .st-compact {
-    display: flex;
-  }
-  .home-card-storage .st-compact + .home-card-body {
+@container (max-height: 200px) {
+  .home-card-storage .gh-pills {
     display: none;
   }
 }
-/* Server: CPU and memory side by side, stacked in a narrow card; network use below when there is room.
-   Series colours: categorical slots 1 and 2 of the reference palette, validated on both card surfaces. */
-.home-card-server {
-  --series-down: #3987e5;
-  --series-up: #d95926;
+@container (max-width: 260px) {
+  .home-card-storage .gh-pills,
+  .home-card-storage .gh-figure .gh-label {
+    display: none;
+  }
 }
-:global([data-theme='light'] .home-card-server) {
-  --series-down: #2a78d6;
-  --series-up: #eb6834;
-}
-.sv-up {
-  font-size: 0.8rem;
-}
-.sv-meters {
+/* Server: CPU and memory as figures, the last few minutes of network use as an area chart, details as pills. */
+.sv-figures {
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: end;
-  gap: 0.6rem 1.2rem;
-}
-.sv-meter {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-}
-.sv-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.sv-value {
-  font-size: 2rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.sv-value small {
-  margin-left: 0.1rem;
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: var(--text-muted);
-}
-.sv-note {
-  font-size: 0.74rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  gap: 1rem;
 }
 .sv-net {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 .sv-net-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
   justify-content: space-between;
-  gap: 0.2rem 0.75rem;
+  gap: 0.75rem;
 }
-.sv-net-rates {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.75rem;
-  font-size: 0.78rem;
+.sv-rate {
+  margin-left: 0.35rem;
+  color: var(--text-main);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.sv-key {
-  display: inline-block;
-  width: 0.55rem;
-  height: 0.55rem;
-  margin-right: 0.3rem;
-  border-radius: 2px;
-}
-.sv-key.is-down {
-  background: var(--series-down);
-}
-.sv-key.is-up {
-  background: var(--series-up);
-}
-.sv-spark {
+.sv-chart {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  color: var(--text-main);
+}
+.sv-spark {
+  display: block;
   width: 100%;
+  height: 100%;
   overflow: visible;
   cursor: crosshair;
 }
 .sv-line {
   fill: none;
+  stroke: currentColor;
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+  opacity: 0.8;
 }
-.sv-line.is-down {
-  stroke: var(--series-down);
-}
-.sv-line.is-up {
-  stroke: var(--series-up);
-}
-.sv-base,
+.sv-grid,
 .sv-cross {
-  stroke: var(--border-strong);
+  stroke: var(--border-subtle);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
+.sv-cross {
+  stroke: var(--border-strong);
+}
+.sv-end {
+  position: absolute;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin: -0.35rem 0 0 -0.35rem;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: var(--bg-card);
+  pointer-events: none;
+}
 .sv-net-wait {
   margin: 0;
-  font-size: 0.78rem;
 }
-/* Two rows high: the rates stay, the graph goes. */
+/* Two rows high: figures and pills; the chart needs a third row. */
 @container (max-height: 200px) {
-  .sv-spark,
-  .sv-net-wait {
-    display: none;
-  }
-}
-@container (max-height: 150px) {
   .sv-net {
     display: none;
+  }
+  .sv-pills {
+    margin-top: auto;
   }
 }
 @container (max-width: 300px) {
-  .sv-net {
+  .sv-pills,
+  .sv-mem-bytes {
     display: none;
   }
-  .sv-meters {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .sv-value {
-    font-size: 1.45rem;
-  }
-  .sv-note {
-    display: none;
+  .sv-figures {
+    gap: 0.5rem;
   }
 }
-/* Needs attention: a coloured dot per row, each row opens where to fix it; empty means all is well. */
-.at-count {
-  min-width: 1.5rem;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  text-align: center;
-  font-size: 0.78rem;
-  font-weight: 800;
-  background: var(--color-warning-bg);
-  color: var(--color-warning-fg);
+/* Needs attention: a timeline; each row opens where to fix it. */
+.at-timeline {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
 }
-.at-count.is-problem {
-  background: var(--color-danger-bg);
-  color: var(--color-danger-fg);
+.at-timeline::before {
+  content: '';
+  position: absolute;
+  left: 0.3rem;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  width: 1px;
+  background: var(--border-strong);
 }
-.home-card .at-list {
-  gap: 0.4rem;
+.home-card .at-timeline li {
+  display: block;
 }
-.at-row {
+.at-item {
   display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  min-width: 0;
-  padding: 0.55rem 0.6rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--bg-surface);
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.45rem 0;
   color: inherit;
   text-decoration: none;
 }
-.at-row:hover {
-  border-color: var(--border-hover);
+.at-item:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .at-dot {
+  position: relative;
   flex: 0 0 auto;
-  width: 0.6rem;
-  height: 0.6rem;
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-top: 0.3rem;
   border-radius: 50%;
   background: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--bg-card);
 }
-.at-row.is-problem .at-dot {
+.at-item.is-problem .at-dot {
   background: var(--color-danger);
 }
-.at-row.is-warning .at-dot {
+.at-item.is-warning .at-dot {
   background: var(--color-warning);
 }
-.at-body {
+.at-text {
   flex: 1;
   min-width: 0;
   display: grid;
+  gap: 0.1rem;
 }
-.at-body strong,
-.at-body .home-muted {
+.at-text strong {
+  font-size: 0.95rem;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.at-body strong {
-  font-size: 0.86rem;
-}
-.at-body .home-muted {
-  font-size: 0.76rem;
-}
-.at-go {
+.at-kind {
   flex: 0 0 auto;
-  width: 1rem;
-  height: 1rem;
-  color: var(--text-dim);
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
-.at-ok {
+.gh-empty {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 0.35rem;
-  text-align: center;
 }
-.at-ok svg {
-  width: 2rem;
-  height: 2rem;
-  padding: 0.4rem;
-  border-radius: 50%;
-  color: var(--color-success-fg);
-  background: var(--color-success-bg);
+.gh-empty .gh-big {
+  font-size: clamp(1.8rem, 10cqw, 2.8rem);
 }
-@container (max-height: 160px) {
-  .at-ok .home-muted {
+@container (max-width: 300px) {
+  .at-kind {
     display: none;
   }
 }
