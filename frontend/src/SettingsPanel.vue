@@ -5,6 +5,7 @@ import { resolveSettingsSection, SETTINGS_NAV } from './router'
 import { apiError, apiRequest, readJson } from './api.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug } from './homepageDebug.js'
+import { versionLabel } from './statusChips.js'
 import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 import {
@@ -810,6 +811,22 @@ function applySettingsPayload(data) {
   if (data.branding) applyBrandingPayload(data.branding)
 }
 
+/** This build's version, shown under System info (it used to sit under the title in the header). */
+const versionText = ref('')
+const buildSha = ref('')
+
+async function loadVersion() {
+  try {
+    const res = await apiRequest('/health')
+    if (!res.ok) return
+    const health = await readJson(res)
+    versionText.value = versionLabel(health)
+    buildSha.value = health.git_sha || ''
+  } catch (_) {
+    /* the version line is optional */
+  }
+}
+
 async function loadAll() {
   loading.value = true
   error.value = ''
@@ -1528,6 +1545,7 @@ watch(section, (s, prev) => {
 })
 
 onMounted(() => {
+  loadVersion()
   widgetDebug.value = readHomepageWidgetDebug()
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
@@ -1907,6 +1925,10 @@ onBeforeUnmount(() => {
           <p>Read-only. Changing bind mounts is a host/compose job; this UI does not remount disks.</p>
         </div>
         <dl class="info-grid">
+          <div>
+            <dt>Version</dt>
+            <dd class="font-mono" :title="buildSha ? `Build ${buildSha}` : undefined">{{ versionText || '—' }}</dd>
+          </div>
           <div>
             <dt>Architecture</dt>
             <dd class="font-mono">{{ hostArch ? hostArch.toUpperCase() : '—' }}</dd>

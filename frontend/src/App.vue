@@ -25,7 +25,7 @@ import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInsta
 import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
 import { migrateLocalVisualsIfNeeded } from './visualsProfile.js'
 import { lockThemeToSystem, unlockTheme } from './theme.js'
-import { tunnelChip, versionLabel, vpnChip } from './statusChips.js'
+import { tunnelChip, vpnChip } from './statusChips.js'
 
 const { toasts, showToast } = useToasts()
 const showPwaInstall = ref(false)
@@ -72,8 +72,6 @@ const currentView = computed(() => {
 })
 
 const transcodingAvailable = computed(() => systemInfo.value?.transcoding?.available)
-const healthInfo = ref(null)
-const versionText = computed(() => versionLabel(healthInfo.value))
 const statusChips = computed(() =>
   [
     ['vpn', vpnChip(vpnLive.value)],
@@ -203,15 +201,6 @@ async function fetchVpnStatus() {
     if (res.ok) vpnLive.value = await readJson(res)
   } catch (err) {
     console.error('VPN status error:', err)
-  }
-}
-
-async function fetchHealthInfo() {
-  try {
-    const res = await apiRequest('/health')
-    if (res.ok) healthInfo.value = await readJson(res)
-  } catch (_) {
-    /* the version line is optional */
   }
 }
 
@@ -389,7 +378,6 @@ watch(() => route.fullPath, () => closeAccountMenu())
 onMounted(() => {
   document.addEventListener('click', closeAccountMenu)
   loadBranding()
-  fetchHealthInfo()
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
   stopLivePoll = startGuardedInterval(pollLiveStatus, 10000)
@@ -418,11 +406,6 @@ onUnmounted(() => {
         </div>
         <div class="brand-titles">
           <h1 class="brand-name" :title="brandTitle">{{ brandTitle }}</h1>
-          <span
-            v-if="versionText"
-            class="brand-version font-mono"
-            :title="healthInfo?.git_sha ? `Build ${healthInfo.git_sha}` : undefined"
-          >{{ versionText }}</span>
         </div>
       </div>
 
