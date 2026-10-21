@@ -15,7 +15,8 @@ export function bpForWidth(width) {
 
 /** Sizes are [columns, rows]; `size` is where a widget starts on each screen, `presets` what its sheet offers. */
 export const WIDGETS = {
-  search: { label: 'Greeting & search', min: [4, 1], max: [12, 3], size: { desktop: [12, 2], tablet: [8, 2], phone: [4, 2] }, presets: [[12, 1, 'Slim'], [12, 2, 'Standard'], [6, 2, 'Half']] },
+  greeting: { label: 'Greeting', min: [2, 1], max: [12, 3], size: { desktop: [12, 1], tablet: [8, 1], phone: [4, 1] }, presets: [[4, 1, 'Small'], [6, 1, 'Half'], [12, 1, 'Slim'], [12, 2, 'Large']] },
+  searchbar: { label: 'Search', min: [2, 1], max: [12, 1], size: { desktop: [12, 1], tablet: [8, 1], phone: [4, 1] }, presets: [[3, 1, 'Small'], [6, 1, 'Half'], [12, 1, 'Full']] },
   recent: { label: 'Recently added', min: [3, 3], max: [12, 6], size: { desktop: [12, 3], tablet: [8, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [8, 3, 'Wide'], [12, 3, 'Full'], [12, 4, 'Tall']] },
   calendar: { label: 'Calendar', min: [3, 3], max: [12, 8], size: { desktop: [12, 4], tablet: [8, 4], phone: [4, 5] }, presets: [[4, 4, 'Agenda'], [12, 4, 'Week'], [12, 6, 'Large']] },
   downloads: { label: 'Downloading', min: [2, 2], max: [12, 8], size: { desktop: [4, 4], tablet: [4, 4], phone: [4, 4] }, presets: [[2, 2, 'Counter'], [4, 4, 'List'], [6, 4, 'Wide']] },
@@ -31,6 +32,16 @@ export const GRID_IDS = Object.keys(WIDGETS)
 export const LEGACY_IDS = ['search', 'recent', 'calendar', 'downloads', 'requests', 'trending']
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value))
+
+/**
+ * Greeting and search were one widget ('search'). Its place is shared out: the greeting keeps the top rows and the
+ * search bar takes the bottom one, or on a single row the greeting takes the left half.
+ */
+export function splitSearch({ x, y, w, h }) {
+  if (h > 1) return [{ id: 'greeting', x, y, w, h: h - 1 }, { id: 'searchbar', x, y: y + h - 1, w, h: 1 }]
+  const half = Math.ceil(w / 2)
+  return [{ id: 'greeting', x, y, w: half, h }, { id: 'searchbar', x: x + half, y, w: w - half, h }]
+}
 
 export function collides(a, b) {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
@@ -97,12 +108,15 @@ export function fitItem(item, cols) {
   return { id: item.id, x: clamp(item.x, 0, cols - w), y: Math.max(0, item.y), w, h }
 }
 
-/** Saved data made safe: known widgets once each, whole numbers, inside the grid, nothing on top of anything else. */
+/** Saved data made safe: known widgets once each (the old greeting-and-search as two), whole numbers, inside the grid, nothing on top of anything else. */
 export function normalizeLayout(list, bp) {
   const cols = BREAKPOINTS[bp].cols
   const seen = new Set()
   const items = []
-  for (const raw of Array.isArray(list) ? list : []) {
+  const saved = (Array.isArray(list) ? list : []).flatMap((raw) =>
+    raw?.id === 'search' ? splitSearch({ x: Number(raw.x), y: Number(raw.y), w: Number(raw.w), h: Number(raw.h) }) : [raw],
+  )
+  for (const raw of saved) {
     if (!raw || !WIDGETS[raw.id] || seen.has(raw.id)) continue
     const [x, y, w, h] = ['x', 'y', 'w', 'h'].map((key) => Math.round(Number(raw[key])))
     if (![x, y, w, h].every(Number.isFinite)) continue
@@ -150,9 +164,8 @@ export function fromLegacy({ order = [], sizes = {}, hidden = [] } = {}) {
   for (const id of ids) {
     if (id === 'search') {
       flush()
-      const [w, h] = WIDGETS.search.size.desktop
-      out.push({ id, x: 0, y, w, h })
-      y += h
+      out.push(...splitSearch({ x: 0, y, w: 12, h: 2 }))
+      y += 2
       continue
     }
     const want = fixed(id) || 4

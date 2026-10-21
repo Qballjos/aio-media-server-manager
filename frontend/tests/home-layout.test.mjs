@@ -9,7 +9,7 @@ test('an old Home keeps its order, hidden cards and hidden dock until someone ar
   home.homeHidden.value = ['trending', 'apps']
 
   const desktop = home.layoutFor('desktop')
-  assert.deepEqual(desktop.map((item) => item.id), ['downloads', 'search', 'calendar', 'recent', 'requests'])
+  assert.deepEqual(desktop.map((item) => item.id), ['downloads', 'greeting', 'searchbar', 'calendar', 'recent', 'requests'])
   assert.equal(home.dockHidden.value, true)
   assert.ok(home.layoutFor('phone').every((item) => item.w === 4))
 

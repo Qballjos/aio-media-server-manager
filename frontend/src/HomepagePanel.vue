@@ -213,7 +213,8 @@ const gridLayout = computed(() => layoutFor(activeBp.value))
 const widgetHasContent = computed(() => {
   const s = snapshot.value
   return {
-    search: true,
+    greeting: true,
+    searchbar: true,
     recent: !!(s.recent.length || (hasMediaServer.value && isPending('recent'))),
     requests: !!(s.requests.length || (s.seerr.available && isPending('requests'))),
     trending: !!(s.trending.length || (s.seerr.available && isPending('trending'))),
@@ -687,6 +688,13 @@ async function runSearch() {
 }
 
 /** Search results open over the widgets below the greeting instead of making it taller. */
+/** A narrow search bar opens its results toward the middle of the screen, so they stay on it. */
+const searchAnchor = computed(() => {
+  const item = shownLayout.value.find((one) => one.id === 'searchbar')
+  const cols = BREAKPOINTS[activeBp.value].cols
+  if (!item || item.w > cols / 2) return ''
+  return item.x + item.w / 2 > cols / 2 ? 'is-right' : 'is-left'
+})
 const searchOpen = computed(() => !!(notice.value || searchError.value || searching.value || searchedFor.value))
 
 function closeSearch() {
@@ -1183,17 +1191,22 @@ onUnmounted(() => {
         :bp="activeBp"
         :editing="editing"
         :highlight="highlight"
-        :raise="searchOpen && !editing ? 'search' : ''"
+        :raise="searchOpen && !editing ? 'searchbar' : ''"
         :bottom-inset="(dockHidden ? 0 : dockHeight) + (editing ? 96 : 24)"
         @change="onGridChange"
         @remove="removeWidget"
         @open="openWidget"
       >
-      <template #search>
+      <template #greeting>
       <section class="home-hero">
         <span class="home-hero-date">{{ todayLabel }}</span>
         <h2 class="home-hero-title">{{ greeting }}</h2>
         <p class="home-hero-sub">{{ heroSummary }}</p>
+      </section>
+      </template>
+
+      <template #searchbar>
+      <section class="home-search">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <label class="home-sr" for="home-search">Search</label>
@@ -1209,7 +1222,7 @@ onUnmounted(() => {
           />
           <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :disabled="searching">Search</button>
         </form>
-        <div v-if="searchOpen" class="home-hero-results glass-card">
+        <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
         <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" aria-label="Close search results" title="Close" @click="closeSearch">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
@@ -1956,7 +1969,7 @@ onUnmounted(() => {
   margin-left: 0.35rem;
   text-decoration: underline;
 }
-/* Hero: date, greeting and the search pill, centred like the mockup. */
+/* Greeting: date, greeting and a line about today, centred like the mockup. */
 .home-hero {
   position: relative;
   display: flex;
@@ -1991,6 +2004,15 @@ onUnmounted(() => {
   color: var(--text-main);
   text-shadow: var(--wallpaper-text-shadow);
 }
+/* Search: the pill, centred in a wide card and filling a small one. */
+.home-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0;
+  container-type: inline-size;
+}
 .home-search-pill {
   background: var(--control-bg);
   width: 100%;
@@ -1999,7 +2021,6 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.6rem;
   height: 3.5rem;
-  margin-top: 0.4rem;
   padding: 0 0.5rem 0 1.25rem;
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
 }
@@ -2030,7 +2051,7 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
-  width: min(720px, 100%);
+  width: min(720px, max(100%, min(28rem, calc(100vw - 2rem))));
   max-height: min(60vh, 34rem);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -2047,34 +2068,27 @@ onUnmounted(() => {
   width: 16px;
   height: 16px;
 }
+.home-hero-results.is-left {
+  left: 0;
+  transform: none;
+}
+.home-hero-results.is-right {
+  left: auto;
+  right: 0;
+  transform: none;
+}
 @container (max-height: 172px) {
   .home-hero-sub {
     display: none;
   }
 }
-/* One row high: the greeting sits beside the search pill. */
-@container (max-height: 130px) {
-  .home-hero {
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: 1rem;
-    text-align: left;
-  }
-  .home-hero-date {
-    display: none;
-  }
-  .home-hero-title {
-    flex: 0 1 auto;
-    min-width: 0;
-    font-size: 1.5rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+/* A small search bar searches on Enter; the button would leave no room to type. */
+@container (max-width: 300px) {
   .home-search-pill {
-    flex: 1 1 auto;
-    margin-top: 0;
-    height: 3rem;
+    padding-left: 1rem;
+  }
+  .home-search-btn {
+    display: none;
   }
 }
 .home-sr {
@@ -2156,7 +2170,7 @@ onUnmounted(() => {
 .hg.is-editing :is(.home-rail-tools, .home-rail-nav, .cal-nav, .cal-tools, .home-widget-head > :not(h3)) {
   visibility: hidden;
 }
-.hg.is-editing .home-hero {
+.hg.is-editing :is(.home-hero, .home-search) {
   border-radius: var(--radius-glass);
   outline: 1px dashed var(--border-strong);
   outline-offset: -1px;

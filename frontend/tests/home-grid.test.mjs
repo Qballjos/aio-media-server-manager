@@ -91,8 +91,8 @@ test('normalizeLayout sanitises bad data', () => {
     ],
     'desktop',
   )
-  assert.deepEqual(out.map((item) => item.id).sort(), ['calendar', 'downloads', 'recent', 'search'])
-  assert.deepEqual(byId(out).search, { id: 'search', x: 0, y: 0, w: 12, h: 2 })
+  assert.deepEqual(out.map((item) => item.id).sort(), ['calendar', 'downloads', 'greeting', 'recent', 'searchbar'])
+  assert.deepEqual(byId(out).greeting, { id: 'greeting', x: 0, y: 0, w: 12, h: 1 })
   assert.ok(byId(out).recent.h >= 3, 'recent keeps its minimum height')
   assertNoOverlap(out)
 })
@@ -103,19 +103,33 @@ test('fromLegacy keeps order, widths and hidden cards', () => {
   assert.equal(items.apps, undefined)
   assert.equal(items.trending, undefined)
   assert.equal(items.downloads.y, 0)
-  assert.ok(items.search.y >= items.downloads.y + items.downloads.h, 'search sits below downloads')
-  assert.deepEqual([items.search.x, items.search.w], [0, 12])
+  assert.ok(items.greeting.y >= items.downloads.y + items.downloads.h, 'the greeting sits below downloads')
+  assert.deepEqual([items.searchbar.x, items.searchbar.y, items.searchbar.w], [0, items.greeting.y + 1, 12])
   assert.equal(items.calendar.w, 12)
   assert.ok(items.requests, 'a card missing from the old order is added')
-  assert.deepEqual(readingOrder(out).slice(0, 4), ['downloads', 'search', 'calendar', 'recent'])
+  assert.deepEqual(readingOrder(out).slice(0, 5), ['downloads', 'greeting', 'searchbar', 'calendar', 'recent'])
   assertNoOverlap(out)
 })
 
 test('fromLegacy with empty input gives the default arrangement', () => {
   const out = fromLegacy({})
-  assert.deepEqual(out.map((item) => item.id).sort(), ['calendar', 'downloads', 'recent', 'requests', 'search', 'trending'])
-  assert.deepEqual(byId(out).search, { id: 'search', x: 0, y: 0, w: 12, h: 2 })
+  assert.deepEqual(out.map((item) => item.id).sort(), ['calendar', 'downloads', 'greeting', 'recent', 'requests', 'searchbar', 'trending'])
+  assert.deepEqual(byId(out).greeting, { id: 'greeting', x: 0, y: 0, w: 12, h: 1 })
+  assert.deepEqual(byId(out).searchbar, { id: 'searchbar', x: 0, y: 1, w: 12, h: 1 })
   assertNoOverlap(out)
+})
+
+test('the old greeting-and-search widget becomes a greeting above a search bar, in the same place', () => {
+  assert.deepEqual(normalizeLayout([{ id: 'search', x: 0, y: 0, w: 12, h: 2 }, { id: 'recent', x: 0, y: 2, w: 12, h: 3 }], 'desktop'), [
+    { id: 'greeting', x: 0, y: 0, w: 12, h: 1 },
+    { id: 'searchbar', x: 0, y: 1, w: 12, h: 1 },
+    { id: 'recent', x: 0, y: 2, w: 12, h: 3 },
+  ])
+  // On one row the greeting keeps the left half.
+  assert.deepEqual(normalizeLayout([{ id: 'search', x: 0, y: 0, w: 12, h: 1 }], 'desktop'), [
+    { id: 'greeting', x: 0, y: 0, w: 6, h: 1 },
+    { id: 'searchbar', x: 6, y: 0, w: 6, h: 1 },
+  ])
 })
 
 test('deriveLayout keeps reading order on phone', () => {
