@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 import threading
 
 import pytest
@@ -498,6 +498,45 @@ def test_homepage_seerr_requests_row(tmp_path):
     assert snap["requests"][0]["mediaType"] == "movie"
     assert snap["requests"][0]["status"] == "requested"
     assert "image.tmdb.org" in snap["requests"][0]["poster"]
+
+
+def test_homepage_seerr_requests_keep_unfinished(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(days=40)).isoformat().replace("+00:00", "Z")
+    fresh = (now - timedelta(days=2)).isoformat().replace("+00:00", "Z")
+
+    def row(tmdb, media_status, updated, status=2):
+        return {"status": status, "updatedAt": updated, "media": {"tmdbId": tmdb, "mediaType": "movie", "status": media_status}}
+
+    def fake_fetch(url, **_kwargs):
+        if "/request" in url and "/discover/" not in url:
+            return (
+                {
+                    "results": [
+                        row(1, 5, fresh, status=5),  # available, recent: keep
+                        row(2, 5, old, status=5),  # available, old: drop
+                        row(3, 4, old),  # partial, old: keep
+                        row(4, 3, old),  # still downloading, old: keep
+                        row(5, 1, old, status=3),  # declined, old: drop
+                    ]
+                },
+                None,
+            )
+        if "/discover/trending" in url:
+            return ({"results": []}, None)
+        if "/movie/" in url:
+            return ({"title": url.rsplit("/", 1)[-1]}, None)
+        return (None, "unexpected")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        snap = homepage_snapshot("nas.local", force=True)
+    assert [item["mediaId"] for item in snap["requests"]] == [1, 3, 4]
 
 
 def test_homepage_seerr_trending_row(tmp_path):
