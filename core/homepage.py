@@ -340,7 +340,7 @@ def _build_homepage_snapshot(host: str, scheme: str = "http") -> dict[str, Any]:
         "calendar": calendar[:400],
         "downloads": downloads[:40],
         "recent": recent[:24],
-        "requests": requests_row[:16],
+        "requests": requests_row,
         "trending": trending[:20],
         "seerr": {
             "available": bool(seerr_running),
@@ -1267,7 +1267,8 @@ def _collect_seerr_requests(
     data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/api/v1/request",
         headers=headers,
-        params={"take": "16", "skip": "0", "filter": "all", "sort": "added"},
+        # ponytail: one big page; paginate if a household ever passes 500 requests
+        params={"take": "500", "skip": "0", "filter": "all", "sort": "added"},
     )
     rows = data.get("results") if isinstance(data, dict) else None
     if not isinstance(rows, list):
@@ -1279,7 +1280,9 @@ def _collect_seerr_requests(
             error or (None if isinstance(data, dict) else "unexpected request payload"),
             "no requests yet",
         )
-    items = _seerr_request_cards(plugin, headers, rows[:16], host, scheme)
+    cutoff = datetime.now().astimezone() - timedelta(days=_REQUEST_DONE_DAYS)
+    rows = [row for row in rows if isinstance(row, dict) and _seerr_request_visible(row, cutoff)]
+    items = _seerr_request_cards(plugin, headers, rows, host, scheme)
     return _finish_source(
         notes,
         "requests",
@@ -1368,6 +1371,22 @@ def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str, scheme: str =
         if len(items) >= 20:
             break
     return items
+
+
+_REQUEST_DONE_DAYS = 30
+
+
+def _seerr_request_visible(row: dict[str, Any], cutoff: datetime) -> bool:
+    """Unfinished requests stay; available or declined ones drop off after 30 days."""
+    media = row.get("media") if isinstance(row.get("media"), dict) else {}
+    if seerr_media_status(media) != "available" and row.get("status") != 3:  # 3 = declined
+        return True
+    # updatedAt is when Seerr marked the request completed/declined.
+    stamp = str(row.get("updatedAt") or row.get("createdAt") or "")
+    try:
+        return datetime.fromisoformat(stamp.replace("Z", "+00:00")) >= cutoff
+    except (TypeError, ValueError):  # unparseable or naive stamp
+        return False
 
 
 def _seerr_request_cards(
