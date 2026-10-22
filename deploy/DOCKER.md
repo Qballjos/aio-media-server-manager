@@ -70,6 +70,8 @@ The container cannot replace its own image. Settings → Updates can *notify* yo
 
 **Adding `/backups` later:** create the host folder, add `- /path/to/backups:/backups` under `volumes:`, recreate. Old backups under `/config/backups` stay restorable until you remove them.
 
+**Host network traffic on Home:** add `- /sys:/host/sys:ro` under `volumes:` and recreate. Without it, Home shows only the container's own traffic.
+
 Optional `GITHUB_TOKEN` (compose or Settings → Updates) raises GitHub API limits. Do not commit the token.
 
 ### Build from this checkout
@@ -114,6 +116,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   -v /opt/aio-media-manager/config:/config \
   -v "${HOME}/aio-media-manager:/data" \
   -v /opt/aio-media-manager/backups:/backups \
+  -v /sys:/host/sys:ro \
   -e AMM_DOWNLOAD_DIR=/data/downloads \
   -e AMM_MEDIA_DIR=/data/media \
   ghcr.io/qballjos/aio-media-server-manager:latest
