@@ -890,6 +890,16 @@ function eventKind(item) {
   return item?.kind || item?.source || ''
 }
 
+const MEDIA_LABELS = { tv: 'Series', movie: 'Movie' }
+
+// Requests, trending and recent carry mediaType; calendar entries only kind and source.
+function mediaKind(item) {
+  const kind = String(item?.mediaType || item?.kind || item?.source || '').toLowerCase()
+  if (['tv', 'series', 'episode', 'season', 'sonarr'].includes(kind)) return 'tv'
+  if (['movie', 'radarr'].includes(kind)) return 'movie'
+  return ''
+}
+
 function matchesCalFilter(item) {
   if (calFilter.value === 'tv') return eventKind(item) === 'episode' || item?.source === 'sonarr'
   if (calFilter.value === 'movies') return eventKind(item) === 'movie' || item?.source === 'radarr'
@@ -925,7 +935,8 @@ const calendarDays = computed(() => {
     byDay[key].push(item)
   }
   for (const key of Object.keys(byDay)) {
-    byDay[key].sort((a, b) => (parseWhen(a.when)?.getTime() || 0) - (parseWhen(b.when)?.getTime() || 0))
+    const rows = byDay[key].map((item) => ({ item, dt: parseWhen(item.when) })).sort((a, b) => a.dt - b.dt)
+    byDay[key] = groupSameDay(rows).map((row) => row.item)
   }
   const todayKey = dayKey(new Date())
   if (calView.value === 'day' || calView.value === 'list') {
@@ -1028,15 +1039,17 @@ function groupSameDay(rows) {
     if (prev && prev.item.title === row.item.title && dayKey(prev.dt) === dayKey(row.dt)) {
       prev.count += 1
       prev.last = row
+      prev.have = prev.have && row.item.has_file
       continue
     }
-    out.push({ ...row, count: 1, last: row })
+    out.push({ ...row, count: 1, last: row, have: row.item.has_file })
   }
   return out.map((row) => {
     if (row.count === 1) return row
     const code = (r) => String(r.item.detail || '').split(' ')[0]
     const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
-    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes` } }
+    // Downloaded only when every episode in the group is.
+    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have } }
   })
 }
 const calendarList = computed(() => calendarListInfo.value.rows)
@@ -1281,8 +1294,11 @@ onUnmounted(() => {
               rel="noopener noreferrer"
               @click="item.url && openApp($event, item.source || 'jellyfin', item.url)"
             >
-              <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
-              <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+              <span class="home-tile-art">
+                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+              </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
             </a>
@@ -1332,6 +1348,7 @@ onUnmounted(() => {
                 <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
                 <span class="home-status-dot" :class="requestStatusDot(item).cls" :title="requestStatusDot(item).label" role="img" :aria-label="requestStatusDot(item).label"></span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
@@ -1380,8 +1397,11 @@ onUnmounted(() => {
                 rel="noopener noreferrer"
                 @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
               >
-                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
-                <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                <span class="home-tile-art">
+                  <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                  <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                  <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                </span>
                 <span class="home-tile-title">{{ item.title }}</span>
                 <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
                 <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
@@ -1449,7 +1469,10 @@ onUnmounted(() => {
               <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
                 <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
                 <span class="cal-row-body">
-                  <strong>{{ row.item.title }}</strong>
+                  <span class="cal-row-title">
+                    <strong>{{ row.item.title }}</strong>
+                    <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                  </span>
                   <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
                 </span>
               </li>
@@ -1494,7 +1517,10 @@ onUnmounted(() => {
                       :data-kind="eventKind(item)"
                       :class="{ 'is-have': item.has_file }"
                     >
-                      <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                      <span class="cal-event-top">
+                        <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                        <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                      </span>
                       <strong>{{ item.title }}</strong>
                       <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
                     </li>
@@ -2548,6 +2574,44 @@ onUnmounted(() => {
 .cal-event[data-kind='movie'] {
   background: color-mix(in srgb, var(--color-primary) 16%, var(--bg-input));
 }
+.cal-event-top,
+.cal-row-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.cal-event-top {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.cal-row-title strong {
+  min-width: 0;
+}
+/* Series or movie: a small pill on calendar entries and, overlaid, on posters. */
+.media-badge {
+  flex: none;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+.home-tile-art .media-badge {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  color: #fff;
+  background: rgba(10, 12, 20, 0.62);
+  border-color: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
 /* Calendar list rows: a day chip (accent for today), the title and its detail. */
 .cal-list ul {
   list-style: none;
@@ -2626,7 +2690,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.8rem;
   overflow-y: auto;
-  overscroll-behavior: contain;
   padding-right: 0.35rem;
   scrollbar-width: thin;
 }

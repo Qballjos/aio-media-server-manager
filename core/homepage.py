@@ -983,7 +983,10 @@ def _season_label(season: int | None) -> str:
 
 
 def _public_recent(item: dict[str, Any]) -> dict[str, Any]:
-    return {key: item.get(key) or "" for key in _RECENT_FIELDS}
+    public = {key: item.get(key) or "" for key in _RECENT_FIELDS}
+    kind = item.get("_kind")
+    public["mediaType"] = "tv" if kind in ("season", "episode", "show") else "movie" if kind == "movie" else ""
+    return public
 
 
 def _episode_numbers(items: list[dict[str, Any]]) -> list[int]:
