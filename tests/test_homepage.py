@@ -464,6 +464,32 @@ def test_homepage_jellyfin_full_season_is_one_tile(tmp_path):
     assert snap["recent"][0]["detail"] == "Season 01"
 
 
+def test_homepage_jellyfin_whole_series_does_not_push_out_the_rest(tmp_path):
+    catalog = FakeCatalog([_plugin("jellyfin", 8096, tmp_path)])
+    friends = [
+        {"Id": f"f{n}", "Type": "Episode", "SeriesName": "Friends", "SeriesId": "friends", "ParentIndexNumber": n // 24 + 1, "IndexNumber": n % 24 + 1, "DateCreated": "2026-10-22T12:14"}
+        for n in range(240)
+    ]
+    older = [
+        {"Id": "r1", "Type": "Episode", "SeriesName": "Reacher", "SeriesId": "reacher", "ParentIndexNumber": 3, "IndexNumber": 1, "DateCreated": "2026-10-16T23:06"},
+        {"Id": "dune", "Type": "Movie", "Name": "Dune", "DateCreated": "2026-10-12T12:00"},
+    ]
+    library = friends + older
+
+    def fake_fetch(url, **kwargs):
+        start, limit = int(kwargs["params"]["StartIndex"]), int(kwargs["params"]["Limit"])
+        return {"Items": library[start : start + limit]}, None
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"jellyfin"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        snap = homepage_snapshot("nas.local", force=True)
+    assert [item["title"] for item in snap["recent"]] == ["Friends", "Reacher", "Dune"]
+
+
 def test_homepage_seerr_requests_row(tmp_path):
     catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
 
