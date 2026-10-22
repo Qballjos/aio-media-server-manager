@@ -393,6 +393,7 @@ def test_collapse_full_season_hides_member_episodes():
     )
     out = collapse_recent_series(rows)
     assert [item["title"] for item in out] == ["Severance", "Dune"]
+    assert [item["mediaType"] for item in out] == ["tv", "movie"]
     assert out[0]["detail"] == "Season 01"
     assert out[0]["url"].endswith("id=season-1")
 
