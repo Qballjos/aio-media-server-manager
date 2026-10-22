@@ -32,6 +32,8 @@ services:
       - /volume1/homes/admin/aio-media-manager:/data
       # Config backups. Prefer a different volume or a Hyper Backup target folder.
       - /volume1/docker/aio-media-manager/backups:/backups
+      # Read-only host /sys so Home shows the NAS's network traffic, not just this container's.
+      - /sys:/host/sys:ro
     environment:
       PUID: "1026"
       PGID: "100"
