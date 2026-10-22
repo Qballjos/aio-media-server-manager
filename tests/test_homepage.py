@@ -21,6 +21,7 @@ from core.homepage import (
     homepage_request,
     homepage_search,
     homepage_snapshot,
+    homepage_trending,
     month_calendar_span,
 )
 from core.settings import Settings
@@ -615,6 +616,34 @@ def test_homepage_seerr_trending_row(tmp_path):
     assert snap["trending"][1]["title"] == "Hot Show"
     assert snap["trending"][1]["can_request"] is False
     assert snap["trending"][1]["status"] == "available"
+
+
+def test_homepage_trending_fetches_the_asked_page(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+    asked = []
+
+    def fake_fetch(url, **kwargs):
+        asked.append(kwargs["params"]["page"])
+        return {"results": [{"id": 42, "mediaType": "movie", "title": "Deep Cut", "mediaInfo": {"status": 1}}]}, None
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        out = homepage_trending("nas.local", 7)
+    assert asked == ["7"]
+    assert out["page"] == 7 and out["error"] is None
+    assert [item["title"] for item in out["items"]] == ["Deep Cut"]
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", return_value=(None, "HTTP 500")),
+    ):
+        assert homepage_trending("nas.local", 8)["error"] == "HTTP 500"
 
 
 def test_homepage_widget_debug_http_error(tmp_path):
