@@ -377,6 +377,14 @@ def homepage_search(host: str, query: str) -> dict[str, Any]:
     return {"query": term, "results": results[:20], "seerr": False, "error": error}
 
 
+def homepage_trending(host: str, page: int, scheme: str = "http") -> dict[str, Any]:
+    """A further page of Seerr's trending titles; Home's rail loads these as it scrolls."""
+    notes: list[dict[str, Any]] = []
+    items = _collect_seerr_trending(ApplicationCatalog(), _running_names(), notes, host, scheme, page)
+    error = next((note["detail"] for note in notes if note["state"] == "error"), None)
+    return {"page": page, "items": items, "error": error}
+
+
 def homepage_request(payload: dict[str, Any]) -> dict[str, Any]:
     catalog = ApplicationCatalog()
     running = _running_names()
@@ -1309,6 +1317,7 @@ def _collect_seerr_trending(
     notes: list[dict[str, Any]],
     host: str,
     scheme: str = "http",
+    page: int = 1,
 ) -> list[dict[str, Any]]:
     if not _source_ready(catalog, running, "seerr", "trending", notes, need_key=True):
         return []
@@ -1318,7 +1327,7 @@ def _collect_seerr_trending(
     data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/api/v1/discover/trending",
         headers=headers,
-        params={"page": "1", "mediaType": "all", "timeWindow": "week"},
+        params={"page": str(page), "mediaType": "all", "timeWindow": "week"},
     )
     rows = data.get("results") if isinstance(data, dict) else None
     if not isinstance(rows, list):

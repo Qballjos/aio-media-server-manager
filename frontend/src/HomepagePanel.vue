@@ -497,11 +497,19 @@ const requestItems = computed(() =>
     .filter((item) => mediaTypeMatches(item, requestsFilter.value))
     .map((item) => withPublicUrls(item, 'seerr')),
 )
-const trendingItems = computed(() =>
-  (snapshot.value.trending || [])
-    .filter((item) => mediaTypeMatches(item, trendingFilter.value))
-    .map((item) => withPublicUrls(item, 'seerr')),
-)
+// Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
+const trendingMore = ref([])
+const trendingItems = computed(() => {
+  const seen = new Set()
+  return [...(snapshot.value.trending || []), ...trendingMore.value]
+    .filter((item) => {
+      const key = `${item.mediaType}-${item.mediaId}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return mediaTypeMatches(item, trendingFilter.value)
+    })
+    .map((item) => withPublicUrls(item, 'seerr'))
+})
 const seerrHomeUrl = computed(() => {
   const seerr = snapshot.value.seerr || {}
   const port = Number((snapshot.value.apps || []).find((app) => app.name === 'seerr')?.port || 5055)
@@ -744,6 +752,10 @@ async function requestTitle(item) {
       notice.value = data.detail || 'Request submitted.'
       item.status = 'requested'
       item.can_request = false
+      // Later trending pages are not in the snapshot, so mark them here.
+      trendingMore.value = trendingMore.value.map((t) =>
+        `${t.mediaType}-${t.mediaId}` === key ? { ...t, status: 'requested', can_request: false } : t,
+      )
       loadSnapshot(true)
     } else {
       notice.value = apiError(data, 'Request failed.')
@@ -879,6 +891,37 @@ function scrollRail(which, direction) {
   const step = Math.max(node.clientWidth * 0.72, 232)
   node.scrollBy({ left: direction * step, behavior: 'smooth' })
 }
+
+let trendingPage = 1
+let trendingDone = false
+let trendingLoading = false
+
+// Seerr has up to 500 trending pages; fetch the next once the rail is within a screen of its end.
+async function loadMoreTrending() {
+  const rail = trendingRail.value
+  if (!rail || trendingLoading || trendingDone) return
+  if (rail.scrollWidth - rail.scrollLeft - rail.clientWidth > rail.clientWidth) return
+  trendingLoading = true
+  let loaded = false
+  try {
+    const res = await apiRequest(`/api/homepage/trending?page=${trendingPage + 1}`)
+    const data = res.ok ? await readJson(res) : null
+    if (data && !data.error) {
+      trendingPage += 1
+      trendingMore.value = [...trendingMore.value, ...(data.items || [])]
+      trendingDone = !(data.items || []).length || trendingPage >= 500
+      loaded = true
+    }
+  } catch {
+    // A failed page is tried again on the next scroll.
+  } finally {
+    trendingLoading = false
+  }
+  // A filtered rail can still end inside the screen after a page; keep going.
+  if (loaded) nextTick(loadMoreTrending)
+}
+// A rail wide enough to show every tile never scrolls, so also check when it appears or the filter changes.
+watch([trendingRail, trendingFilter], () => nextTick(loadMoreTrending))
 
 function addDays(value, amount) {
   const dt = new Date(value)
@@ -1388,7 +1431,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail">
+          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" @scroll.passive="loadMoreTrending">
             <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
               <a
                 class="home-tile-link"
