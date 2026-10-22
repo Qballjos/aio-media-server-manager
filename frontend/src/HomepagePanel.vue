@@ -2313,6 +2313,8 @@ onUnmounted(() => {
   display: flex;
   gap: 0.85rem;
   overflow-x: auto;
+  /* Tiles round up a pixel taller than the rail; a vertically scrollable rail keeps the wheel from the page. */
+  overflow-y: hidden;
   padding: 0.25rem 0.25rem 0.5rem;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
