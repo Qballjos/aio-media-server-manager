@@ -385,6 +385,14 @@ def homepage_trending(host: str, page: int, scheme: str = "http") -> dict[str, A
     return {"page": page, "items": items, "error": error}
 
 
+def homepage_recent(host: str, page: int, scheme: str = "http") -> dict[str, Any]:
+    """Every Jellyfin show and movie, newest first, a page at a time; Home's rail loads these as it scrolls."""
+    notes: list[dict[str, Any]] = []
+    items = _collect_jellyfin_titles(ApplicationCatalog(), _running_names(), notes, host, scheme, page)
+    error = next((note["detail"] for note in notes if note["state"] == "error"), None)
+    return {"page": page, "items": items, "error": error}
+
+
 def homepage_request(payload: dict[str, Any]) -> dict[str, Any]:
     catalog = ApplicationCatalog()
     running = _running_names()
@@ -973,6 +981,7 @@ _QBIT_STATUS = {
 _RECENT_FIELDS = ("source", "title", "detail", "when", "poster", "url")
 _JELLYFIN_RECENT_PAGE = 200
 _JELLYFIN_RECENT_MAX = 2000
+_JELLYFIN_TITLES_PAGE = 20
 
 
 def _as_int(value: Any) -> int | None:
@@ -992,6 +1001,8 @@ def _season_label(season: int | None) -> str:
 
 def _public_recent(item: dict[str, Any]) -> dict[str, Any]:
     public = {key: item.get(key) or "" for key in _RECENT_FIELDS}
+    # The rail drops a title it already shows when a later page brings it again.
+    public["id"] = item.get("_series_id") or item.get("_id") or ""
     kind = item.get("_kind")
     public["mediaType"] = "tv" if kind in ("season", "episode", "show") else "movie" if kind == "movie" else ""
     return public
@@ -1114,7 +1125,8 @@ def _jellyfin_recent_row(row: dict[str, Any], web: str) -> dict[str, Any]:
         "when": str(row.get("DateCreated") or "")[:16],
         "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
         "url": f"{web}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
-        "_kind": "movie",
+        "_kind": "show" if kind == "Series" else "movie",
+        "_id": item_id,
     }
 
 
@@ -1168,6 +1180,45 @@ def _collect_jellyfin_recent(
         items,
         error or payload_error,
         "library returned no recently added items",
+    )
+
+
+def _collect_jellyfin_titles(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    notes: list[dict[str, Any]],
+    host: str,
+    scheme: str = "http",
+    page: int = 1,
+) -> list[dict[str, Any]]:
+    """One tile per show or movie, by when it entered the library (a show's episodes don't count)."""
+    if not _source_ready(catalog, running, "jellyfin", "recent", notes, need_key=True):
+        return []
+    plugin = catalog.get("jellyfin")
+    data, error = _fetch_json(
+        f"http://127.0.0.1:{plugin.port}/Items",
+        headers=jellyfin_auth_headers(get_application_api_key("jellyfin", plugin.config_dir)),
+        params={
+            "Recursive": "true",
+            # DateLastContentAdded would follow a show's newest episode, but movies lack it and sort by name.
+            "SortBy": "DateCreated,SortName",
+            "SortOrder": "Descending",
+            "IncludeItemTypes": "Series,Movie",
+            "StartIndex": str((page - 1) * _JELLYFIN_TITLES_PAGE),
+            "Limit": str(_JELLYFIN_TITLES_PAGE),
+            "Fields": "DateCreated,ProductionYear",
+        },
+    )
+    rows = data.get("Items") if isinstance(data, dict) else None
+    web = _web_url(plugin.name, plugin.port, host, scheme)
+    items = [_public_recent(_jellyfin_recent_row(row, web)) for row in rows or [] if isinstance(row, dict)]
+    return _finish_source(
+        notes,
+        "recent",
+        "jellyfin",
+        items,
+        error or (None if isinstance(rows, list) else "unexpected items payload"),
+        "no more titles",
     )
 
 

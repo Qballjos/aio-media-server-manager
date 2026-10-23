@@ -489,9 +489,19 @@ const dockNotes = computed(() =>
     .map((app) => [`${app.display_name}: ${app.state_label || app.state}`, app.progress_message].filter(Boolean).join(' — ')),
 )
 
-const recentItems = computed(() =>
-  (snapshot.value.recent || []).map((item) => withPublicUrls(item, item.source)),
-)
+// Every Jellyfin show and movie, newest first, appended as the rail scrolls; the snapshot keeps the latest activity fresh.
+const recentMore = ref([])
+const recentItems = computed(() => {
+  const seen = new Set()
+  return [...(snapshot.value.recent || []), ...recentMore.value]
+    .filter((item) => {
+      const key = `${item.source}-${item.id || item.title}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .map((item) => withPublicUrls(item, item.source))
+})
 const requestItems = computed(() =>
   (snapshot.value.requests || [])
     .filter((item) => mediaTypeMatches(item, requestsFilter.value))
@@ -892,36 +902,43 @@ function scrollRail(which, direction) {
   node.scrollBy({ left: direction * step, behavior: 'smooth' })
 }
 
-let trendingPage = 1
-let trendingDone = false
-let trendingLoading = false
-
-// Seerr has up to 500 trending pages; fetch the next once the rail is within a screen of its end.
-async function loadMoreTrending() {
-  const rail = trendingRail.value
-  if (!rail || trendingLoading || trendingDone) return
-  if (rail.scrollWidth - rail.scrollLeft - rail.clientWidth > rail.clientWidth) return
-  trendingLoading = true
-  let loaded = false
-  try {
-    const res = await apiRequest(`/api/homepage/trending?page=${trendingPage + 1}`)
-    const data = res.ok ? await readJson(res) : null
-    if (data && !data.error) {
-      trendingPage += 1
-      trendingMore.value = [...trendingMore.value, ...(data.items || [])]
-      trendingDone = !(data.items || []).length || trendingPage >= 500
-      loaded = true
+// Seerr's trending and Jellyfin's titles come up to 500 pages at a time; fetch the next once the rail
+// is within a screen of its end. `shown` is the page the snapshot already covers.
+function railPager(railRef, more, path, shown) {
+  let page = shown
+  let done = false
+  let loading = false
+  async function load() {
+    const rail = railRef.value
+    if (!rail || loading || done) return
+    if (rail.scrollWidth - rail.scrollLeft - rail.clientWidth > rail.clientWidth) return
+    loading = true
+    let loaded = false
+    try {
+      const res = await apiRequest(`${path}?page=${page + 1}`)
+      const data = res.ok ? await readJson(res) : null
+      if (data && !data.error) {
+        page += 1
+        more.value = [...more.value, ...(data.items || [])]
+        done = !(data.items || []).length || page >= 500
+        loaded = true
+      }
+    } catch {
+      // A failed page is tried again on the next scroll.
+    } finally {
+      loading = false
     }
-  } catch {
-    // A failed page is tried again on the next scroll.
-  } finally {
-    trendingLoading = false
+    // A filtered rail, or a page of titles the rail already shows, can still end inside the screen; keep going.
+    if (loaded) nextTick(load)
   }
-  // A filtered rail can still end inside the screen after a page; keep going.
-  if (loaded) nextTick(loadMoreTrending)
+  return load
 }
+const loadMoreTrending = railPager(trendingRail, trendingMore, '/api/homepage/trending', 1)
+// Jellyfin's title pages start over from the newest, so the snapshot's tiles come again and are skipped.
+const loadMoreRecent = railPager(recentRail, recentMore, '/api/homepage/recent', 0)
 // A rail wide enough to show every tile never scrolls, so also check when it appears or the filter changes.
 watch([trendingRail, trendingFilter], () => nextTick(loadMoreTrending))
+watch(recentRail, () => nextTick(loadMoreRecent))
 
 function addDays(value, amount) {
   const dt = new Date(value)
@@ -1327,7 +1344,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail">
+          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail" @scroll.passive="loadMoreRecent">
             <a
               v-for="(item, idx) in recentItems"
               :key="idx"

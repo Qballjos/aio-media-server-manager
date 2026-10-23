@@ -18,6 +18,7 @@ from core.homepage import (
     clear_homepage_snapshot_cache,
     collapse_recent_series,
     homepage_downloads,
+    homepage_recent,
     homepage_request,
     homepage_search,
     homepage_snapshot,
@@ -395,6 +396,7 @@ def test_collapse_full_season_hides_member_episodes():
     out = collapse_recent_series(rows)
     assert [item["title"] for item in out] == ["Severance", "Dune"]
     assert [item["mediaType"] for item in out] == ["tv", "movie"]
+    assert [item["id"] for item in out] == ["Severance", ""]  # the series id later title pages match on
     assert out[0]["detail"] == "Season 01"
     assert out[0]["url"].endswith("id=season-1")
 
@@ -644,6 +646,40 @@ def test_homepage_trending_fetches_the_asked_page(tmp_path):
         patch("core.homepage._fetch_json", return_value=(None, "HTTP 500")),
     ):
         assert homepage_trending("nas.local", 8)["error"] == "HTTP 500"
+
+
+def test_homepage_recent_pages_through_jellyfin_titles(tmp_path):
+    catalog = FakeCatalog([_plugin("jellyfin", 8096, tmp_path)])
+    asked = []
+
+    def fake_fetch(url, **kwargs):
+        asked.append((kwargs["params"]["IncludeItemTypes"], kwargs["params"]["StartIndex"]))
+        return {
+            "Items": [
+                {"Type": "Series", "Id": "show-1", "Name": "Slow Horses", "ProductionYear": 2022, "DateCreated": "2026-10-22T09:00:00Z"},
+                {"Type": "Movie", "Id": "movie-1", "Name": "Brave", "ProductionYear": 2012, "DateCreated": "2026-10-21T09:00:00Z"},
+            ]
+        }, None
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"jellyfin"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        out = homepage_recent("nas.local", 3)
+    assert asked == [("Series,Movie", "40")]
+    assert out["page"] == 3 and out["error"] is None
+    assert [(item["title"], item["id"], item["mediaType"], item["detail"]) for item in out["items"]] == [
+        ("Slow Horses", "show-1", "tv", "2022"),
+        ("Brave", "movie-1", "movie", "2012"),
+    ]
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value=set()),
+    ):
+        assert homepage_recent("nas.local", 1)["items"] == []  # Jellyfin stopped: the rail just ends
 
 
 def test_homepage_widget_debug_http_error(tmp_path):
