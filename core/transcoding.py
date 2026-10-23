@@ -13,8 +13,8 @@ def probe_transcoding() -> dict[str, Any]:
     cards = sorted(p.name for p in dri.glob("card*") if p.exists()) if dri.is_dir() else []
     vaapi = bool(render_nodes) or which("vainfo") is not None
     nvidia = Path("/dev/nvidia0").exists() or which("nvidia-smi") is not None
-    intel_qsv = any("i915" in p.read_text(encoding="utf-8", errors="ignore") for p in _mod_aliases())
-    amd = Path("/dev/kfd").exists() or any("amdgpu" in p.read_text(encoding="utf-8", errors="ignore") for p in _mod_aliases())
+    intel_qsv = _module_loaded("i915")
+    amd = Path("/dev/kfd").exists() or _module_loaded("amdgpu")
     available = vaapi or nvidia or intel_qsv or amd
     return {
         "available": available,
@@ -30,11 +30,13 @@ def probe_transcoding() -> dict[str, Any]:
     }
 
 
-def _mod_aliases() -> list[Path]:
-    root = Path("/sys/module")
-    if not root.is_dir():
-        return []
-    return [root / name / "uevent" for name in ("i915", "amdgpu", "nvidia") if (root / name).exists()]
+_SYS_MODULE = Path("/sys/module")
+
+
+def _module_loaded(name: str) -> bool:
+    # /sys/module/<name> exists while the kernel module is loaded. Its uevent file is write-only
+    # (reading it raised PermissionError on a Synology with i915 and broke /api/system/info).
+    return (_SYS_MODULE / name).is_dir()
 
 
 def _notes(available: bool, vaapi: bool, nvidia: bool) -> str:

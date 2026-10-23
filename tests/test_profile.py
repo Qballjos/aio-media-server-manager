@@ -178,3 +178,63 @@ def test_home_layout_is_kept_on_the_profile(tmp_path: Path, monkeypatch):
     assert client.get("/api/auth/status").json()["homepage_layout"] == ["downloads", "apps", "search"]
     # Saving the layout leaves the other visuals alone.
     assert client.get("/api/auth/me", headers=headers).json()["theme"] == "dark"
+
+
+def test_glass_tuning_and_hidden_blocks_are_kept_on_the_profile(tmp_path: Path, monkeypatch):
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    me = client.get("/api/auth/me", headers=headers).json()
+    assert (me["glass_alpha"], me["glass_blur"], me["glass_depth"], me["wallpaper_blur"], me["homepage_hidden"]) == (0.5, 28, 1.0, 12, [])
+
+    saved = client.patch(
+        "/api/auth/visuals",
+        json={"glass_alpha": 0.33, "glass_blur": 40, "glass_depth": 1.5, "wallpaper_blur": 6, "homepage_hidden": ["trending"], "wallpaper": "ocean"},
+        headers=headers,
+    )
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert (body["glass_alpha"], body["glass_blur"], body["glass_depth"], body["wallpaper_blur"]) == (0.33, 40, 1.5, 6)
+    assert body["homepage_hidden"] == ["trending"] and body["wallpaper"] == "ocean"
+    assert client.patch("/api/auth/visuals", json={"glass_blur": 500}, headers=headers).status_code == 422
+    assert client.get("/api/auth/status").json()["glass_blur"] == 40
+
+    # Card widths: a third, a half or the full row; anything else is dropped.
+    sized = client.patch("/api/auth/visuals", json={"homepage_sizes": {"requests": 12, "calendar": 5, "downloads": "6"}}, headers=headers)
+    assert sized.status_code == 200, sized.text
+    assert sized.json()["homepage_sizes"] == {"requests": 12, "downloads": 6}
+    assert client.get("/api/auth/status").json()["homepage_sizes"] == {"requests": 12, "downloads": 6}
+
+
+def test_home_grid_is_kept_on_the_profile(tmp_path: Path, monkeypatch):
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    assert client.get("/api/auth/me", headers=headers).json()["homepage_grid"] == {}
+
+    saved = client.patch(
+        "/api/auth/visuals",
+        json={
+            "homepage_grid": {
+                "desktop": [
+                    {"id": "search", "x": 0, "y": 0, "w": 12, "h": 2},
+                    {"id": "recent", "x": 10, "y": 2, "w": 4, "h": 3},
+                    {"id": "search", "x": 0, "y": 5, "w": 6, "h": 2},
+                    {"id": "calendar", "x": "1", "y": 2, "w": 7, "h": 4},
+                ],
+                "phone": [{"id": "downloads", "x": 0, "y": 0, "w": 9, "h": 2}],
+                "watch": [{"id": "search", "x": 0, "y": 0, "w": 1, "h": 1}],
+            }
+        },
+        headers=headers,
+    )
+    assert saved.status_code == 200, saved.text
+    # Past the right edge, a second copy of an id, a size that does not exist: dropped. Numeric strings count.
+    assert saved.json()["homepage_grid"] == {
+        "desktop": [
+            {"id": "search", "x": 0, "y": 0, "w": 12, "h": 2},
+            {"id": "calendar", "x": 1, "y": 2, "w": 7, "h": 4},
+        ],
+        "phone": [],
+    }
+    assert client.get("/api/auth/status").json()["homepage_grid"] == saved.json()["homepage_grid"]
+    # The grid lives next to the old order, which stays as it was.
+    assert client.get("/api/auth/me", headers=headers).json()["homepage_layout"] == []

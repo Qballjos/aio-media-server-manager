@@ -7,7 +7,7 @@ Handles initial setup, login, logout, session status, and profile info.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
@@ -46,6 +46,13 @@ class AuthStatusResponse(BaseModel):
     has_wallpaper_image: Optional[bool] = None
     homepage_widget_debug: Optional[bool] = None
     homepage_layout: Optional[list[str]] = None
+    homepage_hidden: Optional[list[str]] = None
+    homepage_sizes: Optional[dict[str, int]] = None
+    homepage_grid: Optional[dict[str, list[dict[str, Any]]]] = None
+    glass_alpha: Optional[float] = None
+    glass_blur: Optional[int] = None
+    glass_depth: Optional[float] = None
+    wallpaper_blur: Optional[int] = None
 
 
 def _avatar_url() -> str | None:
@@ -70,6 +77,13 @@ def _empty_auth(*, setup_required: bool) -> dict:
         "has_wallpaper_image": None,
         "homepage_widget_debug": None,
         "homepage_layout": None,
+        "homepage_hidden": None,
+        "homepage_sizes": None,
+        "homepage_grid": None,
+        "glass_alpha": None,
+        "glass_blur": None,
+        "glass_depth": None,
+        "wallpaper_blur": None,
     }
 
 
@@ -221,28 +235,42 @@ class VisualsPatch(BaseModel):
     wallpaper: Optional[str] = None
     homepage_widget_debug: Optional[bool] = None
     homepage_layout: Optional[list[str]] = Field(default=None, max_length=20)
+    homepage_hidden: Optional[list[str]] = Field(default=None, max_length=20)
+    homepage_sizes: Optional[dict[str, int]] = None
+    homepage_grid: Optional[dict[str, Any]] = None
+    glass_alpha: Optional[float] = Field(default=None, ge=0.15, le=0.9)
+    glass_blur: Optional[int] = Field(default=None, ge=0, le=60)
+    glass_depth: Optional[float] = Field(default=None, ge=0, le=2)
+    wallpaper_blur: Optional[int] = Field(default=None, ge=0, le=40)
 
 
 @router.patch("/visuals", summary="Update admin visual preferences")
 async def patch_visuals(body: VisualsPatch, request: Request) -> dict:
     auth_manager.authenticate_request(request)
-    if all(value is None for value in (body.theme, body.wallpaper, body.homepage_widget_debug, body.homepage_layout)):
+    if all(value is None for value in body.model_dump().values()):
         raise HTTPException(
             status_code=422,
-            detail="Provide theme, wallpaper, homepage_widget_debug and/or homepage_layout.",
+            detail="Provide theme, wallpaper, homepage_widget_debug, homepage_layout, homepage_hidden, homepage_sizes, homepage_grid or a glass_* value.",
         )
     if body.theme is not None and body.theme not in profile_mod.THEMES:
         raise HTTPException(status_code=422, detail="theme must be dark, light, or system.")
     if body.wallpaper is not None and body.wallpaper not in profile_mod.WALLPAPERS:
         raise HTTPException(
             status_code=422,
-            detail="wallpaper must be default, jellyfin, plex, or personal.",
+            detail="wallpaper must be one of: " + ", ".join(sorted(profile_mod.WALLPAPERS)) + ".",
         )
     visuals = profile_mod.save_visual_preferences(
         theme=body.theme,
         wallpaper=body.wallpaper,
         homepage_widget_debug=body.homepage_widget_debug,
         homepage_layout=body.homepage_layout,
+        homepage_hidden=body.homepage_hidden,
+        homepage_sizes=body.homepage_sizes,
+        homepage_grid=body.homepage_grid,
+        glass_alpha=body.glass_alpha,
+        glass_blur=body.glass_blur,
+        glass_depth=body.glass_depth,
+        wallpaper_blur=body.wallpaper_blur,
     )
     return {"status": "ok", **visuals}
 

@@ -5,6 +5,9 @@ import { resolveSettingsSection, SETTINGS_NAV } from './router'
 import { apiError, apiRequest, readJson } from './api.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug } from './homepageDebug.js'
+import { versionLabel } from './statusChips.js'
+import { formatUptime } from './format.js'
+import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 import {
   canPromptInstall,
@@ -18,22 +21,26 @@ import {
   getThemePreference,
 } from './theme.js'
 import {
-  WALLPAPER_OPTIONS,
   getWallpaperPreference,
   getWallpaperImage,
+  wallpaperCss,
 } from './background.js'
+import { GLASS_DEFAULTS, GLASS_RANGES, applyGlass, glass } from './glass.js'
+import { THEMES } from './themes.js'
 import {
   saveThemeToProfile,
   saveWallpaperToProfile,
   uploadWallpaperToProfile,
   removeWallpaperFromProfile,
   saveHomepageWidgetDebugToProfile,
+  saveGlassToProfile,
   applyVisualsFromProfile,
 } from './visualsProfile.js'
 import {
   ACCENT_PRESETS,
   DEFAULT_ACCENT,
   applyBranding,
+  squareIconPng,
 } from './branding.js'
 import { copyText } from './clipboard.js'
 
@@ -51,6 +58,15 @@ const notice = ref('')
 const USENET_CLIENTS = { sabnzbd: 'SABnzbd', nzbget: 'NZBGet' }
 const usenet = ref({ server: null, clients: [] })
 const usenetForm = ref({ host: '', port: 563, ssl: true, username: '', password: '', connections: 8 })
+// Settings → Notifications: the saved state (secrets only as "saved") and the editable form.
+const notif = ref(null)
+const notifForm = ref({
+  discord: { enabled: false, webhook_url: '' },
+  email: { enabled: false, host: '', port: 587, security: 'starttls', username: '', password: '', sender: '', recipients: '' },
+  events: {},
+})
+const notifTesting = ref('')
+const NOTIF_EVENT_NAMES = { apps: 'Apps', vpn: 'VPN', tunnel: 'Cloudflare tunnel', updates: 'Updates', disk: 'Storage' }
 const usenetClientNames = computed(() => (usenet.value.clients || []).map((name) => USENET_CLIENTS[name] || name))
 const share = ref({ active: false, url: '', expires_at: null, ttl_hours: 24 })
 const errors = ref([])
@@ -155,38 +171,6 @@ const publicTunnelChip = computed(() => {
   return { cls: 'is-warn', label: 'Cloudflare tunnel needed' }
 })
 
-const currentTime = ref('')
-let stopClock = null
-
-const showVpnStatusPill = computed(() => !!vpnLive.value.enabled)
-const vpnStatusOk = computed(() => !!vpnLive.value.tunnel_up)
-
-const showCloudflareStatusPill = computed(() => {
-  const t = tunnelLive.value || {}
-  const meta = hostnameMeta.value || {}
-  return !!(
-    form.value.cloudflare_tunnel_enabled ||
-    t.enabled ||
-    meta.tunnel_enabled ||
-    t.token_present ||
-    t.token_saved ||
-    meta.tunnel_token_present
-  )
-})
-
-const cloudflareStatusOk = computed(() => {
-  const t = tunnelLive.value || {}
-  const meta = hostnameMeta.value || {}
-  return !!(t.connected || meta.tunnel_connected)
-})
-
-const cloudflareStatusTitle = computed(() => {
-  if (cloudflareStatusOk.value) {
-    return 'Cloudflare Tunnel connected'
-  }
-  const t = tunnelLive.value || {}
-  return t.summary || 'Cloudflare Tunnel not connected'
-})
 const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
 const seerrConfigured = ref(false)
@@ -225,11 +209,66 @@ function chooseWallpaper(pref) {
     .then(() => {
       wallpaperPreference.value = getWallpaperPreference()
       wallpaperImage.value = getWallpaperImage()
-      notice.value = `Background set to ${WALLPAPER_OPTIONS.find((row) => row[0] === wallpaperPreference.value)?.[1] || wallpaperPreference.value}.`
+      notice.value = wallpaperPreference.value === 'personal' ? 'Using your own image.' : `Background set to ${wallpaperPreference.value}.`
     })
     .catch((err) => {
       error.value = err?.message || 'Could not save background.'
     })
+}
+
+const themeBusy = ref('')
+const themesExpanded = ref(false)
+/** The card art: the night version with a diagonal slice of the day version; the dots are accent, night panel, day panel, warning. */
+function themeArt(theme, tone) {
+  return { background: wallpaperCss(theme.wallpaper, tone === 'day' ? 'light' : 'dark') }
+}
+function themeDots(theme) {
+  return [theme.accent, '#121628', '#ffffff', '#f59e0b']
+}
+const activeTheme = computed(() => THEMES.find((theme) => theme.wallpaper === wallpaperPreference.value)?.id || '')
+async function applyTheme(theme) {
+  error.value = ''
+  themeBusy.value = theme.id
+  try {
+    await saveThemeToProfile(theme.mode)
+    await saveWallpaperToProfile(theme.wallpaper)
+    await saveAccentColor(theme.accent)
+    await saveGlassToProfile(theme.glass).catch(() => {})
+    themePreference.value = getThemePreference()
+    wallpaperPreference.value = getWallpaperPreference()
+    wallpaperImage.value = getWallpaperImage()
+    notice.value = `Theme set to ${theme.name}.`
+  } catch (err) {
+    error.value = err?.message || 'Could not apply the theme.'
+  } finally {
+    themePreference.value = getThemePreference()
+    wallpaperPreference.value = getWallpaperPreference()
+    wallpaperImage.value = getWallpaperImage()
+    themeBusy.value = ''
+  }
+}
+
+const customArt = computed(() =>
+  wallpaperImage.value ? { background: `url("${wallpaperImage.value}") center / cover no-repeat` } : undefined,
+)
+
+// Sliders: transparency is shown the way people think of it (more = clearer), stored as alpha.
+const GLASS_SLIDERS = [
+  { key: 'alpha', label: 'Transparency', hint: 'How much of the wallpaper shows through a panel.', min: 1 - GLASS_RANGES.alpha[1], max: 1 - GLASS_RANGES.alpha[0], step: 0.01, get: () => 1 - glass.value.alpha, set: (v) => ({ alpha: 1 - v }), fmt: (v) => `${Math.round(v * 100)}%` },
+  { key: 'blur', label: 'Blur', hint: 'How soft the wallpaper is behind the glass.', min: GLASS_RANGES.blur[0], max: GLASS_RANGES.blur[1], step: 1, get: () => glass.value.blur, set: (v) => ({ blur: v }), fmt: (v) => `${Math.round(v)} px` },
+  { key: 'depth', label: 'Depth', hint: 'Parallax and shadow strength; 0 keeps the wallpaper still.', min: GLASS_RANGES.depth[0], max: GLASS_RANGES.depth[1], step: 0.05, get: () => glass.value.depth, set: (v) => ({ depth: v }), fmt: (v) => `${Number(v).toFixed(2)}×` },
+  { key: 'wallpaperBlur', label: 'Wallpaper blur', hint: 'How much a photo wallpaper is softened; 0 shows it sharp. Drawn wallpapers stay crisp.', min: GLASS_RANGES.wallpaperBlur[0], max: GLASS_RANGES.wallpaperBlur[1], step: 1, get: () => glass.value.wallpaperBlur, set: (v) => ({ wallpaperBlur: v }), fmt: (v) => `${Math.round(v)} px` },
+]
+let glassTimer = 0
+function tuneGlass(row, value) {
+  applyGlass(row.set(Number(value)))
+  clearTimeout(glassTimer)
+  // The browser applies and remembers the values at once; the profile write is best-effort.
+  glassTimer = setTimeout(() => saveGlassToProfile(glass.value).catch(() => {}), 500)
+}
+function resetGlass() {
+  clearTimeout(glassTimer)
+  saveGlassToProfile(GLASS_DEFAULTS).catch(() => {})
 }
 
 async function onWallpaperFileChange(event) {
@@ -379,10 +418,12 @@ async function uploadBrandSlot(slot, event) {
   error.value = ''
   notice.value = ''
   try {
+    // The favicon is also the iPhone home-screen and installed-app icon: store it as a sharp 512 px PNG.
+    const body = slot === 'favicon' ? await squareIconPng(file).catch(() => file) : file
     const res = await apiRequest(`/api/branding/${slot}`, {
       method: 'PUT',
-      headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      body: file,
+      headers: { 'Content-Type': body.type || 'application/octet-stream' },
+      body,
     })
     const data = await readJson(res)
     if (!res.ok) {
@@ -423,6 +464,13 @@ async function installPwaFromSettings() {
   const ok = await promptInstall()
   if (ok) notice.value = 'App installed on this device.'
   refreshPwaInstall()
+}
+
+/** The dock is the row of app icons at the bottom of Home; it is not part of Home's grid, so it is switched here. */
+async function toggleHomeDock() {
+  const hide = !dockHidden.value
+  await setDockHidden(hide)
+  notice.value = hide ? 'The app dock is hidden on Home.' : 'The app dock shows on Home again.'
 }
 
 async function toggleHomepageWidgetDebug() {
@@ -764,6 +812,22 @@ function applySettingsPayload(data) {
   if (data.branding) applyBrandingPayload(data.branding)
 }
 
+/** This build's version, shown under System info (it used to sit under the title in the header). */
+const versionText = ref('')
+const buildSha = ref('')
+
+async function loadVersion() {
+  try {
+    const res = await apiRequest('/health')
+    if (!res.ok) return
+    const health = await readJson(res)
+    versionText.value = versionLabel(health)
+    buildSha.value = health.git_sha || ''
+  } catch (_) {
+    /* the version line is optional */
+  }
+}
+
 async function loadAll() {
   loading.value = true
   error.value = ''
@@ -848,6 +912,71 @@ async function toggleVpn() {
   form.value.vpn_enabled = next
   const ok = await patchSettings({ vpn_enabled: next })
   if (!ok) form.value.vpn_enabled = !next
+}
+
+function fillNotifForm(data) {
+  notif.value = data
+  notifForm.value = {
+    discord: { enabled: data.discord.enabled, webhook_url: '' },
+    email: { ...data.email, password: '', recipients: (data.email.recipients || []).join(', ') },
+    events: { ...data.events },
+  }
+}
+
+async function loadNotifications() {
+  try {
+    const res = await apiRequest('/api/notifications')
+    if (res.ok) fillNotifForm(await readJson(res))
+  } catch (_) {
+    /* the form still works without the saved values */
+  }
+}
+
+/** Blank secret fields keep what is saved; "Remove" sends an empty string. */
+async function saveNotifications(overrides = {}) {
+  saving.value = true
+  error.value = ''
+  notice.value = ''
+  const form = notifForm.value
+  const body = {
+    discord: { enabled: form.discord.enabled, webhook_url: form.discord.webhook_url.trim() || null },
+    email: { ...form.email, password: form.email.password || null },
+    events: form.events,
+  }
+  delete body.email.password_saved
+  if (overrides.removeWebhook) Object.assign(body.discord, { webhook_url: '', enabled: false })
+  if (overrides.removePassword) body.email.password = ''
+  try {
+    const res = await apiRequest('/api/notifications', { method: 'PUT', body: JSON.stringify(body) })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not save notifications.')
+      return false
+    }
+    fillNotifForm(data)
+    notice.value = 'Notifications saved.'
+    return true
+  } catch (err) {
+    error.value = err?.message || 'Could not save notifications.'
+    return false
+  } finally {
+    saving.value = false
+  }
+}
+
+async function testNotification(channel) {
+  if (!(await saveNotifications())) return
+  notifTesting.value = channel
+  try {
+    const res = await apiRequest('/api/notifications/test', { method: 'POST', body: JSON.stringify({ channel }) })
+    const data = await readJson(res)
+    if (!res.ok) error.value = apiError(data, 'Could not send the test message.')
+    else notice.value = channel === 'discord' ? 'Test message sent to Discord.' : 'Test e-mail sent.'
+  } catch (err) {
+    error.value = err?.message || 'Could not send the test message.'
+  } finally {
+    notifTesting.value = ''
+  }
 }
 
 async function loadUsenet() {
@@ -1065,6 +1194,86 @@ async function runUpdateCheck() {
   } finally {
     saving.value = false
   }
+}
+
+/** Settings → Updates: update one app, or all of them one after another (each update restarts its app). */
+const updatingApp = ref('')
+const updateAllProgress = ref('')
+/** Where the running update is (the app's job message) and how long it has taken. */
+const updateStep = ref('')
+const updateElapsed = ref('')
+let updateTimer = null
+const catalogUpdates = computed(() => (snapshot.value.updates?.available || []).filter((item) => item.kind !== 'appliance'))
+
+function updateLabel(item) {
+  return item.display_name || item.name
+}
+
+async function watchUpdate(name) {
+  const started = Date.now()
+  const tick = async () => {
+    updateElapsed.value = formatUptime((Date.now() - started) / 1000)
+    try {
+      const res = await apiRequest('/api/catalog/install-jobs')
+      const job = res.ok ? ((await readJson(res)).jobs || []).find((row) => row.name === name) : null
+      if (job?.status === 'updating' && updatingApp.value === name) updateStep.value = job.message
+    } catch (_) {
+      /* the next tick tries again */
+    }
+  }
+  updateStep.value = 'Starting the update…'
+  updateElapsed.value = ''
+  updateTimer = setInterval(tick, 2000)
+}
+
+async function applyAppUpdate(item) {
+  updatingApp.value = item.name
+  watchUpdate(item.name)
+  try {
+    const res = await apiRequest(`/api/applications/${item.name}/update`, { method: 'POST' })
+    const data = await readJson(res)
+    // Updated but not running again (the VPN it needs is down, say): the new version is in, the app is not.
+    if (res.ok && data.status !== 'rolled_back') return { ok: true, version: data.version || item.latest_version, stopped: data.start_error || '' }
+    return { ok: false, reason: apiError(data, 'update failed') }
+  } catch (err) {
+    return { ok: false, reason: err.message || 'update failed' }
+  } finally {
+    clearInterval(updateTimer)
+    updatingApp.value = ''
+    updateStep.value = ''
+  }
+}
+
+async function updateOneApp(item) {
+  error.value = ''
+  notice.value = ''
+  const result = await applyAppUpdate(item)
+  // Reload first: loadAll clears the error line.
+  await loadAll()
+  emit('updates')
+  if (result.ok && result.stopped) error.value = `${updateLabel(item)} updated to ${result.version}, but it is stopped: ${result.stopped}`
+  else if (result.ok) notice.value = `${updateLabel(item)} updated to ${result.version}.`
+  else error.value = `${updateLabel(item)} was not updated: ${result.reason}`
+}
+
+async function updateAllApps() {
+  error.value = ''
+  notice.value = ''
+  const items = [...catalogUpdates.value]
+  const failed = []
+  const stopped = []
+  for (const [index, item] of items.entries()) {
+    updateAllProgress.value = `Updating ${index + 1} of ${items.length}: ${updateLabel(item)}…`
+    const result = await applyAppUpdate(item)
+    if (!result.ok) failed.push(`${updateLabel(item)} (${result.reason})`)
+    else if (result.stopped) stopped.push(`${updateLabel(item)} (${result.stopped})`)
+  }
+  updateAllProgress.value = ''
+  await loadAll()
+  emit('updates')
+  const problems = [failed.length ? `Not updated: ${failed.join(', ')}.` : '', stopped.length ? `Updated but stopped: ${stopped.join(', ')}.` : ''].filter(Boolean)
+  if (problems.length) error.value = `Updated ${items.length - failed.length} of ${items.length}. ${problems.join(' ')}`
+  else notice.value = `Updated all ${items.length} apps.`
 }
 
 const backupJobRunning = computed(() => backupJob.value?.status === 'running')
@@ -1357,24 +1566,22 @@ watch(section, (s, prev) => {
     refreshHostnames()
   }
   if (s === 'usenet') loadUsenet()
+  if (s === 'notifications') loadNotifications()
 })
 
 onMounted(() => {
+  loadVersion()
   widgetDebug.value = readHomepageWidgetDebug()
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
-  const tickClock = () => {
-    currentTime.value = new Date().toLocaleTimeString()
-  }
-  tickClock()
-  stopClock = startGuardedInterval(tickClock, 1000)
   loadAll()
   if (section.value === 'usenet') loadUsenet()
+  if (section.value === 'notifications') loadNotifications()
 })
 onBeforeUnmount(() => {
   if (stopPwa) stopPwa()
-  if (stopClock) stopClock()
   stopJobPoll()
+  clearInterval(updateTimer)
 })
 </script>
 
@@ -1384,29 +1591,6 @@ onBeforeUnmount(() => {
       <div>
         <h2 class="section-title">Settings</h2>
         <p class="section-subtitle">Manage this appliance after first-run. Bind mounts and the manager port stay in compose/env.</p>
-      </div>
-      <div class="settings-header-metrics" role="status" aria-label="Live status">
-        <div class="metric-pill status-pill" :title="currentTime">
-          <span class="metric-val font-mono">{{ currentTime }}</span>
-        </div>
-        <RouterLink
-          v-if="showVpnStatusPill"
-          :to="{ name: 'settings', params: { section: 'network' } }"
-          class="metric-pill status-pill"
-          :class="vpnStatusOk ? 'is-ok' : 'is-bad'"
-          :title="vpnStatusOk ? 'VPN tunnel up' : 'VPN tunnel down'"
-        >
-          <span class="metric-val font-mono">VPN</span>
-        </RouterLink>
-        <RouterLink
-          v-if="showCloudflareStatusPill"
-          :to="{ name: 'settings', params: { section: 'network' } }"
-          class="metric-pill status-pill"
-          :class="cloudflareStatusOk ? 'is-ok' : 'is-bad'"
-          :title="cloudflareStatusTitle"
-        >
-          <span class="metric-val font-mono">CF</span>
-        </RouterLink>
       </div>
     </div>
 
@@ -1426,6 +1610,97 @@ onBeforeUnmount(() => {
     <p v-if="notice" class="share-meta">{{ notice }}</p>
 
     <template v-if="section === 'visuals'">
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <span class="accent-badge">THEMES</span>
+          <h3>Themes</h3>
+          <p>A wallpaper, day or night, an accent colour and the glass tuning in one go — or make your own: upload an image and set the accent below. Everything can be fine-tuned afterwards.</p>
+        </div>
+        <div class="theme-gallery" :class="{ 'is-expanded': themesExpanded }" role="group" aria-label="Themes">
+          <button
+            v-for="theme in THEMES"
+            :key="theme.id"
+            type="button"
+            class="theme-card"
+            :class="{ 'is-active': activeTheme === theme.id }"
+            :aria-pressed="activeTheme === theme.id"
+            :disabled="!!themeBusy"
+            @click="applyTheme(theme)"
+          >
+            <span class="theme-card-art" :style="themeArt(theme, 'night')">
+              <span class="theme-card-day" :style="themeArt(theme, 'day')"></span>
+              <span class="theme-card-dots" aria-hidden="true">
+                <span v-for="(dot, idx) in themeDots(theme)" :key="idx" :style="{ background: dot }"></span>
+              </span>
+            </span>
+            <span class="theme-card-name">{{ themeBusy === theme.id ? 'Applying…' : theme.name }}</span>
+          </button>
+          <div class="theme-card theme-card-custom" :class="{ 'is-active': wallpaperPreference === 'personal' }">
+            <button
+              type="button"
+              class="theme-card-art"
+              :style="customArt"
+              :disabled="!!themeBusy || wallpaperBusy"
+              :aria-pressed="wallpaperPreference === 'personal'"
+              :aria-label="wallpaperImage ? 'Use your own image' : 'Upload your own image'"
+              @click="wallpaperImage ? chooseWallpaper('personal') : wallpaperFileInput?.click()"
+            >
+              <span v-if="!wallpaperImage" class="theme-card-empty">+ Upload an image</span>
+              <span v-else class="theme-card-dots" aria-hidden="true">
+                <span v-for="(dot, idx) in [form.accent_color, '#121628', '#ffffff', '#f59e0b']" :key="idx" :style="{ background: dot }"></span>
+              </span>
+            </button>
+            <span class="theme-card-name">Your own</span>
+            <span class="theme-card-actions">
+              <label class="ui-btn ui-btn-ghost wallpaper-file-btn" :aria-disabled="wallpaperBusy">
+                {{ wallpaperBusy ? 'Saving…' : (wallpaperImage ? 'Replace' : 'Upload') }}
+                <input
+                  ref="wallpaperFileInput"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  :disabled="wallpaperBusy"
+                  @change="onWallpaperFileChange"
+                />
+              </label>
+              <button v-if="wallpaperImage" type="button" class="ui-btn ui-btn-ghost" :disabled="wallpaperBusy" @click="removeWallpaperImage">Remove</button>
+            </span>
+          </div>
+        </div>
+        <button type="button" class="ui-btn ui-btn-ghost theme-gallery-more" :aria-expanded="themesExpanded" @click="themesExpanded = !themesExpanded">
+          {{ themesExpanded ? 'Show fewer themes' : `Show all ${THEMES.length} themes` }}
+        </button>
+        <div class="theme-accent">
+          <div class="theme-accent-copy">
+            <strong>Accent colour</strong>
+            <span>Buttons, switches and active states — part of your own theme, saved for every browser on this appliance.</span>
+          </div>
+          <div class="accent-presets" role="group" aria-label="Accent presets">
+            <button
+              v-for="item in ACCENT_PRESETS"
+              :key="item[0]"
+              type="button"
+              class="accent-preset"
+              :class="{ 'is-active': form.accent_color === item[0] }"
+              :style="{ '--preset': item[0] }"
+              :title="item[1]"
+              :aria-label="item[1]"
+              @click="saveAccentColor(item[0])"
+            ></button>
+          </div>
+          <div class="accent-picker">
+            <label class="accent-swatch-input" title="Pick a color">
+              <input v-model="form.accent_color" type="color" @change="saveAccentColor(form.accent_color)" />
+            </label>
+            <label class="ui-field accent-hex-field">Hex
+              <input v-model="form.accent_color" class="ui-input font-mono" maxlength="7" placeholder="#0a6cff" @change="saveAccentColor(form.accent_color)" />
+            </label>
+            <button type="button" class="ui-btn ui-btn-primary" :disabled="saving" @click="saveAccentColor(form.accent_color)">
+              {{ saving ? 'Saving…' : 'Save accent' }}
+            </button>
+            <button v-if="branding.accent_custom" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="resetAccentColor">Reset</button>
+          </div>
+        </div>
+      </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">THEME</span>
@@ -1448,102 +1723,29 @@ onBeforeUnmount(() => {
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <span class="accent-badge">BACKGROUND</span>
-          <h3>Personal background</h3>
-          <p>Pick a gradient style or upload your own image. Saved on your profile — panels stay translucent so the wallpaper shows through.</p>
+          <span class="accent-badge">GLASS</span>
+          <h3>Glass</h3>
+          <p>How clear, how soft and how deep the panels feel. Changes show as you drag and are saved on your profile.</p>
         </div>
-        <div class="wallpaper-picker" role="group" aria-label="Background style">
-          <button
-            v-for="item in WALLPAPER_OPTIONS"
-            :key="item[0]"
-            type="button"
-            class="wallpaper-option"
-            :class="{ 'is-active': wallpaperPreference === item[0] }"
-            :aria-pressed="wallpaperPreference === item[0]"
-            @click="chooseWallpaper(item[0])"
-          >
-            <span
-              class="wallpaper-swatch"
-              :data-preset="item[0]"
-              :class="{ 'has-image': item[0] === 'personal' && wallpaperImage }"
-              :style="item[0] === 'personal' && wallpaperImage ? { '--wallpaper-preview': `url('${wallpaperImage}')` } : undefined"
-            />
-            <span class="wallpaper-option-meta">
-              <strong>{{ item[1] }}</strong>
-              <span>{{ item[2] }}</span>
+        <div class="glass-sliders">
+          <label v-for="row in GLASS_SLIDERS" :key="row.key" class="glass-slider">
+            <span class="glass-slider-head">
+              <span>{{ row.label }}</span>
+              <output class="font-mono">{{ row.fmt(row.get()) }}</output>
             </span>
-          </button>
+            <input
+              type="range"
+              :min="row.min"
+              :max="row.max"
+              :step="row.step"
+              :value="row.get()"
+              @input="tuneGlass(row, $event.target.value)"
+            />
+            <span class="glass-slider-hint">{{ row.hint }}</span>
+          </label>
         </div>
         <div class="wallpaper-personal-actions">
-          <label class="ui-btn ui-btn-primary wallpaper-file-btn" :aria-disabled="wallpaperBusy">
-            {{ wallpaperBusy ? 'Saving…' : (wallpaperImage ? 'Replace image' : 'Upload image') }}
-            <input
-              ref="wallpaperFileInput"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              :disabled="wallpaperBusy"
-              @change="onWallpaperFileChange"
-            />
-          </label>
-          <button
-            v-if="wallpaperImage"
-            type="button"
-            class="ui-btn ui-btn-ghost"
-            :disabled="wallpaperBusy"
-            @click="removeWallpaperImage"
-          >
-            Remove image
-          </button>
-        </div>
-      </div>
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <span class="accent-badge">ACCENT</span>
-          <h3>Accent color</h3>
-          <p>Highlight color for buttons, switches, and active states. Saved on this appliance for every browser.</p>
-        </div>
-        <div class="accent-picker">
-          <label class="accent-swatch-input" title="Pick a color">
-            <input
-              v-model="form.accent_color"
-              type="color"
-              @change="saveAccentColor(form.accent_color)"
-            />
-          </label>
-          <label class="ui-field accent-hex-field">Hex
-            <input
-              v-model="form.accent_color"
-              class="ui-input font-mono"
-              maxlength="7"
-              placeholder="#f97316"
-              @change="saveAccentColor(form.accent_color)"
-            />
-          </label>
-          <button type="button" class="ui-btn ui-btn-primary" :disabled="saving" @click="saveAccentColor(form.accent_color)">
-            {{ saving ? 'Saving…' : 'Save accent' }}
-          </button>
-          <button
-            v-if="branding.accent_custom"
-            type="button"
-            class="ui-btn ui-btn-ghost"
-            :disabled="saving"
-            @click="resetAccentColor"
-          >
-            Reset
-          </button>
-        </div>
-        <div class="accent-presets" role="group" aria-label="Accent presets">
-          <button
-            v-for="item in ACCENT_PRESETS"
-            :key="item[0]"
-            type="button"
-            class="accent-preset"
-            :class="{ 'is-active': form.accent_color === item[0] }"
-            :style="{ '--preset': item[0] }"
-            :title="item[1]"
-            :aria-label="item[1]"
-            @click="saveAccentColor(item[0])"
-          ></button>
+          <button type="button" class="ui-btn ui-btn-ghost" @click="resetGlass">Reset to defaults</button>
         </div>
       </div>
       <div class="glass-card settings-card">
@@ -1750,6 +1952,10 @@ onBeforeUnmount(() => {
         </div>
         <dl class="info-grid">
           <div>
+            <dt>Version</dt>
+            <dd class="font-mono" :title="buildSha ? `Build ${buildSha}` : undefined">{{ versionText || '—' }}</dd>
+          </div>
+          <div>
             <dt>Architecture</dt>
             <dd class="font-mono">{{ hostArch ? hostArch.toUpperCase() : '—' }}</dd>
           </div>
@@ -1881,12 +2087,27 @@ onBeforeUnmount(() => {
             <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="runUpdateCheck">Check now</button>
           </div>
         </form>
+        <div v-if="catalogUpdates.length > 1" class="share-row update-all-row">
+          <button type="button" class="ui-btn ui-btn-primary" :disabled="!!updatingApp || !!updateAllProgress || saving" @click="updateAllApps">
+            Update all ({{ catalogUpdates.length }})
+          </button>
+          <span v-if="updateAllProgress" class="share-meta" role="status">{{ updateAllProgress }}</span>
+        </div>
         <ul v-if="(snapshot.updates?.available || []).length" class="backup-list">
           <li v-for="item in snapshot.updates.available" :key="item.name">
             <div>
               <strong>{{ item.display_name || item.name }}</strong>
               <span class="path-line font-mono">{{ item.installed_version || '—' }} → {{ item.latest_version }}</span>
               <span v-if="item.kind === 'appliance'" class="path-line">{{ item.apply_hint }}</span>
+              <span v-if="updatingApp === item.name && updateStep" class="path-line" role="status">
+                {{ updateStep }}<template v-if="updateElapsed"> · {{ updateElapsed }}</template>
+              </span>
+            </div>
+            <div v-if="item.kind !== 'appliance'" class="share-row">
+              <a class="ui-btn ui-btn-ghost" :href="`#/catalog?q=${encodeURIComponent(item.name)}`">Open in Catalog</a>
+              <button type="button" class="ui-btn ui-btn-primary" :disabled="!!updatingApp || !!updateAllProgress" @click="updateOneApp(item)">
+                {{ updatingApp === item.name ? 'Updating…' : 'Update' }}
+              </button>
             </div>
           </li>
         </ul>
@@ -2123,6 +2344,10 @@ onBeforeUnmount(() => {
             {{ tunnelLive.binary_present ? 'cloudflared ready' : 'cloudflared missing' }}
           </span>
         </div>
+        <p class="ui-alert ui-alert-warning">
+          Run a tunnel token on one server only. If another server (say, the one this replaces) still runs it, Cloudflare
+          splits visitors between both and every login ends in "Session expired". Give a new server its own tunnel.
+        </p>
         <p class="share-meta">{{ tunnelLive.summary || 'Status loads when you open Network.' }}</p>
         <p v-if="tunnelLive.token_saved || tunnelLive.token_present" class="share-meta font-mono">
           Stored at {{ tunnelLive.token_file || '/config/cloudflare/tunnel.token' }}
@@ -2224,7 +2449,9 @@ onBeforeUnmount(() => {
               v-model="form.cloudflare_api_token"
               type="password"
               class="ui-input font-mono"
-              autocomplete="off"
+              autocomplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
               :placeholder="apiTokenConfigured ? '•••• token saved — paste to replace' : 'Cloudflare API token'"
             />
           </label>
@@ -2305,6 +2532,137 @@ onBeforeUnmount(() => {
             Secure public hostnames with <code>deploy/CLOUDFLARE_ACCESS.md</code>.
           </p>
         </form>
+      </div>
+    </template>
+
+    <template v-else-if="section === 'notifications'">
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>Discord</h3>
+          <p>Messages go to a Discord channel through a webhook: in Discord open the channel's settings → Integrations → Webhooks → New Webhook, and copy its URL.</p>
+        </div>
+        <form class="form-stack" @submit.prevent="saveNotifications()">
+          <div class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong>Send to Discord</strong>
+              <span>{{ notif?.discord.webhook_saved ? 'A webhook is saved.' : 'No webhook saved yet.' }}</span>
+            </div>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="notifForm.discord.enabled ? 'true' : 'false'"
+              @click="notifForm.discord.enabled = !notifForm.discord.enabled"
+            >
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
+          <label class="ui-field">Webhook URL
+            <input
+              v-model="notifForm.discord.webhook_url"
+              class="ui-input font-mono"
+              type="password"
+              autocomplete="off"
+              :placeholder="notif?.discord.webhook_saved ? 'Saved — leave blank to keep' : 'https://discord.com/api/webhooks/…'"
+            />
+          </label>
+          <div class="notif-actions">
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('discord')">
+              {{ notifTesting === 'discord' ? 'Sending…' : 'Send a test' }}
+            </button>
+            <button v-if="notif?.discord.webhook_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removeWebhook: true })">Remove webhook</button>
+          </div>
+        </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>E-mail</h3>
+          <p>Messages go out through your own mail server or provider (SMTP). Gmail and Outlook need an app password.</p>
+        </div>
+        <form class="form-stack" @submit.prevent="saveNotifications()">
+          <div class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong>Send e-mail</strong>
+              <span>To every address under To.</span>
+            </div>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="notifForm.email.enabled ? 'true' : 'false'"
+              @click="notifForm.email.enabled = !notifForm.email.enabled"
+            >
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
+          <div class="usenet-pair">
+            <label class="ui-field">SMTP server
+              <input v-model.trim="notifForm.email.host" class="ui-input font-mono" placeholder="smtp.example.com" autocomplete="off" />
+            </label>
+            <label class="ui-field">Port
+              <input v-model.number="notifForm.email.port" class="ui-input font-mono" type="number" min="1" max="65535" />
+            </label>
+          </div>
+          <label class="ui-field">Security
+            <select v-model="notifForm.email.security" class="ui-input">
+              <option value="starttls">STARTTLS (usually port 587)</option>
+              <option value="ssl">SSL/TLS (usually port 465)</option>
+              <option value="none">None (local relay only)</option>
+            </select>
+          </label>
+          <div class="usenet-pair">
+            <label class="ui-field">Username
+              <input v-model.trim="notifForm.email.username" class="ui-input font-mono" autocomplete="off" />
+            </label>
+            <label class="ui-field">Password
+              <input
+                v-model="notifForm.email.password"
+                class="ui-input"
+                type="password"
+                autocomplete="new-password"
+                :placeholder="notif?.email.password_saved ? 'Saved — leave blank to keep' : ''"
+              />
+            </label>
+          </div>
+          <label class="ui-field">From
+            <input v-model.trim="notifForm.email.sender" class="ui-input font-mono" placeholder="Defaults to the username" autocomplete="off" />
+          </label>
+          <label class="ui-field">To
+            <input v-model="notifForm.email.recipients" class="ui-input font-mono" placeholder="you@example.com, family@example.com" autocomplete="off" />
+          </label>
+          <div class="notif-actions">
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('email')">
+              {{ notifTesting === 'email' ? 'Sending…' : 'Send a test' }}
+            </button>
+            <button v-if="notif?.email.password_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removePassword: true })">Remove password</button>
+          </div>
+        </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>What to send</h3>
+          <p>Checked every minute. Each problem is sent once, and again when it is solved.</p>
+        </div>
+        <div class="form-stack">
+          <div v-for="(label, key) in notif?.event_labels || {}" :key="key" class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong>{{ NOTIF_EVENT_NAMES[key] || key }}</strong>
+              <span>{{ label }}</span>
+            </div>
+            <button
+              type="button"
+              class="ui-switch"
+              role="switch"
+              :aria-checked="notifForm.events[key] ? 'true' : 'false'"
+              :disabled="saving"
+              @click="notifForm.events[key] = !notifForm.events[key]; saveNotifications()"
+            >
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
+        </div>
       </div>
     </template>
 
@@ -2393,6 +2751,28 @@ onBeforeUnmount(() => {
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
+          <h3>App dock</h3>
+          <p>The row of app icons at the bottom of Home. Arrange the rest of Home with the layout button in the page tabs.</p>
+        </div>
+        <div class="ui-switch-row">
+          <div class="ui-switch-copy">
+            <strong>Show the app dock on Home</strong>
+            <span>Saved on your profile, for every screen size.</span>
+          </div>
+          <button
+            type="button"
+            class="ui-switch"
+            role="switch"
+            aria-label="Show the app dock on Home"
+            :aria-checked="dockHidden ? 'false' : 'true'"
+            @click="toggleHomeDock"
+          >
+            <span class="ui-switch-thumb"></span>
+          </button>
+        </div>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
           <h3>Jellyfin API key</h3>
           <p>
             Home → Recently added uses this key. Create one in Jellyfin Dashboard → API Keys
@@ -2447,6 +2827,9 @@ onBeforeUnmount(() => {
           </div>
         </form>
       </div>
+    </template>
+
+    <template v-else-if="section === 'diagnostics'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Widget debug</h3>
@@ -2471,9 +2854,6 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
-    </template>
-
-    <template v-else-if="section === 'diagnostics'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Support share</h3>
@@ -2534,13 +2914,6 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 0.75rem;
 }
-.settings-header-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.4rem;
-}
 .section-title {
   font-size: 1.25rem;
   font-weight: 700;
@@ -2556,22 +2929,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-}
-.settings-nav-btn {
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  padding: 0.4rem 0.85rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-}
-.settings-nav-btn.active {
-  color: var(--color-primary-soft);
-  background: rgba(var(--color-primary-rgb), 0.16);
-  border-color: rgba(var(--color-primary-rgb), 0.45);
 }
 .settings-card {
   padding: 1.4rem 1.5rem;
@@ -2595,7 +2952,12 @@ onBeforeUnmount(() => {
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
   background: rgba(var(--color-primary-rgb), 0.18);
-  color: var(--color-primary-soft);
+  color: var(--color-primary-text);
+}
+.notif-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 .usenet-pair {
   display: grid;
@@ -2780,6 +3142,10 @@ onBeforeUnmount(() => {
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
 }
+.update-all-row {
+  margin-top: 1rem;
+  align-items: center;
+}
 .backup-warn {
   color: var(--color-warning-fg);
 }
@@ -2894,7 +3260,7 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 .brand-asset-size {
-  color: var(--color-primary-soft) !important;
+  color: var(--color-primary-text) !important;
   font-weight: 600;
 }
 .brand-asset-actions {
@@ -2912,7 +3278,7 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--color-primary);
+  background: var(--color-primary-button);
   color: var(--color-primary-contrast);
   display: inline-flex;
   align-items: center;
@@ -2937,6 +3303,24 @@ onBeforeUnmount(() => {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+.theme-accent {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.theme-accent-copy {
+  display: grid;
+  gap: 0.15rem;
+}
+.theme-accent-copy strong {
+  font-size: 0.95rem;
+}
+.theme-accent-copy span {
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 .accent-picker {
   display: flex;

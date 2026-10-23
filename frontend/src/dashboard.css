@@ -4,8 +4,7 @@
 .app-container {
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--app-bg);
-  background-attachment: fixed;
+  background: transparent;
   color: var(--text-main);
   font-family: var(--font-sans);
   display: flex;
@@ -18,15 +17,6 @@
   position: relative;
 }
 
-.app-container::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: var(--wallpaper-overlay, transparent);
-}
-
 .top-nav {
   display: flex;
   justify-content: space-between;
@@ -35,7 +25,6 @@
   gap: 0.75rem 1rem;
   padding: calc(0.85rem + env(safe-area-inset-top, 0px)) clamp(0.85rem, 3vw, 2rem) 0.85rem;
   background: transparent;
-  border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
   z-index: 50;
@@ -44,14 +33,34 @@
 }
 
 .top-nav::before {
+  /* On scroll the bar frosts so pills stay legible over content. */
   content: '';
   position: absolute;
-  inset: 0;
+  inset: 0 0 -1px;
   z-index: 0;
   pointer-events: none;
-  background: var(--glass-shine, none), var(--nav-bg);
-  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.1));
-  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.1));
+  background: var(--nav-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+@supports (animation-timeline: scroll()) {
+  .top-nav::before {
+    animation: nav-frost linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 80px;
+  }
+}
+
+@keyframes nav-frost {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .top-nav > * {
@@ -59,17 +68,157 @@
   z-index: 1;
 }
 
+/* The glass pill: a translucent fill with its own blur, a soft rim and a top highlight. */
+.glass-pill {
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 24px -16px rgb(0 0 0 / calc(0.5 * var(--glass-depth)));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
+}
+
 .nav-brand {
+  background: var(--control-bg);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
   min-width: 0;
-  flex: 1 1 12rem;
+  flex: 0 1 auto;
+  min-height: calc(var(--btn-h) + 0.5rem);
+  padding: 0.3rem 1rem 0.3rem 0.4rem;
+}
+
+.nav-tabs {
+  background: var(--control-bg);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.25rem;
+  margin-inline: auto;
+}
+
+.nav-tabs .metric-pill {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--text-muted);
+  padding: 0 0.85rem;
+}
+
+/* Home's layout toggle sits at the end of the page tabs, behind a hairline. */
+.nav-tabs-divider {
+  width: 1px;
+  height: 1.3rem;
+  margin: 0 0.15rem;
+  background: var(--border-strong);
+}
+
+.nav-tabs .nav-edit-btn {
+  width: 2.15rem;
+  min-width: 2.15rem;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.nav-edit-btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.nav-tabs .metric-pill.nav-edit-btn.is-active {
+  background: var(--color-primary-button, var(--color-primary));
+  color: var(--color-primary-contrast);
+}
+
+.nav-tabs .metric-pill.is-active {
+  background: var(--pill-active);
+  color: var(--text-heading);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 2px 8px rgb(0 0 0 / 0.08);
+}
+
+/* The account pill: status dots, avatar and a menu (account, VPN/Tunnel, GPU, log out) on every width. */
+.nav-account {
+  position: relative;
+  flex: 0 0 auto;
+}
+.nav-account > summary {
+  background: var(--control-bg);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.nav-account > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-account > summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.nav-account-status {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.nav-account-status .status-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.nav-account-status .status-dot {
+  width: 0.35rem;
+  height: 0.35rem;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dot) 22%, transparent);
+}
+
+.nav-account[open] .nav-account-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-account-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: grid;
+  gap: 0.3rem;
+  width: min(18rem, calc(100vw - 1.7rem));
+  max-height: calc(100dvh - 5rem);
+  overflow-y: auto;
+  padding: 0.5rem;
+  border-radius: var(--radius-glass, 14px);
+  background: var(--control-bg, var(--pill-bg));
+}
+
+.nav-account-menu .metric-pill {
+  justify-content: flex-start;
+  min-height: 2.75rem;
+  height: auto;
+  padding: 0.65rem 0.75rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.nav-account-phone-only {
+  display: none;
 }
 
 .logo-orb {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
   background: transparent;
   display: flex;
@@ -145,38 +294,46 @@
   justify-content: center;
   gap: 0.4rem;
   box-sizing: border-box;
-  min-height: 2rem;
-  height: 2rem;
-  padding: 0 0.7rem;
+  min-height: var(--btn-h);
+  height: var(--btn-h);
+  padding: 0 1rem;
   margin: 0;
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
   font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: var(--btn-font);
+  font-weight: 700;
   line-height: 1;
-  color: var(--text-muted);
+  color: var(--text-main);
   flex-shrink: 0;
   max-width: 100%;
   text-decoration: none;
   white-space: nowrap;
   vertical-align: middle;
 }
+.nav-metrics > .metric-pill,
+.nav-metrics > .user-pill {
+  background: var(--control-bg);
+}
 
 .metric-pill-action {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  background: rgba(var(--color-primary-rgb), 0.12);
-  border-color: rgba(var(--color-primary-rgb), 0.35);
-  color: var(--color-primary);
+  color: var(--text-main);
+}
+
+.metric-pill-action:hover:not(:disabled) {
+  background: var(--pill-active);
 }
 
 .metric-pill-action.is-active {
-  background: rgba(var(--color-primary-rgb), 0.22);
-  border-color: rgba(var(--color-primary-rgb), 0.5);
-  color: var(--color-primary-soft);
+  background: var(--pill-active);
+  color: var(--text-heading);
 }
 
 .metric-pill-action:disabled {
@@ -218,13 +375,6 @@ a.status-pill {
   font-weight: 600;
 }
 
-.brand-version {
-  font-size: 0.68rem;
-  line-height: 1.3;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
 /* VPN / Cloudflare Tunnel state: the dot carries the colour, the label names a problem. */
 .status-chip {
   color: var(--text-main);
@@ -255,23 +405,20 @@ a.status-pill {
   justify-content: center;
   gap: 0.45rem;
   box-sizing: border-box;
-  min-height: 2rem;
-  height: 2rem;
-  padding: 0 0.65rem;
-  background: rgba(var(--color-primary-rgb), 0.15);
-  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
-  border-radius: 8px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  min-height: var(--btn-h);
+  height: var(--btn-h);
+  padding: 0 0.7rem 0 0.35rem;
+  font-size: var(--btn-font);
+  font-weight: 700;
   line-height: 1;
   flex-shrink: 0;
 }
 
 .user-avatar {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.6rem;
+  height: 1.6rem;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--color-primary-button);
   color: var(--color-primary-contrast);
   display: inline-flex;
   align-items: center;
@@ -291,7 +438,7 @@ a.status-pill {
 }
 
 .user-name {
-  color: var(--color-primary-soft);
+  color: var(--text-main);
   font-weight: 600;
   max-width: 9rem;
   overflow: hidden;
@@ -351,7 +498,7 @@ a.status-pill {
   min-width: 0;
   width: 100%;
   max-width: 100%;
-  box-shadow: var(--glass-shadow, 0 8px 28px rgba(0, 0, 0, 0.18));
+  box-shadow: var(--panel-shadow);
 }
 
 .glass-card::before {
@@ -361,9 +508,10 @@ a.status-pill {
   z-index: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: var(--glass-shine, none), var(--bg-card);
-  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
-  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
+  background: var(--panel-shine), var(--bg-card);
+  box-shadow: inset 0 1px 0 var(--panel-highlight);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
 
 /* The lit rim: a 1px gradient ring just inside the (transparent) border; overflow clips the border box. */
@@ -376,6 +524,7 @@ a.status-pill {
   pointer-events: none;
   padding: 1px;
   background: var(--glass-rim, var(--border-subtle));
+  opacity: 0.6;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -399,19 +548,18 @@ a.status-pill {
   overflow: visible;
 }
 
+/* Each glass card is its own stacking layer, so a card's open More menu (it opens downward on
+   phones) would sit under the next card; lift the card while its menu is open. */
+.service-card.has-open-menu {
+  z-index: 20;
+}
+
 .glass-card:hover {
   border-color: transparent;
 }
 
 .glass-card:hover::after {
   background: var(--glass-rim-hover, var(--glass-rim, var(--border-strong)));
-}
-
-[data-theme='light'] .glass-card:hover {
-  box-shadow:
-    0 10px 32px rgba(15, 23, 42, 0.09),
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 -1px 0 rgba(15, 23, 42, 0.05) inset;
 }
 
 /* Auth Cards */
@@ -453,7 +601,7 @@ a.status-pill {
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
   background: rgba(var(--color-primary-rgb), 0.18);
-  color: var(--color-primary-soft);
+  color: var(--color-primary-text);
   margin-bottom: 0.5rem;
 }
 
@@ -545,7 +693,7 @@ a.status-pill {
 
 .installed-color {
   background: rgba(var(--color-primary-rgb), 0.15);
-  color: var(--color-primary-soft);
+  color: var(--color-primary-text);
   border: 1px solid rgba(var(--color-primary-rgb), 0.3);
 }
 
@@ -581,7 +729,7 @@ a.status-pill {
 
 .text-glow-purple,
 .text-glow-accent {
-  color: var(--color-primary-soft);
+  color: var(--color-primary-text);
   text-shadow: 0 0 10px rgba(var(--color-primary-rgb), 0.4);
 }
 
@@ -667,30 +815,7 @@ a.status-pill {
 }
 
 .catalog-chip {
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  padding: 0.3rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.catalog-chip:hover {
-  color: var(--text-main);
-  border-color: rgba(var(--color-primary-rgb), 0.4);
-  background: rgba(var(--color-primary-rgb), 0.08);
-}
-
-.catalog-chip.active {
-  color: var(--color-primary);
-  background: rgba(var(--color-primary-rgb), 0.16);
-  border-color: rgba(var(--color-primary-rgb), 0.45);
+  padding-inline: 0.9rem;
 }
 
 .chip-clear {
@@ -816,11 +941,14 @@ a.status-pill {
 .app-badge.requests { color: var(--color-warning-fg); border-color: color-mix(in srgb, var(--color-warning) 35%, transparent); background: var(--color-warning-bg); }
 .app-badge.subtitles { color: #7c3aed; border-color: rgba(124, 58, 237, 0.3); background: rgba(124, 58, 237, 0.1); }
 .app-badge.optimization { color: var(--color-info-fg); border-color: color-mix(in srgb, var(--color-info) 35%, transparent); background: var(--color-info-bg); }
-.app-badge.maintenance { color: var(--color-primary); border-color: color-mix(in srgb, var(--color-primary) 35%, transparent); background: rgba(var(--color-primary-rgb), 0.12); }
+.app-badge.maintenance { color: var(--color-primary-text); border-color: color-mix(in srgb, var(--color-primary) 35%, transparent); background: rgba(var(--color-primary-rgb), 0.12); }
 
 [data-theme="dark"] .app-badge.automation { color: #a5b4fc; border-color: rgba(129, 140, 248, 0.3); background: rgba(129, 140, 248, 0.1); }
 [data-theme="dark"] .app-badge.media { color: #f9a8d4; border-color: rgba(244, 114, 182, 0.3); background: rgba(244, 114, 182, 0.1); }
 [data-theme="dark"] .app-badge.subtitles { color: #d8b4fe; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.1); }
+/* A real app icon stands on its own; only the letter fallback gets the tinted frame. */
+.app-badge.has-icon,
+[data-theme] .app-badge.has-icon { background: none; border-color: transparent; border-radius: 0; }
 
 .service-name-row {
   display: flex;
@@ -867,7 +995,7 @@ a.status-pill {
 }
 
 .help-btn:hover {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
 }
 
@@ -999,106 +1127,16 @@ a.status-pill {
 .btn-action {
   flex: 1 1 5.5rem;
   min-width: 0;
-  padding: 0.45rem 0.55rem;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-  transition: all 0.2s;
+  padding-inline: 0.6rem;
 }
 
 .btn-install {
   flex: 2;
-  position: relative;
-  isolation: isolate;
-  background: var(--gradient-primary);
-  color: var(--color-primary-contrast);
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.28);
-  z-index: 0;
-}
-
-.btn-install::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: rgba(var(--color-primary-rgb), 0.7);
-  filter: blur(10px);
-  transform: translateY(5px) scale(0.92);
-  opacity: 0.55;
-  z-index: -1;
-  pointer-events: none;
-}
-
-.btn-start {
-  background: var(--color-success-bg);
-  color: var(--color-success-fg);
-  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
-}
-
-.btn-start:hover {
-  background: color-mix(in srgb, var(--color-success) 22%, transparent);
-}
-
-.btn-stop {
-  background: var(--color-danger-bg);
-  color: var(--color-danger-fg);
-  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
-}
-
-.btn-stop:hover {
-  background: color-mix(in srgb, var(--color-danger) 22%, transparent);
-}
-
-.btn-restart {
-  background: var(--color-warning-bg);
-  color: var(--color-warning-fg);
-  border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
-}
-
-.btn-restart:hover {
-  background: color-mix(in srgb, var(--color-warning) 22%, transparent);
-}
-
-.btn-webui {
-  background: rgba(var(--color-primary-rgb), 0.15);
-  color: var(--color-primary-soft);
-  border-color: rgba(var(--color-primary-rgb), 0.3);
-}
-
-.btn-webui:hover {
-  background: rgba(var(--color-primary-rgb), 0.25);
-}
-
-.btn-logs {
-  background: var(--pill-bg);
-  color: var(--text-main);
-  border-color: var(--border-subtle);
-}
-
-.btn-logs:hover {
-  background: var(--bg-surface-elevated);
-  color: var(--text-heading);
 }
 
 .btn-more {
   width: 100%;
   height: 100%;
-  background: var(--pill-bg);
-  color: var(--text-main);
-  border-color: var(--border-subtle);
-}
-
-.btn-more.open,
-.btn-more:hover {
-  color: var(--text-heading);
-  background: var(--bg-surface-elevated);
 }
 
 .card-menu-wrap {
@@ -1116,7 +1154,9 @@ a.status-pill {
   max-width: min(16rem, calc(100vw - 2rem));
   padding: 0.35rem;
   border-radius: 10px;
-  background: var(--menu-bg);
+  background: var(--modal-bg);
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-card);
   z-index: 5;
@@ -1497,26 +1537,6 @@ a.status-pill {
   cursor: pointer;
 }
 
-.btn-icon {
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover {
-  background: var(--bg-surface-elevated);
-  color: var(--text-heading);
-  border-color: var(--border-strong);
-}
-
 /* Always a dark terminal — do not use theme --text-main (unreadable in light mode). */
 .log-console {
   flex: 1;
@@ -1669,6 +1689,47 @@ a.status-pill {
 }
 
 @media (max-width: 720px) {
+  .top-nav {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    padding-block: calc(0.5rem + env(safe-area-inset-top, 0px)) 0.5rem;
+  }
+
+  .nav-brand {
+    min-height: 2.75rem;
+    padding: 0.25rem 0.6rem 0.25rem 0.3rem;
+    gap: 0.4rem;
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .nav-tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+  }
+
+  .nav-tabs .metric-pill {
+    min-height: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .nav-metrics-authenticated {
+    display: none;
+  }
+
+  .nav-account {
+    grid-column: 2;
+    grid-row: 1;
+    z-index: 2;
+  }
+
+  .nav-account-phone-only {
+    display: flex;
+  }
+
+
   .health-body {
     overflow: auto;
   }
@@ -1777,5 +1838,19 @@ a.status-pill {
     right: 0.75rem;
     bottom: 0.75rem;
     width: calc(100vw - 1.5rem);
+  }
+}
+
+/* The catalog's sort select is a pill like the chips next to it, not a full-width form field. */
+.catalog-toolbar select.ui-input {
+  width: auto;
+  min-width: 11rem;
+}
+
+/* Home-screen web app (iOS): the system blurs a band below the status bar that reaches past the safe
+   area, so it softened the top half of the logo and the account pill. Keep the header clear of it. */
+@media (display-mode: standalone) {
+  .top-nav {
+    padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
   }
 }

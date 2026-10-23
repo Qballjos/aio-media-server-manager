@@ -1,5 +1,5 @@
-/** Last Home snapshot of this browser tab, so returning to Home renders at once. */
-export const homeSnapshotCache = { snapshot: null }
+/** Last Home snapshot and network history of this browser tab, so returning to Home renders at once. */
+export const homeSnapshotCache = { snapshot: null, netHistory: [] }
 
 const PARTIAL_RETRIES = 8
 
