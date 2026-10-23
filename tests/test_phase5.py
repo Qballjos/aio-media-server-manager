@@ -47,6 +47,40 @@ def test_metrics_shape():
     assert isinstance(data["processes"], list)
 
 
+def test_network_totals_count_host_nics_only(monkeypatch, tmp_path):
+    from core import metrics as metrics_mod
+
+    def nic(name, rx, tx, physical):
+        stats = tmp_path / name / "statistics"
+        stats.mkdir(parents=True)
+        (stats / "rx_bytes").write_text(f"{rx}\n")
+        (stats / "tx_bytes").write_text(f"{tx}\n")
+        if physical:
+            (tmp_path / name / "device").mkdir()
+
+    nic("eth0", 1000, 100, physical=True)
+    nic("eth1", 10, 1, physical=True)
+    nic("docker0", 5000, 5000, physical=False)
+    nic("lo", 7000, 7000, physical=False)
+    monkeypatch.setattr(metrics_mod, "_HOST_NET", tmp_path)
+    assert metrics_mod._network_totals() == (1010, 101)
+
+
+def test_network_totals_without_host_mount_skip_loopback_and_tunnels(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from core import metrics as metrics_mod
+
+    monkeypatch.setattr(metrics_mod, "_HOST_NET", tmp_path / "missing")
+    counters = {
+        "lo": SimpleNamespace(bytes_recv=7000, bytes_sent=7000),
+        "wg0": SimpleNamespace(bytes_recv=900, bytes_sent=90),
+        "eth0": SimpleNamespace(bytes_recv=1000, bytes_sent=100),
+    }
+    monkeypatch.setattr(metrics_mod.psutil, "net_io_counters", lambda pernic=False: counters)
+    assert metrics_mod._network_totals() == (1000, 100)
+
+
 def test_metrics_shape_when_process_cpu_is_blocked(monkeypatch):
     from core import metrics as metrics_mod
     from core.metrics import clear_metrics_cache

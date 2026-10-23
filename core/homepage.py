@@ -340,7 +340,7 @@ def _build_homepage_snapshot(host: str, scheme: str = "http") -> dict[str, Any]:
         "calendar": calendar[:400],
         "downloads": downloads[:40],
         "recent": recent[:24],
-        "requests": requests_row[:16],
+        "requests": requests_row,
         "trending": trending[:20],
         "seerr": {
             "available": bool(seerr_running),
@@ -375,6 +375,22 @@ def homepage_search(host: str, query: str) -> dict[str, Any]:
     ):
         error = "Start Seerr, Sonarr or Radarr to search."
     return {"query": term, "results": results[:20], "seerr": False, "error": error}
+
+
+def homepage_trending(host: str, page: int, scheme: str = "http") -> dict[str, Any]:
+    """A further page of Seerr's trending titles; Home's rail loads these as it scrolls."""
+    notes: list[dict[str, Any]] = []
+    items = _collect_seerr_trending(ApplicationCatalog(), _running_names(), notes, host, scheme, page)
+    error = next((note["detail"] for note in notes if note["state"] == "error"), None)
+    return {"page": page, "items": items, "error": error}
+
+
+def homepage_recent(host: str, page: int, scheme: str = "http") -> dict[str, Any]:
+    """Every Jellyfin show and movie, newest first, a page at a time; Home's rail loads these as it scrolls."""
+    notes: list[dict[str, Any]] = []
+    items = _collect_jellyfin_titles(ApplicationCatalog(), _running_names(), notes, host, scheme, page)
+    error = next((note["detail"] for note in notes if note["state"] == "error"), None)
+    return {"page": page, "items": items, "error": error}
 
 
 def homepage_request(payload: dict[str, Any]) -> dict[str, Any]:
@@ -963,6 +979,9 @@ _QBIT_STATUS = {
 
 
 _RECENT_FIELDS = ("source", "title", "detail", "when", "poster", "url")
+_JELLYFIN_RECENT_PAGE = 200
+_JELLYFIN_RECENT_MAX = 2000
+_JELLYFIN_TITLES_PAGE = 20
 
 
 def _as_int(value: Any) -> int | None:
@@ -981,7 +1000,12 @@ def _season_label(season: int | None) -> str:
 
 
 def _public_recent(item: dict[str, Any]) -> dict[str, Any]:
-    return {key: item.get(key) or "" for key in _RECENT_FIELDS}
+    public = {key: item.get(key) or "" for key in _RECENT_FIELDS}
+    # The rail drops a title it already shows when a later page brings it again.
+    public["id"] = item.get("_series_id") or item.get("_id") or ""
+    kind = item.get("_kind")
+    public["mediaType"] = "tv" if kind in ("season", "episode", "show") else "movie" if kind == "movie" else ""
+    return public
 
 
 def _episode_numbers(items: list[dict[str, Any]]) -> list[int]:
@@ -1054,6 +1078,58 @@ def collapse_recent_series(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return public
 
 
+def _jellyfin_recent_row(row: dict[str, Any], web: str) -> dict[str, Any]:
+    kind = str(row.get("Type") or "")
+    item_id = str(row.get("Id") or "")
+    series_id = str(row.get("SeriesId") or "")
+    if kind == "Season":
+        season = _as_int(row.get("IndexNumber"))
+        poster_id = series_id or item_id
+        return {
+            "source": "jellyfin",
+            "title": row.get("SeriesName") or row.get("Name") or "Series",
+            "detail": _season_label(season),
+            "when": str(row.get("DateCreated") or "")[:16],
+            "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
+            "url": f"{web}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
+            "_kind": "season",
+            "_series_id": series_id,
+            "_season": season,
+            "_season_id": item_id,
+            "_child_count": _as_int(row.get("ChildCount") or row.get("RecursiveItemCount")),
+        }
+    if kind == "Episode":
+        season = _as_int(row.get("ParentIndexNumber"))
+        episode = _as_int(row.get("IndexNumber"))
+        ep = f"S{season:02d}E{episode:02d}" if season is not None and episode is not None else ""
+        poster_id = series_id or item_id
+        return {
+            "source": "jellyfin",
+            "title": row.get("SeriesName") or row.get("Name") or "Episode",
+            "detail": " ".join(part for part in (ep, row.get("Name") or "") if part),
+            "when": str(row.get("DateCreated") or "")[:16],
+            "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
+            "url": f"{web}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
+            "_kind": "episode",
+            "_series_id": series_id,
+            "_season": season,
+            "_episode": episode,
+            "_season_id": str(row.get("ParentId") or ""),
+            "_child_count": _as_int(row.get("ChildCount")),
+        }
+    poster_id = item_id
+    return {
+        "source": "jellyfin",
+        "title": row.get("Name") or "Movie",
+        "detail": str(row.get("ProductionYear") or "Movie"),
+        "when": str(row.get("DateCreated") or "")[:16],
+        "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
+        "url": f"{web}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
+        "_kind": "show" if kind == "Series" else "movie",
+        "_id": item_id,
+    }
+
+
 def _collect_jellyfin_recent(
     catalog: ApplicationCatalog,
     running: set[str],
@@ -1065,80 +1141,34 @@ def _collect_jellyfin_recent(
         return []
     plugin = catalog.get("jellyfin")
     key = get_application_api_key("jellyfin", plugin.config_dir)
-    data, error = _fetch_json(
-        f"http://127.0.0.1:{plugin.port}/Items",
-        headers=jellyfin_auth_headers(key),
-        params={
-            "Recursive": "true",
-            "SortBy": "DateCreated",
-            "SortOrder": "Descending",
-            "IncludeItemTypes": "Movie,Episode,Season",
-            "Limit": "100",
-            "Fields": "DateCreated,PrimaryImageAspectRatio,SeriesName,ChildCount,RecursiveItemCount,IndexNumber,ParentIndexNumber",
-        },
-    )
-    rows = data.get("Items") if isinstance(data, dict) else None
+    web = _web_url(plugin.name, plugin.port, host, scheme)
     items: list[dict[str, Any]] = []
-    if isinstance(rows, list):
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            kind = str(row.get("Type") or "")
-            item_id = str(row.get("Id") or "")
-            series_id = str(row.get("SeriesId") or "")
-            if kind == "Season":
-                season = _as_int(row.get("IndexNumber"))
-                poster_id = series_id or item_id
-                items.append(
-                    {
-                        "source": "jellyfin",
-                        "title": row.get("SeriesName") or row.get("Name") or "Series",
-                        "detail": _season_label(season),
-                        "when": str(row.get("DateCreated") or "")[:16],
-                        "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
-                        "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
-                        "_kind": "season",
-                        "_series_id": series_id,
-                        "_season": season,
-                        "_season_id": item_id,
-                        "_child_count": _as_int(row.get("ChildCount") or row.get("RecursiveItemCount")),
-                    }
-                )
-                continue
-            if kind == "Episode":
-                season = _as_int(row.get("ParentIndexNumber"))
-                episode = _as_int(row.get("IndexNumber"))
-                ep = f"S{season:02d}E{episode:02d}" if season is not None and episode is not None else ""
-                poster_id = series_id or item_id
-                items.append(
-                    {
-                        "source": "jellyfin",
-                        "title": row.get("SeriesName") or row.get("Name") or "Episode",
-                        "detail": " ".join(part for part in (ep, row.get("Name") or "") if part),
-                        "when": str(row.get("DateCreated") or "")[:16],
-                        "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
-                        "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
-                        "_kind": "episode",
-                        "_series_id": series_id,
-                        "_season": season,
-                        "_episode": episode,
-                        "_season_id": str(row.get("ParentId") or ""),
-                        "_child_count": _as_int(row.get("ChildCount")),
-                    }
-                )
-                continue
-            poster_id = item_id
-            items.append(
-                {
-                    "source": "jellyfin",
-                    "title": row.get("Name") or "Movie",
-                    "detail": str(row.get("ProductionYear") or "Movie"),
-                    "when": str(row.get("DateCreated") or "")[:16],
-                    "poster": f"/api/homepage/art?source=jellyfin&item_id={quote(poster_id, safe='')}" if poster_id else "",
-                    "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/web/#/details?id={quote(item_id, safe='')}" if item_id else "",
-                    "_kind": "movie",
-                }
-            )
+    data, error = None, None
+    # A whole series added at once fills page after page with its episodes; keep paging until
+    # there are enough tiles. ponytail: capped at _JELLYFIN_RECENT_MAX rows (10 requests).
+    for start in range(0, _JELLYFIN_RECENT_MAX, _JELLYFIN_RECENT_PAGE):
+        page, page_error = _fetch_json(
+            f"http://127.0.0.1:{plugin.port}/Items",
+            headers=jellyfin_auth_headers(key),
+            params={
+                "Recursive": "true",
+                "SortBy": "DateCreated",
+                "SortOrder": "Descending",
+                "IncludeItemTypes": "Movie,Episode,Season",
+                "StartIndex": str(start),
+                "Limit": str(_JELLYFIN_RECENT_PAGE),
+                "Fields": "DateCreated,PrimaryImageAspectRatio,SeriesName,ChildCount,RecursiveItemCount,IndexNumber,ParentIndexNumber",
+            },
+        )
+        if start and page_error:
+            break  # a later page failing keeps what the earlier ones found
+        data, error = page, page_error
+        rows = data.get("Items") if isinstance(data, dict) else None
+        if not isinstance(rows, list):
+            break
+        items.extend(_jellyfin_recent_row(row, web) for row in rows if isinstance(row, dict))
+        if len(rows) < _JELLYFIN_RECENT_PAGE or len(collapse_recent_series(items)) >= 20:
+            break
     items = collapse_recent_series(items)[:20]
     payload_error = None if isinstance(data, dict) else "unexpected items payload"
     if error in ("HTTP 401", "HTTP 403"):
@@ -1150,6 +1180,45 @@ def _collect_jellyfin_recent(
         items,
         error or payload_error,
         "library returned no recently added items",
+    )
+
+
+def _collect_jellyfin_titles(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    notes: list[dict[str, Any]],
+    host: str,
+    scheme: str = "http",
+    page: int = 1,
+) -> list[dict[str, Any]]:
+    """One tile per show or movie, by when it entered the library (a show's episodes don't count)."""
+    if not _source_ready(catalog, running, "jellyfin", "recent", notes, need_key=True):
+        return []
+    plugin = catalog.get("jellyfin")
+    data, error = _fetch_json(
+        f"http://127.0.0.1:{plugin.port}/Items",
+        headers=jellyfin_auth_headers(get_application_api_key("jellyfin", plugin.config_dir)),
+        params={
+            "Recursive": "true",
+            # DateLastContentAdded would follow a show's newest episode, but movies lack it and sort by name.
+            "SortBy": "DateCreated,SortName",
+            "SortOrder": "Descending",
+            "IncludeItemTypes": "Series,Movie",
+            "StartIndex": str((page - 1) * _JELLYFIN_TITLES_PAGE),
+            "Limit": str(_JELLYFIN_TITLES_PAGE),
+            "Fields": "DateCreated,ProductionYear",
+        },
+    )
+    rows = data.get("Items") if isinstance(data, dict) else None
+    web = _web_url(plugin.name, plugin.port, host, scheme)
+    items = [_public_recent(_jellyfin_recent_row(row, web)) for row in rows or [] if isinstance(row, dict)]
+    return _finish_source(
+        notes,
+        "recent",
+        "jellyfin",
+        items,
+        error or (None if isinstance(rows, list) else "unexpected items payload"),
+        "no more titles",
     )
 
 
@@ -1267,7 +1336,8 @@ def _collect_seerr_requests(
     data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/api/v1/request",
         headers=headers,
-        params={"take": "16", "skip": "0", "filter": "all", "sort": "added"},
+        # ponytail: one big page; paginate if a household ever passes 500 requests
+        params={"take": "500", "skip": "0", "filter": "all", "sort": "added"},
     )
     rows = data.get("results") if isinstance(data, dict) else None
     if not isinstance(rows, list):
@@ -1279,7 +1349,9 @@ def _collect_seerr_requests(
             error or (None if isinstance(data, dict) else "unexpected request payload"),
             "no requests yet",
         )
-    items = _seerr_request_cards(plugin, headers, rows[:16], host, scheme)
+    cutoff = datetime.now().astimezone() - timedelta(days=_REQUEST_DONE_DAYS)
+    rows = [row for row in rows if isinstance(row, dict) and _seerr_request_visible(row, cutoff)]
+    items = _seerr_request_cards(plugin, headers, rows, host, scheme)
     return _finish_source(
         notes,
         "requests",
@@ -1296,6 +1368,7 @@ def _collect_seerr_trending(
     notes: list[dict[str, Any]],
     host: str,
     scheme: str = "http",
+    page: int = 1,
 ) -> list[dict[str, Any]]:
     if not _source_ready(catalog, running, "seerr", "trending", notes, need_key=True):
         return []
@@ -1305,7 +1378,7 @@ def _collect_seerr_trending(
     data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/api/v1/discover/trending",
         headers=headers,
-        params={"page": "1", "mediaType": "all", "timeWindow": "week"},
+        params={"page": str(page), "mediaType": "all", "timeWindow": "week"},
     )
     rows = data.get("results") if isinstance(data, dict) else None
     if not isinstance(rows, list):
@@ -1368,6 +1441,22 @@ def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str, scheme: str =
         if len(items) >= 20:
             break
     return items
+
+
+_REQUEST_DONE_DAYS = 30
+
+
+def _seerr_request_visible(row: dict[str, Any], cutoff: datetime) -> bool:
+    """Unfinished requests stay; available or declined ones drop off after 30 days."""
+    media = row.get("media") if isinstance(row.get("media"), dict) else {}
+    if seerr_media_status(media) != "available" and row.get("status") != 3:  # 3 = declined
+        return True
+    # updatedAt is when Seerr marked the request completed/declined.
+    stamp = str(row.get("updatedAt") or row.get("createdAt") or "")
+    try:
+        return datetime.fromisoformat(stamp.replace("Z", "+00:00")) >= cutoff
+    except (TypeError, ValueError):  # unparseable or naive stamp
+        return False
 
 
 def _seerr_request_cards(
