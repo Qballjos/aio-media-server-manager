@@ -5,12 +5,20 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
 from core.debug_access import require_local_or_session
-from core.homepage import homepage_art, homepage_downloads, homepage_request, homepage_search, homepage_snapshot
+from core.homepage import (
+    homepage_art,
+    homepage_downloads,
+    homepage_recent,
+    homepage_request,
+    homepage_search,
+    homepage_snapshot,
+    homepage_trending,
+)
 from core.homepage_status import homepage_status
 from core.integrations.seerr import sync_seerr_external_links
 
@@ -51,6 +59,22 @@ async def get_homepage_status(request: Request) -> dict[str, Any]:
     host = request.url.hostname or "127.0.0.1"
     scheme = request.url.scheme or "http"
     return await asyncio.to_thread(homepage_status, host, scheme)
+
+
+@router.get("/trending", summary="Another page of Seerr's trending titles")
+async def get_homepage_trending(request: Request, page: int = Query(2, ge=1, le=500)) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    host = request.url.hostname or "127.0.0.1"
+    scheme = request.url.scheme or "http"
+    return await asyncio.to_thread(homepage_trending, host, page, scheme)
+
+
+@router.get("/recent", summary="Another page of Jellyfin's shows and movies, newest first")
+async def get_homepage_recent(request: Request, page: int = Query(1, ge=1, le=500)) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    host = request.url.hostname or "127.0.0.1"
+    scheme = request.url.scheme or "http"
+    return await asyncio.to_thread(homepage_recent, host, page, scheme)
 
 
 @router.get("/art", summary="Poster image for Home rails")

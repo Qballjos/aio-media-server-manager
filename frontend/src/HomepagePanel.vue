@@ -489,19 +489,37 @@ const dockNotes = computed(() =>
     .map((app) => [`${app.display_name}: ${app.state_label || app.state}`, app.progress_message].filter(Boolean).join(' — ')),
 )
 
-const recentItems = computed(() =>
-  (snapshot.value.recent || []).map((item) => withPublicUrls(item, item.source)),
-)
+// Every Jellyfin show and movie, newest first, appended as the rail scrolls; the snapshot keeps the latest activity fresh.
+const recentMore = ref([])
+const recentItems = computed(() => {
+  const seen = new Set()
+  return [...(snapshot.value.recent || []), ...recentMore.value]
+    .filter((item) => {
+      const key = `${item.source}-${item.id || item.title}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .map((item) => withPublicUrls(item, item.source))
+})
 const requestItems = computed(() =>
   (snapshot.value.requests || [])
     .filter((item) => mediaTypeMatches(item, requestsFilter.value))
     .map((item) => withPublicUrls(item, 'seerr')),
 )
-const trendingItems = computed(() =>
-  (snapshot.value.trending || [])
-    .filter((item) => mediaTypeMatches(item, trendingFilter.value))
-    .map((item) => withPublicUrls(item, 'seerr')),
-)
+// Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
+const trendingMore = ref([])
+const trendingItems = computed(() => {
+  const seen = new Set()
+  return [...(snapshot.value.trending || []), ...trendingMore.value]
+    .filter((item) => {
+      const key = `${item.mediaType}-${item.mediaId}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return mediaTypeMatches(item, trendingFilter.value)
+    })
+    .map((item) => withPublicUrls(item, 'seerr'))
+})
 const seerrHomeUrl = computed(() => {
   const seerr = snapshot.value.seerr || {}
   const port = Number((snapshot.value.apps || []).find((app) => app.name === 'seerr')?.port || 5055)
@@ -744,6 +762,10 @@ async function requestTitle(item) {
       notice.value = data.detail || 'Request submitted.'
       item.status = 'requested'
       item.can_request = false
+      // Later trending pages are not in the snapshot, so mark them here.
+      trendingMore.value = trendingMore.value.map((t) =>
+        `${t.mediaType}-${t.mediaId}` === key ? { ...t, status: 'requested', can_request: false } : t,
+      )
       loadSnapshot(true)
     } else {
       notice.value = apiError(data, 'Request failed.')
@@ -880,6 +902,44 @@ function scrollRail(which, direction) {
   node.scrollBy({ left: direction * step, behavior: 'smooth' })
 }
 
+// Seerr's trending and Jellyfin's titles come up to 500 pages at a time; fetch the next once the rail
+// is within a screen of its end. `shown` is the page the snapshot already covers.
+function railPager(railRef, more, path, shown) {
+  let page = shown
+  let done = false
+  let loading = false
+  async function load() {
+    const rail = railRef.value
+    if (!rail || loading || done) return
+    if (rail.scrollWidth - rail.scrollLeft - rail.clientWidth > rail.clientWidth) return
+    loading = true
+    let loaded = false
+    try {
+      const res = await apiRequest(`${path}?page=${page + 1}`)
+      const data = res.ok ? await readJson(res) : null
+      if (data && !data.error) {
+        page += 1
+        more.value = [...more.value, ...(data.items || [])]
+        done = !(data.items || []).length || page >= 500
+        loaded = true
+      }
+    } catch {
+      // A failed page is tried again on the next scroll.
+    } finally {
+      loading = false
+    }
+    // A filtered rail, or a page of titles the rail already shows, can still end inside the screen; keep going.
+    if (loaded) nextTick(load)
+  }
+  return load
+}
+const loadMoreTrending = railPager(trendingRail, trendingMore, '/api/homepage/trending', 1)
+// Jellyfin's title pages start over from the newest, so the snapshot's tiles come again and are skipped.
+const loadMoreRecent = railPager(recentRail, recentMore, '/api/homepage/recent', 0)
+// A rail wide enough to show every tile never scrolls, so also check when it appears or the filter changes.
+watch([trendingRail, trendingFilter], () => nextTick(loadMoreTrending))
+watch(recentRail, () => nextTick(loadMoreRecent))
+
 function addDays(value, amount) {
   const dt = new Date(value)
   dt.setDate(dt.getDate() + amount)
@@ -888,6 +948,16 @@ function addDays(value, amount) {
 
 function eventKind(item) {
   return item?.kind || item?.source || ''
+}
+
+const MEDIA_LABELS = { tv: 'Series', movie: 'Movie' }
+
+// Requests, trending and recent carry mediaType; calendar entries only kind and source.
+function mediaKind(item) {
+  const kind = String(item?.mediaType || item?.kind || item?.source || '').toLowerCase()
+  if (['tv', 'series', 'episode', 'season', 'sonarr'].includes(kind)) return 'tv'
+  if (['movie', 'radarr'].includes(kind)) return 'movie'
+  return ''
 }
 
 function matchesCalFilter(item) {
@@ -925,7 +995,8 @@ const calendarDays = computed(() => {
     byDay[key].push(item)
   }
   for (const key of Object.keys(byDay)) {
-    byDay[key].sort((a, b) => (parseWhen(a.when)?.getTime() || 0) - (parseWhen(b.when)?.getTime() || 0))
+    const rows = byDay[key].map((item) => ({ item, dt: parseWhen(item.when) })).sort((a, b) => a.dt - b.dt)
+    byDay[key] = groupSameDay(rows).map((row) => row.item)
   }
   const todayKey = dayKey(new Date())
   if (calView.value === 'day' || calView.value === 'list') {
@@ -1028,15 +1099,17 @@ function groupSameDay(rows) {
     if (prev && prev.item.title === row.item.title && dayKey(prev.dt) === dayKey(row.dt)) {
       prev.count += 1
       prev.last = row
+      prev.have = prev.have && row.item.has_file
       continue
     }
-    out.push({ ...row, count: 1, last: row })
+    out.push({ ...row, count: 1, last: row, have: row.item.has_file })
   }
   return out.map((row) => {
     if (row.count === 1) return row
     const code = (r) => String(r.item.detail || '').split(' ')[0]
     const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
-    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes` } }
+    // Downloaded only when every episode in the group is.
+    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have } }
   })
 }
 const calendarList = computed(() => calendarListInfo.value.rows)
@@ -1271,7 +1344,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail">
+          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail" @scroll.passive="loadMoreRecent">
             <a
               v-for="(item, idx) in recentItems"
               :key="idx"
@@ -1281,8 +1354,11 @@ onUnmounted(() => {
               rel="noopener noreferrer"
               @click="item.url && openApp($event, item.source || 'jellyfin', item.url)"
             >
-              <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
-              <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+              <span class="home-tile-art">
+                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+              </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
             </a>
@@ -1332,6 +1408,7 @@ onUnmounted(() => {
                 <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
                 <span class="home-status-dot" :class="requestStatusDot(item).cls" :title="requestStatusDot(item).label" role="img" :aria-label="requestStatusDot(item).label"></span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
@@ -1371,7 +1448,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail">
+          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" @scroll.passive="loadMoreTrending">
             <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
               <a
                 class="home-tile-link"
@@ -1380,8 +1457,11 @@ onUnmounted(() => {
                 rel="noopener noreferrer"
                 @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
               >
-                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
-                <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                <span class="home-tile-art">
+                  <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                  <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                  <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                </span>
                 <span class="home-tile-title">{{ item.title }}</span>
                 <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
                 <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
@@ -1449,7 +1529,10 @@ onUnmounted(() => {
               <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
                 <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
                 <span class="cal-row-body">
-                  <strong>{{ row.item.title }}</strong>
+                  <span class="cal-row-title">
+                    <strong>{{ row.item.title }}</strong>
+                    <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                  </span>
                   <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
                 </span>
               </li>
@@ -1494,7 +1577,10 @@ onUnmounted(() => {
                       :data-kind="eventKind(item)"
                       :class="{ 'is-have': item.has_file }"
                     >
-                      <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                      <span class="cal-event-top">
+                        <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                        <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                      </span>
                       <strong>{{ item.title }}</strong>
                       <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
                     </li>
@@ -2244,6 +2330,8 @@ onUnmounted(() => {
   display: flex;
   gap: 0.85rem;
   overflow-x: auto;
+  /* Tiles round up a pixel taller than the rail; a vertically scrollable rail keeps the wheel from the page. */
+  overflow-y: hidden;
   padding: 0.25rem 0.25rem 0.5rem;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
@@ -2548,6 +2636,44 @@ onUnmounted(() => {
 .cal-event[data-kind='movie'] {
   background: color-mix(in srgb, var(--color-primary) 16%, var(--bg-input));
 }
+.cal-event-top,
+.cal-row-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.cal-event-top {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.cal-row-title strong {
+  min-width: 0;
+}
+/* Series or movie: a small pill on calendar entries and, overlaid, on posters. */
+.media-badge {
+  flex: none;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+.home-tile-art .media-badge {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  color: #fff;
+  background: rgba(10, 12, 20, 0.62);
+  border-color: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
 /* Calendar list rows: a day chip (accent for today), the title and its detail. */
 .cal-list ul {
   list-style: none;
@@ -2626,7 +2752,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.8rem;
   overflow-y: auto;
-  overscroll-behavior: contain;
   padding-right: 0.35rem;
   scrollbar-width: thin;
 }

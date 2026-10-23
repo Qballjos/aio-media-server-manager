@@ -67,7 +67,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now aio-media-manager
 ```
 
-Open `http://<host>:8080`.
+Open `http://<host>:8080`. Installed apps update later from **Settings → Updates** (schedules default to off). Updating this checkout and restarting the service updates AIO itself. On a native install, Home's Server card already sees the host's network cards.
 
 If systemd-managed Python is 3.14+, install a 3.13 interpreter for Bazarr (`AMM_CHILD_PYTHON` pointing at `python3.13`) or Bazarr will fail on missing `PIL` / unsupported Python.
 
@@ -81,7 +81,8 @@ Install only what you will run. On ARM64, skip Chromium — Flaresolverr is x86_
 | `libicu*`, `libssl3`, `libsqlite3-0`, `sqlite3`, `libgssapi-krb5-2`, `zlib1g` | Sonarr, Radarr, Lidarr, Prowlarr, NeutArr |
 | `git` | Recyclarr (clones TRaSH Guides) |
 | `unrar` (RAR 5+), `p7zip-full`, [par2cmdline-turbo](https://sabnzbd.org/wiki/installation/par2cmdline-turbo) as `par2` | SABnzbd, NZBGet |
-| Python 3.13, `libxml2`, `libxslt1.1`, `libjpeg62-turbo`, `python3-dev`, `build-essential` | Bazarr, SABnzbd, Shelfmark, NeutArr |
+| Python 3.13, `libxml2`, `libxslt1.1`, `libjpeg62-turbo`, `python3-dev`, `build-essential` | Bazarr, SABnzbd, NeutArr |
+| Manager Python 3.14, `python3-dev`, `build-essential` | Shelfmark (upstream requires Python >= 3.14) |
 | Node.js 22 | Seerr |
 | JRE 25, `mariadb-server` | Grimmory |
 | `chromium`, `xvfb`, `fonts-liberation` | Flaresolverr (x86_64 only) |

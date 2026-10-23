@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from applications.install_helpers import venv_bin, write_runner
+from applications.install_helpers import create_venv, venv_bin, write_runner
 
 logger = logging.getLogger(__name__)
 
@@ -472,6 +476,92 @@ def sync_shelfmark_download_clients(config_dir: Path) -> bool:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     logger.info("Synced Shelfmark download client settings from AIO")
     return True
+
+
+_MIN_PYTHON = (3, 14)
+
+
+def shelfmark_python() -> str:
+    """Interpreter for Shelfmark.
+
+    Upstream ``requires-python`` is ``>=3.14``. The 3.13 child runtime used by
+    Bazarr and SABnzbd cannot install the package, so gunicorn never lands in
+    the venv and ``run-shelfmark`` crash-loops on ``exec: gunicorn: not found``.
+    """
+    override = os.environ.get("AMM_SHELFMARK_PYTHON")
+    if override:
+        if not Path(override).is_file():
+            raise RuntimeError(f"AMM_SHELFMARK_PYTHON is not a file: {override}")
+        return override
+    return sys.executable
+
+
+def _python_version(python: str) -> tuple[int, int] | None:
+    if not python or not Path(python).is_file():
+        return None
+    proc = subprocess.run(
+        [python, "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    parts = (proc.stdout or "").split()
+    if proc.returncode != 0 or len(parts) != 2:
+        return None
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+
+
+def _run_checked(cmd: list[str], label: str) -> None:
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        detail = ((exc.stderr or "") + (exc.stdout or ""))[-4000:]
+        raise RuntimeError(f"{label} failed: {detail}") from exc
+
+
+def ensure_shelfmark_venv(install_dir: Path) -> Path:
+    """Create or repair the Shelfmark venv so ``gunicorn`` exists before launch.
+
+    A 3.13 venv, or a venv whose ``pip install`` never finished, has no
+    ``venv/bin/gunicorn``. Rebuild with Python >= 3.14 and install the checkout.
+    """
+    install_dir = Path(install_dir)
+    venv_dir = install_dir / "venv"
+    gunicorn = venv_bin(venv_dir, "gunicorn")
+    venv_python = venv_bin(venv_dir, "python")
+    if gunicorn.is_file():
+        version = _python_version(str(venv_python))
+        if version is not None and version >= _MIN_PYTHON:
+            return venv_dir
+
+    interpreter = shelfmark_python()
+    version = _python_version(interpreter)
+    if version is None or version < _MIN_PYTHON:
+        found = ".".join(str(part) for part in version) if version else "unknown"
+        raise RuntimeError(
+            f"Shelfmark requires Python >= 3.14; {interpreter} is {found}. "
+            "The 3.13 child runtime cannot install gunicorn."
+        )
+    if venv_dir.exists():
+        shutil.rmtree(venv_dir)
+    try:
+        create_venv(install_dir, python=interpreter)
+    except subprocess.CalledProcessError as exc:
+        detail = ((exc.stderr or "") + (exc.stdout or ""))[-4000:]
+        raise RuntimeError(f"Shelfmark virtualenv create failed: {detail}") from exc
+    pip = venv_bin(venv_dir, "pip")
+    _run_checked([str(pip), "install", str(install_dir)], "Shelfmark pip install")
+    if not venv_bin(venv_dir, "gunicorn").is_file():
+        _run_checked(
+            [str(pip), "install", "gunicorn", "gevent", "gevent-websocket"],
+            "Shelfmark gunicorn install",
+        )
+    if not venv_bin(venv_dir, "gunicorn").is_file():
+        raise RuntimeError(f"Shelfmark venv is missing {venv_dir / 'bin' / 'gunicorn'}")
+    return venv_dir
 
 
 def write_shelfmark_preload(install_dir: Path) -> Path:
