@@ -137,6 +137,7 @@ services:
       - ${PROJECT}/config:/config
       - ${DATA_ROOT}:/data
       - ${BACKUPS}:/backups
+      - /sys:/host/sys:ro
     environment:
       PUID: "${PUID}"
       PGID: "${PGID}"

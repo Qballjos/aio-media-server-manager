@@ -93,18 +93,23 @@ Typical service targets (inside AIO):
 
 | Hostname | Points to (inside AIO) |
 |----------|-------------------------|
-| `jellyfin.example.com` | `http://127.0.0.1:8096` |
-| `sonarr.example.com` | `http://127.0.0.1:8989` |
-| `radarr.example.com` | `http://127.0.0.1:7878` |
-| `prowlarr.example.com` | `http://127.0.0.1:9696` |
-| `seerr.example.com` | `http://127.0.0.1:5055` |
+| `media.example.com` (AIO) | `http://127.0.0.1:8080` |
 | `qbittorrent.example.com` | `http://127.0.0.1:8081` |
+| `shelfmark.example.com` | `http://127.0.0.1:8084` |
 | `sabnzbd.example.com` | `http://127.0.0.1:8085` |
+| `jellyfin.example.com` | `http://127.0.0.1:8096` |
+| `seerr.example.com` | `http://127.0.0.1:5055` |
+| `grimmory.example.com` | `http://127.0.0.1:6060` |
 | `bazarr.example.com` | `http://127.0.0.1:6767` |
+| `nzbget.example.com` | `http://127.0.0.1:6789` |
+| `radarr.example.com` | `http://127.0.0.1:7878` |
 | `lidarr.example.com` | `http://127.0.0.1:8686` |
+| `sonarr.example.com` | `http://127.0.0.1:8989` |
+| `prowlarr.example.com` | `http://127.0.0.1:9696` |
+| `neutarr.example.com` | `http://127.0.0.1:9705` |
 | `plex.example.com` | `http://127.0.0.1:32400` |
 
-More ports: [Install → Ports](../docs/INSTALL.md#ports).
+Flaresolverr and Recyclarr are not offered as public hostnames. Recyclarr is a command-line sync. Flaresolverr is used inside the appliance by Prowlarr. More ports: [Install → Ports](../docs/INSTALL.md#ports).
 
 ### Or: publish by hand in Cloudflare
 
