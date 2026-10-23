@@ -113,6 +113,76 @@ Names in the UI may be short labels; here is what they mean in practice.
 
 After changing important network or port settings, give apps a moment to reload — or restart AIO if links still look stale.
 
+## Screens
+
+Light is on the left, dark is on the right. Home is empty here because no app with a WebUI is installed yet. Catalog app settings are the dialog opened from a catalog card (this one is qBittorrent).
+
+### Account
+
+| Light | Dark |
+| --- | --- |
+| ![Settings account, light theme](screenshots/light/settings.png) | ![Settings account, dark theme](screenshots/dark/settings.png) |
+
+### Visuals
+
+| Light | Dark |
+| --- | --- |
+| ![Visuals, light theme](screenshots/light/settings-visuals.png) | ![Visuals, dark theme](screenshots/dark/settings-visuals.png) |
+
+### System
+
+| Light | Dark |
+| --- | --- |
+| ![System settings, light theme](screenshots/light/settings-system.png) | ![System settings, dark theme](screenshots/dark/settings-system.png) |
+
+### Updates
+
+| Light | Dark |
+| --- | --- |
+| ![Updates, light theme](screenshots/light/settings-updates.png) | ![Updates, dark theme](screenshots/dark/settings-updates.png) |
+
+### Backups
+
+| Light | Dark |
+| --- | --- |
+| ![Backups, light theme](screenshots/light/settings-backups.png) | ![Backups, dark theme](screenshots/dark/settings-backups.png) |
+
+### Network
+
+| Light | Dark |
+| --- | --- |
+| ![Network settings, light theme](screenshots/light/settings-network.png) | ![Network settings, dark theme](screenshots/dark/settings-network.png) |
+
+### Notifications
+
+| Light | Dark |
+| --- | --- |
+| ![Notifications, light theme](screenshots/light/settings-notifications.png) | ![Notifications, dark theme](screenshots/dark/settings-notifications.png) |
+
+### Usenet
+
+| Light | Dark |
+| --- | --- |
+| ![Usenet settings, light theme](screenshots/light/settings-usenet.png) | ![Usenet settings, dark theme](screenshots/dark/settings-usenet.png) |
+
+### Homepage
+
+| Light | Dark |
+| --- | --- |
+| ![Homepage settings, light theme](screenshots/light/settings-homepage.png) | ![Homepage settings, dark theme](screenshots/dark/settings-homepage.png) |
+
+### Diagnostics
+
+| Light | Dark |
+| --- | --- |
+| ![Diagnostics, light theme](screenshots/light/settings-diagnostics.png) | ![Diagnostics, dark theme](screenshots/dark/settings-diagnostics.png) |
+
+### Catalog app settings
+
+| Light | Dark |
+| --- | --- |
+| ![qBittorrent catalog settings, light theme](screenshots/light/catalog-settings.png) | ![qBittorrent catalog settings, dark theme](screenshots/dark/catalog-settings.png) |
+
 ---
 
 ## Backups

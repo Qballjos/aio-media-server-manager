@@ -28,21 +28,77 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 </div>
 </div>
 
+<div class="aio-pair" markdown>
+
 <div class="aio-shot" markdown>
-![AIO Media Manager sign-in](screenshots/login.png)
+
+![Administrator sign-in, light theme](screenshots/light/login.png)
+
 </div>
 
 <div class="aio-shot" markdown>
-![AIO Media Manager home dashboard](screenshots/dashboard.png)
+
+![Administrator sign-in, dark theme](screenshots/dark/login.png)
+
+</div>
+
+</div>
+
+<p class="aio-shot-caption">Sign-in — light and dark.</p>
+
+<div class="aio-pair" markdown>
+
+<div class="aio-shot" markdown>
+
+![Home before any applications are installed, light theme](screenshots/light/dashboard.png)
+
 </div>
 
 <div class="aio-shot" markdown>
-![AIO Media Manager application catalog](screenshots/catalog.png)
+
+![Home before any applications are installed, dark theme](screenshots/dark/dashboard.png)
+
+</div>
+
+</div>
+
+<p class="aio-shot-caption">Home before any apps with a WebUI are installed.</p>
+
+<div class="aio-pair" markdown>
+
+<div class="aio-shot" markdown>
+
+![Catalog with application cards and install controls, light theme](screenshots/light/catalog.png)
+
 </div>
 
 <div class="aio-shot" markdown>
-![AIO Media Manager settings](screenshots/settings.png)
+
+![Catalog with application cards and install controls, dark theme](screenshots/dark/catalog.png)
+
 </div>
+
+</div>
+
+<p class="aio-shot-caption">Catalog — search, filters, and install.</p>
+
+<div class="aio-pair" markdown>
+
+<div class="aio-shot" markdown>
+
+![Settings account page, light theme](screenshots/light/settings.png)
+
+</div>
+
+<div class="aio-shot" markdown>
+
+![Settings account page, dark theme](screenshots/dark/settings.png)
+
+</div>
+
+</div>
+
+<p class="aio-shot-caption">Settings. Visuals, catalog app settings, and the other sections are in <a href="USAGE.md#screens">Using the dashboard</a>.</p>
 
 ## Start where you are
 

@@ -26,29 +26,35 @@ You run **one** Docker container (or one native Linux service). AIO installs the
 
 ## Screenshots
 
-<p align="center">
-  <img src="docs/screenshots/login.png" alt="Administrator sign-in for AIO Media Server Manager" width="920" />
-</p>
-
-<p align="center"><em>Administrator sign-in before the home dashboard.</em></p>
+Light is on the left, dark is on the right. Visuals, catalog app settings, and the other Settings sections are in the [usage guide](docs/USAGE.md#screens).
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="Home dashboard with app shortcuts, search, and recently added" width="920" />
+  <img src="docs/screenshots/light/login.png" alt="Administrator sign-in, light theme" width="440" />
+  <img src="docs/screenshots/dark/login.png" alt="Administrator sign-in, dark theme" width="440" />
 </p>
 
-<p align="center"><em>Home — app launcher, search, recently added, and requests.</em></p>
+<p align="center"><em>Sign-in.</em></p>
 
 <p align="center">
-  <img src="docs/screenshots/catalog.png" alt="Catalog with application cards, ports, and lifecycle controls" width="920" />
+  <img src="docs/screenshots/light/dashboard.png" alt="Home before any applications are installed, light theme" width="440" />
+  <img src="docs/screenshots/dark/dashboard.png" alt="Home before any applications are installed, dark theme" width="440" />
 </p>
 
-<p align="center"><em>Catalog — install, start, Open UI, and per-app controls.</em></p>
+<p align="center"><em>Home — before any apps with a WebUI are installed.</em></p>
 
 <p align="center">
-  <img src="docs/screenshots/settings.png" alt="Settings with account and appliance options" width="920" />
+  <img src="docs/screenshots/light/catalog.png" alt="Catalog with application cards and install controls, light theme" width="440" />
+  <img src="docs/screenshots/dark/catalog.png" alt="Catalog with application cards and install controls, dark theme" width="440" />
 </p>
 
-<p align="center"><em>Settings — account, system, network, backups, and more.</em></p>
+<p align="center"><em>Catalog — search, filters, and install for each app.</em></p>
+
+<p align="center">
+  <img src="docs/screenshots/light/settings.png" alt="Settings account page, light theme" width="440" />
+  <img src="docs/screenshots/dark/settings.png" alt="Settings account page, dark theme" width="440" />
+</p>
+
+<p align="center"><em>Settings — account. The other sections are in the usage guide.</em></p>
 
 ---
 
@@ -143,7 +149,7 @@ Open `http://<host>:8080`. Create the administrator (username, email, password),
 
 That compose file mounts `./config`, `./backups`, and `$HOME/aio-media-manager` as `/data`, and host `/sys` read-only at `/host/sys` so Home's Server card counts the host's network cards. `PUID` and `PGID` in the file default to `1000` — set them to the output of `id` before the first start. A plain `docker run`, NAS layouts, and `/opt` paths are in the platform guides.
 
-Image tags: `latest` (main), `sha-<git>`, and semver when a `v*` tag is pushed. Architectures: `linux/amd64`, `linux/arm64`. The manager runs on Python 3.14. Child runtimes on both architectures: Python 3.13 (Bazarr / SABnzbd / Shelfmark), Node 22 (Seerr), JRE 25 and MariaDB (Grimmory), ffmpeg (Jellyfin / Plex), git (Recyclarr). Chromium/Xvfb ship only on `linux/amd64` for Flaresolverr. After a pull, **recreate** the container so new port mappings and runtimes take effect. That updates AIO. Sonarr, Seerr, and the other apps update from **Settings → Updates** (schedules default to off).
+Image tags: `latest` (main), `sha-<git>`, and semver when a `v*` tag is pushed. Architectures: `linux/amd64`, `linux/arm64`. The manager runs on Python 3.14. Child runtimes on both architectures: Python 3.13 (Bazarr / SABnzbd), Python 3.14 (Shelfmark), Node 22 (Seerr), JRE 25 and MariaDB (Grimmory), ffmpeg (Jellyfin / Plex), git (Recyclarr). Chromium/Xvfb ship only on `linux/amd64` for Flaresolverr. After a pull, **recreate** the container so new port mappings and runtimes take effect. That updates AIO. Sonarr, Seerr, and the other apps update from **Settings → Updates** (schedules default to off).
 
 Full steps: [docs/INSTALL.md](docs/INSTALL.md) · [deploy/DOCKER.md](deploy/DOCKER.md).
 

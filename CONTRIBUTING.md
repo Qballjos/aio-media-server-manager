@@ -64,7 +64,8 @@ Agents and Dependabot often treat “not on the newest version” as a bug. In t
 |---|---|---|
 | Node (frontend build + Seerr) | **22** LTS | Seerr declares `engines.node: ^22.19.0`. The image copies Node from `node:22-bookworm-slim`. Do **not** merge Dependabot bumps to Node 24/25/26 until Seerr’s engines allow it (Node 26 also broke `corepack` in our Dockerfile). |
 | Manager Python | **3.14** | Appliance API process |
-| Child Python | **3.13** | Bazarr / SABnzbd / Shelfmark (`AMM_CHILD_PYTHON` / `/opt/python3.13`) |
+| Child Python | **3.13** | Bazarr / SABnzbd (`AMM_CHILD_PYTHON` / `/opt/python3.13`) |
+| Shelfmark Python | **3.14** | Upstream `requires-python >= 3.14`. Uses the manager interpreter so `gunicorn` is installed. |
 | JRE | **25** | Grimmory |
 
 **Frontend majors:** treat `vue-router` 5.x as a deliberate migration, not an auto-merge.
