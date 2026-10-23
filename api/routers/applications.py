@@ -624,7 +624,14 @@ async def update_application(name: str, request: Request) -> dict[str, Any]:
     from core.maintenance import update_in_progress
 
     with update_in_progress():
-        return await updater.update(plugin)
+        outcome = await updater.update(plugin)
+    try:
+        from core.update_schedule import scheduler
+
+        scheduler.forget_applied(name, outcome)
+    except Exception as exc:
+        logger.debug("Could not drop %s from the update list: %s", name, exc)
+    return outcome
 
 
 @router.post("/{name}/uninstall", summary="Uninstall an application")

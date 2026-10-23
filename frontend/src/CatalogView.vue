@@ -111,7 +111,7 @@ const combinedServices = computed(() => {
       installed: cat.installed || (live && live.installed) || false,
       installedVersion: cat.installed_version || (live && live.version),
       installJob: cat.install_job,
-      installBusy: ['queued', 'installing', 'configuring'].includes(cat.install_job),
+      installBusy: ['queued', 'installing', 'configuring', 'updating'].includes(cat.install_job),
       installMessage: cat.install_message || cat.install_error || '',
       installUpdatedAt: cat.install_updated_at,
       webUrl,
@@ -815,7 +815,7 @@ onUnmounted(() => {
 
             <!-- Metadata footer -->
             <div class="service-meta font-mono">
-              <span v-if="service.installedVersion">v{{ service.installedVersion }}<template v-if="service.latestVersion"> → {{ service.latestVersion }}</template></span>
+              <span v-if="service.installedVersion">v{{ String(service.installedVersion).replace(/^v/, '') }}<template v-if="service.latestVersion"> → {{ service.latestVersion }}</template></span>
               <span v-else-if="service.installed">Installed</span>
               <span v-else class="text-dim">Not installed</span>
 
