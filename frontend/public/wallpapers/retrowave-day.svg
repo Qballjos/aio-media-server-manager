@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EDE6FF"/>
+      <stop offset=".55" stop-color="#F6D9F2"/>
+      <stop offset="1" stop-color="#FFD9C7"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE9A3"/>
+      <stop offset="1" stop-color="#FF7FBF"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E9DDFF"/>
+      <stop offset="1" stop-color="#F7F1FF"/>
+    </linearGradient>
+    <mask id="stripes">
+      <rect width="1920" height="1080" fill="#fff"/>
+      <rect x="560" y="470" width="800" height="14" fill="#000"/>
+      <rect x="560" y="505" width="800" height="18" fill="#000"/>
+      <rect x="560" y="545" width="800" height="22" fill="#000"/>
+      <rect x="560" y="590" width="800" height="26" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <circle cx="960" cy="470" r="230" fill="#FF7FBF" opacity=".2"/>
+  <circle cx="960" cy="470" r="190" fill="url(#sun)" mask="url(#stripes)"/>
+  <path d="M0 660l160-110 140 70 180-130 200 110 160-60 180 120 200-150 220 130 180-80 300 100v160H0z" fill="#D9C9F5"/>
+  <path d="M0 660l160-110 140 70 180-130 200 110 160-60 180 120 200-150 220 130 180-80 300 100" fill="none" stroke="#C24BA0" stroke-width="3" opacity=".6"/>
+  <rect y="700" width="1920" height="380" fill="url(#floor)"/>
+  <g stroke="#C24BA0" stroke-width="2" opacity=".35">
+    <line x1="960" y1="700" x2="-600" y2="1080"/><line x1="960" y1="700" x2="-200" y2="1080"/><line x1="960" y1="700" x2="200" y2="1080"/>
+    <line x1="960" y1="700" x2="600" y2="1080"/><line x1="960" y1="700" x2="960" y2="1080"/><line x1="960" y1="700" x2="1320" y2="1080"/>
+    <line x1="960" y1="700" x2="1720" y2="1080"/><line x1="960" y1="700" x2="2120" y2="1080"/><line x1="960" y1="700" x2="2520" y2="1080"/>
+    <line x1="0" y1="712" x2="1920" y2="712"/><line x1="0" y1="730" x2="1920" y2="730"/><line x1="0" y1="756" x2="1920" y2="756"/>
+    <line x1="0" y1="792" x2="1920" y2="792"/><line x1="0" y1="842" x2="1920" y2="842"/><line x1="0" y1="910" x2="1920" y2="910"/><line x1="0" y1="1000" x2="1920" y2="1000"/>
+  </g>
+  <rect y="700" width="1920" height="6" fill="#C24BA0" opacity=".7"/>
+</svg>

@@ -53,9 +53,11 @@ Inside those mounts AIO lays out libraries such as `media/tv`, `media/movies`, a
 1. Open the dashboard: `http://YOUR-SERVER-IP:8080`  
    (Use a different port if you mapped one.)
 2. Create the admin account (username, **email**, password).
-3. Follow [Using the dashboard](USAGE.md) to enable apps and open each web UI.
+3. Complete the first-run wizard, then follow [Using the dashboard](USAGE.md).
 
-After `docker compose pull`, **recreate** the container (not only restart) so new ports and runtimes apply.
+After `docker compose pull`, **recreate** the container (not only restart) so new ports and runtimes apply. That updates AIO. Installed apps update from **Settings → Updates** inside the dashboard. Those schedules default to off.
+
+The repo compose file mounts host `/sys` read-only at `/host/sys`, so Home's Server card counts the server's network cards. An older compose file without that line shows only the container's own traffic until you add it and recreate. See [Docker](deploy/DOCKER.md).
 
 ## Optional: reach apps from outside your home
 

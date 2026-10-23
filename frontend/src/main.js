@@ -6,9 +6,11 @@ import { router } from './router'
 import { initPwaInstall } from './pwaInstall.js'
 import { initTheme } from './theme.js'
 import { initWallpaper } from './background.js'
+import { initGlass } from './glass.js'
 import { initAccentFromCache, loadBranding } from './branding.js'
 
 initTheme()
+initGlass()
 initWallpaper()
 initAccentFromCache()
 initPwaInstall()

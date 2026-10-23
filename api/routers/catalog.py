@@ -124,7 +124,7 @@ async def install_application(
     from core.install_jobs import get_job, set_job
 
     job = get_job(name)
-    if job and job["status"] in {"queued", "installing", "configuring"}:
+    if job and job["status"] in {"queued", "installing", "configuring", "updating"}:
         return {
             "status": job["status"],
             "message": job["message"] or f"Setup is already in progress for '{plugin.manifest.display_name}'.",

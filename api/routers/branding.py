@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from pathlib import Path
+
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
@@ -43,6 +45,34 @@ async def get_branding_file(slot: str):
         path,
         media_type=mime,
         headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+_STATIC_ROOTS = [Path(__file__).resolve().parents[2] / "frontend" / sub for sub in ("dist", "public")]
+
+
+@router.get("/icon/{kind}", summary="The tab or home-screen icon: the custom favicon, else the default")
+async def get_app_icon(kind: str):
+    try:
+        custom, mime, default = branding_mod.app_icon(kind)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    # no-cache: browsers keep icons for a long time; revalidating (ETag) lets a new upload show up.
+    headers = {"Cache-Control": "no-cache"}
+    if custom is not None:
+        return FileResponse(custom, media_type=mime, headers=headers)
+    for root in _STATIC_ROOTS:
+        if (root / default.lstrip("/")).is_file():
+            return FileResponse(root / default.lstrip("/"), media_type="image/png", headers=headers)
+    return RedirectResponse(default)
+
+
+@router.get("/manifest.webmanifest", summary="PWA manifest with the configured title and favicon")
+async def get_web_manifest():
+    return JSONResponse(
+        branding_mod.web_manifest(),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache"},
     )
 
 
