@@ -27,6 +27,7 @@ from typing import Any, Optional
 
 from applications.catalog import ApplicationCatalog
 from applications.manifest import help_url_for
+from core.cloudflare_tunnel import CloudflareTunnelManager
 from core.crypto import secret_store
 from core.library_layout import LibraryLayout
 from core.settings import settings
@@ -40,7 +41,7 @@ WIZARD_STEPS = [
     {"id": 3, "key": "storage", "title": "Storage Configuration"},
     {"id": 4, "key": "permissions", "title": "User & Permissions"},
     {"id": 5, "key": "download_clients", "title": "Download Clients"},
-    {"id": 6, "key": "vpn", "title": "VPN Protection"},
+    {"id": 6, "key": "vpn", "title": "VPN & Remote Access"},
     {"id": 7, "key": "arr_stack", "title": "*Arr Automation"},
     {"id": 8, "key": "media_server", "title": "Media Server"},
     {"id": 9, "key": "request_system", "title": "Request System"},
@@ -186,7 +187,7 @@ class WizardEngine:
             return {
                 "step": 1,
                 "title": "Welcome to AIO Media Server Manager",
-                "description": "All-in-One supervisor and manager for the *Arr ecosystem, download clients, and media servers without container overhead.",
+                "description": "One appliance for Sonarr, Radarr, download clients, and media servers — installed and supervised together, not as separate containers.",
             }
 
         if step_id == 2:
@@ -271,6 +272,13 @@ class WizardEngine:
                         and Path(str(selections.get("vpn_config_path"))).is_file()
                     )
                 ),
+                # Until the wizard saves a choice, show the live setting: a tunnel switched on in
+                # Settings or by AMM_CLOUDFLARE_TUNNEL_ENABLED must not come back unticked, or
+                # finishing the wizard writes false to amm_config.json, which beats the env var.
+                "cloudflare_tunnel_enabled": bool(
+                    selections.get("cloudflare_tunnel_enabled", self._settings.cloudflare_tunnel_enabled)
+                ),
+                "has_cloudflare_token": CloudflareTunnelManager(self._settings).token_present(),
             }
 
         if step_id == 7:
@@ -335,6 +343,9 @@ class WizardEngine:
             summary = dict(selections)
             summary.pop("qbittorrent_password", None)
             summary.pop("usenet_password", None)
+            summary["cloudflare_tunnel_enabled"] = bool(
+                selections.get("cloudflare_tunnel_enabled", self._settings.cloudflare_tunnel_enabled)
+            )
             summary["has_vpn_config"] = bool(
                 selections.get("has_vpn_config")
                 or (
@@ -414,6 +425,13 @@ class WizardEngine:
                 )
                 selections["vpn_config_path"] = str(dest)
                 selections["has_vpn_config"] = True
+            if "cloudflare_tunnel_enabled" in data:
+                selections["cloudflare_tunnel_enabled"] = bool(data["cloudflare_tunnel_enabled"])
+            token = str(data.get("cloudflare_tunnel_token") or "").strip()
+            if token:
+                # A credential: it goes to the tunnel token file, never into the wizard state.
+                self._settings.cloudflare_tunnel_token = token
+                CloudflareTunnelManager(self._settings).persist_token()
         elif step_id == 7:
             selections["arr_apps"] = data.get("arr_apps", selections.get("arr_apps", []))
         elif step_id == 8:
@@ -490,6 +508,8 @@ class WizardEngine:
         else:
             cfg.vpn_enabled = False
             cfg.vpn_enforce = False
+        if "cloudflare_tunnel_enabled" in selections:
+            cfg.cloudflare_tunnel_enabled = bool(selections["cloudflare_tunnel_enabled"])
 
         try:
             cfg.save()

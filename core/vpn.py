@@ -10,10 +10,13 @@ routing — no nested netns and no iptables NAT.
 from __future__ import annotations
 
 import logging
+import ipaddress
 import os
 import pwd
 import shutil
+import stat
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -47,6 +50,10 @@ _VPN_UID_RULE_PRIORITY = 100
 _VPN_RULE_PRIORITY = 100
 _VPN_LOCAL_RULE_PRIORITY = 99
 _VPN_UID_V6_BLACKHOLE_PRIORITY = 98
+# Replies to connections that arrived from the house side carry this mark and
+# leave the way they came in; the rule sits before the UID rules.
+_UID_REPLY_MARK = "0x2a"
+_UID_REPLY_RULE_PRIORITY = 97
 
 
 def unwrap_isolation_command(cmd: list[str] | None) -> list[str]:
@@ -220,16 +227,17 @@ def parse_wireguard_endpoint(text: str) -> tuple[str, int] | None:
         line = raw.split("#", 1)[0].strip()
         if not line.lower().startswith("endpoint"):
             continue
-        _, _, rest = line.partition("=")
-        if not rest.strip():
+        _, separator, rest = line.partition("=")
+        if not separator:
             _, _, rest = line.partition(" ")
-        host, port = _split_endpoint(rest.strip())
-        if not host:
-            continue
         try:
-            return host, int(port or "51820")
-        except ValueError:
-            return host, 51820
+            host, port = _split_endpoint(rest.strip())
+            port_number = int(port)
+        except (ValueError, IndexError):
+            return None
+        if host and 1 <= port_number <= 65535:
+            return host, port_number
+        return None
     return None
 
 
@@ -387,6 +395,48 @@ def parse_wireguard_tunnel_address(text: str) -> str | None:
     return None
 
 
+def _tun_node_ready(path: Path) -> bool:
+    try:
+        return stat.S_ISCHR(path.stat().st_mode)
+    except OSError:
+        return False
+
+
+def ensure_tun_device(path: Path | None = None, *, linux: bool | None = None) -> str | None:
+    """Create /dev/net/tun when the node is missing.
+
+    Synology kernels usually have no WireGuard module, so wg-quick falls back to
+    wireguard-go. That binary, and OpenVPN, both need a TUN node. Privileged
+    containers can create it even when the NAS never had /dev/net/tun.
+    Returns an error string when the node still cannot be opened.
+    """
+    on_linux = sys.platform.startswith("linux") if linux is None else linux
+    if not on_linux:
+        return None
+    node = path or Path("/dev/net/tun")
+    if _tun_node_ready(node):
+        return None
+    try:
+        node.parent.mkdir(parents=True, exist_ok=True)
+        if not node.exists():
+            os.mknod(node, stat.S_IFCHR | 0o666, os.makedev(10, 200))
+        os.chmod(node, 0o666)
+    except OSError as exc:
+        logger.warning("Could not create TUN device %s: %s", node, exc)
+        return (
+            "VPN could not create /dev/net/tun "
+            f"({exc}). Recreate the container with privileged: true, "
+            "then save VPN again in Settings → Network."
+        )
+    if _tun_node_ready(node):
+        logger.info("Created TUN device at %s for userspace WireGuard/OpenVPN.", node)
+        return None
+    return (
+        "VPN needs /dev/net/tun and this kernel did not accept the device node. "
+        "Recreate the container with privileged: true."
+    )
+
+
 def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
     detail = (stderr or stdout or "").strip()
     lower = detail.lower()
@@ -407,6 +457,16 @@ def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
             "(this NAS kernel has no nft addrtype/comment). The appliance sets "
             "Table = off and adds the default route itself — recreate the container "
             "from a current image."
+        )
+        return f"{hint} {detail}".strip()[:2000]
+    if "unknown device type" in lower or (
+        "cannot find device" in lower and "wg0" in lower
+    ):
+        hint = (
+            "WireGuard did not create wg0. This kernel has no WireGuard module, "
+            "and the userspace fallback needs /dev/net/tun in a privileged container. "
+            "Recreate the project with privileged: true, then save VPN again in "
+            "Settings → Network. OpenVPN needs that same device node."
         )
         return f"{hint} {detail}".strip()[:2000]
     if returncode == 127 or "command not found" in lower:
@@ -719,6 +779,10 @@ class VpnManager:
             return self._fail(f"VPN config missing: {self.config_path}")
         self._cached_underlay_ips = None
         proto = self.settings.vpn_protocol
+
+        tun_error = ensure_tun_device()
+        if tun_error:
+            return self._fail(tun_error)
 
         if proto == "wireguard":
             return self._start_wireguard_uid()
@@ -1053,8 +1117,68 @@ class VpnManager:
         # IPv4 policy routing does not cover IPv6 — blackhole IPv6 for the VPN UID
         # so Happy Eyeballs / DHT cannot leak the house address.
         self._apply_uid_ipv6_blackhole()
+        self._apply_uid_reply_routing()
         self._apply_uid_output_kill_switch(wg)
         return None
+
+    def _house_interface(self) -> str | None:
+        """Interface of the main table's default route: where Docker and the LAN come in."""
+        result = self._ip(["-4", "route", "show", "default"])
+        for line in (result.stdout or "").splitlines():
+            parts = line.split()
+            if "dev" in parts:
+                return parts[parts.index("dev") + 1]
+        return None
+
+    def _apply_uid_reply_routing(self) -> None:
+        """Answer house-side connections the way they came in.
+
+        The UID rules send everything the VPN UID emits through the tunnel, which
+        also swallows replies to the published WebUI ports of qBittorrent and
+        Prowlarr (Docker Desktop's gateway and LAN clients behind DNAT are not
+        directly connected networks). Mark connections that arrive on the house
+        interface and route their replies via main; connections the apps open
+        themselves are never marked and stay on the tunnel.
+        """
+        iface = self._house_interface()
+        if not iface:
+            return
+        mark_new = [
+            "PREROUTING", "-i", iface, "-m", "conntrack", "--ctstate", "NEW",
+            "-j", "CONNMARK", "--set-mark", _UID_REPLY_MARK,
+        ]
+        restore = [
+            "OUTPUT", "-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED",
+            "-j", "CONNMARK", "--restore-mark",
+        ]
+        for helper in (self._host_iptables, self._host_ip6tables):
+            for rule in (mark_new, restore):
+                if helper(["-t", "mangle", "-C", *rule]).returncode != 0:
+                    helper(["-t", "mangle", "-A", *rule])
+        for family in ((), ("-6",)):
+            self._ip(
+                [
+                    *family, "rule", "add", "fwmark", _UID_REPLY_MARK, "lookup", "main",
+                    "priority", str(_UID_REPLY_RULE_PRIORITY),
+                ]
+            )
+
+    def _clear_uid_reply_routing(self) -> None:
+        iface = self._house_interface()
+        for family in ((), ("-6",)):
+            self._ip(
+                [
+                    *family, "rule", "del", "fwmark", _UID_REPLY_MARK, "lookup", "main",
+                    "priority", str(_UID_REPLY_RULE_PRIORITY),
+                ]
+            )
+        if not iface:
+            return
+        for helper in (self._host_iptables, self._host_ip6tables):
+            helper(["-t", "mangle", "-D", "PREROUTING", "-i", iface, "-m", "conntrack", "--ctstate", "NEW",
+                    "-j", "CONNMARK", "--set-mark", _UID_REPLY_MARK])
+            helper(["-t", "mangle", "-D", "OUTPUT", "-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED",
+                    "-j", "CONNMARK", "--restore-mark"])
 
     def _apply_uid_ipv6_blackhole(self) -> None:
         """Block all IPv6 from the VPN UID (IPv4 tunnel only)."""
@@ -1108,7 +1232,20 @@ class VpnManager:
 
     def _apply_uid_output_kill_switch(self, wg_iface: str) -> None:
         """Reject clear-net OUTPUT from the VPN UID (defense in depth beyond policy routing)."""
-        for helper in (self._host_iptables, self._host_ip6tables):
+        endpoints = []
+        try:
+            raw = self._active_wg_conf.read_text(encoding="utf-8") if self._active_wg_conf else ""
+        except OSError:
+            raw = ""
+        for line in raw.splitlines():
+            endpoint = parse_wireguard_endpoint(line)
+            if endpoint:
+                host, port = endpoint
+                try:
+                    endpoints.append((str(ipaddress.IPv4Address(host)), str(port)))
+                except ValueError:
+                    continue
+        for family, helper in ((4, self._host_iptables), (6, self._host_ip6tables)):
             helper(["-N", _UID_KS_CHAIN])
             helper(["-F", _UID_KS_CHAIN])
             helper(["-A", _UID_KS_CHAIN, "-o", "lo", "-j", "RETURN"])
@@ -1116,6 +1253,15 @@ class VpnManager:
             helper(["-A", _UID_KS_CHAIN, "-o", "tun+", "-j", "RETURN"])
             if wg_iface and wg_iface not in {"wg+", "tun+"}:
                 helper(["-A", _UID_KS_CHAIN, "-o", wg_iface, "-j", "RETURN"])
+            # Answers to published WebUI ports (Docker, LAN clients) go back out
+            # the house interface; the apps' own connections never carry the mark.
+            helper(["-A", _UID_KS_CHAIN, "-m", "connmark", "--mark", _UID_REPLY_MARK, "-j", "RETURN"])
+            # Kernel WireGuard's outer UDP packets retain the inner socket's UID.
+            if family == 4:
+                for host, port in endpoints:
+                    result = helper(["-A", _UID_KS_CHAIN, "-p", "udp", "-d", host, "--dport", port, "-j", "RETURN"])
+                    if result.returncode != 0:
+                        logger.warning("Could not allow WireGuard endpoint through UID kill switch: %s", (result.stderr or "")[:160])
             reject = helper(
                 ["-A", _UID_KS_CHAIN, "-j", "REJECT", "--reject-with", "icmp-net-unreachable"]
             )
@@ -1141,6 +1287,7 @@ class VpnManager:
 
     def _clear_uid_wireguard_routing(self) -> None:
         self._clear_uid_output_kill_switch()
+        self._clear_uid_reply_routing()
         self._ip(
             [
                 "rule",
@@ -2020,7 +2167,7 @@ class VpnManager:
                 ["wg", "show", "all", "latest-handshakes"],
                 capture_output=True,
                 text=True,
-                timeout=3,
+                timeout=10,  # a busy NAS can take seconds to spawn it; a timeout reads as "tunnel down"
             )
         except (OSError, subprocess.TimeoutExpired):
             self._handshake_cache = False

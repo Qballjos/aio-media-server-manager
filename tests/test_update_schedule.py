@@ -174,3 +174,20 @@ async def test_apply_skips_appliance(tmp_path: Path):
     apply_update.assert_not_called()
     assert result["results"][0]["reason"] == "appliance_host_pull"
     assert sched.load_state()["available"][0]["kind"] == "appliance"
+
+
+def test_a_manual_update_leaves_the_update_list(tmp_path: Path):
+    cfg = Settings(config_dir=tmp_path / "config", install_dir=tmp_path / "apps", update_check_schedule="daily")
+    sched = UpdateScheduler(app_settings=cfg)
+    state = sched.load_state()
+    state["available"] = [
+        {"name": "sonarr", "kind": "catalog", "latest_version": "4.0.10"},
+        {"name": "radarr", "kind": "catalog", "latest_version": "5.1"},
+        {"name": "bazarr", "kind": "catalog", "latest_version": "1.5"},
+    ]
+    sched.save_state(state)
+
+    sched.forget_applied("sonarr", {"name": "sonarr", "status": "updated"})
+    sched.forget_applied("radarr", {"name": "radarr", "status": "rolled_back"})
+    sched.forget_applied("bazarr", {"name": "bazarr", "status": "skipped", "reason": "already_current"})
+    assert [item["name"] for item in sched.public_status()["available"]] == ["radarr"]

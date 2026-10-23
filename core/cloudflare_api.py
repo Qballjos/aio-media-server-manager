@@ -22,6 +22,7 @@ from core.settings import settings
 logger = logging.getLogger(__name__)
 
 API_TOKEN_SECRET = "cloudflare_api_token"
+_TOKEN_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
 CF_API = "https://api.cloudflare.com/client/v4"
 
 
@@ -46,15 +47,12 @@ def _looks_like_connector_token(value: str) -> bool:
 
 
 def _normalize_api_token(token: str) -> str:
-    # Cloudflare copies sometimes include wrapping quotes or invisible whitespace.
-    return (
-        (token or "")
-        .replace("\u200b", "")
-        .replace("\ufeff", "")
-        .strip()
-        .strip('"')
-        .strip("'")
-    )
+    # Cloudflare copies sometimes include wrapping quotes, invisible characters, a "Bearer "
+    # prefix, or a line break where the token wrapped. A token never contains whitespace.
+    value = (token or "").replace("\u200b", "").replace("\ufeff", "").strip().strip('"').strip("'").strip()
+    if value[:7].lower() == "bearer ":
+        value = value[7:]
+    return "".join(value.split())
 
 
 def set_api_token(token: str | None) -> None:
@@ -69,12 +67,28 @@ def set_api_token(token: str | None) -> None:
             "(Edit zone DNS + Account → Cloudflare Tunnel → Edit). "
             "The connector token belongs only under Cloudflare Tunnel above."
         )
+    if len(value) == 32 and all(c in "0123456789abcdef" for c in value.lower()):
+        raise CloudflareApiError(
+            "That looks like an account, zone or tunnel ID, not an API token. "
+            "Create an API Token: My Profile → API Tokens → Create Token → Edit zone DNS, "
+            "then add Account → Cloudflare Tunnel → Edit, and paste the token shown after creating it."
+        )
     # Global API Key is 37 hex chars and must use X-Auth-Email/X-Auth-Key — Bearer rejects it as 9109.
     if len(value) == 37 and all(c in "0123456789abcdef" for c in value.lower()):
         raise CloudflareApiError(
             "That looks like a Global API Key, which AIO cannot use as a Bearer token. "
             "Create an API Token instead: My Profile → API Tokens → Create Token → "
             "Edit zone DNS, then add Account → Cloudflare Tunnel → Edit."
+        )
+    # Checked here, not by asking Cloudflare: the value may be a password a browser filled in,
+    # and that must not leave the box. Cloudflare reads only 40+ characters of A-Z, a-z, 0-9, _ and -
+    # as a token and answers anything else with "Invalid request headers"; such a value never
+    # replaces the saved token.
+    if len(value) < 40 or any(c not in _TOKEN_CHARS for c in value):
+        raise CloudflareApiError(
+            "That is not a Cloudflare API token (they are 40 or more letters, digits, _ and -), "
+            "so it was not saved and the token you had stays in place. Check that the field holds "
+            "the API token itself, not a password your browser filled in, an ID, or a cut-off copy."
         )
     secret_store.save_secret(API_TOKEN_SECRET, value)
 
@@ -87,6 +101,15 @@ def _format_cloudflare_api_error(errors: list[Any], status_code: int) -> str:
     msg = "; ".join(str(e.get("message") or e) for e in errors if e) or f"HTTP {status_code}"
     codes = {e.get("code") for e in errors if isinstance(e, dict)}
     lowered = msg.lower()
+    chained = {c.get("code") for e in errors if isinstance(e, dict) for c in (e.get("error_chain") or []) if isinstance(c, dict)}
+    if 6003 in codes or 6111 in chained or "invalid request headers" in lowered:
+        # Cloudflare answers this when the Authorization value is not shaped like an API token.
+        return (
+            "Cloudflare could not read the saved API token (Invalid request headers): it is not an API token. "
+            "Create one under My Profile → API Tokens → Create Token (Edit zone DNS, then add "
+            "Account → Cloudflare Tunnel → Edit) and paste the token shown after creating it, in one piece. "
+            "Not the Global API Key, not the eyJ… tunnel connector, and not an account, zone or tunnel ID."
+        )
     if 9109 in codes or "invalid access token" in lowered:
         return (
             "Cloudflare rejected the API token (Invalid access token). "

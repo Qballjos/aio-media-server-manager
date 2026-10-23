@@ -27,6 +27,7 @@ from typing import Callable, Sequence
 
 import requests
 
+from core.install_jobs import update_job
 from core.installer.arch import (
     PlatformArch,
     PlatformOS,
@@ -41,6 +42,16 @@ from core.settings import Settings, settings
 from core.storage import StorageManager
 
 logger = logging.getLogger(__name__)
+
+
+def _download_progress(app_name: str) -> Callable[[int, int], None]:
+    def report(downloaded: int, total: int) -> None:
+        message = f"Downloading: {downloaded / 1_000_000:.1f} MB"
+        if total > 0:
+            message += f" of {total / 1_000_000:.1f} MB"
+        update_job(app_name, message)
+
+    return report
 
 
 @dataclass
@@ -104,6 +115,7 @@ class AppInstaller:
         )
 
         # 1. Fetch release payload
+        update_job(app_name, "Finding release…")
         if tag:
             release = self.github_client.get_release_by_tag(repo, tag)
         else:
@@ -138,11 +150,12 @@ class AppInstaller:
         cache_dir.mkdir(parents=True, exist_ok=True)
         archive_path = cache_dir / asset_name
 
+        update_job(app_name, "Downloading package…")
         computed_sha = self.download_file(
             url=download_url,
             destination=archive_path,
             expected_sha256=expected_sha,
-            progress_callback=progress_callback,
+            progress_callback=progress_callback if progress_callback is not None else _download_progress(app_name),
         )
 
         # 5. Extract and atomically activate (or copy a raw binary)
@@ -177,6 +190,7 @@ class AppInstaller:
             json.dump(metadata, fh, indent=2)
 
         # 7. Apply permissions
+        update_job(app_name, "Setting file permissions…")
         self.storage_manager.apply_permissions(
             install_root,
             puid=self.settings.puid,
@@ -229,11 +243,12 @@ class AppInstaller:
         cache_dir.mkdir(parents=True, exist_ok=True)
         archive_path = cache_dir / filename
 
+        update_job(app_name, "Downloading package…")
         computed_sha = self.download_file(
             url=url,
             destination=archive_path,
             expected_sha256=expected_sha256,
-            progress_callback=progress_callback,
+            progress_callback=progress_callback if progress_callback is not None else _download_progress(app_name),
         )
 
         install_root = self.settings.install_dir / app_name
@@ -256,6 +271,7 @@ class AppInstaller:
         with open(install_root / ".amm_installed.json", "w", encoding="utf-8") as fh:
             json.dump(metadata, fh, indent=2)
 
+        update_job(app_name, "Setting file permissions…")
         self.storage_manager.apply_permissions(
             install_root,
             puid=self.settings.puid,
@@ -368,6 +384,7 @@ class AppInstaller:
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> InstallResult:
         """Download a GitHub release zipball into the app install dir."""
+        update_job(app_name, "Finding release…")
         if tag:
             release = self.github_client.get_release_by_tag(repo, tag)
         else:
@@ -380,10 +397,11 @@ class AppInstaller:
         cache_dir = self.settings.cache_dir / "downloads"
         cache_dir.mkdir(parents=True, exist_ok=True)
         archive_path = cache_dir / f"{app_name}-{version}.zip"
+        update_job(app_name, "Downloading package…")
         computed_sha = self.download_file(
             url=zipball,
             destination=archive_path,
-            progress_callback=progress_callback,
+            progress_callback=progress_callback if progress_callback is not None else _download_progress(app_name),
         )
         install_root = self.settings.install_dir / app_name
         executable_path = self.activate_archive(
@@ -404,6 +422,7 @@ class AppInstaller:
         }
         with open(install_root / ".amm_installed.json", "w", encoding="utf-8") as fh:
             json.dump(metadata, fh, indent=2)
+        update_job(app_name, "Setting file permissions…")
         self.storage_manager.apply_permissions(
             install_root,
             puid=self.settings.puid,
@@ -455,7 +474,7 @@ class AppInstaller:
                         fh.write(chunk)
                         hasher.update(chunk)
                         downloaded += len(chunk)
-                        if progress_callback and total_size > 0:
+                        if progress_callback is not None:
                             progress_callback(downloaded, total_size)
 
             computed_sha = hasher.hexdigest().lower()
@@ -504,6 +523,7 @@ class AppInstaller:
 
         try:
             # 1. Extract into isolated candidate staging folder
+            update_job(app_name, "Extracting archive…")
             ArchiveExtractor.extract(archive_path, staging_dir, strip_single_wrapper=True)
 
             # 2. Locate and verify executable inside staging
@@ -555,6 +575,7 @@ class AppInstaller:
         app_name: str,
     ) -> Path:
         """Copy a standalone binary into the install directory."""
+        update_job(app_name, "Installing binary…")
         target_install_dir = Path(target_install_dir).resolve()
         target_install_dir.mkdir(parents=True, exist_ok=True)
         dest = target_install_dir / executable_name

@@ -37,6 +37,8 @@ services:
       - ${AMM_DATA_HOST:-${HOME}/aio-media-manager}:/data
       # Config backups. Point this at another disk or NAS share so a failed /config disk keeps them.
       - ./backups:/backups
+      # Read-only host /sys so Home shows the host's network traffic, not just this container's.
+      - /sys:/host/sys:ro
     environment:
       PUID: "1000"
       PGID: "1000"

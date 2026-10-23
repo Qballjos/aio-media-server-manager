@@ -4,9 +4,9 @@
 .app-container {
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--app-bg);
+  background: transparent;
   color: var(--text-main);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -14,6 +14,7 @@
   min-width: 0;
   overflow-x: hidden;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  position: relative;
 }
 
 .top-nav {
@@ -23,34 +24,209 @@
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
   padding: calc(0.85rem + env(safe-area-inset-top, 0px)) clamp(0.85rem, 3vw, 2rem) 0.85rem;
-  background: var(--nav-bg);
-  backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
   position: sticky;
   top: 0;
   z-index: 50;
   min-width: 0;
+  isolation: isolate;
+}
+
+.top-nav::before {
+  /* On scroll the bar frosts so pills stay legible over content. */
+  content: '';
+  position: absolute;
+  inset: 0 0 -1px;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--nav-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+@supports (animation-timeline: scroll()) {
+  .top-nav::before {
+    animation: nav-frost linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 80px;
+  }
+}
+
+@keyframes nav-frost {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.top-nav > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* The glass pill: a translucent fill with its own blur, a soft rim and a top highlight. */
+.glass-pill {
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 24px -16px rgb(0 0 0 / calc(0.5 * var(--glass-depth)));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
 }
 
 .nav-brand {
+  background: var(--control-bg);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
   min-width: 0;
-  flex: 1 1 12rem;
+  flex: 0 1 auto;
+  min-height: calc(var(--btn-h) + 0.5rem);
+  padding: 0.3rem 1rem 0.3rem 0.4rem;
+}
+
+.nav-tabs {
+  background: var(--control-bg);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.25rem;
+  margin-inline: auto;
+}
+
+.nav-tabs .metric-pill {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--text-muted);
+  padding: 0 0.85rem;
+}
+
+/* Home's layout toggle sits at the end of the page tabs, behind a hairline. */
+.nav-tabs-divider {
+  width: 1px;
+  height: 1.3rem;
+  margin: 0 0.15rem;
+  background: var(--border-strong);
+}
+
+.nav-tabs .nav-edit-btn {
+  width: 2.15rem;
+  min-width: 2.15rem;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.nav-edit-btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.nav-tabs .metric-pill.nav-edit-btn.is-active {
+  background: var(--color-primary-button, var(--color-primary));
+  color: var(--color-primary-contrast);
+}
+
+.nav-tabs .metric-pill.is-active {
+  background: var(--pill-active);
+  color: var(--text-heading);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 2px 8px rgb(0 0 0 / 0.08);
+}
+
+/* The account pill: status dots, avatar and a menu (account, VPN/Tunnel, GPU, log out) on every width. */
+.nav-account {
+  position: relative;
+  flex: 0 0 auto;
+}
+.nav-account > summary {
+  background: var(--control-bg);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.nav-account > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-account > summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.nav-account-status {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.nav-account-status .status-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.nav-account-status .status-dot {
+  width: 0.35rem;
+  height: 0.35rem;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dot) 22%, transparent);
+}
+
+.nav-account[open] .nav-account-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-account-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: grid;
+  gap: 0.3rem;
+  width: min(18rem, calc(100vw - 1.7rem));
+  max-height: calc(100dvh - 5rem);
+  overflow-y: auto;
+  padding: 0.5rem;
+  border-radius: var(--radius-glass, 14px);
+  background: var(--control-bg, var(--pill-bg));
+}
+
+.nav-account-menu .metric-pill {
+  justify-content: flex-start;
+  min-height: 2.75rem;
+  height: auto;
+  padding: 0.65rem 0.75rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.nav-account-phone-only {
+  display: none;
 }
 
 .logo-orb {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
-  background: var(--bg-input);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-glow);
+  border: none;
+  box-shadow: none;
   flex-shrink: 0;
 }
 
@@ -68,8 +244,16 @@
   object-fit: cover;
   display: block;
   margin-bottom: 0.85rem;
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-card);
+  border: none;
+  box-shadow: none;
+}
+
+.auth-personal-message {
+  margin: 0.65rem 0 0;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .brand-titles {
@@ -110,38 +294,46 @@
   justify-content: center;
   gap: 0.4rem;
   box-sizing: border-box;
-  min-height: 2rem;
-  height: 2rem;
-  padding: 0 0.7rem;
+  min-height: var(--btn-h);
+  height: var(--btn-h);
+  padding: 0 1rem;
   margin: 0;
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
   font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: var(--btn-font);
+  font-weight: 700;
   line-height: 1;
-  color: var(--text-muted);
+  color: var(--text-main);
   flex-shrink: 0;
   max-width: 100%;
   text-decoration: none;
   white-space: nowrap;
   vertical-align: middle;
 }
+.nav-metrics > .metric-pill,
+.nav-metrics > .user-pill {
+  background: var(--control-bg);
+}
 
 .metric-pill-action {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  background: rgba(var(--color-primary-rgb), 0.12);
-  border-color: rgba(var(--color-primary-rgb), 0.35);
-  color: var(--color-primary);
+  color: var(--text-main);
+}
+
+.metric-pill-action:hover:not(:disabled) {
+  background: var(--pill-active);
 }
 
 .metric-pill-action.is-active {
-  background: rgba(var(--color-primary-rgb), 0.22);
-  border-color: rgba(var(--color-primary-rgb), 0.5);
-  color: var(--color-primary-soft);
+  background: var(--pill-active);
+  color: var(--text-heading);
 }
 
 .metric-pill-action:disabled {
@@ -153,60 +345,24 @@ button.metric-pill {
   color: inherit;
 }
 
-.pulse-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 8px #10b981;
+.status-pill.is-ok {
+  color: var(--color-success-fg);
+  border-color: color-mix(in srgb, var(--color-success) 55%, transparent);
 }
 
-.metric-pill.is-vpn-up {
-  color: #34d399;
-  border-color: rgba(16, 185, 129, 0.4);
+.status-pill.is-bad {
+  color: var(--color-danger-fg);
+  border-color: color-mix(in srgb, var(--color-danger) 55%, transparent);
 }
 
-.metric-pill.is-vpn-down {
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.45);
-}
-
-.metric-pill.is-vpn-down .pulse-dot {
-  background: #f87171;
-  box-shadow: 0 0 8px #f87171;
-}
-
-.metric-pill.is-cf-up {
-  color: #38bdf8;
-  border-color: rgba(56, 189, 248, 0.45);
+a.status-pill {
   text-decoration: none;
-}
-
-.metric-pill.is-cf-up .pulse-dot {
-  background: #38bdf8;
-  box-shadow: 0 0 8px #38bdf8;
-}
-
-.metric-pill.is-cf-down {
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.45);
-  text-decoration: none;
-}
-
-.metric-pill.is-cf-down .pulse-dot {
-  background: #f87171;
-  box-shadow: 0 0 8px #f87171;
 }
 
 .metric-pill.is-updates {
-  color: #86efac;
-  border-color: rgba(134, 239, 172, 0.4);
+  color: var(--color-success-fg);
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
   text-decoration: none;
-}
-
-.metric-pill.is-updates .pulse-dot {
-  background: #4ade80;
-  box-shadow: 0 0 8px #4ade80;
 }
 
 .metric-label {
@@ -219,29 +375,50 @@ button.metric-pill {
   font-weight: 600;
 }
 
+/* VPN / Cloudflare Tunnel state: the dot carries the colour, the label names a problem. */
+.status-chip {
+  color: var(--text-main);
+}
+.status-dot {
+  --dot: var(--color-success);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dot) 22%, transparent);
+  flex-shrink: 0;
+}
+.status-chip[data-tone='warn'] .status-dot {
+  --dot: var(--color-warning);
+}
+.status-chip[data-tone='bad'] {
+  color: var(--color-danger-fg);
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+}
+.status-chip[data-tone='bad'] .status-dot {
+  --dot: var(--color-danger);
+}
+
 .user-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
   box-sizing: border-box;
-  min-height: 2rem;
-  height: 2rem;
-  padding: 0 0.65rem;
-  background: rgba(var(--color-primary-rgb), 0.15);
-  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
-  border-radius: 8px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  min-height: var(--btn-h);
+  height: var(--btn-h);
+  padding: 0 0.7rem 0 0.35rem;
+  font-size: var(--btn-font);
+  font-weight: 700;
   line-height: 1;
   flex-shrink: 0;
 }
 
 .user-avatar {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.6rem;
+  height: 1.6rem;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--color-primary-button);
   color: var(--color-primary-contrast);
   display: inline-flex;
   align-items: center;
@@ -261,7 +438,7 @@ button.metric-pill {
 }
 
 .user-name {
-  color: var(--color-primary-soft);
+  color: var(--text-main);
   font-weight: 600;
   max-width: 9rem;
   overflow: hidden;
@@ -286,32 +463,84 @@ button.metric-pill {
 }
 
 .btn-logout:hover {
-  color: #f87171;
+  color: var(--color-danger-fg);
 }
 
-/* Content */
+/* Content — wide shell on large displays */
 .content-wrapper {
   flex: 1;
-  width: min(1360px, 100%);
+  width: min(1760px, 100%);
   max-width: 100%;
   margin: 0 auto;
-  padding: clamp(1rem, 2.5vw, 2rem) clamp(0.85rem, 3vw, 1.5rem);
+  padding: clamp(1rem, 2.5vw, 2rem) clamp(0.85rem, 3vw, 1.75rem);
   box-sizing: border-box;
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
-/* Glass Card */
+@media (min-width: 1600px) {
+  .content-wrapper {
+    width: min(1920px, 100%);
+    padding-inline: clamp(1.25rem, 2.5vw, 2.25rem);
+  }
+}
+
+/* Glass Card — blur/shine live on a background layer so text stays sharp */
 .glass-card {
-  background: var(--bg-card);
-  backdrop-filter: blur(14px);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-glass, 14px);
   position: relative;
   overflow: hidden;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  isolation: isolate;
+  transition: border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
   min-width: 0;
   width: 100%;
   max-width: 100%;
+  box-shadow: var(--panel-shadow);
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--panel-shine), var(--bg-card);
+  box-shadow: inset 0 1px 0 var(--panel-highlight);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+/* The lit rim: a 1px gradient ring just inside the (transparent) border; overflow clips the border box. */
+.glass-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1px;
+  background: var(--glass-rim, var(--border-subtle));
+  opacity: 0.6;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  transition: opacity 0.25s ease;
+}
+
+.glass-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Keep decorative glows behind text (absolute, not promoted above the glass layer). */
+.glass-card > .card-glow,
+.glass-card > .wizard-glow {
+  position: absolute;
+  z-index: 0;
 }
 
 .service-card.glass-card,
@@ -319,8 +548,18 @@ button.metric-pill {
   overflow: visible;
 }
 
+/* Each glass card is its own stacking layer, so a card's open More menu (it opens downward on
+   phones) would sit under the next card; lift the card while its menu is open. */
+.service-card.has-open-menu {
+  z-index: 20;
+}
+
 .glass-card:hover {
-  border-color: var(--border-strong);
+  border-color: transparent;
+}
+
+.glass-card:hover::after {
+  background: var(--glass-rim-hover, var(--glass-rim, var(--border-strong)));
 }
 
 /* Auth Cards */
@@ -337,7 +576,7 @@ button.metric-pill {
   width: 100%;
   max-width: min(440px, 100%);
   padding: clamp(1.15rem, 4vw, 2.25rem);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--glass-shadow, var(--shadow-card));
 }
 
 .card-glow {
@@ -362,7 +601,7 @@ button.metric-pill {
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
   background: rgba(var(--color-primary-rgb), 0.18);
-  color: var(--color-primary-soft);
+  color: var(--color-primary-text);
   margin-bottom: 0.5rem;
 }
 
@@ -454,20 +693,20 @@ button.metric-pill {
 
 .installed-color {
   background: rgba(var(--color-primary-rgb), 0.15);
-  color: var(--color-primary-soft);
+  color: var(--color-primary-text);
   border: 1px solid rgba(var(--color-primary-rgb), 0.3);
 }
 
 .storage-color {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
 }
 
 .refresh-color {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 
 .stat-label {
@@ -484,27 +723,27 @@ button.metric-pill {
 }
 
 .text-glow-cyan {
-  color: #22d3ee;
-  text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
+  color: var(--color-info-fg);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--color-info) 40%, transparent);
 }
 
 .text-glow-purple,
 .text-glow-accent {
-  color: var(--color-primary-soft);
+  color: var(--color-primary-text);
   text-shadow: 0 0 10px rgba(var(--color-primary-rgb), 0.4);
 }
 
 .text-emerald {
-  color: #34d399;
+  color: var(--color-success-fg);
 }
 
 .text-warn {
-  color: #fbbf24;
+  color: var(--color-warning-fg);
 }
 
 .status-indicator-tag {
   font-size: 0.85rem;
-  color: #fbbf24;
+  color: var(--color-warning-fg);
   letter-spacing: 0.02em;
 }
 
@@ -576,30 +815,7 @@ button.metric-pill {
 }
 
 .catalog-chip {
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  padding: 0.3rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.catalog-chip:hover {
-  color: var(--text-main);
-  border-color: rgba(var(--color-primary-rgb), 0.4);
-  background: rgba(var(--color-primary-rgb), 0.08);
-}
-
-.catalog-chip.active {
-  color: var(--color-primary);
-  background: rgba(var(--color-primary-rgb), 0.16);
-  border-color: rgba(var(--color-primary-rgb), 0.45);
+  padding-inline: 0.9rem;
 }
 
 .chip-clear {
@@ -718,14 +934,21 @@ button.metric-pill {
   border-radius: 5px;
 }
 
-.app-badge.indexers { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.1); }
-.app-badge.automation { color: #818cf8; border-color: rgba(129, 140, 248, 0.3); background: rgba(129, 140, 248, 0.1); }
-.app-badge.downloading { color: #34d399; border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.1); }
-.app-badge.media { color: #f472b6; border-color: rgba(244, 114, 182, 0.3); background: rgba(244, 114, 182, 0.1); }
-.app-badge.requests { color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.1); }
-.app-badge.subtitles { color: #c084fc; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.1); }
-.app-badge.optimization { color: #22d3ee; border-color: rgba(34, 211, 238, 0.3); background: rgba(34, 211, 238, 0.1); }
-.app-badge.maintenance { color: #fb923c; border-color: rgba(251, 146, 60, 0.3); background: rgba(251, 146, 60, 0.1); }
+.app-badge.indexers { color: var(--color-info-fg); border-color: color-mix(in srgb, var(--color-info) 35%, transparent); background: var(--color-info-bg); }
+.app-badge.automation { color: #6366f1; border-color: rgba(99, 102, 241, 0.35); background: rgba(99, 102, 241, 0.12); }
+.app-badge.downloading { color: var(--color-success-fg); border-color: color-mix(in srgb, var(--color-success) 35%, transparent); background: var(--color-success-bg); }
+.app-badge.media { color: #db2777; border-color: rgba(219, 39, 119, 0.3); background: rgba(219, 39, 119, 0.1); }
+.app-badge.requests { color: var(--color-warning-fg); border-color: color-mix(in srgb, var(--color-warning) 35%, transparent); background: var(--color-warning-bg); }
+.app-badge.subtitles { color: #7c3aed; border-color: rgba(124, 58, 237, 0.3); background: rgba(124, 58, 237, 0.1); }
+.app-badge.optimization { color: var(--color-info-fg); border-color: color-mix(in srgb, var(--color-info) 35%, transparent); background: var(--color-info-bg); }
+.app-badge.maintenance { color: var(--color-primary-text); border-color: color-mix(in srgb, var(--color-primary) 35%, transparent); background: rgba(var(--color-primary-rgb), 0.12); }
+
+[data-theme="dark"] .app-badge.automation { color: #a5b4fc; border-color: rgba(129, 140, 248, 0.3); background: rgba(129, 140, 248, 0.1); }
+[data-theme="dark"] .app-badge.media { color: #f9a8d4; border-color: rgba(244, 114, 182, 0.3); background: rgba(244, 114, 182, 0.1); }
+[data-theme="dark"] .app-badge.subtitles { color: #d8b4fe; border-color: rgba(192, 132, 252, 0.3); background: rgba(192, 132, 252, 0.1); }
+/* A real app icon stands on its own; only the letter fallback gets the tinted frame. */
+.app-badge.has-icon,
+[data-theme] .app-badge.has-icon { background: none; border-color: transparent; border-radius: 0; }
 
 .service-name-row {
   display: flex;
@@ -748,9 +971,9 @@ button.metric-pill {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #86efac;
-  border: 1px solid rgba(134, 239, 172, 0.35);
-  background: rgba(22, 163, 74, 0.15);
+  color: var(--color-success-fg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent);
+  background: var(--color-success-bg);
   border-radius: 999px;
   padding: 0.15rem 0.45rem;
   white-space: nowrap;
@@ -765,15 +988,15 @@ button.metric-pill {
   flex-shrink: 0;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #93c5fd;
-  border: 1px solid rgba(147, 197, 253, 0.35);
+  color: var(--color-info-fg);
+  border: 1px solid color-mix(in srgb, var(--color-info) 40%, transparent);
   text-decoration: none;
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-info-bg);
 }
 
 .help-btn:hover {
-  color: #1d4ed8;
-  border-color: #93c5fd;
+  color: var(--color-primary-text);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
 }
 
 [data-theme="dark"] .help-btn:hover {
@@ -804,7 +1027,7 @@ button.metric-pill {
 }
 
 .port-link {
-  color: #38bdf8;
+  color: var(--color-info-fg);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -813,7 +1036,7 @@ button.metric-pill {
 }
 
 .port-link:hover {
-  color: #7dd3fc;
+  color: var(--color-info-fg);
   text-decoration: underline;
 }
 
@@ -829,21 +1052,21 @@ button.metric-pill {
 }
 
 .badge-running {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 
 .badge-stopped {
-  background: rgba(100, 116, 139, 0.15);
+  background: color-mix(in srgb, var(--text-dim) 16%, transparent);
   color: var(--text-muted);
-  border: 1px solid rgba(100, 116, 139, 0.35);
+  border: 1px solid color-mix(in srgb, var(--text-dim) 30%, transparent);
 }
 
 .badge-failed {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
 }
 
 .badge-inactive {
@@ -904,89 +1127,16 @@ button.metric-pill {
 .btn-action {
   flex: 1 1 5.5rem;
   min-width: 0;
-  padding: 0.45rem 0.55rem;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-  transition: all 0.2s;
+  padding-inline: 0.6rem;
 }
 
 .btn-install {
   flex: 2;
-  background: var(--gradient-primary);
-  color: var(--color-primary-contrast);
-  font-weight: 600;
-}
-
-.btn-start {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border-color: rgba(16, 185, 129, 0.3);
-}
-
-.btn-start:hover {
-  background: rgba(16, 185, 129, 0.25);
-}
-
-.btn-stop {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.3);
-}
-
-.btn-stop:hover {
-  background: rgba(239, 68, 68, 0.25);
-}
-
-.btn-restart {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border-color: rgba(245, 158, 11, 0.3);
-}
-
-.btn-restart:hover {
-  background: rgba(245, 158, 11, 0.25);
-}
-
-.btn-webui {
-  background: rgba(var(--color-primary-rgb), 0.15);
-  color: var(--color-primary-soft);
-  border-color: rgba(var(--color-primary-rgb), 0.3);
-}
-
-.btn-webui:hover {
-  background: rgba(var(--color-primary-rgb), 0.25);
-}
-
-.btn-logs {
-  background: var(--pill-bg);
-  color: var(--text-main);
-  border-color: var(--border-subtle);
-}
-
-.btn-logs:hover {
-  background: var(--bg-surface-elevated);
-  color: var(--text-heading);
 }
 
 .btn-more {
   width: 100%;
   height: 100%;
-  background: var(--pill-bg);
-  color: var(--text-main);
-  border-color: var(--border-subtle);
-}
-
-.btn-more.open,
-.btn-more:hover {
-  color: var(--text-heading);
-  background: var(--bg-surface-elevated);
 }
 
 .card-menu-wrap {
@@ -1004,7 +1154,9 @@ button.metric-pill {
   max-width: min(16rem, calc(100vw - 2rem));
   padding: 0.35rem;
   border-radius: 10px;
-  background: var(--menu-bg);
+  background: var(--modal-bg);
+  backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(var(--glass-saturate, 1.12));
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-card);
   z-index: 5;
@@ -1028,7 +1180,7 @@ button.metric-pill {
 }
 
 .card-menu button.danger {
-  color: #fca5a5;
+  color: var(--color-danger-fg);
 }
 
 .card-menu button:disabled {
@@ -1097,15 +1249,35 @@ button.metric-pill {
 
 .health-modal {
   width: min(860px, 100%);
+  height: min(90dvh, 900px);
   max-height: min(90dvh, 900px);
-  overflow: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.health-modal .modal-header {
+  flex: 0 0 auto;
 }
 
 .health-body {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.85rem;
   padding: 1rem 1.15rem 1.25rem;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.health-charts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .health-chart-card {
@@ -1167,8 +1339,12 @@ button.metric-pill {
 .health-line.disk { stroke: #fbbf24; }
 
 .health-apps-card {
-  grid-column: 1 / -1;
   min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 0.85rem 0.9rem 0.7rem;
   border-radius: 12px;
   background: var(--overlay-soft);
@@ -1176,7 +1352,9 @@ button.metric-pill {
 }
 
 .health-apps-table-wrap {
-  overflow-x: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   margin-top: 0.35rem;
 }
 
@@ -1254,7 +1432,7 @@ button.metric-pill {
 .link-btn {
   background: none;
   border: none;
-  color: #93c5fd;
+  color: var(--color-info-fg);
   cursor: pointer;
   font: inherit;
   padding: 0;
@@ -1265,6 +1443,17 @@ button.metric-pill {
   font-size: 0.8rem;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.setup-token-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.setup-token-row .ui-input {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Modal */
@@ -1346,26 +1535,6 @@ button.metric-pill {
   font-size: 0.75rem;
   color: var(--text-muted);
   cursor: pointer;
-}
-
-.btn-icon {
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover {
-  background: var(--bg-surface-elevated);
-  color: var(--text-heading);
-  border-color: var(--border-strong);
 }
 
 /* Always a dark terminal — do not use theme --text-main (unreadable in light mode). */
@@ -1484,9 +1653,9 @@ button.metric-pill {
   display: inline-block;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--spinner-track, rgba(148, 163, 184, 0.35));
   border-radius: 50%;
-  border-top-color: var(--text-heading);
+  border-top-color: var(--color-primary);
   animation: spin 0.8s linear infinite;
 }
 
@@ -1520,6 +1689,65 @@ button.metric-pill {
 }
 
 @media (max-width: 720px) {
+  .top-nav {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    padding-block: calc(0.5rem + env(safe-area-inset-top, 0px)) 0.5rem;
+  }
+
+  .nav-brand {
+    min-height: 2.75rem;
+    padding: 0.25rem 0.6rem 0.25rem 0.3rem;
+    gap: 0.4rem;
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .nav-tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+  }
+
+  .nav-tabs .metric-pill {
+    min-height: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .nav-metrics-authenticated {
+    display: none;
+  }
+
+  .nav-account {
+    grid-column: 2;
+    grid-row: 1;
+    z-index: 2;
+  }
+
+  .nav-account-phone-only {
+    display: flex;
+  }
+
+
+  .health-body {
+    overflow: auto;
+  }
+
+  .health-charts {
+    grid-template-columns: 1fr;
+  }
+
+  .health-apps-card {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .health-apps-table-wrap {
+    flex: 0 0 auto;
+    overflow-x: auto;
+  }
+
   .hide-compact {
     display: none;
   }
@@ -1610,5 +1838,19 @@ button.metric-pill {
     right: 0.75rem;
     bottom: 0.75rem;
     width: calc(100vw - 1.5rem);
+  }
+}
+
+/* The catalog's sort select is a pill like the chips next to it, not a full-width form field. */
+.catalog-toolbar select.ui-input {
+  width: auto;
+  min-width: 11rem;
+}
+
+/* Home-screen web app (iOS): the system blurs a band below the status bar that reaches past the safe
+   area, so it softened the top half of the logo and the account pill. Keep the header clear of it. */
+@media (display-mode: standalone) {
+  .top-nav {
+    padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
   }
 }

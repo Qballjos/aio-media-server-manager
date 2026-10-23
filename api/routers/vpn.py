@@ -39,17 +39,10 @@ async def vpn_status(request: Request) -> dict[str, Any]:
 async def vpn_start(request: Request) -> dict[str, Any]:
     """Enable VPN policy and bring the tunnel up."""
     _ensure_authenticated(request)
-    from core.integrations.lifecycle import enforce_vpn_isolation, start_tunneled_apps, stop_tunneled_apps
+    from core.integrations.lifecycle import bring_up_vpn
 
     _persist_vpn_policy(enabled=True)
-    stopped = await stop_tunneled_apps()
-    result = await asyncio.to_thread(vpn_manager.start)
-    if result.get("tunnel_up"):
-        result["started_apps"] = await start_tunneled_apps(stopped)
-    else:
-        await enforce_vpn_isolation()
-        result["started_apps"] = []
-    return result
+    return await bring_up_vpn(vpn_manager)
 
 
 @router.post("/stop")
@@ -80,7 +73,7 @@ async def vpn_restart(request: Request) -> dict[str, Any]:
     await asyncio.to_thread(vpn_manager.stop)
     result = await asyncio.to_thread(vpn_manager.start)
     if result.get("tunnel_up"):
-        result["started_apps"] = await start_tunneled_apps(stopped)
+        result["started_apps"] = await start_tunneled_apps(stopped or None)
     else:
         await enforce_vpn_isolation()
         result["started_apps"] = []
