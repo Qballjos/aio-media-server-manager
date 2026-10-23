@@ -49,6 +49,50 @@ def read_sabnzbd_ini(config_dir: Path | None) -> dict[str, str]:
     return result
 
 
+def _ini_int(value: object, default: int) -> int:
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return default
+
+
+def read_sabnzbd_ini_server(config_dir: Path | None) -> dict[str, Any] | None:
+    """The first enabled news server in sabnzbd.ini; the API only shows its password as stars."""
+    if not config_dir:
+        return None
+    try:
+        text = (Path(config_dir) / "sabnzbd.ini").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    blocks: list[dict[str, str]] = []
+    in_servers = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if in_servers and stripped.startswith("[["):
+            blocks.append({"_name": stripped.strip("[]").strip().lower()})
+        elif stripped.startswith("["):
+            in_servers = stripped.lower() == "[servers]"
+        elif in_servers and blocks and "=" in stripped:
+            key, _, value = stripped.partition("=")
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            blocks[-1][key.strip().lower()] = value
+    for block in blocks:
+        host = block.get("host", "").strip()
+        if not host or block["_name"] in _JUNK_SERVER_NAMES or block.get("enable", "1") == "0":
+            continue
+        return {
+            "host": host,
+            "port": _ini_int(block.get("port"), 563),
+            "ssl": block.get("ssl", "1") != "0",
+            "username": block.get("username", ""),
+            "password": block.get("password", ""),
+            "connections": _ini_int(block.get("connections"), 8),
+        }
+    return None
+
+
 class SABnzbdClient:
     def __init__(self, host: str = "127.0.0.1", port: int = 8085, api_key: Optional[str] = None):
         self.base_url = f"http://{host}:{port}/api"
@@ -132,14 +176,19 @@ class SABnzbdClient:
         ssl: bool = True,
         connections: int = 8,
         displayname: str = "",
+        update: bool = False,
     ) -> bool:
-        """Add or update a single Usenet server (one set_config, never per-field rows)."""
+        """Add a single Usenet server (one set_config, never per-field rows).
+
+        With update=True an existing server for the host is rewritten (new password,
+        connections, …); otherwise an existing one is left alone.
+        """
         host = (host or "").strip()
         if not host:
             return False
         name = (displayname or host).strip()
         self._remove_accidental_servers()
-        if self._has_news_server(host):
+        if self._has_news_server(host) and not update:
             logger.info("SABnzbd already has Usenet server for '%s'.", host)
             return True
         # Do not pass `keyword` — SABnzbd treats it as the server identity.
@@ -177,6 +226,16 @@ class SABnzbdClient:
             seen.add(ident)
             unique.append(item)
         return unique
+
+    def remove_news_server(self, host: str) -> bool:
+        """Delete the server for a host (by name or host); True when none is left."""
+        want = (host or "").strip().lower()
+        if not want:
+            return True
+        for item in self.list_servers():
+            if want in (str(item.get("host") or "").strip().lower(), str(item.get("name") or "").strip().lower()):
+                self._request("del_config", {"section": "servers", "keyword": str(item.get("name") or host)})
+        return not self._has_news_server(host)
 
     def _has_news_server(self, host: str) -> bool:
         want = host.strip().lower()
@@ -292,8 +351,11 @@ def write_bootstrap_ini(
         f"download_dir = {_ini_value(incomplete_dir)}",
         f"api_key = {key}",
         f"nzb_key = {secrets.token_hex(16)}",
+        # Cloudflare / reverse-proxy Host headers need whitelist entries; inet_exposure=5
+        # allows the UI from outside while still requiring login when username is set.
+        "inet_exposure = 5" if username else "inet_exposure = 4",
         "host_whitelist = localhost,127.0.0.1,::1",
-        "local_ranges = 127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
+        "local_ranges = 127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
     ]
     if username:
         lines.append(f"username = {_ini_value(username)}")
@@ -353,3 +415,134 @@ def write_bootstrap_ini(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+_MISC_KEY_RE = re.compile(r"(?im)^([A-Za-z0-9_]+)\s*=")
+
+
+def _sabnzbd_public_hostnames() -> list[str]:
+    """Hostnames SABnzbd should accept when published via Cloudflare."""
+    hosts: list[str] = ["localhost", "127.0.0.1", "::1"]
+    try:
+        from core.public_hostnames import load_hostnames, subdomain_for
+        from core.settings import settings as live
+
+        base = (live.public_app_base_domain or "").strip().strip(".").lower()
+        entry = load_hostnames().get("sabnzbd") or {}
+        sub = subdomain_for("sabnzbd") or str(entry.get("subdomain") or "").strip().lower()
+        if base and sub:
+            hosts.append(f"{sub}.{base}")
+        last = str(entry.get("last_published") or "").strip().lower()
+        if last:
+            host = last.split("://", 1)[-1].split("/", 1)[0].strip().strip(".")
+            if host:
+                hosts.append(host)
+        # Also accept bare LAN-style names operators may use.
+        if sub:
+            hosts.append(sub)
+    except Exception:
+        pass
+    # Preserve order, drop empties/dupes.
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in hosts:
+        name = (item or "").strip().lower()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        out.append(name)
+    return out
+
+
+def _set_misc_ini_value(text: str, key: str, value: str) -> tuple[str, bool]:
+    """Set or insert a [misc] key. Returns (new_text, changed)."""
+    key_l = key.lower()
+    lines = text.splitlines()
+    in_misc = False
+    found = False
+    changed = False
+    out: list[str] = []
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = stripped[1:-1].strip().lower()
+            if in_misc and not found:
+                out.append(f"{key} = {value}")
+                found = True
+                changed = True
+            in_misc = section == "misc"
+            out.append(line)
+            continue
+        if in_misc and not found:
+            match = _MISC_KEY_RE.match(line)
+            if match and match.group(1).lower() == key_l:
+                new_line = f"{key} = {value}"
+                if stripped != new_line:
+                    changed = True
+                out.append(new_line)
+                found = True
+                continue
+        out.append(line)
+        if idx == len(lines) - 1 and in_misc and not found:
+            out.append(f"{key} = {value}")
+            found = True
+            changed = True
+    if not found:
+        out = ["[misc]", f"{key} = {value}", ""] + out
+        changed = True
+    ending = "\n" if text.endswith("\n") or not text else ""
+    return "\n".join(out) + ending, changed
+
+
+def ensure_sabnzbd_public_access(config_dir: Path | None, *, api_key: str | None = None, port: int = 8085) -> bool:
+    """Allow Cloudflare/public Host access without the access-denied page.
+
+    Sets ``inet_exposure`` so external clients can reach the UI (login still
+    required when a username is configured) and merges published hostnames into
+    ``host_whitelist``.
+    """
+    if not config_dir:
+        return False
+    path = Path(config_dir) / "sabnzbd.ini"
+    if not path.is_file():
+        return False
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+    parsed = read_sabnzbd_ini(config_dir)
+    has_login = bool(parsed.get("username"))
+    exposure = "5" if has_login else "4"
+    whitelist = ",".join(_sabnzbd_public_hostnames())
+    local_ranges = "127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+    changed = False
+    for key, value in (
+        ("inet_exposure", exposure),
+        ("host_whitelist", whitelist),
+        ("local_ranges", local_ranges),
+    ):
+        text, key_changed = _set_misc_ini_value(text, key, value)
+        changed = changed or key_changed
+
+    if changed:
+        try:
+            path.write_text(text, encoding="utf-8")
+            logger.info(
+                "Updated SABnzbd public access (inet_exposure=%s, host_whitelist=%s)",
+                exposure,
+                whitelist,
+            )
+        except OSError as exc:
+            logger.warning("Could not write SABnzbd public-access settings: %s", exc)
+            return False
+
+    # Live-apply when SABnzbd is already running so Cloudflare works without a restart.
+    key = (api_key or parsed.get("api_key") or "").strip()
+    if key:
+        client = SABnzbdClient(port=int(port) or 8085, api_key=key)
+        client._request("set_config", {"section": "misc", "keyword": "inet_exposure", "value": exposure})
+        client._request("set_config", {"section": "misc", "keyword": "host_whitelist", "value": whitelist})
+        client._request("set_config", {"section": "misc", "keyword": "local_ranges", "value": local_ranges})
+    return changed

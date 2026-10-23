@@ -6,7 +6,6 @@ Provides endpoints to inspect connectivity and trigger automatic inter-applicati
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -14,6 +13,7 @@ from fastapi import APIRouter, Request
 
 from core.auth import auth_manager
 from core.integrations.engine import integration_engine
+from core.integrations.lifecycle import schedule_full_wiring
 
 logger = logging.getLogger(__name__)
 
@@ -42,4 +42,4 @@ async def run_integration_wiring(request: Request) -> dict[str, Any]:
     and media server linking.
     """
     _ensure_authenticated(request)
-    return await asyncio.to_thread(integration_engine.run_full_wiring)
+    return await schedule_full_wiring()

@@ -64,9 +64,10 @@ RUN printf '%s\n' \
 # Host packages vs catalog (both linux/amd64 and linux/arm64 unless noted):
 #   *Arr/.NET (Sonarr, Radarr, Lidarr, Prowlarr, NeutArr, Recyclarr):
 #     libicu*, libssl3, libgssapi-krb5-2, zlib1g, libsqlite3-0, sqlite3
-#   SABnzbd / NZBGet: unrar (non-free RAR 5), par2, p7zip-full, python3.13, build-essential
-#   Bazarr / Shelfmark / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,
+#   SABnzbd / NZBGet: unrar (non-free RAR 5), par2cmdline-turbo, p7zip-full, python3.13, build-essential
+#   Bazarr / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,
 #     libncurses6, python3.13, python3-dev, build-essential
+#   Shelfmark: manager Python 3.14 (upstream requires >=3.14), python3-dev, build-essential
 #   Jellyfin / Plex: ffmpeg, libfontconfig1
 #   Seerr: Node 22 (copied from nodebin)
 #   Grimmory: JRE 25 (copied from jre), mariadb-server
@@ -109,7 +110,6 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         libfontconfig1 \
         mariadb-server \
         unrar \
-        par2 \
         p7zip-full \
         build-essential \
         python3-dev \
@@ -133,10 +133,28 @@ RUN set -eux; \
       arm) cfarch=arm ;; \
       *) cfarch=amd64 ;; \
     esac; \
-    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfarch}" \
+    curl -fsSL --retry 5 --retry-delay 5 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfarch}" \
       -o /usr/local/bin/cloudflared; \
     chmod +x /usr/local/bin/cloudflared; \
     cloudflared --version
+
+# Faster SABnzbd/NZBGet PAR2 verify+repair (drop-in replacement for Debian par2).
+# https://sabnzbd.org/wiki/installation/par2cmdline-turbo
+ARG PAR2_TURBO_VERSION=1.4.0
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) par2arch=amd64 ;; \
+      arm64) par2arch=arm64 ;; \
+      arm) par2arch=armhf ;; \
+      *) par2arch=amd64 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-delay 5 "https://github.com/animetosho/par2cmdline-turbo/releases/download/v${PAR2_TURBO_VERSION}/par2cmdline-turbo-${PAR2_TURBO_VERSION}-linux-${par2arch}.zip" \
+      -o /tmp/par2cmdline-turbo.zip; \
+    python -m zipfile -e /tmp/par2cmdline-turbo.zip /tmp/par2cmdline-turbo; \
+    install -m 0755 /tmp/par2cmdline-turbo/par2 /usr/local/bin/par2; \
+    ln -sfn /usr/local/bin/par2 /usr/bin/par2; \
+    rm -rf /tmp/par2cmdline-turbo.zip /tmp/par2cmdline-turbo; \
+    par2 --version
 
 WORKDIR /app
 COPY pyproject.toml poetry.lock ./

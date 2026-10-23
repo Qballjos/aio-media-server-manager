@@ -39,6 +39,7 @@
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/aio-media-manager" Mode="rw" Description="App settings and child-app config" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/aio-media-manager</Config>
   <Config Name="Data" Target="/data" Default="/mnt/user/aio-media-manager" Mode="rw" Description="downloads/ and media/ share" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/aio-media-manager</Config>
   <Config Name="Backups" Target="/backups" Default="/mnt/user/backups/aio-media-manager" Mode="rw" Description="Configuration backups" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/backups/aio-media-manager</Config>
+  <Config Name="Host sys" Target="/host/sys" Default="/sys" Mode="ro" Description="Read-only host /sys so Home shows the server's network traffic, not just this container's." Type="Path" Display="advanced" Required="false" Mask="false">/sys</Config>
   <Config Name="Intel/AMD GPU" Target="/dev/dri" Default="" Mode="rw" Description="Optional /dev/dri for transcoding" Type="Device" Display="advanced" Required="false" Mask="false"/>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="Unraid nobody (99)" Type="Variable" Display="always" Required="true" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Unraid users (100)" Type="Variable" Display="always" Required="true" Mask="false">100</Config>

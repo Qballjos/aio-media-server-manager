@@ -55,3 +55,71 @@ def load_usenet_server() -> Optional[dict[str, Any]]:
         "password": secret_store.get_secret(USENET_PASSWORD) or "",
         "connections": max(1, connections),
     }
+
+
+def public_usenet_server() -> Optional[dict[str, Any]]:
+    """The stored provider without its password, for the dashboard."""
+    server = load_usenet_server()
+    if not server:
+        return None
+    public = {key: value for key, value in server.items() if key != "password"}
+    public["has_password"] = bool(server.get("password"))
+    return public
+
+
+def import_usenet_server() -> str:
+    """Adopt the server SABnzbd or NZBGet already has while AIO stores none; returns that app's name."""
+    if load_usenet_server():
+        return ""
+    from applications.catalog import ApplicationCatalog
+    from core.integrations.nzbget import read_nzbget_conf_server
+    from core.integrations.sabnzbd import read_sabnzbd_ini_server
+
+    catalog = ApplicationCatalog()
+    readers = {
+        "sabnzbd": lambda plugin: read_sabnzbd_ini_server(plugin.config_dir),
+        "nzbget": lambda plugin: read_nzbget_conf_server(plugin.config_file()),
+    }
+    for name, read in readers.items():
+        if not catalog.has(name) or not catalog.get(name).is_installed():
+            continue
+        server = read(catalog.get(name))
+        if server:
+            save_usenet_server(**server)
+            return name
+    return ""
+
+
+def push_usenet_server(previous_host: str = "") -> dict[str, bool]:
+    """Send the stored provider to every installed Usenet client; False where it is not running."""
+    server = load_usenet_server()
+    if not server:
+        return {}
+    from applications.catalog import ApplicationCatalog
+    from core.integrations.credentials import get_application_api_key
+    from core.supervisor import ProcessSupervisor
+
+    catalog = ApplicationCatalog()
+    supervisor = ProcessSupervisor.get()
+    applied: dict[str, bool] = {}
+    for name in ("sabnzbd", "nzbget"):
+        if not catalog.has(name) or not catalog.get(name).is_installed():
+            continue
+        if supervisor.status(name).value != "running":
+            applied[name] = False
+            continue
+        plugin = catalog.get(name)
+        if name == "sabnzbd":
+            from core.integrations.sabnzbd import SABnzbdClient
+
+            client = SABnzbdClient(port=plugin.port, api_key=get_application_api_key("sabnzbd", plugin.config_dir))
+            if previous_host and previous_host.lower() != server["host"].lower():
+                # A new provider replaces the old one instead of running next to it.
+                client.remove_news_server(previous_host)
+            applied[name] = client.add_news_server(**server, update=True)
+        else:
+            from core.integrations.nzbget import NZBGetClient
+
+            # NZBGet keeps one server slot (Server1), so writing it replaces the old one.
+            applied[name] = NZBGetClient(port=plugin.port).add_news_server(**server)
+    return applied

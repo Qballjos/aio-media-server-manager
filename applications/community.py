@@ -7,9 +7,13 @@ import subprocess
 from pathlib import Path
 
 from applications.base import SimpleApplication
-from applications.install_helpers import child_python, create_venv, venv_bin, write_runner
+from applications.install_helpers import write_runner
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
-from applications.shelfmark_mirrors import prepare_shelfmark_runtime, write_shelfmark_runner
+from applications.shelfmark_mirrors import (
+    ensure_shelfmark_venv,
+    prepare_shelfmark_runtime,
+    write_shelfmark_runner,
+)
 from core.installer import AppInstaller, InstallResult
 from core.library_layout import LibraryLayout
 from core.settings import settings as default_settings
@@ -161,7 +165,7 @@ class ShelfmarkApp(SimpleApplication):
     manifest = AppManifest(
         name="shelfmark",
         display_name="Shelfmark",
-        description="Search and request ebooks and audiobooks; pairs with Grimmory and Prowlarr.",
+        description="Search and request ebooks and audiobooks for Grimmory, with Prowlarr support.",
         github_repo="calibrain/shelfmark",
         upstream_url="https://github.com/calibrain/shelfmark",
         tier=AppTier.OPTIONAL,
@@ -224,6 +228,7 @@ class ShelfmarkApp(SimpleApplication):
         return env
 
     def start_command(self) -> list[str]:
+        ensure_shelfmark_venv(self.install_dir)
         prepare_shelfmark_runtime(self.config_dir, self.install_dir, port=self.port)
         return super().start_command()
 
@@ -235,14 +240,7 @@ class ShelfmarkApp(SimpleApplication):
             self.name,
             "pyproject.toml",
         )
-        venv_dir = create_venv(self.install_dir, python=child_python())
-        pip = venv_bin(venv_dir, "pip")
-        subprocess.run(
-            [str(pip), "install", str(self.install_dir)],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        ensure_shelfmark_venv(self.install_dir)
         frontend = self.install_dir / "src" / "frontend"
         npm = shutil.which("npm")
         if npm and (frontend / "package.json").is_file():

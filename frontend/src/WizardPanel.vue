@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { brandLogoUrl, brandTitle } from './branding.js'
+import { formatUptime } from './format.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 
 const emit = defineEmits(['done'])
@@ -19,13 +20,14 @@ const saving = ref(false)
 const error = ref('')
 const installing = ref(false)
 const installProgress = ref([])
+const progressNow = ref(Date.now() / 1000)
 let finishAborted = false
 
 const TITLE = {
   3: 'Storage',
   4: 'File ownership',
   5: 'Download clients',
-  6: 'VPN',
+  6: 'VPN & remote access',
   7: '*Arr apps',
   8: 'Media server',
   9: 'Requests',
@@ -42,12 +44,11 @@ const installDoneCount = computed(() =>
   ).length
 )
 const installActive = computed(() =>
-  installProgress.value.find((item) => item.status === 'installing')
+  installProgress.value.find((item) => ['installing', 'configuring'].includes(item.status))
 )
 const installPercent = computed(() => {
-  if (!installTotal.value) return installing.value ? 8 : 0
-  const partial = installActive.value ? 0.4 : 0
-  return Math.min(100, Math.round(((installDoneCount.value + partial) / installTotal.value) * 100))
+  if (!installTotal.value) return 0
+  return Math.round((installDoneCount.value / installTotal.value) * 100)
 })
 const headerTitle = computed(() => (installing.value ? 'Installing applications' : TITLE[step.value]))
 const headerSubtitle = computed(() => {
@@ -56,7 +57,7 @@ const headerSubtitle = computed(() => {
   }
   if (installing.value) {
     const current = installActive.value
-    if (current) return `Downloading and installing ${displayName(current.name)}.`
+    if (current) return `${displayName(current.name)}: ${current.message || installStatusLabel(current.status).toLowerCase()}`
     return `Finished ${installDoneCount.value} of ${installTotal.value} selected apps.`
   }
   return `Step ${flowIndex.value} of ${FLOW.length} — pick your stack, then save and install.`
@@ -102,6 +103,7 @@ function sleep(ms) {
 }
 
 async function refreshInstallProgress() {
+  progressNow.value = Date.now() / 1000
   const res = await apiRequest('/api/catalog')
   if (!res.ok) return
   const data = await readJson(res)
@@ -109,16 +111,22 @@ async function refreshInstallProgress() {
   installProgress.value = installProgress.value.map((item) => {
     const row = byName[item.name]
     if (!row) return item
-    const next = { ...item, displayName: row.display_name || item.displayName }
-    if (row.installed || row.install_job === 'started' || row.install_job === 'already_installed') {
-      next.status = row.install_job === 'already_installed' ? 'already_installed' : 'started'
-    } else if (row.install_job === 'failed') {
+    const next = {
+      ...item,
+      displayName: row.display_name || item.displayName,
+      installed: row.installed,
+      message: row.install_message || '',
+      updatedAt: row.install_updated_at,
+    }
+    if (row.install_job === 'failed') {
       next.status = 'failed'
       next.detail = row.install_error || item.detail
-    } else if (item.status === 'failed') {
-      return next
+    } else if (row.install_job === 'configuring') {
+      next.status = 'configuring'
     } else if (row.install_job === 'installing' || row.install_job === 'queued') {
-      next.status = 'installing'
+      next.status = row.install_job
+    } else if (row.installed || row.install_job === 'started' || row.install_job === 'already_installed') {
+      next.status = row.install_job === 'already_installed' ? 'already_installed' : 'started'
     }
     return next
   })
@@ -128,7 +136,8 @@ async function waitForAppInstall(name) {
   while (!finishAborted) {
     await refreshInstallProgress()
     const item = installProgress.value.find((row) => row.name === name)
-    if (!item || isInstallTerminal(item.status)) return
+    // Configuration can wait for other apps, so keep installing the remaining packages.
+    if (!item || item.installed || isInstallTerminal(item.status)) return
     await sleep(1500)
   }
 }
@@ -136,6 +145,7 @@ async function waitForAppInstall(name) {
 function installStatusLabel(status) {
   if (status === 'queued') return 'QUEUED'
   if (status === 'installing') return 'INSTALLING'
+  if (status === 'configuring') return 'CONFIGURING'
   if (status === 'started') return 'STARTED'
   if (status === 'already_installed') return 'INSTALLED'
   if (status === 'failed') return 'FAILED'
@@ -145,7 +155,7 @@ function installStatusLabel(status) {
 function installBadgeClass(status) {
   if (status === 'started' || status === 'already_installed') return 'badge-running'
   if (status === 'failed') return 'badge-failed'
-  if (status === 'installing') return 'badge-installing'
+  if (status === 'installing' || status === 'configuring') return 'badge-installing'
   return 'badge-inactive'
 }
 
@@ -186,6 +196,9 @@ async function loadStep(id) {
       selections.vpn_enforce = !!data.vpn_enforce
       selections.has_vpn_config = !!data.has_vpn_config
       selections.vpn_config_text = ''
+      selections.cloudflare_tunnel_enabled = !!data.cloudflare_tunnel_enabled
+      selections.has_cloudflare_token = !!data.has_cloudflare_token
+      selections.cloudflare_tunnel_token = ''
     } else if (id === 7) {
       selections.arr_apps = [...(data.selected || [])]
     } else if (id === 8) {
@@ -195,6 +208,8 @@ async function loadStep(id) {
       selections.request_system = data.selected || 'seerr'
     } else if (id === 10) {
       selections.recommended_preview = [...(data.selected || [])]
+    } else if (id === 11) {
+      loadCatalogNames().catch(() => {})
     }
   } catch (err) {
     error.value = err.message
@@ -226,7 +241,9 @@ function bodyForStep(id) {
       vpn_config_path: selections.vpn_config_path,
       vpn_protocol: selections.vpn_protocol,
       vpn_enforce: selections.vpn_provider !== 'none',
-      ...(selections.vpn_config_text ? { vpn_config_text: selections.vpn_config_text } : {})
+      ...(selections.vpn_config_text ? { vpn_config_text: selections.vpn_config_text } : {}),
+      cloudflare_tunnel_enabled: !!selections.cloudflare_tunnel_enabled,
+      ...(selections.cloudflare_tunnel_token ? { cloudflare_tunnel_token: selections.cloudflare_tunnel_token } : {})
     }
   }
   if (id === 7) return { arr_apps: selections.arr_apps }
@@ -289,6 +306,25 @@ async function skip() {
   }
 }
 
+async function installOne(item) {
+  patchInstallItem(item.name, { status: 'installing' })
+  try {
+    const inst = await apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
+    const instData = await readJson(inst)
+    if (!inst.ok) {
+      patchInstallItem(item.name, { status: 'failed', detail: apiError(instData, 'Install failed') })
+      return
+    }
+    if (instData.status === 'already_installed') {
+      patchInstallItem(item.name, { status: 'already_installed' })
+      return
+    }
+    await waitForAppInstall(item.name)
+  } catch (err) {
+    patchInstallItem(item.name, { status: 'failed', detail: err.message })
+  }
+}
+
 async function finish() {
   installing.value = true
   error.value = ''
@@ -311,29 +347,18 @@ async function finish() {
     }))
     await nextTick()
     await refreshInstallProgress()
-    for (const item of [...installProgress.value]) {
-      if (finishAborted) return
-      if (isInstallTerminal(item.status)) continue
-      patchInstallItem(item.name, { status: 'installing' })
-      try {
-        const inst = await apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
-        const instData = await readJson(inst)
-        if (!inst.ok) {
-          patchInstallItem(item.name, {
-            status: 'failed',
-            detail: apiError(instData, 'Install failed')
-          })
-          continue
-        }
-        if (instData.status === 'already_installed') {
-          patchInstallItem(item.name, { status: 'already_installed' })
-          continue
-        }
-        await waitForAppInstall(item.name)
-      } catch (err) {
-        patchInstallItem(item.name, { status: 'failed', detail: err.message })
+    // Two installs at a time: a long source build (Seerr) must not hold up the
+    // quick downloads queued behind it, while CPU and disk stay within reason.
+    const queue = [...installProgress.value].filter(
+      (item) => !(item.installed || isInstallTerminal(item.status))
+    )
+    const lane = async () => {
+      while (queue.length && !finishAborted) {
+        await installOne(queue.shift())
       }
     }
+    await Promise.all([lane(), lane()])
+    if (finishAborted) return
     if (!finishAborted && installProgress.value.length) {
       await refreshInstallProgress()
       await sleep(800)
@@ -352,6 +377,44 @@ function leaveToHome() {
 }
 
 const summary = computed(() => payload.value.summary || payload.value.selections || {})
+const catalogNames = ref({})
+
+async function loadCatalogNames() {
+  const res = await apiRequest('/api/catalog')
+  if (!res.ok) return
+  const data = await readJson(res)
+  catalogNames.value = Object.fromEntries(
+    (data.applications || []).map((row) => [row.name, row.display_name || row.name]),
+  )
+}
+
+function appLabel(id) {
+  return catalogNames.value[id] || displayName(id)
+}
+
+/** The chosen apps as the pipeline they form: find, download, automate, watch, request. */
+const reviewGroups = computed(() => {
+  const chosen = summary.value
+  const arr = [...(chosen.arr_apps || [])].sort((a, b) => (a === 'prowlarr' ? -1 : b === 'prowlarr' ? 1 : 0))
+  const media = [...(chosen.media_servers || [])]
+  if (chosen.request_system && chosen.request_system !== 'none') media.push(chosen.request_system)
+  let usenet = ''
+  if (chosen.usenet_host) usenet = `Usenet through ${chosen.usenet_host}`
+  else if (chosen.has_usenet_account) usenet = 'Usenet account saved'
+  return [
+    { id: 'automation', label: 'Indexers and automation', apps: arr, note: '' },
+    { id: 'downloads', label: 'Downloads', apps: chosen.download_clients || [], note: usenet },
+    { id: 'media', label: 'Media and requests', apps: media, note: '' },
+    { id: 'extras', label: 'Extras', apps: chosen.recommended_preview || [], note: '' },
+  ]
+})
+const reviewAppCount = computed(() => new Set(reviewGroups.value.flatMap((group) => group.apps)).size)
+const reviewVpn = computed(() => {
+  const provider = summary.value.vpn_provider
+  if (!provider || provider === 'none') return 'off'
+  const name = provider === 'privadovpn' ? 'PrivadoVPN' : provider === 'custom' ? 'your own WireGuard or OpenVPN profile' : provider
+  return summary.value.has_vpn_config ? `${name}, config saved` : name
+})
 const showPlexClaim = computed(() => (selections.media_servers || []).includes('plex'))
 const showQbitCreds = computed(() => (selections.download_clients || []).includes('qbittorrent'))
 const showUsenetCreds = computed(() => {
@@ -376,7 +439,7 @@ onUnmounted(() => {
 
 <template>
   <section class="wizard-shell animate-fade">
-    <div class="wizard-card">
+    <div class="wizard-card glass-card">
       <div class="wizard-glow"></div>
       <div class="wizard-header">
         <img
@@ -416,7 +479,9 @@ onUnmounted(() => {
               role="progressbar"
               :aria-valuemin="0"
               :aria-valuemax="100"
-              :aria-valuenow="installPercent"
+              :aria-valuenow="installTotal ? installPercent : undefined"
+              :aria-valuetext="`${installDoneCount} of ${installTotal} apps finished`"
+              aria-label="Application setup"
             >
               <div
                 class="wizard-bar-fill"
@@ -438,9 +503,15 @@ onUnmounted(() => {
                 <span class="wizard-install-name">
                   {{ displayName(item.name) }}
                   <small v-if="item.status === 'failed' && item.detail" class="wizard-install-error">{{ item.detail }}</small>
+                  <template v-else-if="['queued', 'installing', 'configuring'].includes(item.status)">
+                    <small v-if="item.message" class="wizard-install-detail" aria-live="polite">{{ item.message }}</small>
+                    <small v-if="item.updatedAt" class="wizard-install-detail">
+                      Last progress {{ formatUptime(progressNow - item.updatedAt) }} ago
+                    </small>
+                  </template>
                 </span>
                 <span class="wizard-status" :class="installBadgeClass(item.status)">
-                  <span v-if="item.status === 'installing'" class="spinner spinner-sm"></span>
+                  <span v-if="item.status === 'installing' || item.status === 'configuring'" class="spinner spinner-sm"></span>
                   <span v-else class="wizard-status-dot"></span>
                   {{ installStatusLabel(item.status) }}
                 </span>
@@ -553,6 +624,21 @@ onUnmounted(() => {
               :has-config="!!selections.has_vpn_config"
             />
           </template>
+          <p class="wizard-muted">Remote access (optional). A Cloudflare Tunnel reaches the dashboard and apps over HTTPS without opening router ports; it starts right after this wizard.</p>
+          <label class="wizard-option" :class="{ selected: selections.cloudflare_tunnel_enabled }">
+            <input type="checkbox" v-model="selections.cloudflare_tunnel_enabled" />
+            Cloudflare Tunnel
+          </label>
+          <label v-if="selections.cloudflare_tunnel_enabled" class="ui-field">
+            <span>Tunnel token</span>
+            <input
+              v-model="selections.cloudflare_tunnel_token"
+              type="password"
+              class="ui-input font-mono"
+              autocomplete="off"
+              :placeholder="selections.has_cloudflare_token ? 'Saved — leave blank to keep' : 'Token from Cloudflare Zero Trust → Tunnels'"
+            />
+          </label>
         </template>
 
         <template v-else-if="step === 7">
@@ -637,15 +723,29 @@ onUnmounted(() => {
         </template>
 
         <template v-else>
-          <dl class="wizard-dl">
-            <div><dt>*Arr</dt><dd>{{ (summary.arr_apps || []).join(', ') || '—' }}</dd></div>
-            <div><dt>Download</dt><dd>{{ (summary.download_clients || []).join(', ') || '—' }}</dd></div>
-            <div><dt>Usenet</dt><dd>{{ summary.usenet_host || (summary.has_usenet_account ? 'configured' : '—') }}</dd></div>
-            <div><dt>Media</dt><dd>{{ (summary.media_servers || []).join(', ') || '—' }}</dd></div>
-            <div><dt>Requests</dt><dd>{{ summary.request_system || '—' }}</dd></div>
-            <div><dt>VPN</dt><dd>{{ summary.vpn_provider || 'none' }}{{ summary.has_vpn_config ? ' · config saved' : '' }}</dd></div>
-            <div><dt>Recommended</dt><dd>{{ (summary.recommended_preview || []).join(', ') || 'none' }}</dd></div>
-          </dl>
+          <p class="wizard-review-lead">
+            Your stack: {{ reviewAppCount }} {{ reviewAppCount === 1 ? 'app' : 'apps' }}.
+            Save &amp; install sets them up with your AIO account.
+          </p>
+          <ul class="wizard-review">
+            <li v-for="group in reviewGroups" :key="group.id" class="wizard-review-row">
+              <span class="wizard-review-label">{{ group.label }}</span>
+              <span class="wizard-review-apps">
+                <span v-for="name in group.apps" :key="name" class="wizard-chip">
+                  <span class="wizard-app-badge">
+                    <img v-if="appIconSrc(name)" :src="appIconSrc(name)" alt="" class="wizard-icon" />
+                    <span v-else>{{ appLabel(name).slice(0, 2).toUpperCase() }}</span>
+                  </span>
+                  {{ appLabel(name) }}
+                </span>
+                <span v-if="!group.apps.length" class="wizard-review-empty">None</span>
+                <span v-if="group.note" class="wizard-review-note">{{ group.note }}</span>
+              </span>
+            </li>
+          </ul>
+          <p class="wizard-review-network">
+            VPN: {{ reviewVpn }}. Remote access: {{ summary.cloudflare_tunnel_enabled ? 'Cloudflare Tunnel' : 'off' }}.
+          </p>
         </template>
       </div>
 
@@ -690,11 +790,6 @@ onUnmounted(() => {
 .wizard-card {
   width: min(640px, 100%);
   padding: clamp(1.25rem, 4vw, 2.25rem);
-  background: rgba(19, 23, 34, 0.65);
-  backdrop-filter: blur(14px);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
   position: relative;
   overflow: hidden;
   min-width: 0;
@@ -719,8 +814,8 @@ onUnmounted(() => {
   object-fit: cover;
   display: block;
   margin-bottom: 0.85rem;
-  border: 1px solid var(--border-subtle);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border: none;
+  box-shadow: none;
 }
 .wizard-badge {
   display: inline-block;
@@ -773,9 +868,9 @@ onUnmounted(() => {
   box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.35);
 }
 .wizard-steps li.done {
-  color: #34d399;
-  border-color: rgba(16, 185, 129, 0.3);
-  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-success-fg);
+  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
+  background: var(--color-success-bg);
 }
 .wizard-body {
   display: flex;
@@ -820,7 +915,7 @@ onUnmounted(() => {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: #1e293b;
+  background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
@@ -846,37 +941,75 @@ onUnmounted(() => {
   place-items: center;
   font-weight: 700;
   font-size: 0.82rem;
-  color: #93c5fd;
-  border: 1px solid rgba(147, 197, 253, 0.4);
+  color: var(--color-info-fg);
+  border: 1px solid color-mix(in srgb, var(--color-info) 40%, transparent);
   text-decoration: none;
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-info-bg);
   flex-shrink: 0;
 }
-.wizard-dl {
+.wizard-review-lead {
+  margin: 0 0 0.9rem;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.wizard-review {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
   gap: 0.55rem;
 }
-.wizard-dl div {
+.wizard-review-row {
   display: grid;
-  grid-template-columns: 7.5rem 1fr;
-  gap: 0.6rem;
-  padding: 0.75rem 0.9rem;
+  grid-template-columns: 10rem 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.7rem 0.9rem;
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
 }
-.wizard-dl dt {
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.wizard-review-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.3;
+  padding-top: 0.5rem;
 }
-.wizard-dl dd {
-  margin: 0;
+.wizard-review-apps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.1rem;
+  min-width: 0;
+}
+.wizard-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   color: var(--text-main);
-  font-size: 0.88rem;
-  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+}
+.wizard-review-empty,
+.wizard-review-note {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+}
+.wizard-review-network {
+  margin: 0.9rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+@media (max-width: 520px) {
+  .wizard-review-row {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+  .wizard-review-label {
+    padding-top: 0;
+  }
 }
 .wizard-install {
   display: flex;
@@ -941,15 +1074,19 @@ onUnmounted(() => {
   min-width: 0;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #f3f4f6;
+  color: var(--text-main);
   overflow-wrap: anywhere;
 }
-.wizard-install-error {
+.wizard-install-error,
+.wizard-install-detail {
   display: block;
   margin-top: 0.2rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: #fca5a5;
+  color: var(--color-danger-fg);
+}
+.wizard-install-detail {
+  color: var(--text-muted);
 }
 .wizard-status {
   display: inline-flex;
@@ -968,24 +1105,24 @@ onUnmounted(() => {
   background: currentColor;
 }
 .badge-running {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 .badge-failed {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
 }
 .badge-installing {
-  background: rgba(6, 182, 212, 0.12);
-  color: #38bdf8;
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  background: var(--color-info-bg);
+  color: var(--color-info-fg);
+  border: 1px solid color-mix(in srgb, var(--color-info) 35%, transparent);
 }
 .badge-inactive {
-  background: rgba(71, 85, 105, 0.15);
+  background: color-mix(in srgb, var(--text-dim) 16%, transparent);
   color: var(--text-muted);
-  border: 1px solid rgba(71, 85, 105, 0.2);
+  border: 1px solid color-mix(in srgb, var(--text-dim) 25%, transparent);
 }
 .wizard-actions {
   display: flex;
@@ -1007,9 +1144,9 @@ onUnmounted(() => {
   display: inline-block;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--spinner-track, rgba(148, 163, 184, 0.35));
   border-radius: 50%;
-  border-top-color: var(--color-primary-contrast);
+  border-top-color: var(--color-primary);
   animation: wizard-spin 0.8s linear infinite;
 }
 .spinner-sm {
@@ -1020,9 +1157,6 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 @media (max-width: 560px) {
-  .wizard-dl div {
-    grid-template-columns: 1fr;
-  }
   .wizard-actions {
     flex-direction: column;
     align-items: stretch;
