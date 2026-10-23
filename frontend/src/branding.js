@@ -5,7 +5,7 @@ import { apiRequest, readJson } from './api.js'
 
 const DEFAULT_TITLE = 'AIO Media Server Manager'
 const DEFAULT_LOGO = '/logo-aio-media-manager.png'
-export const DEFAULT_ACCENT = '#f97316'
+export const DEFAULT_ACCENT = '#0a6cff'
 const ACCENT_CACHE_KEY = 'amm-accent'
 
 export const brandTitle = ref(DEFAULT_TITLE)
@@ -13,15 +13,17 @@ export const brandHeaderUrl = ref(DEFAULT_LOGO)
 export const brandLogoUrl = ref(DEFAULT_LOGO)
 export const brandFaviconUrl = ref(DEFAULT_LOGO)
 export const brandAccent = ref(DEFAULT_ACCENT)
+export const brandLoginMessage = ref('')
 export const brandSlots = ref({})
 
 export const ACCENT_PRESETS = [
+  ['#0a6cff', 'Blue'],
+  ['#5aa2ff', 'Sky'],
   ['#f97316', 'Orange'],
   ['#f59e0b', 'Amber'],
   ['#ef4444', 'Red'],
   ['#ec4899', 'Pink'],
   ['#8b5cf6', 'Violet'],
-  ['#3b82f6', 'Blue'],
   ['#06b6d4', 'Cyan'],
   ['#10b981', 'Emerald'],
 ]
@@ -66,15 +68,44 @@ function mixChannel(from, to, amount) {
   return from + (to - from) * amount
 }
 
+function mixAccent(hex, target, amount) {
+  const { r, g, b } = hexToRgb(hex)
+  return toHex(mixChannel(r, target, amount), mixChannel(g, target, amount), mixChannel(b, target, amount))
+}
+
+function luminance(hex) {
+  const channels = Object.values(hexToRgb(hex)).map((channel) => {
+    const value = channel / 255
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  })
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+}
+
+function readableAccent(hex, background, target) {
+  const backgroundLuminance = luminance(background)
+  // Adjust only functional colors; the saved accent still drives decorative glass and glow.
+  for (let step = 0; step <= 100; step += 1) {
+    const candidate = mixAccent(hex, target, step / 100)
+    const value = luminance(candidate)
+    if ((Math.max(value, backgroundLuminance) + 0.05) / (Math.min(value, backgroundLuminance) + 0.05) >= 4.5) return candidate
+  }
+  return target === 0 ? '#000000' : '#ffffff'
+}
+
 export function deriveAccent(hex) {
   const primary = normalizeHex(hex)
   const { r, g, b } = hexToRgb(primary)
-  const hover = toHex(mixChannel(r, 0, 0.18), mixChannel(g, 0, 0.18), mixChannel(b, 0, 0.18))
-  const soft = toHex(mixChannel(r, 255, 0.28), mixChannel(g, 255, 0.28), mixChannel(b, 255, 0.28))
+  const hover = mixAccent(primary, 0, 0.18)
+  const soft = mixAccent(primary, 255, 0.28)
+  const button = readableAccent(primary, '#ffffff', 0)
   return {
     primary,
     hover,
     soft,
+    button,
+    buttonHover: mixAccent(button, 0, 0.18),
+    textLight: readableAccent(primary, '#e2e8f0', 0),
+    textDark: readableAccent(primary, '#475569', 255),
     rgb: `${r}, ${g}, ${b}`,
     gradient: `linear-gradient(135deg, ${hover} 0%, ${soft} 100%)`,
   }
@@ -92,6 +123,10 @@ export function applyAccentColor(hex) {
   root.style.setProperty('--color-primary', accent.primary)
   root.style.setProperty('--color-primary-hover', accent.hover)
   root.style.setProperty('--color-primary-soft', accent.soft)
+  root.style.setProperty('--color-primary-button', accent.button)
+  root.style.setProperty('--color-primary-button-hover', accent.buttonHover)
+  root.style.setProperty('--color-primary-text-light', accent.textLight)
+  root.style.setProperty('--color-primary-text-dark', accent.textDark)
   root.style.setProperty('--color-primary-rgb', accent.rgb)
   root.style.setProperty('--gradient-primary', accent.gradient)
   root.style.setProperty('--border-active', accent.primary)
@@ -126,6 +161,7 @@ export function applyBranding(data) {
   brandLogoUrl.value = logo
   brandFaviconUrl.value = favicon
   brandSlots.value = data?.slots || {}
+  brandLoginMessage.value = String(data?.login_message || '').trim()
   applyAccentColor(accent)
 
   if (typeof document === 'undefined') return
@@ -134,9 +170,37 @@ export function applyBranding(data) {
   const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]')
   if (appleTitle) appleTitle.setAttribute('content', title.slice(0, 12))
 
-  // Tab icon + Apple touch icon follow the favicon slot (placeholder or custom upload).
-  ensureLink('icon', { type: favicon.endsWith('.ico') ? 'image/x-icon' : 'image/png', href: favicon })
-  ensureLink('apple-touch-icon', { href: favicon })
+  // Tab icon + Apple touch icon follow the favicon slot; the version query makes a new upload show at once.
+  const version = favicon.includes('?') ? favicon.slice(favicon.indexOf('?')) : ''
+  ensureLink('icon', { type: null, href: `/api/branding/icon/favicon${version}` })
+  ensureLink('apple-touch-icon', { href: `/api/branding/icon/apple-touch-icon${version}` })
+}
+
+/** A square 512 px PNG of an uploaded icon (contained, centred), so every place that shows it gets a sharp image. */
+export function squareIconPng(file, size = 512) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return reject(new Error('Could not process the icon.'))
+      const scale = Math.min(size / img.width, size / img.height)
+      const w = img.width * scale
+      const h = img.height * scale
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h)
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not process the icon.'))), 'image/png')
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Could not read that image.'))
+    }
+    img.src = url
+  })
 }
 
 export async function loadBranding() {

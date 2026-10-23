@@ -12,6 +12,9 @@ import requests
 from applications.base import BaseApplication
 from core.integrations.credentials import wait_for_application_api_key
 from core.integrations.engine import WIRE_AFTER_INSTALL, integration_engine
+from core.integrations.local_auth import apply_shared_local_logins
+from core.integrations.sessions import SERVARR_APPS
+from core.install_jobs import set_job, set_wiring_progress
 from core.settings import settings
 from core.supervisor import ProcessSupervisor
 from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager
@@ -30,15 +33,20 @@ async def schedule_full_wiring(*, wait_for_apps: bool = False) -> dict[str, Any]
         if _pending_wiring == 0:
             return {"status": "coalesced"}
         _pending_wiring = 0
-        if wait_for_apps:
-            await _wait_wiring_prereqs()
-        return await asyncio.to_thread(integration_engine.run_full_wiring)
+        try:
+            set_wiring_progress("Waiting for applications to start" if wait_for_apps else "Preparing application connections")
+            if wait_for_apps:
+                await _wait_wiring_prereqs()
+            return await asyncio.to_thread(integration_engine.run_full_wiring)
+        finally:
+            set_wiring_progress("")
 
 
 async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any]:
     """Start a newly installed daemon, wait until it answers, then wire."""
     report: dict[str, Any] = {"name": plugin.name, "started": False, "wired": False}
     if plugin.manifest.daemon:
+        set_job(plugin.name, "configuring", "Starting application")
         supervisor = ProcessSupervisor.get()
         log_dir = settings.config_dir / "logs"
         try:
@@ -56,11 +64,25 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
             logger.info("Did not start '%s' after install: %s", plugin.name, exc)
             report["start_error"] = str(exc)
 
+        set_job(plugin.name, "configuring", "Waiting for application to respond")
         healthy = await _wait_healthy(plugin)
         report["healthy"] = healthy
         if healthy:
+            set_job(plugin.name, "configuring", "Reading connection details")
             key = await wait_for_application_api_key(plugin.name, timeout=90.0)
             report["has_api_key"] = bool(key)
+            if plugin.name in SERVARR_APPS:
+                set_job(plugin.name, "configuring", "Configuring AIO login")
+                login_steps = await asyncio.to_thread(
+                    apply_shared_local_logins,
+                    installed=lambda name: name == plugin.name,
+                    port_for=lambda _name, _fallback: plugin.port,
+                    api_key_for=lambda _name: key,
+                    config_dir_for=lambda _name: plugin.config_dir,
+                )
+                report["shared_login"] = bool(login_steps) and all(step["status"] == "success" for step in login_steps)
+                # Changing Servarr's auth method restarts the app.
+                report["healthy"] = await _wait_healthy(plugin)
         else:
             logger.warning(
                 "Health check timed out for '%s'; wiring will skip it until it is running.",
@@ -72,6 +94,7 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
 
     logger.info("Running integration wiring after '%s' install.", plugin.name)
     try:
+        set_job(plugin.name, "configuring", "Waiting for shared setup", wiring=True)
         report["wiring"] = await schedule_full_wiring()
         report["wired"] = True
     except Exception as exc:
@@ -120,17 +143,36 @@ async def stop_tunneled_apps() -> list[str]:
     return stopped
 
 
-async def enforce_vpn_isolation() -> list[str]:
-    """If VPN is on without a tunnel, stop qBittorrent/Prowlarr/Flaresolverr."""
-    if vpn_manager.tunneled_apps_allowed():
+# Watchdog state. ponytail: in memory; after a container restart the boot start covers the apps.
+_down_checks = 0
+_stopped_for_tunnel: set[str] = set()
+
+
+async def enforce_vpn_isolation(grace: int = 0) -> list[str]:
+    """If VPN is on without a tunnel, stop qBittorrent/Prowlarr/Flaresolverr.
+
+    ``grace`` is how many failed checks in a row to ride out first: the 5 s watchdog passes 2,
+    so one slow ``wg show`` on a busy host stops nothing. Apps stopped here start again once
+    the tunnel is back.
+    """
+    global _down_checks
+    # The checks shell out (wg, ip, iptables); keep them off the event loop.
+    if await asyncio.to_thread(vpn_manager.tunneled_apps_allowed):
+        _down_checks = 0
         # Keep WebUI proxies alive while the tunnel is up (Docker may race start).
         try:
-            vpn_manager.refresh_local_forwards()
+            await asyncio.to_thread(vpn_manager.refresh_local_forwards)
         except Exception as exc:
             logger.debug("VPN WebUI forward refresh failed: %s", exc)
+        if _stopped_for_tunnel:
+            names = sorted(_stopped_for_tunnel)
+            _stopped_for_tunnel.clear()
+            restarted = await start_tunneled_apps(names)
+            if restarted:
+                logger.info("VPN tunnel is back; started %s again.", ", ".join(restarted))
         # Kill any leftover clearnet copies that bypass WireGuard UID routing.
         try:
-            leaked = vpn_manager.reclaim_clearnet_tunneled_processes()
+            leaked = await asyncio.to_thread(vpn_manager.reclaim_clearnet_tunneled_processes)
         except Exception as exc:
             logger.warning("Clearnet tunneled-process reclaim failed: %s", exc)
             leaked = []
@@ -143,20 +185,25 @@ async def enforce_vpn_isolation() -> list[str]:
                 )
             return leaked
         return []
+    _down_checks += 1
+    if _down_checks <= grace:
+        logger.warning("VPN tunnel check failed (%s of %s); not stopping tunneled apps yet.", _down_checks, grace + 1)
+        return []
     stopped = await stop_tunneled_apps()
     if stopped:
+        _stopped_for_tunnel.update(stopped)
         logger.error(
-            "Stopped %s because VPN is enabled but the tunnel is down.",
+            "Stopped %s because VPN is enabled but the tunnel is down; they start again when it is back.",
             ", ".join(stopped),
         )
     return stopped
 
 
-async def vpn_isolation_loop(interval: float = 5.0) -> None:
+async def vpn_isolation_loop(interval: float = 5.0, grace: int = 2) -> None:
     """Keep tunneled apps off the house WAN if the tunnel drops after they started."""
     while True:
         try:
-            await enforce_vpn_isolation()
+            await enforce_vpn_isolation(grace=grace)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -233,9 +280,11 @@ async def _wait_wiring_prereqs(timeout: float = 90.0) -> None:
         for name in names:
             plugin = catalog.get(name)
             if not await _probe_url(plugin.health_check_url()):
+                set_wiring_progress(f"Waiting for {plugin.manifest.display_name} to respond")
                 ready = False
                 break
-            if name in APPS_WITH_FILE_API_KEYS and not get_application_api_key(name):
+            if name in APPS_WITH_FILE_API_KEYS and not await asyncio.to_thread(get_application_api_key, name):
+                set_wiring_progress(f"Waiting for {plugin.manifest.display_name} connection details")
                 ready = False
                 break
         if ready:
@@ -249,3 +298,25 @@ async def _probe_url(url: str) -> bool:
         return resp.status_code < 500
     except Exception:
         return False
+
+
+async def bring_up_vpn(manager: Any = None) -> dict[str, Any]:
+    """Bring the tunnel up, then run every installed tunneled app on it.
+
+    Shared by the wizard, Settings → Network, and POST /api/vpn/start so they
+    behave the same. Nothing may have been running yet (fresh install), so a
+    tunnel that comes up starts all tunneled apps, not just the ones stopped here.
+    """
+    manager = manager or vpn_manager
+    stopped = await stop_tunneled_apps()
+    result = await asyncio.to_thread(manager.start)
+    if result.get("tunnel_up"):
+        result["started_apps"] = await start_tunneled_apps(stopped or None)
+        if result["started_apps"]:
+            # Apps that only start once the tunnel is up still need their shared
+            # login and *Arr links; the install-time wiring skipped them.
+            asyncio.create_task(schedule_full_wiring(wait_for_apps=True))
+    else:
+        await enforce_vpn_isolation()
+        result["started_apps"] = []
+    return result

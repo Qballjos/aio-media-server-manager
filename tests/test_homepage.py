@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 import threading
 
 import pytest
@@ -16,11 +16,13 @@ from core.auth import auth_manager
 from core.homepage import (
     calendar_fetch_span,
     clear_homepage_snapshot_cache,
-    collapse_full_seasons,
+    collapse_recent_series,
     homepage_downloads,
+    homepage_recent,
     homepage_request,
     homepage_search,
     homepage_snapshot,
+    homepage_trending,
     month_calendar_span,
 )
 from core.settings import Settings
@@ -391,22 +393,51 @@ def test_collapse_full_season_hides_member_episodes():
             "_kind": "movie",
         }
     )
-    out = collapse_full_seasons(rows)
+    out = collapse_recent_series(rows)
     assert [item["title"] for item in out] == ["Severance", "Dune"]
+    assert [item["mediaType"] for item in out] == ["tv", "movie"]
+    assert [item["id"] for item in out] == ["Severance", ""]  # the series id later title pages match on
     assert out[0]["detail"] == "Season 01"
     assert out[0]["url"].endswith("id=season-1")
 
 
-def test_collapse_keeps_single_and_partial_season_episodes():
+def test_collapse_folds_a_partial_season_and_keeps_a_lone_episode():
     rows = [
         _episode("Show", 1, 4, "2026-09-30T20:00:00"),
         _episode("Show", 1, 5, "2026-09-30T20:01:00"),
         _episode("Other", 2, 1, "2026-09-29T18:00:00"),
         _episode("Show", 1, 6, "2026-09-20T10:00:00"),
     ]
-    out = collapse_full_seasons(rows)
-    details = [item["detail"] for item in out]
-    assert details == ["S01E05", "S01E04", "S02E01", "S01E06"]
+    out = collapse_recent_series(rows)
+    assert [(item["title"], item["detail"]) for item in out] == [
+        ("Show", "Season 01 · 3 episodes"),
+        ("Other", "S02E01"),
+    ]
+    assert out[0]["when"] == "2026-09-30T20:01:00"
+
+
+def test_collapse_shows_one_tile_for_a_series_across_seasons():
+    rows = [
+        _episode("Friends", 3, n, f"2026-10-11T1{n % 10}:00:00", _series_id="friends", _season_id="s3") for n in (1, 5, 9, 12, 19)
+    ] + [_episode("Friends", 2, n, "2026-10-11T08:00:00", _series_id="friends", _season_id="s2") for n in (20, 21, 22, 23, 24)]
+    rows.append(
+        {
+            "source": "jellyfin",
+            "title": "Friends",
+            "detail": "Season 04",
+            "when": "2026-10-11T21:00:00",
+            "poster": "/p",
+            "url": "http://nas/web/#/details?id=s4",
+            "_kind": "season",
+            "_series_id": "friends",
+            "_season": 4,
+            "_season_id": "s4",
+        }
+    )
+    out = collapse_recent_series(rows)
+    assert len(out) == 1
+    assert out[0]["detail"] == "3 seasons"
+    assert out[0]["url"].endswith("id=friends")
 
 
 def test_homepage_jellyfin_full_season_is_one_tile(tmp_path):
@@ -437,6 +468,32 @@ def test_homepage_jellyfin_full_season_is_one_tile(tmp_path):
     assert snap["recent"][0]["detail"] == "Season 01"
 
 
+def test_homepage_jellyfin_whole_series_does_not_push_out_the_rest(tmp_path):
+    catalog = FakeCatalog([_plugin("jellyfin", 8096, tmp_path)])
+    friends = [
+        {"Id": f"f{n}", "Type": "Episode", "SeriesName": "Friends", "SeriesId": "friends", "ParentIndexNumber": n // 24 + 1, "IndexNumber": n % 24 + 1, "DateCreated": "2026-10-22T12:14"}
+        for n in range(240)
+    ]
+    older = [
+        {"Id": "r1", "Type": "Episode", "SeriesName": "Reacher", "SeriesId": "reacher", "ParentIndexNumber": 3, "IndexNumber": 1, "DateCreated": "2026-10-16T23:06"},
+        {"Id": "dune", "Type": "Movie", "Name": "Dune", "DateCreated": "2026-10-12T12:00"},
+    ]
+    library = friends + older
+
+    def fake_fetch(url, **kwargs):
+        start, limit = int(kwargs["params"]["StartIndex"]), int(kwargs["params"]["Limit"])
+        return {"Items": library[start : start + limit]}, None
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"jellyfin"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        snap = homepage_snapshot("nas.local", force=True)
+    assert [item["title"] for item in snap["recent"]] == ["Friends", "Reacher", "Dune"]
+
+
 def test_homepage_seerr_requests_row(tmp_path):
     catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
 
@@ -446,7 +503,7 @@ def test_homepage_seerr_requests_row(tmp_path):
                 {
                     "results": [
                         {
-                            "media": {"tmdbId": 42, "mediaType": "movie"},
+                            "media": {"tmdbId": 42, "mediaType": "movie", "status": 2},
                             "requestedBy": {"displayName": "Qballjos"},
                         }
                     ]
@@ -468,7 +525,48 @@ def test_homepage_seerr_requests_row(tmp_path):
         snap = homepage_snapshot("nas.local", force=True)
     assert snap["requests"][0]["title"] == "Dune"
     assert snap["requests"][0]["detail"] == "Qballjos"
+    assert snap["requests"][0]["mediaType"] == "movie"
+    assert snap["requests"][0]["status"] == "requested"
     assert "image.tmdb.org" in snap["requests"][0]["poster"]
+
+
+def test_homepage_seerr_requests_keep_unfinished(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(days=40)).isoformat().replace("+00:00", "Z")
+    fresh = (now - timedelta(days=2)).isoformat().replace("+00:00", "Z")
+
+    def row(tmdb, media_status, updated, status=2):
+        return {"status": status, "updatedAt": updated, "media": {"tmdbId": tmdb, "mediaType": "movie", "status": media_status}}
+
+    def fake_fetch(url, **_kwargs):
+        if "/request" in url and "/discover/" not in url:
+            return (
+                {
+                    "results": [
+                        row(1, 5, fresh, status=5),  # available, recent: keep
+                        row(2, 5, old, status=5),  # available, old: drop
+                        row(3, 4, old),  # partial, old: keep
+                        row(4, 3, old),  # still downloading, old: keep
+                        row(5, 1, old, status=3),  # declined, old: drop
+                    ]
+                },
+                None,
+            )
+        if "/discover/trending" in url:
+            return ({"results": []}, None)
+        if "/movie/" in url:
+            return ({"title": url.rsplit("/", 1)[-1]}, None)
+        return (None, "unexpected")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        snap = homepage_snapshot("nas.local", force=True)
+    assert [item["mediaId"] for item in snap["requests"]] == [1, 3, 4]
 
 
 def test_homepage_seerr_trending_row(tmp_path):
@@ -520,6 +618,68 @@ def test_homepage_seerr_trending_row(tmp_path):
     assert snap["trending"][1]["title"] == "Hot Show"
     assert snap["trending"][1]["can_request"] is False
     assert snap["trending"][1]["status"] == "available"
+
+
+def test_homepage_trending_fetches_the_asked_page(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+    asked = []
+
+    def fake_fetch(url, **kwargs):
+        asked.append(kwargs["params"]["page"])
+        return {"results": [{"id": 42, "mediaType": "movie", "title": "Deep Cut", "mediaInfo": {"status": 1}}]}, None
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        out = homepage_trending("nas.local", 7)
+    assert asked == ["7"]
+    assert out["page"] == 7 and out["error"] is None
+    assert [item["title"] for item in out["items"]] == ["Deep Cut"]
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", return_value=(None, "HTTP 500")),
+    ):
+        assert homepage_trending("nas.local", 8)["error"] == "HTTP 500"
+
+
+def test_homepage_recent_pages_through_jellyfin_titles(tmp_path):
+    catalog = FakeCatalog([_plugin("jellyfin", 8096, tmp_path)])
+    asked = []
+
+    def fake_fetch(url, **kwargs):
+        asked.append((kwargs["params"]["IncludeItemTypes"], kwargs["params"]["StartIndex"]))
+        return {
+            "Items": [
+                {"Type": "Series", "Id": "show-1", "Name": "Slow Horses", "ProductionYear": 2022, "DateCreated": "2026-10-22T09:00:00Z"},
+                {"Type": "Movie", "Id": "movie-1", "Name": "Brave", "ProductionYear": 2012, "DateCreated": "2026-10-21T09:00:00Z"},
+            ]
+        }, None
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"jellyfin"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        out = homepage_recent("nas.local", 3)
+    assert asked == [("Series,Movie", "40")]
+    assert out["page"] == 3 and out["error"] is None
+    assert [(item["title"], item["id"], item["mediaType"], item["detail"]) for item in out["items"]] == [
+        ("Slow Horses", "show-1", "tv", "2022"),
+        ("Brave", "movie-1", "movie", "2012"),
+    ]
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value=set()),
+    ):
+        assert homepage_recent("nas.local", 1)["items"] == []  # Jellyfin stopped: the rail just ends
 
 
 def test_homepage_widget_debug_http_error(tmp_path):
@@ -613,6 +773,8 @@ def test_seerr_media_status_mapping():
     assert seerr_media_status({"mediaInfo": {"status": 2}}) == "requested"
     assert seerr_media_status({"mediaInfo": {"status": 4}}) == "partial"
     assert seerr_media_status({"mediaInfo": {"status": 5}}) == "available"
+    assert seerr_media_status({"status": 2}) == "requested"
+    assert seerr_media_status({"status": 5}) == "available"
 
 
 def test_jellyfin_auth_header_carries_token():
@@ -662,3 +824,96 @@ def test_homepage_api_requires_session(tmp_path, monkeypatch):
         )
     assert ok.status_code == 200
     assert ok.json()["apps"] == []
+
+
+def test_homepage_launcher_explains_why_apps_are_stopped(tmp_path, monkeypatch):
+    from core.install_jobs import clear_jobs, set_job
+    from core.settings import settings
+
+    catalog = FakeCatalog(
+        [
+            _plugin("prowlarr", 9696, tmp_path, category="indexers"),
+            _plugin("seerr", 5055, tmp_path, category="requests"),
+            _plugin("sonarr", 8989, tmp_path),
+            _plugin("radarr", 7878, tmp_path),
+            _plugin("jellyfin", 8096, tmp_path, category="media"),
+        ]
+    )
+    clear_jobs()
+    set_job("seerr", "installing")
+    set_job("radarr", "configuring")  # process already runs, post-install wiring still busy
+    monkeypatch.setattr(settings, "vpn_enabled", True)
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"radarr", "jellyfin"}),
+        patch("core.homepage.vpn_manager.tunneled_apps_allowed", return_value=False),
+        patch("core.homepage.vpn_manager.status", return_value={"tunnel_up": False, "last_error": "handshake timed out"}),
+        patch("core.homepage.get_application_api_key", return_value=None),
+        patch("core.homepage._fetch_json", return_value=(None, "skipped")),
+    ):
+        snap = homepage_snapshot("nas.local", force=True)
+    clear_jobs()
+    by_name = {item["name"]: (item["state"], item["state_label"]) for item in snap["apps"]}
+    assert by_name["prowlarr"] == ("waiting_for_vpn", "Waiting for VPN")
+    assert by_name["seerr"] == ("installing", "Installing…")
+    assert by_name["sonarr"] == ("stopped", "Stopped")
+    assert by_name["radarr"] == ("configuring", "Configuring…")
+    assert by_name["jellyfin"] == ("running", "")
+    assert snap["vpn"] == {
+        "enabled": True,
+        "tunnel_up": False,
+        "waiting": ["prowlarr"],
+        "last_error": "handshake timed out",
+    }
+
+
+def test_stale_snapshot_still_reports_live_launcher_state(tmp_path, monkeypatch):
+    """A visitor who arrives after setup finished must not see tiles frozen in Configuring…"""
+    from core.install_jobs import clear_jobs, set_job
+
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path, category="requests")])
+    monkeypatch.setattr("core.homepage._CACHE_TTL", 0.0)
+    real_thread = threading.Thread
+
+    def fake_thread(*args, **kwargs):
+        if str(kwargs.get("name") or "").startswith("homepage-refresh-"):
+            return SimpleNamespace(start=lambda: None)
+        return real_thread(*args, **kwargs)
+
+    clear_jobs()
+    set_job("seerr", "configuring")
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value=None),
+        patch("core.homepage._fetch_json", return_value=(None, "skipped")),
+        patch("threading.Thread", side_effect=fake_thread),
+    ):
+        first = homepage_snapshot("nas.local", force=True)
+        assert first["apps"][0]["state"] == "configuring"
+        set_job("seerr", "started")
+        later = homepage_snapshot("nas.local")  # cache entry is stale now
+    clear_jobs()
+    assert later["apps"][0]["state"] == "running"
+    assert later["apps"][0]["state_label"] == ""
+
+
+def test_a_failing_source_keeps_the_last_good_items():
+    from core.homepage import _keep_last_good
+
+    fresh = {
+        "recent": [],
+        "trending": [],
+        "requests": [],
+        "calendar": [],
+        "widgets": [
+            {"widget": "recent", "source": "jellyfin", "state": "error", "detail": "timed out"},
+            {"widget": "trending", "source": "seerr", "state": "error", "detail": "timed out"},
+            {"widget": "requests", "source": "seerr", "state": "empty", "detail": "no requests"},
+        ],
+    }
+    previous = {"recent": [{"title": "Friends"}], "trending": [], "requests": [{"title": "Old"}]}
+    waiting = _keep_last_good(fresh, previous)
+    assert fresh["recent"] == [{"title": "Friends"}]  # kept instead of "Nothing recently added"
+    assert waiting == ["trending"]  # failed and nothing to fall back on: show it as loading
+    assert fresh["requests"] == []  # really empty stays empty

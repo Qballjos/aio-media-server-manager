@@ -227,3 +227,47 @@ async def test_wizard_api_endpoints(tmp_path: Path):
     res_skip = client.post("/api/wizard/skip")
     assert res_skip.status_code == 200
     assert res_skip.json()["completed"] is True
+
+
+def test_wizard_stores_cloudflare_token_outside_state_and_enables_tunnel(tmp_path: Path):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        install_dir=tmp_path / "apps",
+    )
+    engine = WizardEngine(state_file=tmp_path / "wizard_state.json", cfg=cfg)
+    engine.update_step_selections(
+        6,
+        {"vpn_provider": "none", "cloudflare_tunnel_enabled": True, "cloudflare_tunnel_token": "eyJ-tunnel-token"},
+    )
+    token_file = Path(cfg.cloudflare_tunnel_token_file)
+    assert token_file.read_text(encoding="utf-8").strip() == "eyJ-tunnel-token"
+    assert "cloudflare_tunnel_token" not in engine.get_status()["selections"]
+    assert "eyJ-tunnel-token" not in (tmp_path / "wizard_state.json").read_text(encoding="utf-8")
+    step6 = engine.get_step_data(6)
+    assert step6["cloudflare_tunnel_enabled"] is True
+    assert step6["has_cloudflare_token"] is True
+    assert engine.get_step_data(11)["summary"]["cloudflare_tunnel_enabled"] is True
+    engine.apply_initial_settings()
+    assert cfg.cloudflare_tunnel_enabled is True
+
+
+def test_wizard_keeps_a_tunnel_that_was_already_on(tmp_path: Path):
+    # Switched on before the wizard (Settings or AMM_CLOUDFLARE_TUNNEL_ENABLED): step 6 must show it
+    # ticked, or finishing the wizard writes false to amm_config.json, which beats the env var.
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "downloads",
+        media_dir=tmp_path / "media",
+        install_dir=tmp_path / "apps",
+        cloudflare_tunnel_enabled=True,
+    )
+    engine = WizardEngine(state_file=tmp_path / "wizard_state.json", cfg=cfg)
+    step6 = engine.get_step_data(6)
+    assert step6["cloudflare_tunnel_enabled"] is True
+    assert engine.get_step_data(11)["summary"]["cloudflare_tunnel_enabled"] is True
+    # The wizard UI posts the switch back as it was shown.
+    engine.update_step_selections(6, {"vpn_provider": "none", "cloudflare_tunnel_enabled": step6["cloudflare_tunnel_enabled"]})
+    engine.apply_initial_settings()
+    assert cfg.cloudflare_tunnel_enabled is True

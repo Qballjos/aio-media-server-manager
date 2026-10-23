@@ -101,6 +101,8 @@ You usually do **not** need an explicit Block rule for the open internet — no 
 | `sonarr` / `radarr` / `lidarr` / `prowlarr` / `bazarr` | Admins | Automation UIs |
 | `qbittorrent` / `sabnzbd` | Admins | Downloads |
 | `jellyfin` / `plex` / `seerr` | Family (or admins) | Day-to-day watching |
+| `nzbget` | Admins | Usenet, same as SABnzbd |
+| `shelfmark` / `grimmory` / `neutarr` | As needed | Books, audiobooks, and the NeutArr UI |
 | Other apps | As needed | Same idea |
 
 Use whatever subdomains you set under **Public subdomains**.

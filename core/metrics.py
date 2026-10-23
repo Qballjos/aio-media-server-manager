@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Any
 
 import psutil
@@ -14,6 +15,8 @@ _proc_cache: dict[int, psutil.Process] = {}
 _metrics_cache: dict[str, Any] | None = None
 _metrics_cache_at = 0.0
 _METRICS_TTL = 2.0
+# The host's /sys, bind-mounted read-only by the compose file; the container's own /sys only shows its netns.
+_HOST_NET = Path("/host/sys/class/net")
 
 
 def clear_metrics_cache() -> None:
@@ -65,11 +68,8 @@ def collect_metrics() -> dict[str, Any]:
     except Exception:
         pass
     try:
-        net = psutil.net_io_counters()
-        payload["network"] = {
-            "bytes_sent": getattr(net, "bytes_sent", 0),
-            "bytes_recv": getattr(net, "bytes_recv", 0),
-        }
+        recv, sent = _network_totals()
+        payload["network"] = {"bytes_sent": sent, "bytes_recv": recv}
     except Exception:
         pass
     try:
@@ -86,6 +86,29 @@ def collect_metrics() -> dict[str, Any]:
     _metrics_cache = payload
     _metrics_cache_at = now
     return dict(payload)
+
+
+def _network_totals() -> tuple[int, int]:
+    """Bytes received and sent by the host's physical NICs when its /sys is mounted.
+
+    Without that mount: this container's interfaces, minus loopback (app-to-app
+    traffic) and tunnels (their traffic is counted again on eth0).
+    """
+    if _HOST_NET.is_dir():
+        recv = sent = 0
+        # Only physical NICs have a device link; this skips lo, bridges, veths and bonds.
+        for nic in _HOST_NET.iterdir():
+            if (nic / "device").exists():
+                recv += int((nic / "statistics" / "rx_bytes").read_text())
+                sent += int((nic / "statistics" / "tx_bytes").read_text())
+        if recv or sent:
+            return recv, sent
+    recv = sent = 0
+    for name, counters in psutil.net_io_counters(pernic=True).items():
+        if not name.startswith(("lo", "wg", "tun")):
+            recv += counters.bytes_recv
+            sent += counters.bytes_sent
+    return recv, sent
 
 
 def _process_metrics() -> list[dict[str, Any]]:

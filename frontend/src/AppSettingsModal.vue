@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
+import { openApp } from './appOpen.js'
+import { copyText } from './clipboard.js'
 import { useToasts } from './useToasts.js'
 
 const props = defineProps({
@@ -41,6 +43,7 @@ const settingsError = ref('')
 
 const actionLoading = ref({})
 const vuetorrentUpdating = ref(false)
+const setupTokenCopied = ref(false)
 
 async function loadSettings(service) {
   settingsError.value = ''
@@ -66,6 +69,7 @@ async function loadSettings(service) {
       recyclarrPrefs: {}
     }
     recyclarrMeta.value = null
+    setupTokenCopied.value = false
     if (service.name === 'recyclarr') {
       const rec = await apiRequest('/api/recyclarr')
       const recData = await readJson(rec)
@@ -147,6 +151,8 @@ async function saveAppSettings() {
           method: 'PATCH',
           body: JSON.stringify({
             sonarr_web_1080p: !!settingsForm.value.recyclarrPrefs.sonarr_web_1080p,
+            sonarr_all_sources: !!settingsForm.value.recyclarrPrefs.sonarr_all_sources,
+            sonarr_older_tv: !!settingsForm.value.recyclarrPrefs.sonarr_older_tv,
             sonarr_web_2160p: !!settingsForm.value.recyclarrPrefs.sonarr_web_2160p,
             sonarr_anime: !!settingsForm.value.recyclarrPrefs.sonarr_anime,
             radarr_hd: !!settingsForm.value.recyclarrPrefs.radarr_hd,
@@ -209,6 +215,25 @@ async function saveAppSettings() {
     settingsError.value = err.message || 'Could not save settings.'
   } finally {
     settingsLoading.value = false
+  }
+}
+
+async function copySetupToken() {
+  const token = settingsMeta.value?.setup_token
+  if (!token) return
+  settingsError.value = ''
+  try {
+    await copyText(token)
+    setupTokenCopied.value = true
+    showToast('Setup token copied', 'success')
+    setTimeout(() => { setupTokenCopied.value = false }, 2500)
+  } catch {
+    const field = document.getElementById('neutarr-setup-token')
+    if (field && typeof field.select === 'function') {
+      field.focus()
+      field.select()
+    }
+    settingsError.value = 'Copy failed. The token is selected — press Cmd/Ctrl+C.'
   }
 }
 
@@ -337,8 +362,35 @@ watch(
           </p>
           <p v-if="openUiUrl" class="settings-hint">
             Open UI:
-            <a :href="openUiUrl" target="_blank" rel="noopener noreferrer" class="link-btn font-mono">{{ openUiUrl }}</a>
+            <a :href="openUiUrl" target="_blank" rel="noopener noreferrer" class="link-btn font-mono" @click="openApp($event, service.name, openUiUrl)">{{ openUiUrl }}</a>
           </p>
+          <div v-if="settingsApp.name === 'neutarr'" class="ui-field-block">
+            <label class="ui-field">
+              First-run setup token
+              <span class="setup-token-row">
+                <input
+                  id="neutarr-setup-token"
+                  class="ui-input font-mono"
+                  type="text"
+                  readonly
+                  :value="settingsMeta?.setup_token || ''"
+                  placeholder="Appears after NeutArr starts, until setup finishes"
+                />
+                <button
+                  type="button"
+                  class="ui-btn ui-btn-ghost"
+                  :disabled="!settingsMeta?.setup_token"
+                  @click="copySetupToken"
+                >
+                  {{ setupTokenCopied ? 'Copied' : 'Copy' }}
+                </button>
+              </span>
+            </label>
+            <p class="settings-hint">
+              NeutArr writes this the first time it starts. Paste it into NeutArr's setup screen.
+              The token is removed after the account is created.
+            </p>
+          </div>
           <div v-if="settingsMeta?.daemon !== false" class="ui-switch-row">
             <div class="ui-switch-copy">
               <strong>Start with the manager</strong>
@@ -379,7 +431,7 @@ watch(
               <span>
                 On by default. Uses
                 <a href="https://github.com/VueTorrent/VueTorrent" target="_blank" rel="noopener noreferrer">VueTorrent</a>
-                instead of the stock qBittorrent WebUI. Turn off for the stock UI. Turning back on re-downloads the latest release. *Arr still uses the same WebAPI.
+                instead of the stock qBittorrent WebUI. Turn off for the stock UI. Turning back on re-downloads the latest release. Sonarr, Radarr, and Lidarr still use the same WebAPI.
               </span>
               <span v-if="settingsMeta.vuetorrent_version" class="settings-hint">
                 Installed {{ settingsMeta.vuetorrent_version }}

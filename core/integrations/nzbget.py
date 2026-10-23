@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Optional
 
 import requests
@@ -17,6 +18,37 @@ def nzbget_credentials() -> tuple[str, str]:
     if shared:
         return shared
     return "nzbget", "tegbzn6789"
+
+
+def read_nzbget_conf_server(path: Path) -> dict[str, Any] | None:
+    """Server1 from nzbget.conf, skipping the placeholder the bundled template ships with."""
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    conf: dict[str, str] = {}
+    for line in lines:
+        key, sep, value = line.partition("=")
+        if sep and key.strip().startswith("Server1."):
+            conf[key.strip()[len("Server1."):].lower()] = value.strip()
+    host = conf.get("host", "")
+    if not host or host == "my.newsserver.com" or conf.get("active", "yes") != "yes":
+        return None
+
+    def number(key: str, default: int) -> int:
+        try:
+            return int(conf.get(key, ""))
+        except ValueError:
+            return default
+
+    return {
+        "host": host,
+        "port": number("port", 563),
+        "ssl": conf.get("encryption", "no") == "yes",
+        "username": conf.get("username", ""),
+        "password": conf.get("password", ""),
+        "connections": number("connections", 8),
+    }
 
 
 class NZBGetClient:

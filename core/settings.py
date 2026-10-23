@@ -50,7 +50,8 @@ _PERSISTED_KEYS = (
     "backup_day_of_month",
 )
 # Wizard / Settings values in amm_config.json beat compose defaults such as
-# AMM_VPN_ENABLED=false, otherwise a restart silently turns VPN off.
+# AMM_VPN_ENABLED=false / AMM_CLOUDFLARE_TUNNEL_ENABLED=false, otherwise a
+# restart silently turns VPN or the Cloudflare tunnel off.
 _FILE_WINS_KEYS = frozenset(
     {
         "vpn_enabled",
@@ -58,6 +59,7 @@ _FILE_WINS_KEYS = frozenset(
         "vpn_provider",
         "vpn_protocol",
         "vpn_config_path",
+        "cloudflare_tunnel_enabled",
     }
 )
 

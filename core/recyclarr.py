@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ LAST_SYNC_NAME = "last-sync.json"
 MANAGED_MARK = "AMM Recyclarr managed"
 SETTINGS_NAME = "settings.yml"
 _GIT_PATH_RE = re.compile(r"^git_path:\s*.*$", re.MULTILINE)
+_ERROR_LINE_RE = re.compile(r"\[(?:[\d:]+ )?(?:ERR|FTL)\]\s*(.+)")
 _GIT_MISSING = (
     "Recyclarr needs git to clone TRaSH Guides. "
     "Install git on the host (native) or recreate the container from an image that includes git."
@@ -36,11 +38,101 @@ _SONARR_ANIME_REMUX_1080P = "20e0fc959f1f1704bed501f23bdae76f"
 _RADARR_HD_BLURAY_WEB = "d1d67249d3890e49bc12e275d989a7e9"
 _RADARR_UHD_BLURAY_WEB = "64fb5f9858489bdac2af690e27c8f42f"
 
+def _sonarr_all_sources_block(resolution: str) -> str:
+    """WEB, Bluray and HDTV in one group: all are accepted and none replaces another just for its
+    source; TRaSH scores still pick the best release. The guide's cutoff names its "WEB …" group,
+    which empties out here, so the cutoff points at the new group."""
+    return "\n".join(
+        [
+            "        upgrade:",
+            "          allowed: true",
+            f"          until_quality: {resolution}",
+            "          until_score: 10000",
+            "        qualities:",
+            f"          - name: {resolution}",
+            "            qualities:",
+            *(f"              - {source}-{resolution}" for source in ("WEBDL", "WEBRip", "Bluray", "HDTV")),
+        ]
+    )
+
+
+SONARR_OLDER_TV = "older tv shows"
+# Older series often only exist as Bluray, HDTV or 720p: 1080p first, 720p when that is all there is.
+_SONARR_OLDER_TV_PROFILE = f"""\
+      - name: {SONARR_OLDER_TV}
+        reset_unmatched_scores:
+          enabled: true
+        min_format_score: 0
+        upgrade:
+          allowed: true
+          until_quality: 1080p
+          until_score: 10000
+        qualities:
+          - name: 1080p
+            qualities:
+              - WEBDL-1080p
+              - WEBRip-1080p
+              - Bluray-1080p
+              - HDTV-1080p
+          - name: 720p
+            qualities:
+              - WEBDL-720p
+              - WEBRip-720p
+              - Bluray-720p
+              - HDTV-720p"""
+# A profile without a trash_id gets no guide scores, so it gets the ones WEB-1080p uses: the WEB
+# tiers and the TRaSH groups that keep out unwanted formats (LQ, BR-DISK, x265 HD, …). Naming a
+# default group here replaces the guide's auto-sync of it, so its guide profiles are listed too.
+_SONARR_SCORE_GROUPS = (
+    ("59c3af66780d08332fdc64e68297098f", "[Unwanted] Unwanted Formats", (_SONARR_WEB_1080P, _SONARR_WEB_2160P)),
+    ("22256473b656e195eabc2798e326fbb7", "[Required] Repack/Proper", ()),
+    ("158188097a58d7687dee647e04af0da3", "[Optional] Golden Rule HD", (_SONARR_WEB_1080P,)),
+    ("74aff4168620ed49dcc67e92b2c2a5b4", "[Optional] Language Profiles", (_SONARR_WEB_1080P, _SONARR_WEB_2160P)),
+    (
+        "abe720fab2d27682adc2a735136cec02",
+        "[Streaming Services] General",
+        (_SONARR_WEB_1080P, _SONARR_WEB_2160P, _SONARR_ANIME_REMUX_1080P),
+    ),
+    ("85fae4a2294965b75710ef2989c850eb", "[Streaming Services] HD/UHD boost", (_SONARR_WEB_1080P, _SONARR_WEB_2160P)),
+)
+
+
+def _sonarr_older_tv_scores(guide_profiles: set[str]) -> str:
+    lines = [
+        "    custom_formats:",
+        "      - trash_ids:",
+        "          - e6258996055b9fbab7e9cb2f75819294  # WEB Tier 01",
+        "          - 58790d4e2fdcd9733aa7ae68ba2bb503  # WEB Tier 02",
+        "          - d84935abd3f8556dcd51d4f27e22d0a6  # WEB Tier 03",
+        "          - d0c516558625b04b363fa6c5c2c7cfd4  # WEB Scene",
+        "        assign_scores_to:",
+        f"          - name: {SONARR_OLDER_TV}",
+        "    custom_format_groups:",
+        "      add:",
+    ]
+    for trash_id, label, guide in _SONARR_SCORE_GROUPS:
+        lines += [f"        - trash_id: {trash_id}  # {label}", "          assign_scores_to:", f"            - name: {SONARR_OLDER_TV}"]
+        lines += [f"            - trash_id: {profile}" for profile in guide if profile in guide_profiles]
+    return "\n".join(lines)
+
+
 PROFILE_OPTIONS = (
     {
         "id": "sonarr_web_1080p",
         "label": "Sonarr WEB-1080p",
         "guide": "https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles/#web-1080p",
+        "default": True,
+    },
+    {
+        "id": "sonarr_all_sources",
+        "label": "Sonarr WEB profiles: also accept Bluray and HDTV",
+        "guide": "https://recyclarr.dev/wiki/yaml/config-reference/quality-profiles/",
+        "default": True,
+    },
+    {
+        "id": "sonarr_older_tv",
+        "label": "Sonarr older tv shows (720p–1080p, any source)",
+        "guide": "https://recyclarr.dev/wiki/yaml/config-reference/quality-profiles/",
         "default": True,
     },
     {
@@ -259,7 +351,25 @@ def apply_prefs_and_render(prefs: dict[str, Any], *, force: bool = True) -> dict
     return config_payload()
 
 
+_sync_lock = threading.Lock()
+
+
 def run_sync(timeout: float = 180.0) -> dict[str, Any]:
+    """Run one Recyclarr sync; a second request while one runs returns at once."""
+    if not _sync_lock.acquire(blocking=False):
+        return {
+            "ok": False,
+            "detail": "A Recyclarr sync is already running. Wait for it to finish.",
+            "log": "",
+            "returncode": None,
+        }
+    try:
+        return _run_sync_unlocked(timeout)
+    finally:
+        _sync_lock.release()
+
+
+def _run_sync_unlocked(timeout: float = 180.0) -> dict[str, Any]:
     catalog = ApplicationCatalog()
     if not catalog.has("recyclarr"):
         return _fail_sync(None, "Recyclarr is not in the catalog.")
@@ -329,8 +439,14 @@ def run_sync(timeout: float = 180.0) -> dict[str, Any]:
         detail = "Sync finished."
     else:
         detail = f"Recyclarr exited {completed.returncode}."
+        error = _ERROR_LINE_RE.search(log)
+        if error:
+            # Recyclarr's own reason, e.g. a TRaSH Guides clone or Sonarr/Radarr connection error.
+            detail = f"Recyclarr exited {completed.returncode}: {error.group(1).strip()[:300]}"
         if "start process 'git'" in lowered or "file path 'git'" in lowered:
             detail = _GIT_MISSING
+    if not ok:
+        logger.warning("Recyclarr sync failed: %s", detail)
     result = {
         "ok": ok,
         "detail": detail,
@@ -436,12 +552,19 @@ def _service_instance(
     qdef: str,
     profiles: list[tuple[str, str]],
     naming: str,
+    overrides: dict[str, str] | None = None,
+    extra_profiles: str = "",
+    extra: str = "",
 ) -> str:
     profile_lines: list[str] = []
     for trash_id, comment in profiles:
         profile_lines.append(f"      - trash_id: {trash_id}  # {comment}")
         profile_lines.append("        reset_unmatched_scores:")
         profile_lines.append("          enabled: true")
+        if overrides and trash_id in overrides:
+            profile_lines.append(overrides[trash_id])
+    if extra_profiles:
+        profile_lines.append(extra_profiles)
     return (
         f"  {name}:\n"
         f"    base_url: {url}\n"
@@ -452,6 +575,7 @@ def _service_instance(
         "    quality_profiles:\n"
         + "\n".join(profile_lines)
         + "\n"
+        + (extra + "\n" if extra else "")
         + naming
     )
 
@@ -476,9 +600,14 @@ def _render_yaml(
         sonarr_profiles.append((_SONARR_ANIME_REMUX_1080P, "[Anime] Remux-1080p"))
     sonarr_qdef = (
         "series"
-        if prefs.get("sonarr_web_1080p") or prefs.get("sonarr_web_2160p")
+        if prefs.get("sonarr_web_1080p") or prefs.get("sonarr_web_2160p") or prefs.get("sonarr_older_tv")
         else "anime"
     )
+    sonarr_overrides: dict[str, str] = {}
+    if prefs.get("sonarr_all_sources"):
+        sonarr_overrides[_SONARR_WEB_1080P] = _sonarr_all_sources_block("1080p")
+        sonarr_overrides[_SONARR_WEB_2160P] = _sonarr_all_sources_block("2160p")
+    older_tv = bool(prefs.get("sonarr_older_tv"))
     radarr_profiles: list[tuple[str, str]] = []
     if prefs.get("radarr_hd"):
         radarr_profiles.append((_RADARR_HD_BLURAY_WEB, "HD Bluray + WEB"))
@@ -493,7 +622,7 @@ def _render_yaml(
         "# https://recyclarr.dev/wiki/guide-configs/",
         "",
     ]
-    if sonarr_profiles:
+    if sonarr_profiles or older_tv:
         parts.append("sonarr:")
         parts.append(
             _service_instance(
@@ -503,6 +632,9 @@ def _render_yaml(
                 qdef=sonarr_qdef,
                 profiles=sonarr_profiles,
                 naming=_naming_block("sonarr", naming),
+                overrides=sonarr_overrides,
+                extra_profiles=_SONARR_OLDER_TV_PROFILE if older_tv else "",
+                extra=_sonarr_older_tv_scores({trash_id for trash_id, _ in sonarr_profiles}) if older_tv else "",
             )
         )
     if radarr_profiles:
@@ -517,6 +649,6 @@ def _render_yaml(
                 naming=_naming_block("radarr", naming),
             )
         )
-    if not sonarr_profiles and not radarr_profiles:
+    if not sonarr_profiles and not older_tv and not radarr_profiles:
         parts.append("# No TRaSH profiles selected.")
     return "\n".join(parts).rstrip() + "\n"

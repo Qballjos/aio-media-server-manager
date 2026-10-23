@@ -10,6 +10,8 @@ export const SETTINGS_SECTIONS = [
   'updates',
   'backups',
   'network',
+  'notifications',
+  'usenet',
   'homepage',
   'diagnostics',
 ]
@@ -36,6 +38,8 @@ export const SETTINGS_NAV = [
   ['updates', 'Updates'],
   ['backups', 'Backups'],
   ['network', 'Network'],
+  ['notifications', 'Notifications'],
+  ['usenet', 'Usenet'],
   ['homepage', 'Homepage'],
   ['diagnostics', 'Diagnostics'],
 ]

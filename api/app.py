@@ -16,15 +16,18 @@ from api.routers import auth as auth_router
 from api.routers import backups as backups_router
 from api.routers import branding as branding_router
 from api.routers import catalog as catalog_router
+from api.routers import downloads as downloads_router
 from api.routers import diagnostics as diagnostics_router
 from api.routers import health as health_router
 from api.routers import homepage as homepage_router
 from api.routers import integrations as integrations_router
 from api.routers import logs as logs_router
+from api.routers import notifications as notifications_router
 from api.routers import recyclarr as recyclarr_router
 from api.routers import settings as settings_router
 from api.routers import system as system_router
 from api.routers import updates as updates_router
+from api.routers import usenet as usenet_router
 from api.routers import wizard as wizard_router
 from api.routers import vpn as vpn_router
 from api.routers import cloudflare_hostnames as cloudflare_hostnames_router
@@ -122,8 +125,13 @@ def create_app() -> FastAPI:
         from core.integrations.lifecycle import vpn_isolation_loop
         from core.update_schedule import scheduler_loop
 
+        from core.downloads_pause import resume_when_due_loop
+        from core.notifications import notifications_loop
+
         asyncio.create_task(vpn_isolation_loop())
         asyncio.create_task(scheduler_loop())
+        asyncio.create_task(resume_when_due_loop())
+        asyncio.create_task(notifications_loop())
         yield
         logger.info("FastAPI application shutting down.")
 
@@ -163,6 +171,7 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     app.include_router(health_router.router)
     app.include_router(homepage_router.router)
+    app.include_router(downloads_router.router)
     app.include_router(auth_router.router)
     app.include_router(catalog_router.router)
     app.include_router(applications_router.router)
@@ -173,12 +182,14 @@ def create_app() -> FastAPI:
     app.include_router(settings_router.router)
     app.include_router(branding_router.router)
     app.include_router(updates_router.router)
+    app.include_router(usenet_router.router)
     app.include_router(wizard_router.router)
     app.include_router(backups_router.router)
     app.include_router(vpn_router.router)
     app.include_router(cloudflare_tunnel_router.router)
     app.include_router(cloudflare_hostnames_router.router)
     app.include_router(diagnostics_router.router)
+    app.include_router(notifications_router.router)
 
     @app.middleware("http")
     async def _no_cache_spa_shell(request, call_next):
