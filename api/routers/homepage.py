@@ -13,6 +13,7 @@ from core.debug_access import require_local_or_session
 from core.homepage import (
     homepage_art,
     homepage_downloads,
+    homepage_recent,
     homepage_request,
     homepage_search,
     homepage_snapshot,
@@ -66,6 +67,14 @@ async def get_homepage_trending(request: Request, page: int = Query(2, ge=1, le=
     host = request.url.hostname or "127.0.0.1"
     scheme = request.url.scheme or "http"
     return await asyncio.to_thread(homepage_trending, host, page, scheme)
+
+
+@router.get("/recent", summary="Another page of Jellyfin's shows and movies, newest first")
+async def get_homepage_recent(request: Request, page: int = Query(1, ge=1, le=500)) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    host = request.url.hostname or "127.0.0.1"
+    scheme = request.url.scheme or "http"
+    return await asyncio.to_thread(homepage_recent, host, page, scheme)
 
 
 @router.get("/art", summary="Poster image for Home rails")
