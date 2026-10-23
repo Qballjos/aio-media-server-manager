@@ -165,6 +165,19 @@ Optional live Vue reload (API still in Docker): `cd frontend && npm ci && npm ru
 
 ---
 
+## 📌 Intended Use & Disclaimer
+
+### What This Project Is For
+This project is designed solely as a self-hosting management tool and deployment stack to help users automate, configure, and manage personal media servers and lab infrastructure. It is intended for:
+* Managing personal digital libraries and media legally owned by the user (e.g., home videos, family photos, public domain content, or personal physical backups).
+* Streamlining local network setup, container management, and server administration for home lab enthusiasts.
+
+### What This Project Is NOT For
+* **Not for illegal downloading or piracy:** This repository does not host, provide, or distribute copyrighted content, nor is it designed to encourage copyright infringement.
+* **Not a license or legal shield:** Using this software stack to acquire, download, stream, or distribute unauthorized copyrighted material violates copyright laws in most jurisdictions. Users are solely responsible for ensuring their usage complies with all local, state, and international laws.
+
+---
+
 ## Security
 
 Report vulnerabilities through [GitHub private advisories](https://github.com/Qballjos/aio-media-server-manager/security/advisories/new), not public issues.
