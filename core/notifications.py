@@ -290,8 +290,8 @@ def send_test(channel: str) -> None:
 # --------------------------------------------------------------------------- watching
 
 
-def snapshot() -> dict[str, Any]:
-    """The facts the loop compares: sick apps, VPN/tunnel up, pending updates, full disks."""
+def snapshot(*, disks: bool = True) -> dict[str, Any]:
+    """The facts the loop compares: sick apps, VPN/tunnel up, pending updates, full disks (a test write per data path; skip with disks=False)."""
     from core.cloudflare_tunnel import cloudflare_tunnel
     from core.supervisor import ProcessSupervisor
     from core.vpn import vpn_manager
@@ -324,6 +324,8 @@ def snapshot() -> dict[str, Any]:
         snap["updates"] = sorted(names)
     except Exception as exc:
         logger.debug("notifications: update status failed: %s", exc)
+    if not disks:
+        return snap
     try:
         import psutil
 

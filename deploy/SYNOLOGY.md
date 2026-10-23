@@ -61,6 +61,8 @@ If GHCR is private: `sudo docker login ghcr.io` before starting the project.
 
 The UI should show a single service `aio-media-manager`. Open `http://<nas-ip>:8080` for the manager. **Open UI** on catalog cards uses the app ports (Sonarr `8989`, Radarr `7878`, …), which the project compose now publishes. If you generated compose before that change, copy the `ports:` list from [`synology/docker-compose.yml`](synology/docker-compose.yml) into the project file and recreate the container.
 
+The install script also mounts host `/sys` read-only at `/host/sys` so Home's Server card shows the NAS network traffic. If the project compose was generated before that, add `- /sys:/host/sys:ro` under `volumes:` and recreate. Without it, the graph is only this container's traffic. Installed apps update later from **Settings → Updates** (schedules default to off). Recreating the project updates AIO.
+
 To start from SSH instead of the UI:
 
 ```bash

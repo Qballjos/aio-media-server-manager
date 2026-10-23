@@ -36,7 +36,7 @@ FORMAT_VERSION = 2
 MANIFEST_NAME = ".amm_backup.json"
 MANAGER_SECTION = "manager"
 SNAPSHOT_DIR_NAME = "app-snapshots"
-SNAPSHOT_KEEP = 3
+SNAPSHOT_KEEP = 1  # the settings from before the last update of each app; older ones are deleted
 
 _NAME_RE = re.compile(r"^amm-[A-Za-z0-9_-]+\.tar\.gz$")
 _SQLITE_MAGIC = b"SQLite format 3\x00"
