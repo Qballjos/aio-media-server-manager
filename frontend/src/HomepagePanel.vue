@@ -1298,37 +1298,39 @@ onUnmounted(() => {
           <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :disabled="searching">Search</button>
         </form>
         <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
-        <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" aria-label="Close search results" title="Close" @click="closeSearch">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-        <p v-if="notice" class="home-notice">{{ notice }}</p>
-        <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
-        <p v-else-if="!snapshot.seerr.available && !notice" class="home-muted">
-          Install and start Seerr to request titles from this page.
-        </p>
-        <p v-if="searching" class="home-muted">Searching…</p>
-        <p v-else-if="searchedFor && !results.length && !searchError" class="home-muted">
-          No results for “{{ searchedFor }}”.
-        </p>
-        <ul v-if="results.length" class="home-results">
-          <li v-for="item in results" :key="`${item.source}-${item.mediaType}-${item.mediaId}`" class="home-result">
-            <img v-if="item.poster" :src="item.poster" alt="" class="home-poster" />
-            <div class="home-result-body">
-              <strong>{{ item.title }}</strong>
-              <span>{{ item.mediaType === 'tv' ? 'TV' : 'Movie' }} {{ String(item.year || '').slice(0, 4) }}</span>
-              <span v-if="statusLabel(item)" class="home-status" :class="`is-${item.status}`">{{ statusLabel(item) }}</span>
-            </div>
-            <button
-              v-if="item.can_request && searchSeerr"
-              type="button"
-              class="ui-btn ui-btn-primary"
-              :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
-              @click="requestTitle(item)"
-            >
-              {{ requestBusy === `${item.mediaType}-${item.mediaId}` ? 'Requesting…' : 'Get it now' }}
+          <div class="home-results-scroll">
+            <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" aria-label="Close search results" title="Close" @click="closeSearch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
             </button>
-          </li>
-        </ul>
+            <p v-if="notice" class="home-notice">{{ notice }}</p>
+            <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
+            <p v-else-if="!snapshot.seerr.available && !notice" class="home-muted">
+              Install and start Seerr to request titles from this page.
+            </p>
+            <p v-if="searching" class="home-muted">Searching…</p>
+            <p v-else-if="searchedFor && !results.length && !searchError" class="home-muted">
+              No results for “{{ searchedFor }}”.
+            </p>
+            <ul v-if="results.length" class="home-results">
+              <li v-for="item in results" :key="`${item.source}-${item.mediaType}-${item.mediaId}`" class="home-result">
+                <img v-if="item.poster" :src="item.poster" alt="" class="home-poster" />
+                <div class="home-result-body">
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.mediaType === 'tv' ? 'TV' : 'Movie' }} {{ String(item.year || '').slice(0, 4) }}</span>
+                  <span v-if="statusLabel(item)" class="home-status" :class="`is-${item.status}`">{{ statusLabel(item) }}</span>
+                </div>
+                <button
+                  v-if="item.can_request && searchSeerr"
+                  type="button"
+                  class="ui-btn ui-btn-primary"
+                  :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
+                  @click="requestTitle(item)"
+                >
+                  {{ requestBusy === `${item.mediaType}-${item.mediaId}` ? 'Requesting…' : 'Get it now' }}
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
       </section>
       </template>
@@ -2135,16 +2137,19 @@ onUnmounted(() => {
 }
 .home-hero-results {
   position: absolute;
-  top: calc(100% + 0.5rem);
+  top: calc(50% + 1.75rem - 1px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
   width: min(720px, max(100%, min(28rem, calc(100vw - 2rem))));
+  padding: 0;
+  text-align: left;
+}
+.home-results-scroll {
   max-height: min(60vh, 34rem);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 1rem 1.1rem;
-  text-align: left;
   display: grid;
   gap: 0.5rem;
 }
