@@ -77,9 +77,11 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr. Settings → Usenet holds the Usenet provider (server, port, SSL, login, connections) and sends it to SABnzbd and NZBGet; NZB indexers are added in Prowlarr. Prowlarr also gets a starter set of public indexers (1337x, The Pirate Bay, YTS, Nyaa.si, LimeTorrents, Knaben) with seed settings (ratio 1, 48 hours, season packs 7 days), and FlareSolverr is attached to the ones Cloudflare blocks. Remove any you do not want; they are not added back.
 
-**Home.** Launcher plus calendar, downloads, recently added, and Seerr search. Widget diagnostics live under **Settings → Diagnostics** (empty tiles explained; API keys never shown).
+**Home.** A grid with its own layout on phone, tablet, and desktop: greeting, search, calendar, downloading, recently added, requests, trending, now playing, storage, server, and needs attention, plus an app dock. Recently added and Trending keep loading as you scroll (Jellyfin recently added walks the library; Plex stays on its latest 20). The Server card shows the host's network traffic when `/sys` is mounted read-only at `/host/sys`. Arrange widgets with the layout control on the Home tab. The dock is shown or hidden under **Settings → Homepage**. Widget diagnostics live under **Settings → Diagnostics** (empty tiles explained; API keys never shown).
 
-**Visuals.** Dark / light / system theme, accent color, custom header title, and replaceable header icon, login logo, and favicon under **Settings → Visuals**.
+**Visuals.** Dark / light / system theme, accent color, wallpaper, custom header title, and replaceable header icon, login logo, and favicon under **Settings → Visuals**.
+
+**Notifications.** Settings → Notifications sends Discord and email when an app crash-loops, the VPN or Cloudflare tunnel drops, an update is available, or a disk passes 90% full, and again when it recovers.
 
 **Operations.** `config` / `downloads` / `media` with `PUID` / `PGID` and hardlink checks. Optional WireGuard or OpenVPN isolation for qBittorrent, Prowlarr, and Flaresolverr (Usenet stays off the tunnel). Optional VAAPI / QSV / NVIDIA transcoding. Optional Cloudflare Tunnel (`cloudflared` inside this appliance). Configuration backups with verify, per-app restore, and a schedule.
 
@@ -114,7 +116,7 @@ Each catalog card includes a help control that opens that project's official doc
 | Guide | What it covers |
 |-------|----------------|
 | [Install](docs/INSTALL.md) | Folders, ports, which platform guide to open |
-| [Using the dashboard](docs/USAGE.md) | First run, enabling apps, Open UI, common snags |
+| [Using the dashboard](docs/USAGE.md) | First run, Home, Settings, Open UI, updates |
 | [Docker](deploy/DOCKER.md) | Recommended way to run AIO |
 | [Linux](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md) | Platform-specific steps |
 | [Cloudflare Tunnel](deploy/CLOUDFLARE.md) | Remote HTTPS without opening router ports |
@@ -127,18 +129,21 @@ Local preview: `bash scripts/prepare-docs-site.sh && pip install -r requirements
 
 ## Install
 
-Create bind-mount directories on the host (downloads and media as children of **one** folder in your home so hardlinks work and the file manager can see them), then run the published image.
+Create the library folders in your home (downloads and media as children of **one** folder so hardlinks work and the file manager can see them), clone this repo for the compose file, then start the published image.
 
 ```bash
-mkdir -p "$HOME/aio-media-manager/downloads" "$HOME/aio-media-manager/media"
-sudo mkdir -p /opt/aio-media-manager/{config,backups}
-docker pull ghcr.io/qballjos/aio-media-server-manager:latest
+git clone https://github.com/Qballjos/aio-media-server-manager.git
+cd aio-media-server-manager
+mkdir -p "$HOME/aio-media-manager/downloads" "$HOME/aio-media-manager/media" config backups
+docker compose pull
 docker compose up -d
 ```
 
-Open `http://<host>:8080`. Create the administrator, complete the stack wizard, then use Catalog to install and start applications.
+Open `http://<host>:8080`. Create the administrator (username, email, password), complete the stack wizard, then use Catalog for anything you skipped.
 
-Image tags: `latest` (main), `sha-<git>`, and semver when a `v*` tag is pushed. Architectures: `linux/amd64`, `linux/arm64`. The manager runs on Python 3.14. Child runtimes on both architectures: Python 3.13 (Bazarr / SABnzbd), Node 22 (Seerr), JRE 25 and MariaDB (Grimmory), ffmpeg (Jellyfin / Plex), git (Recyclarr). Chromium/Xvfb ship only on `linux/amd64` for Flaresolverr. After a pull, **recreate** the container so new port mappings and runtimes take effect.
+That compose file mounts `./config`, `./backups`, and `$HOME/aio-media-manager` as `/data`, and host `/sys` read-only at `/host/sys` so Home's Server card counts the host's network cards. `PUID` and `PGID` in the file default to `1000` — set them to the output of `id` before the first start. A plain `docker run`, NAS layouts, and `/opt` paths are in the platform guides.
+
+Image tags: `latest` (main), `sha-<git>`, and semver when a `v*` tag is pushed. Architectures: `linux/amd64`, `linux/arm64`. The manager runs on Python 3.14. Child runtimes on both architectures: Python 3.13 (Bazarr / SABnzbd / Shelfmark), Node 22 (Seerr), JRE 25 and MariaDB (Grimmory), ffmpeg (Jellyfin / Plex), git (Recyclarr). Chromium/Xvfb ship only on `linux/amd64` for Flaresolverr. After a pull, **recreate** the container so new port mappings and runtimes take effect. That updates AIO. Sonarr, Seerr, and the other apps update from **Settings → Updates** (schedules default to off).
 
 Full steps: [docs/INSTALL.md](docs/INSTALL.md) · [deploy/DOCKER.md](deploy/DOCKER.md).
 

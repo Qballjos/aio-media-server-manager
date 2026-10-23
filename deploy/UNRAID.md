@@ -78,6 +78,7 @@ Then bind `/data` to `/mnt/cache/aio-media-manager` (same share, disk path) inst
    - `/config` → `/mnt/user/appdata/aio-media-manager`
    - `/data` → `/mnt/user/aio-media-manager`
    - `/backups` → `/mnt/user/backups/aio-media-manager`
+   - `/host/sys` → `/sys` (read-only). Home's Server card then shows the server's network traffic. The template lists this as **Host sys** (advanced). Without it, the graph is only this container's traffic.
 9. Variables: `PUID=99`, `PGID=100`, `TZ=<IANA timezone>`, `AMM_DOWNLOAD_DIR=/data/downloads`, `AMM_MEDIA_DIR=/data/media`. Optional: `GITHUB_TOKEN`.
 
 After updating the image, recreate the container so added WebUI port mappings take effect.
@@ -150,4 +151,4 @@ Prefer `/mnt/cache/aio-media-manager` or a single disk path for downloads and me
 
 ## Updates
 
-Change the repository tag or use Unraid's container update. Images are published from `main` as `:latest` and from git tags as semver.
+Change the repository tag or use Unraid's container update, then recreate so new ports and the Host sys mount apply. Images are published from `main` as `:latest` and from git tags as semver. That updates AIO. Installed apps update from **Settings → Updates** (schedules default to off).

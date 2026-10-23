@@ -67,7 +67,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now aio-media-manager
 ```
 
-Open `http://<host>:8080`.
+Open `http://<host>:8080`. Installed apps update later from **Settings → Updates** (schedules default to off). Updating this checkout and restarting the service updates AIO itself. On a native install, Home's Server card already sees the host's network cards.
 
 If systemd-managed Python is 3.14+, install a 3.13 interpreter for Bazarr (`AMM_CHILD_PYTHON` pointing at `python3.13`) or Bazarr will fail on missing `PIL` / unsupported Python.
 

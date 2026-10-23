@@ -60,7 +60,7 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 
     ---
 
-    Enable apps, open each web UI, wire libraries.
+    Home, Catalog, and each app's Open UI.
 
     [:octicons-arrow-right-24: Using the dashboard](USAGE.md)
 
@@ -128,7 +128,7 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 
     ---
 
-    Status, start/stop, and **Open UI** for every app you enable.
+    Home for what is new, playing, or needs a look. Catalog for install, start/stop, and **Open UI**.
 
 -   :material-television-play:{ .lg .middle } __Automation + libraries__
 
@@ -156,6 +156,15 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 Do not add separate Sonarr/Radarr/qBittorrent containers next to it.
 
 </div>
+
+## Intended use
+
+AIO is a self-hosting management tool for a personal media library and a home lab:
+
+- Files you own (home videos, family photos, public-domain media, or your own backups of physical media).
+- Local network setup and server administration.
+
+This repository does not host or distribute copyrighted content. It is not a licence or a legal shield. Using it to acquire, download, stream, or share unauthorized copyrighted material breaks copyright law in most places. You are responsible for following the laws where you live.
 
 ## Vibe coded
 
