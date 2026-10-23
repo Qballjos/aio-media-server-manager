@@ -65,8 +65,9 @@ RUN printf '%s\n' \
 #   *Arr/.NET (Sonarr, Radarr, Lidarr, Prowlarr, NeutArr, Recyclarr):
 #     libicu*, libssl3, libgssapi-krb5-2, zlib1g, libsqlite3-0, sqlite3
 #   SABnzbd / NZBGet: unrar (non-free RAR 5), par2cmdline-turbo, p7zip-full, python3.13, build-essential
-#   Bazarr / Shelfmark / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,
+#   Bazarr / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,
 #     libncurses6, python3.13, python3-dev, build-essential
+#   Shelfmark: manager Python 3.14 (upstream requires >=3.14), python3-dev, build-essential
 #   Jellyfin / Plex: ffmpeg, libfontconfig1
 #   Seerr: Node 22 (copied from nodebin)
 #   Grimmory: JRE 25 (copied from jre), mariadb-server

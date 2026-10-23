@@ -5,6 +5,8 @@ import { resolveSettingsSection, SETTINGS_NAV } from './router'
 import { apiError, apiRequest, readJson } from './api.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug } from './homepageDebug.js'
+import { versionLabel } from './statusChips.js'
+import { formatUptime } from './format.js'
 import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 import {
@@ -169,38 +171,6 @@ const publicTunnelChip = computed(() => {
   return { cls: 'is-warn', label: 'Cloudflare tunnel needed' }
 })
 
-const currentTime = ref('')
-let stopClock = null
-
-const showVpnStatusPill = computed(() => !!vpnLive.value.enabled)
-const vpnStatusOk = computed(() => !!vpnLive.value.tunnel_up)
-
-const showCloudflareStatusPill = computed(() => {
-  const t = tunnelLive.value || {}
-  const meta = hostnameMeta.value || {}
-  return !!(
-    form.value.cloudflare_tunnel_enabled ||
-    t.enabled ||
-    meta.tunnel_enabled ||
-    t.token_present ||
-    t.token_saved ||
-    meta.tunnel_token_present
-  )
-})
-
-const cloudflareStatusOk = computed(() => {
-  const t = tunnelLive.value || {}
-  const meta = hostnameMeta.value || {}
-  return !!(t.connected || meta.tunnel_connected)
-})
-
-const cloudflareStatusTitle = computed(() => {
-  if (cloudflareStatusOk.value) {
-    return 'Cloudflare Tunnel connected'
-  }
-  const t = tunnelLive.value || {}
-  return t.summary || 'Cloudflare Tunnel not connected'
-})
 const githubConfigured = ref(false)
 const jellyfinConfigured = ref(false)
 const seerrConfigured = ref(false)
@@ -842,6 +812,22 @@ function applySettingsPayload(data) {
   if (data.branding) applyBrandingPayload(data.branding)
 }
 
+/** This build's version, shown under System info (it used to sit under the title in the header). */
+const versionText = ref('')
+const buildSha = ref('')
+
+async function loadVersion() {
+  try {
+    const res = await apiRequest('/health')
+    if (!res.ok) return
+    const health = await readJson(res)
+    versionText.value = versionLabel(health)
+    buildSha.value = health.git_sha || ''
+  } catch (_) {
+    /* the version line is optional */
+  }
+}
+
 async function loadAll() {
   loading.value = true
   error.value = ''
@@ -1210,6 +1196,86 @@ async function runUpdateCheck() {
   }
 }
 
+/** Settings → Updates: update one app, or all of them one after another (each update restarts its app). */
+const updatingApp = ref('')
+const updateAllProgress = ref('')
+/** Where the running update is (the app's job message) and how long it has taken. */
+const updateStep = ref('')
+const updateElapsed = ref('')
+let updateTimer = null
+const catalogUpdates = computed(() => (snapshot.value.updates?.available || []).filter((item) => item.kind !== 'appliance'))
+
+function updateLabel(item) {
+  return item.display_name || item.name
+}
+
+async function watchUpdate(name) {
+  const started = Date.now()
+  const tick = async () => {
+    updateElapsed.value = formatUptime((Date.now() - started) / 1000)
+    try {
+      const res = await apiRequest('/api/catalog/install-jobs')
+      const job = res.ok ? ((await readJson(res)).jobs || []).find((row) => row.name === name) : null
+      if (job?.status === 'updating' && updatingApp.value === name) updateStep.value = job.message
+    } catch (_) {
+      /* the next tick tries again */
+    }
+  }
+  updateStep.value = 'Starting the update…'
+  updateElapsed.value = ''
+  updateTimer = setInterval(tick, 2000)
+}
+
+async function applyAppUpdate(item) {
+  updatingApp.value = item.name
+  watchUpdate(item.name)
+  try {
+    const res = await apiRequest(`/api/applications/${item.name}/update`, { method: 'POST' })
+    const data = await readJson(res)
+    // Updated but not running again (the VPN it needs is down, say): the new version is in, the app is not.
+    if (res.ok && data.status !== 'rolled_back') return { ok: true, version: data.version || item.latest_version, stopped: data.start_error || '' }
+    return { ok: false, reason: apiError(data, 'update failed') }
+  } catch (err) {
+    return { ok: false, reason: err.message || 'update failed' }
+  } finally {
+    clearInterval(updateTimer)
+    updatingApp.value = ''
+    updateStep.value = ''
+  }
+}
+
+async function updateOneApp(item) {
+  error.value = ''
+  notice.value = ''
+  const result = await applyAppUpdate(item)
+  // Reload first: loadAll clears the error line.
+  await loadAll()
+  emit('updates')
+  if (result.ok && result.stopped) error.value = `${updateLabel(item)} updated to ${result.version}, but it is stopped: ${result.stopped}`
+  else if (result.ok) notice.value = `${updateLabel(item)} updated to ${result.version}.`
+  else error.value = `${updateLabel(item)} was not updated: ${result.reason}`
+}
+
+async function updateAllApps() {
+  error.value = ''
+  notice.value = ''
+  const items = [...catalogUpdates.value]
+  const failed = []
+  const stopped = []
+  for (const [index, item] of items.entries()) {
+    updateAllProgress.value = `Updating ${index + 1} of ${items.length}: ${updateLabel(item)}…`
+    const result = await applyAppUpdate(item)
+    if (!result.ok) failed.push(`${updateLabel(item)} (${result.reason})`)
+    else if (result.stopped) stopped.push(`${updateLabel(item)} (${result.stopped})`)
+  }
+  updateAllProgress.value = ''
+  await loadAll()
+  emit('updates')
+  const problems = [failed.length ? `Not updated: ${failed.join(', ')}.` : '', stopped.length ? `Updated but stopped: ${stopped.join(', ')}.` : ''].filter(Boolean)
+  if (problems.length) error.value = `Updated ${items.length - failed.length} of ${items.length}. ${problems.join(' ')}`
+  else notice.value = `Updated all ${items.length} apps.`
+}
+
 const backupJobRunning = computed(() => backupJob.value?.status === 'running')
 const backupOnConfigVolume = computed(() => {
   const dir = backupInfo.value.backup_dir || ''
@@ -1504,22 +1570,18 @@ watch(section, (s, prev) => {
 })
 
 onMounted(() => {
+  loadVersion()
   widgetDebug.value = readHomepageWidgetDebug()
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
-  const tickClock = () => {
-    currentTime.value = new Date().toLocaleTimeString()
-  }
-  tickClock()
-  stopClock = startGuardedInterval(tickClock, 1000)
   loadAll()
   if (section.value === 'usenet') loadUsenet()
   if (section.value === 'notifications') loadNotifications()
 })
 onBeforeUnmount(() => {
   if (stopPwa) stopPwa()
-  if (stopClock) stopClock()
   stopJobPoll()
+  clearInterval(updateTimer)
 })
 </script>
 
@@ -1529,29 +1591,6 @@ onBeforeUnmount(() => {
       <div>
         <h2 class="section-title">Settings</h2>
         <p class="section-subtitle">Manage this appliance after first-run. Bind mounts and the manager port stay in compose/env.</p>
-      </div>
-      <div class="settings-header-metrics" role="status" aria-label="Live status">
-        <div class="metric-pill status-pill" :title="currentTime">
-          <span class="metric-val font-mono">{{ currentTime }}</span>
-        </div>
-        <RouterLink
-          v-if="showVpnStatusPill"
-          :to="{ name: 'settings', params: { section: 'network' } }"
-          class="metric-pill status-pill"
-          :class="vpnStatusOk ? 'is-ok' : 'is-bad'"
-          :title="vpnStatusOk ? 'VPN tunnel up' : 'VPN tunnel down'"
-        >
-          <span class="metric-val font-mono">VPN</span>
-        </RouterLink>
-        <RouterLink
-          v-if="showCloudflareStatusPill"
-          :to="{ name: 'settings', params: { section: 'network' } }"
-          class="metric-pill status-pill"
-          :class="cloudflareStatusOk ? 'is-ok' : 'is-bad'"
-          :title="cloudflareStatusTitle"
-        >
-          <span class="metric-val font-mono">CF</span>
-        </RouterLink>
       </div>
     </div>
 
@@ -1913,6 +1952,10 @@ onBeforeUnmount(() => {
         </div>
         <dl class="info-grid">
           <div>
+            <dt>Version</dt>
+            <dd class="font-mono" :title="buildSha ? `Build ${buildSha}` : undefined">{{ versionText || '—' }}</dd>
+          </div>
+          <div>
             <dt>Architecture</dt>
             <dd class="font-mono">{{ hostArch ? hostArch.toUpperCase() : '—' }}</dd>
           </div>
@@ -2044,12 +2087,27 @@ onBeforeUnmount(() => {
             <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="runUpdateCheck">Check now</button>
           </div>
         </form>
+        <div v-if="catalogUpdates.length > 1" class="share-row update-all-row">
+          <button type="button" class="ui-btn ui-btn-primary" :disabled="!!updatingApp || !!updateAllProgress || saving" @click="updateAllApps">
+            Update all ({{ catalogUpdates.length }})
+          </button>
+          <span v-if="updateAllProgress" class="share-meta" role="status">{{ updateAllProgress }}</span>
+        </div>
         <ul v-if="(snapshot.updates?.available || []).length" class="backup-list">
           <li v-for="item in snapshot.updates.available" :key="item.name">
             <div>
               <strong>{{ item.display_name || item.name }}</strong>
               <span class="path-line font-mono">{{ item.installed_version || '—' }} → {{ item.latest_version }}</span>
               <span v-if="item.kind === 'appliance'" class="path-line">{{ item.apply_hint }}</span>
+              <span v-if="updatingApp === item.name && updateStep" class="path-line" role="status">
+                {{ updateStep }}<template v-if="updateElapsed"> · {{ updateElapsed }}</template>
+              </span>
+            </div>
+            <div v-if="item.kind !== 'appliance'" class="share-row">
+              <a class="ui-btn ui-btn-ghost" :href="`#/catalog?q=${encodeURIComponent(item.name)}`">Open in Catalog</a>
+              <button type="button" class="ui-btn ui-btn-primary" :disabled="!!updatingApp || !!updateAllProgress" @click="updateOneApp(item)">
+                {{ updatingApp === item.name ? 'Updating…' : 'Update' }}
+              </button>
             </div>
           </li>
         </ul>
@@ -2286,6 +2344,10 @@ onBeforeUnmount(() => {
             {{ tunnelLive.binary_present ? 'cloudflared ready' : 'cloudflared missing' }}
           </span>
         </div>
+        <p class="ui-alert ui-alert-warning">
+          Run a tunnel token on one server only. If another server (say, the one this replaces) still runs it, Cloudflare
+          splits visitors between both and every login ends in "Session expired". Give a new server its own tunnel.
+        </p>
         <p class="share-meta">{{ tunnelLive.summary || 'Status loads when you open Network.' }}</p>
         <p v-if="tunnelLive.token_saved || tunnelLive.token_present" class="share-meta font-mono">
           Stored at {{ tunnelLive.token_file || '/config/cloudflare/tunnel.token' }}
@@ -2852,13 +2914,6 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 0.75rem;
 }
-.settings-header-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.4rem;
-}
 .section-title {
   font-size: 1.25rem;
   font-weight: 700;
@@ -3086,6 +3141,10 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
+}
+.update-all-row {
+  margin-top: 1rem;
+  align-items: center;
 }
 .backup-warn {
   color: var(--color-warning-fg);

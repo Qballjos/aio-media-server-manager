@@ -11,7 +11,9 @@ import HomeGrid from './HomeGrid.vue'
 import HomeGridSheet from './HomeGridSheet.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
-import { formatUptime } from './format.js'
+import { formatBytes, formatUptime } from './format.js'
+import { addNetSample } from './netRates.js'
+import { MOOD_COLORS, attentionMood, serverMood, storageMood } from './statusMood.js'
 import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepageDebug.js'
 
 const props = defineProps({
@@ -70,6 +72,8 @@ const emptySnapshot = () => ({
 
 const snapshot = ref(homeSnapshotCache.snapshot || emptySnapshot())
 const installJobs = ref({})
+/** Job states during which an app is being installed, set up or updated. */
+const BUSY_JOBS = ['queued', 'installing', 'configuring', 'updating']
 const progressNow = ref(Date.now() / 1000)
 const loading = ref(!homeSnapshotCache.snapshot)
 // Widgets still on their way: the first response only carries the launcher.
@@ -162,6 +166,7 @@ const requestsFilter = ref('all')
 const trendingFilter = ref('all')
 let poll = null
 let downloadsPoll = null
+let statusPoll = null
 let installPoll = null
 let searchTimer = null
 
@@ -210,12 +215,17 @@ const gridLayout = computed(() => layoutFor(activeBp.value))
 const widgetHasContent = computed(() => {
   const s = snapshot.value
   return {
-    search: true,
+    greeting: true,
+    searchbar: true,
     recent: !!(s.recent.length || (hasMediaServer.value && isPending('recent'))),
     requests: !!(s.requests.length || (s.seerr.available && isPending('requests'))),
     trending: !!(s.trending.length || (s.seerr.available && isPending('trending'))),
     calendar: !!(s.calendar.length || (hasCalendarSource.value && isPending('calendar'))),
     downloads: !!(s.downloads.length || downloadPause.value.paused),
+    playing: hasMediaServer.value,
+    storage: true,
+    server: true,
+    attention: true,
   }
 })
 // Empty widgets leave Home outside edit mode, and the rows they had to themselves close up.
@@ -327,6 +337,97 @@ const totalSpeed = computed(() => {
   }
   return formatSpeed(Object.values(bySource).reduce((sum, bps) => sum + bps, 0))
 })
+/** Now playing, Storage, Server and Needs attention share one status call, made only while one of them is on Home. */
+const STATUS_IDS = ['playing', 'storage', 'server', 'attention']
+const homeStatus = ref({ playing: [], server: null, storage: [], attention: [] })
+const statusLoaded = ref(false)
+const statusWanted = computed(() => gridLayout.value.some((item) => STATUS_IDS.includes(item.id)))
+const fullestVolume = computed(() => homeStatus.value.storage[0] || null)
+const fullestFree = computed(() => (fullestVolume.value ? formatBytes(fullestVolume.value.free).split(' ') : ['', '']))
+const serverStatus = computed(() => (homeStatus.value.server ? serverMood(homeStatus.value.server) : null))
+const storageStatus = computed(() => (fullestVolume.value ? storageMood(fullestVolume.value.percent) : null))
+const attentionStatus = computed(() => attentionMood(homeStatus.value.attention))
+const nowItem = computed(() => homeStatus.value.playing[0] || null)
+// The last 30 polls (5 minutes) of network use, drawn in the Server widget; kept for the tab, like the snapshot.
+const netHistory = ref(homeSnapshotCache.netHistory || [])
+const netHoverIdx = ref(-1)
+const netPoints = computed(() => netHistory.value.filter((point) => point.rxRate != null))
+const netShown = computed(() => netPoints.value[netHoverIdx.value] || netPoints.value.at(-1) || null)
+const netChart = computed(() => {
+  const points = netPoints.value
+  if (points.length < 2) return null
+  const first = points[0].at
+  const span = points.at(-1).at - first || 1
+  const top = Math.max(1, ...points.map((point) => Math.max(point.rxRate, point.txRate))) * 1.15
+  // ponytail: the line stops 4% short of the right edge so the marker on the latest point is not clipped.
+  const x = (point) => ((point.at - first) / span) * 96
+  const y = (value) => 40 - (value / top) * 38
+  const line = (key) => points.map((point, i) => `${i ? 'L' : 'M'}${x(point).toFixed(2)} ${y(point[key]).toFixed(2)}`).join(' ')
+  const peak = (key) => formatSpeed(Math.max(...points.map((point) => point[key]))) || '0 B/s'
+  const last = points.at(-1)
+  return {
+    down: line('rxRate'),
+    up: line('txRate'),
+    downArea: `${line('rxRate')} L ${x(last).toFixed(2)} 40 L 0 40 Z`,
+    upArea: `${line('txRate')} L ${x(last).toFixed(2)} 40 L 0 40 Z`,
+    end: { x: x(last), down: (y(last.rxRate) / 40) * 100, up: (y(last.txRate) / 40) * 100 },
+    minutes: Math.max(1, Math.round(span / 60)),
+    hoverX: netHoverIdx.value >= 0 && points[netHoverIdx.value] ? x(points[netHoverIdx.value]) : null,
+    label: `Network over the last ${Math.round(span / 60) || 1} min: download peak ${peak('rxRate')}, upload peak ${peak('txRate')}`,
+  }
+})
+const netAgo = computed(() => {
+  const point = netPoints.value[netHoverIdx.value]
+  return point ? `${Math.round(netPoints.value.at(-1).at - point.at)} s ago` : ''
+})
+
+function netRate(value) {
+  return value == null ? '—' : formatSpeed(value) || '0 B/s'
+}
+
+/** "12 MB/s" as figure and unit, for the big download number. */
+function netParts(value) {
+  return value == null ? ['—', ''] : netRate(value).split(' ')
+}
+
+function onNetHover(event) {
+  const box = event.currentTarget.getBoundingClientRect()
+  const points = netPoints.value
+  if (points.length < 2 || !box.width) return
+  const first = points[0].at
+  const at = first + ((event.clientX - box.left) / (box.width * 0.96)) * (points.at(-1).at - first)
+  let best = 0
+  points.forEach((point, i) => {
+    if (Math.abs(point.at - at) < Math.abs(points[best].at - at)) best = i
+  })
+  netHoverIdx.value = best
+}
+
+async function loadStatus() {
+  if (!statusWanted.value) return
+  try {
+    const res = await apiRequest('/api/homepage/status')
+    if (!res.ok) return
+    const data = await readJson(res)
+    homeStatus.value = { playing: data.playing || [], server: data.server || null, storage: data.storage || [], attention: data.attention || [] }
+    const net = data.server?.network
+    if (net && data.server.sampled_at) {
+      netHistory.value = addNetSample(netHistory.value, { at: data.server.sampled_at, rx: net.rx_bytes, tx: net.tx_bytes })
+      homeSnapshotCache.netHistory = netHistory.value
+    }
+    statusLoaded.value = true
+  } catch (_) {
+    /* keep the last status */
+  }
+}
+
+function upFor(seconds) {
+  const days = Math.floor(seconds / 86400)
+  if (days) return `${days} day${days === 1 ? '' : 's'}`
+  const hours = Math.floor(seconds / 3600)
+  return hours ? `${hours} h` : `${Math.max(1, Math.floor(seconds / 60))} min`
+}
+
 /** How far the moving downloads are together, for the small Downloading card. */
 const downloadsProgress = computed(() => {
   const list = movingDownloads.value
@@ -356,7 +457,7 @@ const launcherGroups = computed(() => {
   const groups = new Map()
   for (const app of snapshot.value.apps || []) {
     const job = installJobs.value[app.name]
-    const busy = !app.sick && job && ['queued', 'installing', 'configuring'].includes(job.status)
+    const busy = !app.sick && job && BUSY_JOBS.includes(job.status)
     const id = app.category || 'other'
     if (!groups.has(id)) {
       groups.set(id, {
@@ -384,23 +485,41 @@ const launcherGroups = computed(() => {
 const dockApps = computed(() => launcherGroups.value.flatMap((group) => group.apps))
 const dockNotes = computed(() =>
   dockApps.value
-    .filter((app) => app.sick || ['queued', 'installing', 'configuring'].includes(app.state))
+    .filter((app) => app.sick || BUSY_JOBS.includes(app.state))
     .map((app) => [`${app.display_name}: ${app.state_label || app.state}`, app.progress_message].filter(Boolean).join(' — ')),
 )
 
-const recentItems = computed(() =>
-  (snapshot.value.recent || []).map((item) => withPublicUrls(item, item.source)),
-)
+// Every Jellyfin show and movie, newest first, appended as the rail scrolls; the snapshot keeps the latest activity fresh.
+const recentMore = ref([])
+const recentItems = computed(() => {
+  const seen = new Set()
+  return [...(snapshot.value.recent || []), ...recentMore.value]
+    .filter((item) => {
+      const key = `${item.source}-${item.id || item.title}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .map((item) => withPublicUrls(item, item.source))
+})
 const requestItems = computed(() =>
   (snapshot.value.requests || [])
     .filter((item) => mediaTypeMatches(item, requestsFilter.value))
     .map((item) => withPublicUrls(item, 'seerr')),
 )
-const trendingItems = computed(() =>
-  (snapshot.value.trending || [])
-    .filter((item) => mediaTypeMatches(item, trendingFilter.value))
-    .map((item) => withPublicUrls(item, 'seerr')),
-)
+// Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
+const trendingMore = ref([])
+const trendingItems = computed(() => {
+  const seen = new Set()
+  return [...(snapshot.value.trending || []), ...trendingMore.value]
+    .filter((item) => {
+      const key = `${item.mediaType}-${item.mediaId}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return mediaTypeMatches(item, trendingFilter.value)
+    })
+    .map((item) => withPublicUrls(item, 'seerr'))
+})
 const seerrHomeUrl = computed(() => {
   const seerr = snapshot.value.seerr || {}
   const port = Number((snapshot.value.apps || []).find((app) => app.name === 'seerr')?.port || 5055)
@@ -495,11 +614,11 @@ async function loadInstallJobs() {
     const data = await readJson(res)
     const jobs = data.jobs || []
     const finished = jobs.some((job) =>
-      !['queued', 'installing', 'configuring'].includes(job.status)
+      !BUSY_JOBS.includes(job.status)
       && installJobs.value[job.name]?.status !== job.status
       && (
-        ['queued', 'installing', 'configuring'].includes(installJobs.value[job.name]?.status)
-        || snapshot.value.apps.some((app) => app.name === job.name && ['queued', 'installing', 'configuring'].includes(app.state))
+        BUSY_JOBS.includes(installJobs.value[job.name]?.status)
+        || snapshot.value.apps.some((app) => app.name === job.name && BUSY_JOBS.includes(app.state))
       ),
     )
     installJobs.value = Object.fromEntries(jobs.map((job) => [job.name, job]))
@@ -589,6 +708,13 @@ async function runSearch() {
 }
 
 /** Search results open over the widgets below the greeting instead of making it taller. */
+/** A narrow search bar opens its results toward the middle of the screen, so they stay on it. */
+const searchAnchor = computed(() => {
+  const item = shownLayout.value.find((one) => one.id === 'searchbar')
+  const cols = BREAKPOINTS[activeBp.value].cols
+  if (!item || item.w > cols / 2) return ''
+  return item.x + item.w / 2 > cols / 2 ? 'is-right' : 'is-left'
+})
 const searchOpen = computed(() => !!(notice.value || searchError.value || searching.value || searchedFor.value))
 
 function closeSearch() {
@@ -636,6 +762,10 @@ async function requestTitle(item) {
       notice.value = data.detail || 'Request submitted.'
       item.status = 'requested'
       item.can_request = false
+      // Later trending pages are not in the snapshot, so mark them here.
+      trendingMore.value = trendingMore.value.map((t) =>
+        `${t.mediaType}-${t.mediaId}` === key ? { ...t, status: 'requested', can_request: false } : t,
+      )
       loadSnapshot(true)
     } else {
       notice.value = apiError(data, 'Request failed.')
@@ -696,6 +826,9 @@ watch(
   },
   { immediate: true },
 )
+watch(statusWanted, (wanted) => {
+  if (wanted) loadStatus()
+})
 // A smaller screen's preview that no longer fits the window gives way to the window's own layout.
 watch(viewportBp, () => {
   if (previewBp.value && !previewOptions.value.includes(previewBp.value)) previewBp.value = ''
@@ -769,6 +902,44 @@ function scrollRail(which, direction) {
   node.scrollBy({ left: direction * step, behavior: 'smooth' })
 }
 
+// Seerr's trending and Jellyfin's titles come up to 500 pages at a time; fetch the next once the rail
+// is within a screen of its end. `shown` is the page the snapshot already covers.
+function railPager(railRef, more, path, shown) {
+  let page = shown
+  let done = false
+  let loading = false
+  async function load() {
+    const rail = railRef.value
+    if (!rail || loading || done) return
+    if (rail.scrollWidth - rail.scrollLeft - rail.clientWidth > rail.clientWidth) return
+    loading = true
+    let loaded = false
+    try {
+      const res = await apiRequest(`${path}?page=${page + 1}`)
+      const data = res.ok ? await readJson(res) : null
+      if (data && !data.error) {
+        page += 1
+        more.value = [...more.value, ...(data.items || [])]
+        done = !(data.items || []).length || page >= 500
+        loaded = true
+      }
+    } catch {
+      // A failed page is tried again on the next scroll.
+    } finally {
+      loading = false
+    }
+    // A filtered rail, or a page of titles the rail already shows, can still end inside the screen; keep going.
+    if (loaded) nextTick(load)
+  }
+  return load
+}
+const loadMoreTrending = railPager(trendingRail, trendingMore, '/api/homepage/trending', 1)
+// Jellyfin's title pages start over from the newest, so the snapshot's tiles come again and are skipped.
+const loadMoreRecent = railPager(recentRail, recentMore, '/api/homepage/recent', 0)
+// A rail wide enough to show every tile never scrolls, so also check when it appears or the filter changes.
+watch([trendingRail, trendingFilter], () => nextTick(loadMoreTrending))
+watch(recentRail, () => nextTick(loadMoreRecent))
+
 function addDays(value, amount) {
   const dt = new Date(value)
   dt.setDate(dt.getDate() + amount)
@@ -777,6 +948,16 @@ function addDays(value, amount) {
 
 function eventKind(item) {
   return item?.kind || item?.source || ''
+}
+
+const MEDIA_LABELS = { tv: 'Series', movie: 'Movie' }
+
+// Requests, trending and recent carry mediaType; calendar entries only kind and source.
+function mediaKind(item) {
+  const kind = String(item?.mediaType || item?.kind || item?.source || '').toLowerCase()
+  if (['tv', 'series', 'episode', 'season', 'sonarr'].includes(kind)) return 'tv'
+  if (['movie', 'radarr'].includes(kind)) return 'movie'
+  return ''
 }
 
 function matchesCalFilter(item) {
@@ -814,7 +995,8 @@ const calendarDays = computed(() => {
     byDay[key].push(item)
   }
   for (const key of Object.keys(byDay)) {
-    byDay[key].sort((a, b) => (parseWhen(a.when)?.getTime() || 0) - (parseWhen(b.when)?.getTime() || 0))
+    const rows = byDay[key].map((item) => ({ item, dt: parseWhen(item.when) })).sort((a, b) => a.dt - b.dt)
+    byDay[key] = groupSameDay(rows).map((row) => row.item)
   }
   const todayKey = dayKey(new Date())
   if (calView.value === 'day' || calView.value === 'list') {
@@ -917,15 +1099,17 @@ function groupSameDay(rows) {
     if (prev && prev.item.title === row.item.title && dayKey(prev.dt) === dayKey(row.dt)) {
       prev.count += 1
       prev.last = row
+      prev.have = prev.have && row.item.has_file
       continue
     }
-    out.push({ ...row, count: 1, last: row })
+    out.push({ ...row, count: 1, last: row, have: row.item.has_file })
   }
   return out.map((row) => {
     if (row.count === 1) return row
     const code = (r) => String(r.item.detail || '').split(' ')[0]
     const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
-    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes` } }
+    // Downloaded only when every episode in the group is.
+    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have } }
   })
 }
 const calendarList = computed(() => calendarListInfo.value.rows)
@@ -990,6 +1174,7 @@ onMounted(() => {
   poll = startGuardedInterval(loadSnapshot, 20000)
   downloadsPoll = startGuardedInterval(loadDownloads, 8000)
   installPoll = startGuardedInterval(loadInstallJobs, 3000, { immediate: true })
+  statusPoll = startGuardedInterval(loadStatus, 10000, { immediate: true })
 })
 watch(
   () => route.query.debug,
@@ -1019,6 +1204,7 @@ onUnmounted(() => {
   if (poll) poll()
   if (downloadsPoll) downloadsPoll()
   if (installPoll) installPoll()
+  if (statusPoll) statusPoll()
   if (partialTimer) clearTimeout(partialTimer)
   clearTimeout(searchTimer)
 })
@@ -1060,7 +1246,7 @@ onUnmounted(() => {
             v-for="app in dockApps"
             :key="app.name"
             class="home-app"
-            :class="{ 'is-down': app.state !== 'running' && !app.sick, 'is-sick': app.sick, 'is-busy': ['queued', 'installing', 'configuring'].includes(app.state) }"
+            :class="{ 'is-down': app.state !== 'running' && !app.sick, 'is-sick': app.sick, 'is-busy': BUSY_JOBS.includes(app.state) }"
             v-bind="launcherOpen(app) ? { href: app.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
             :title="launcherTitle(app)"
             :aria-label="launcherTitle(app)"
@@ -1080,17 +1266,22 @@ onUnmounted(() => {
         :bp="activeBp"
         :editing="editing"
         :highlight="highlight"
-        :raise="searchOpen && !editing ? 'search' : ''"
+        :raise="searchOpen && !editing ? 'searchbar' : ''"
         :bottom-inset="(dockHidden ? 0 : dockHeight) + (editing ? 96 : 24)"
         @change="onGridChange"
         @remove="removeWidget"
         @open="openWidget"
       >
-      <template #search>
+      <template #greeting>
       <section class="home-hero">
         <span class="home-hero-date">{{ todayLabel }}</span>
         <h2 class="home-hero-title">{{ greeting }}</h2>
         <p class="home-hero-sub">{{ heroSummary }}</p>
+      </section>
+      </template>
+
+      <template #searchbar>
+      <section class="home-search">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <label class="home-sr" for="home-search">Search</label>
@@ -1106,7 +1297,7 @@ onUnmounted(() => {
           />
           <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :disabled="searching">Search</button>
         </form>
-        <div v-if="searchOpen" class="home-hero-results glass-card">
+        <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
         <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" aria-label="Close search results" title="Close" @click="closeSearch">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
@@ -1153,7 +1344,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail">
+          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail" @scroll.passive="loadMoreRecent">
             <a
               v-for="(item, idx) in recentItems"
               :key="idx"
@@ -1163,8 +1354,11 @@ onUnmounted(() => {
               rel="noopener noreferrer"
               @click="item.url && openApp($event, item.source || 'jellyfin', item.url)"
             >
-              <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
-              <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+              <span class="home-tile-art">
+                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+              </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
             </a>
@@ -1214,6 +1408,7 @@ onUnmounted(() => {
                 <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
                 <span class="home-status-dot" :class="requestStatusDot(item).cls" :title="requestStatusDot(item).label" role="img" :aria-label="requestStatusDot(item).label"></span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
@@ -1253,7 +1448,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail">
+          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" @scroll.passive="loadMoreTrending">
             <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
               <a
                 class="home-tile-link"
@@ -1262,8 +1457,11 @@ onUnmounted(() => {
                 rel="noopener noreferrer"
                 @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
               >
-                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
-                <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                <span class="home-tile-art">
+                  <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                  <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                  <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                </span>
                 <span class="home-tile-title">{{ item.title }}</span>
                 <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
                 <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
@@ -1331,7 +1529,10 @@ onUnmounted(() => {
               <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
                 <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
                 <span class="cal-row-body">
-                  <strong>{{ row.item.title }}</strong>
+                  <span class="cal-row-title">
+                    <strong>{{ row.item.title }}</strong>
+                    <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                  </span>
                   <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
                 </span>
               </li>
@@ -1376,7 +1577,10 @@ onUnmounted(() => {
                       :data-kind="eventKind(item)"
                       :class="{ 'is-have': item.has_file }"
                     >
-                      <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                      <span class="cal-event-top">
+                        <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                        <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                      </span>
                       <strong>{{ item.title }}</strong>
                       <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
                     </li>
@@ -1475,6 +1679,154 @@ onUnmounted(() => {
               <span>{{ note.source }} — {{ note.detail }}</span>
             </li>
           </ul>
+          </div>
+        </article>
+      </template>
+      <template #playing>
+        <article class="home-card glass-card home-card-playing" :class="{ 'has-art': nowItem?.poster }">
+          <template v-if="nowItem">
+            <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" alt="" aria-hidden="true" />
+            <span v-if="nowItem.poster" class="np-shade" aria-hidden="true"></span>
+            <div class="np-top">
+              <span class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+                {{ nowItem.device || (nowItem.source === 'plex' ? 'Plex' : 'Jellyfin') }}
+              </span>
+              <span v-if="homeStatus.playing.length > 1" class="gh-pill">+{{ homeStatus.playing.length - 1 }} watching</span>
+            </div>
+            <component
+              :is="nowItem.url ? 'a' : 'div'"
+              class="np-bottom"
+              v-bind="nowItem.url ? { href: nowItem.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
+              @click="nowItem.url && openApp($event, nowItem.source, nowItem.url)"
+            >
+              <strong class="np-title">{{ nowItem.title }}</strong>
+              <span v-if="nowItem.detail" class="np-sub">{{ nowItem.detail }}</span>
+              <span class="np-progress"><span :style="{ width: `${nowItem.progress}%` }" /></span>
+              <span class="np-foot">
+                <span>{{ nowItem.user }}<template v-if="nowItem.paused"> · Paused</template></span>
+                <span>{{ nowItem.transcoding ? 'Transcoding' : 'Direct play' }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} min left</template></span>
+              </span>
+            </component>
+          </template>
+          <template v-else>
+            <div class="gh-head">
+              <h3>Now playing</h3>
+              <span class="gh-status is-idle">{{ !statusLoaded ? 'Checking who is watching…' : hasMediaServer ? 'Nobody is watching' : 'Install Jellyfin or Plex' }}</span>
+            </div>
+            <div v-if="statusLoaded && hasMediaServer" class="gh-empty">
+              <span class="gh-big">Nothing on</span>
+              <span class="gh-label">What plays on Jellyfin or Plex shows up here.</span>
+            </div>
+          </template>
+        </article>
+      </template>
+      <template #storage>
+        <article class="home-card glass-card home-card-storage">
+          <div class="gh-head">
+            <h3>Storage</h3>
+            <span v-if="storageStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[storageStatus.level] }">{{ storageStatus.text }}</span>
+            <span v-else class="gh-status is-idle">{{ statusLoaded ? 'No data folders found' : 'Checking disks…' }}</span>
+          </div>
+          <template v-if="fullestVolume">
+            <div class="gh-figure">
+              <span class="gh-big">{{ fullestFree[0] }}<small>{{ fullestFree[1] }} free</small></span>
+              <span class="gh-label">of {{ formatBytes(fullestVolume.total) }} · {{ Math.round(fullestVolume.percent) }}% used</span>
+            </div>
+            <span class="gh-meter" :class="`is-${storageStatus.level}`"><span :style="{ width: `${fullestVolume.percent}%` }" /></span>
+            <div class="gh-pills">
+              <span v-for="volume in homeStatus.storage" :key="volume.labels.join()" class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2.5" /><path d="M7 14h.01M11 14h6" /></svg>
+                {{ volume.labels.join(' · ') }}<template v-if="homeStatus.storage.length > 1"> · {{ Math.round(volume.percent) }}%</template>
+              </span>
+            </div>
+          </template>
+        </article>
+      </template>
+      <template #server>
+        <article class="home-card glass-card home-card-server">
+          <div v-if="homeStatus.server && netChart" class="sv-chart">
+            <svg class="sv-spark" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="netChart.label" @pointermove="onNetHover" @pointerleave="netHoverIdx = -1">
+              <defs>
+                <linearGradient id="sv-down-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" style="stop-color: var(--series-down); stop-opacity: 0.35" />
+                  <stop offset="100%" style="stop-color: var(--series-down); stop-opacity: 0" />
+                </linearGradient>
+                <linearGradient id="sv-up-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" style="stop-color: var(--series-up); stop-opacity: 0.3" />
+                  <stop offset="100%" style="stop-color: var(--series-up); stop-opacity: 0" />
+                </linearGradient>
+              </defs>
+              <path :d="netChart.downArea" fill="url(#sv-down-fill)" />
+              <path :d="netChart.upArea" fill="url(#sv-up-fill)" />
+              <path class="sv-line is-down" :d="netChart.down" />
+              <path class="sv-line is-up" :d="netChart.up" />
+              <line v-if="netChart.hoverX != null" class="sv-cross" :x1="netChart.hoverX" y1="0" :x2="netChart.hoverX" y2="40" />
+            </svg>
+            <span class="sv-end is-down" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.down}%` }" aria-hidden="true"></span>
+            <span class="sv-end is-up" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.up}%` }" aria-hidden="true"></span>
+          </div>
+          <div class="gh-head">
+            <h3>Server</h3>
+            <span v-if="serverStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[serverStatus.level] }">{{ serverStatus.text }}</span>
+            <span v-else class="gh-status is-idle">Reading the server…</span>
+          </div>
+          <template v-if="homeStatus.server">
+            <div class="sv-figures">
+              <div class="gh-figure">
+                <span class="gh-big">{{ Math.round(homeStatus.server.cpu_percent) }}<small>%</small></span>
+                <span class="gh-label">CPU</span>
+              </div>
+              <div class="gh-figure">
+                <span class="gh-big">{{ Math.round(homeStatus.server.memory_percent) }}<small>%</small></span>
+                <span class="gh-label">Memory<span class="sv-mem-bytes"> · {{ formatBytes(homeStatus.server.memory_used) }} of {{ formatBytes(homeStatus.server.memory_total) }}</span></span>
+              </div>
+              <div class="gh-figure sv-net-figure">
+                <span class="gh-big">{{ netParts(netShown?.rxRate)[0] }}<small>{{ netParts(netShown?.rxRate)[1] }} <b class="sv-key">↓</b></small></span>
+                <span class="gh-label">{{ netAgo || 'Network' }}<template v-if="netShown"> · <b class="sv-key is-up">↑</b> {{ netRate(netShown.txRate) }}</template></span>
+              </div>
+            </div>
+            <div class="gh-pills sv-pills">
+              <span class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" /></svg>
+                {{ homeStatus.server.cpu_count }} cores
+              </span>
+              <span v-if="homeStatus.server.temperature != null" class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0z" /></svg>
+                {{ Math.round(homeStatus.server.temperature) }} °C
+              </span>
+              <span class="gh-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                Up {{ upFor(homeStatus.server.uptime_seconds) }}
+              </span>
+            </div>
+          </template>
+        </article>
+      </template>
+      <template #attention>
+        <article class="home-card glass-card home-card-attention">
+          <div class="gh-head">
+            <h3>Needs attention</h3>
+            <span v-if="statusLoaded" class="gh-status" :style="{ '--dot': MOOD_COLORS[attentionStatus.level] }">{{ attentionStatus.text }}</span>
+            <span v-else class="gh-status is-idle">Checking…</span>
+          </div>
+          <div class="home-card-body">
+            <ol v-if="homeStatus.attention.length" class="at-timeline">
+              <li v-for="(item, idx) in homeStatus.attention" :key="idx">
+                <a :href="item.href" class="at-item" :class="`is-${item.level}`">
+                  <span class="at-dot" aria-hidden="true"></span>
+                  <span class="at-text">
+                    <strong>{{ item.title }}</strong>
+                    <span class="gh-label">{{ item.detail }}</span>
+                  </span>
+                  <span class="at-kind">{{ item.level === 'problem' ? 'Problem' : item.level === 'warning' ? 'Warning' : 'Update' }}</span>
+                </a>
+              </li>
+            </ol>
+            <div v-else-if="statusLoaded" class="gh-empty">
+              <span class="gh-big">All clear</span>
+              <span class="gh-label">Apps, VPN, tunnel, updates and disks look fine.</span>
+            </div>
           </div>
         </article>
       </template>
@@ -1705,7 +2057,7 @@ onUnmounted(() => {
   margin-left: 0.35rem;
   text-decoration: underline;
 }
-/* Hero: date, greeting and the search pill, centred like the mockup. */
+/* Greeting: date, greeting and a line about today, centred like the mockup. */
 .home-hero {
   position: relative;
   display: flex;
@@ -1740,6 +2092,15 @@ onUnmounted(() => {
   color: var(--text-main);
   text-shadow: var(--wallpaper-text-shadow);
 }
+/* Search: the pill, centred in a wide card and filling a small one. */
+.home-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0;
+  container-type: inline-size;
+}
 .home-search-pill {
   background: var(--control-bg);
   width: 100%;
@@ -1748,7 +2109,6 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.6rem;
   height: 3.5rem;
-  margin-top: 0.4rem;
   padding: 0 0.5rem 0 1.25rem;
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
 }
@@ -1779,7 +2139,7 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
-  width: min(720px, 100%);
+  width: min(720px, max(100%, min(28rem, calc(100vw - 2rem))));
   max-height: min(60vh, 34rem);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1796,34 +2156,27 @@ onUnmounted(() => {
   width: 16px;
   height: 16px;
 }
+.home-hero-results.is-left {
+  left: 0;
+  transform: none;
+}
+.home-hero-results.is-right {
+  left: auto;
+  right: 0;
+  transform: none;
+}
 @container (max-height: 172px) {
   .home-hero-sub {
     display: none;
   }
 }
-/* One row high: the greeting sits beside the search pill. */
-@container (max-height: 130px) {
-  .home-hero {
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: 1rem;
-    text-align: left;
-  }
-  .home-hero-date {
-    display: none;
-  }
-  .home-hero-title {
-    flex: 0 1 auto;
-    min-width: 0;
-    font-size: 1.5rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+/* A small search bar searches on Enter; the button would leave no room to type. */
+@container (max-width: 300px) {
   .home-search-pill {
-    flex: 1 1 auto;
-    margin-top: 0;
-    height: 3rem;
+    padding-left: 1rem;
+  }
+  .home-search-btn {
+    display: none;
   }
 }
 .home-sr {
@@ -1905,7 +2258,7 @@ onUnmounted(() => {
 .hg.is-editing :is(.home-rail-tools, .home-rail-nav, .cal-nav, .cal-tools, .home-widget-head > :not(h3)) {
   visibility: hidden;
 }
-.hg.is-editing .home-hero {
+.hg.is-editing :is(.home-hero, .home-search) {
   border-radius: var(--radius-glass);
   outline: 1px dashed var(--border-strong);
   outline-offset: -1px;
@@ -1977,6 +2330,8 @@ onUnmounted(() => {
   display: flex;
   gap: 0.85rem;
   overflow-x: auto;
+  /* Tiles round up a pixel taller than the rail; a vertically scrollable rail keeps the wheel from the page. */
+  overflow-y: hidden;
   padding: 0.25rem 0.25rem 0.5rem;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
@@ -2281,6 +2636,44 @@ onUnmounted(() => {
 .cal-event[data-kind='movie'] {
   background: color-mix(in srgb, var(--color-primary) 16%, var(--bg-input));
 }
+.cal-event-top,
+.cal-row-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.cal-event-top {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.cal-row-title strong {
+  min-width: 0;
+}
+/* Series or movie: a small pill on calendar entries and, overlaid, on posters. */
+.media-badge {
+  flex: none;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+.home-tile-art .media-badge {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  color: #fff;
+  background: rgba(10, 12, 20, 0.62);
+  border-color: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
 /* Calendar list rows: a day chip (accent for today), the title and its detail. */
 .cal-list ul {
   list-style: none;
@@ -2359,7 +2752,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.8rem;
   overflow-y: auto;
-  overscroll-behavior: contain;
   padding-right: 0.35rem;
   scrollbar-width: thin;
 }
@@ -2576,5 +2968,395 @@ onUnmounted(() => {
 }
 .home-debug-state[data-state='empty'] {
   color: var(--color-warning, #e6b84d);
+}
+/* Status widgets, after GlassHome: a title with a one-line status, big light figures, quiet pills and charts. */
+.gh-head {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 0.15rem;
+}
+.gh-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+.gh-status::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--dot, var(--text-dim));
+}
+.gh-status.is-idle::before {
+  display: none;
+}
+.gh-figure {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.gh-big {
+  font-size: clamp(2.2rem, 12cqw, 3.6rem);
+  font-weight: 300;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--text-heading);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gh-big small {
+  margin-left: 0.2em;
+  font-size: 0.32em;
+  font-weight: 500;
+  letter-spacing: 0;
+  vertical-align: top;
+  color: var(--text-muted);
+}
+.gh-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gh-pills {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.gh-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.38rem 0.75rem;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gh-pill svg {
+  flex: 0 0 auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  opacity: 0.75;
+}
+.gh-meter {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--switch-track);
+  overflow: hidden;
+}
+.gh-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-main);
+  opacity: 0.85;
+}
+.gh-meter.is-warn span {
+  background: var(--color-warning);
+  opacity: 1;
+}
+.gh-meter.is-crit span {
+  background: var(--color-danger);
+  opacity: 1;
+}
+/* Now playing: the poster fills the card, the title sits on it. */
+.home-card-playing.has-art {
+  color: #fff;
+}
+.home-card-playing > .np-art,
+.home-card-playing > .np-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.home-card-playing > .np-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+}
+.home-card-playing > .np-shade {
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.35) 0%, rgb(0 0 0 / 0) 30%, rgb(0 0 0 / 0.25) 50%, rgb(0 0 0 / 0.8) 100%);
+}
+.np-top {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.has-art .gh-pill {
+  color: #fff;
+  background: rgb(0 0 0 / 0.35);
+  border-color: rgb(255 255 255 / 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.np-bottom {
+  margin-top: auto;
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.np-title {
+  font-size: clamp(1.25rem, 7cqw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-sub {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-progress {
+  display: block;
+  height: 4px;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.25);
+  overflow: hidden;
+}
+.home-card-playing:not(.has-art) .np-progress {
+  background: var(--switch-track);
+}
+.np-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+}
+.np-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.np-foot span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@container (max-height: 200px) {
+  .np-sub,
+  .np-foot span:first-child {
+    display: none;
+  }
+}
+/* Storage: free space as the big figure, a meter, and a pill per disk. */
+.home-card-storage .gh-meter {
+  margin-top: auto;
+}
+@container (max-height: 200px) {
+  .home-card-storage .gh-pills {
+    display: none;
+  }
+}
+@container (max-width: 260px) {
+  .home-card-storage .gh-pills,
+  .home-card-storage .gh-figure .gh-label {
+    display: none;
+  }
+}
+/* Server: CPU and memory as figures, the last few minutes of network use as an area chart, details as pills. */
+.sv-figures {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+/* Three figures side by side leave no room for the memory in bytes until the card is wide. */
+@container (max-width: 560px) {
+  .sv-mem-bytes {
+    display: none;
+  }
+}
+/* Network use is drawn behind the card along its bottom edge, so even a two-row card shows it.
+   Download blue, upload pink: categorical slots of the reference palette, validated on both card surfaces. */
+.home-card-server {
+  --series-down: #3987e5;
+  --series-up: #d55181;
+}
+:global([data-theme='light'] .home-card-server) {
+  --series-down: #2a78d6;
+  --series-up: #e87ba4;
+}
+.sv-key {
+  color: var(--series-down);
+  font-weight: 700;
+}
+.sv-key.is-up {
+  color: var(--series-up);
+}
+.home-card-server > .sv-chart {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  height: 46%;
+  color: var(--text-main);
+}
+/* The figures and pills sit on the chart; let the pointer through to it for the crosshair. */
+.home-card-server > :not(.sv-chart) {
+  pointer-events: none;
+}
+.sv-pills {
+  margin-top: auto;
+}
+.sv-spark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  cursor: crosshair;
+}
+.sv-line {
+  fill: none;
+  stroke: var(--series-down);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.85;
+}
+.sv-line.is-up {
+  stroke: var(--series-up);
+}
+.sv-cross {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.sv-end {
+  position: absolute;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin: -0.35rem 0 0 -0.35rem;
+  border-radius: 50%;
+  border: 2px solid var(--series-down);
+  background: var(--bg-card);
+  pointer-events: none;
+}
+.sv-end.is-up {
+  border-color: var(--series-up);
+}
+@container (max-width: 300px) {
+  .sv-pills,
+  .sv-net-figure,
+  .home-card-server > .sv-chart {
+    display: none;
+  }
+  .sv-figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+}
+/* Needs attention: a timeline; each row opens where to fix it. */
+.at-timeline {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+.at-timeline::before {
+  content: '';
+  position: absolute;
+  left: 0.3rem;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  width: 1px;
+  background: var(--border-strong);
+}
+.home-card .at-timeline li {
+  display: block;
+}
+.at-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.45rem 0;
+  color: inherit;
+  text-decoration: none;
+}
+.at-item:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.at-dot {
+  position: relative;
+  flex: 0 0 auto;
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-top: 0.3rem;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--bg-card);
+}
+.at-item.is-problem .at-dot {
+  background: var(--color-danger);
+}
+.at-item.is-warning .at-dot {
+  background: var(--color-warning);
+}
+.at-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+}
+.at-text strong {
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.at-kind {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.gh-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+.gh-empty .gh-big {
+  font-size: clamp(1.8rem, 10cqw, 2.8rem);
+}
+@container (max-width: 300px) {
+  .at-kind {
+    display: none;
+  }
 }
 </style>
