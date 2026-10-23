@@ -243,6 +243,21 @@ class JellyfinClient:
             logger.debug("Jellyfin public users error: %s", exc)
             return []
 
+    def authorize_quick_connect(self, code: str) -> bool:
+        """Approve a browser's Quick Connect request without exchanging its secret."""
+        if not self.api_key or not re.fullmatch(r"[0-9]{6}", code):
+            return False
+        try:
+            response = requests.post(
+                f"{self.base_url}/QuickConnect/Authorize",
+                params={"Code": code},
+                headers=self._headers(),
+                timeout=8.0,
+            )
+            return response.status_code == 200 and response.json() is True
+        except (requests.RequestException, ValueError):
+            return False
+
     def complete_startup(self, username: str, password: str) -> bool:
         """Finish Jellyfin's first-run wizard and set the manager admin login."""
         if self._wizard_completed():

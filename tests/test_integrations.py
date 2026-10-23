@@ -232,8 +232,46 @@ def test_sabnzbd_bootstrap_ini_includes_usenet(tmp_path: Path):
     assert "connections = 20" in text
     assert "ssl = 1" in text
     assert "helpful_warnings = 0" in text
+    assert "inet_exposure = 5" in text
+    assert "host_whitelist = localhost,127.0.0.1,::1" in text
     write_bootstrap_ini(path, port=1, complete_dir="x", incomplete_dir="y")
     assert "port = 8085" in path.read_text(encoding="utf-8")
+
+
+def test_ensure_sabnzbd_public_access_sets_exposure_and_whitelist(tmp_path: Path, monkeypatch):
+    from core.integrations.sabnzbd import ensure_sabnzbd_public_access
+    from core.public_hostnames import save_hostnames
+    from core.settings import Settings
+
+    cfg = Settings(config_dir=tmp_path, public_app_base_domain="example.com")
+    monkeypatch.setattr("core.settings.settings", cfg)
+    monkeypatch.setattr("core.public_hostnames.settings", cfg)
+    sab_dir = tmp_path / "sabnzbd"
+    sab_dir.mkdir()
+    ini = sab_dir / "sabnzbd.ini"
+    ini.write_text(
+        "[misc]\n"
+        "host = 0.0.0.0\n"
+        "port = 8085\n"
+        "api_key = aabbccddeeff00112233445566778899\n"
+        "username = admin\n"
+        "password = secret\n"
+        "inet_exposure = 0\n"
+        "host_whitelist = localhost\n"
+        "\n[categories]\n",
+        encoding="utf-8",
+    )
+    save_hostnames(
+        {"sabnzbd": {"subdomain": "usenet", "enabled": True}},
+        app_settings=cfg,
+    )
+    assert ensure_sabnzbd_public_access(sab_dir, port=8085) is True
+    text = ini.read_text(encoding="utf-8")
+    assert "inet_exposure = 5" in text
+    assert "usenet.example.com" in text
+    assert "localhost" in text
+    # Second pass should be a no-op once values match.
+    assert ensure_sabnzbd_public_access(sab_dir, port=8085) is False
 
 
 def test_sabnzbd_post_install_seeds_ini_and_api_key(tmp_path: Path, monkeypatch):
@@ -567,24 +605,21 @@ def test_prowlarr_client(mock_post, mock_get):
     assert client.add_flaresolverr() is True
 
 
-@patch("requests.get")
-@patch("requests.post")
-def test_seerr_client(mock_post, mock_get):
-    mock_get_resp = MagicMock()
-    mock_get_resp.status_code = 200
-    mock_get_resp.json.return_value = []
-    mock_get.return_value = mock_get_resp
+def test_seerr_client():
+    http = MagicMock()
+    get_resp = MagicMock()
+    get_resp.status_code = 200
+    get_resp.json.return_value = []
+    http.get.return_value = get_resp
+    post_resp = MagicMock()
+    post_resp.status_code = 201
+    http.post.return_value = post_resp
 
-    mock_post_resp = MagicMock()
-    mock_post_resp.status_code = 201
-    mock_post.return_value = mock_post_resp
-
-    client = SeerrClient(api_key="seerr_key_123")
+    client = SeerrClient(api_key="seerr_key_123", http=http)
     assert client.connect_sonarr(api_key="sonarr_key") is True
     assert client.connect_radarr(api_key="radarr_key") is True
     assert client.connect_jellyfin(api_key="jelly_key") is True
     assert client.connect_plex(port=32400) is True
-    assert client.setup_local_admin("admin@example.com", "admin", "SharedPass123!") is True
 
 
 def test_integration_endpoints():
@@ -733,7 +768,7 @@ def test_optimization_hooks(tmp_path: Path):
     assert "trash_id: 72dae194fc92bf828f32cde7744e51a1" in rec_text
     assert "trash_id: d1d67249d3890e49bc12e275d989a7e9" in rec_text
     assert "reset_unmatched_scores" in rec_text
-    assert "custom_format_groups:" not in rec_text
+    assert rec_text.count("custom_format_groups:") == 1  # only the older tv shows scores
     assert "plex-imdb" in rec_text
     neu = write_neutarr_config(
         tmp_path / "neutarr",

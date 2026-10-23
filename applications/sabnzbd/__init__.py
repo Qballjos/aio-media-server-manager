@@ -13,6 +13,10 @@ from core.installer import AppInstaller, InstallResult
 
 logger = logging.getLogger(__name__)
 
+# Import checks that passed, per venv. is_installed() runs on every Home poll and a fresh
+# Python process can take a minute on a busy NAS; a rebuilt venv has a new inode and is checked again.
+_IMPORTS_OK: set[tuple[str, int]] = set()
+
 MANIFEST = AppManifest(
     name="sabnzbd",
     display_name="SABnzbd",
@@ -47,6 +51,12 @@ class SabnzbdApp(BaseApplication):
         return script.is_file() and self._runtime_imports_ok(self._venv_python())
 
     def start_command(self) -> list[str]:
+        try:
+            from core.integrations.sabnzbd import ensure_sabnzbd_public_access
+
+            ensure_sabnzbd_public_access(self.config_dir, port=self.port)
+        except Exception:
+            pass
         self._ensure_runtime()
         self._write_runner()
         self._own_config()
@@ -67,11 +77,16 @@ class SabnzbdApp(BaseApplication):
     def _runtime_imports_ok(self, python: Path) -> bool:
         if not python.is_file():
             return False
+        key = (str(python), python.parent.parent.stat().st_ino)
+        if key in _IMPORTS_OK:
+            return True
         probe = subprocess.run(
             [str(python), "-c", "import sabctools, cherrypy"],
             capture_output=True,
             text=True,
         )
+        if probe.returncode == 0:
+            _IMPORTS_OK.add(key)
         return probe.returncode == 0
 
     def _venv_matches_child(self, python: Path) -> bool:
@@ -174,6 +189,12 @@ class SabnzbdApp(BaseApplication):
                     if key:
                         set_application_api_key(self.name, key)
                     break
+        try:
+            from core.integrations.sabnzbd import ensure_sabnzbd_public_access
+
+            ensure_sabnzbd_public_access(self.config_dir, port=self.port)
+        except Exception:
+            pass
         self._own_config()
 
     def _own_config(self) -> None:

@@ -378,15 +378,14 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         raise HTTPException(status_code=500, detail=f"Could not save settings: {exc}") from exc
 
     if body.vpn_enabled is True and not vpn_was_enabled:
-        from core.integrations.lifecycle import start_tunneled_apps, stop_tunneled_apps
+        from core.integrations.lifecycle import bring_up_vpn
 
-        stopped = await stop_tunneled_apps()
-        result = await asyncio.to_thread(vpn_manager.start)
+        result = await bring_up_vpn(vpn_manager)
         if result.get("status") == "error":
             notes.append(f"VPN start failed: {result.get('detail') or 'unknown error'}.")
             notes.append("qBittorrent, Prowlarr, and Flaresolverr are stopped so they cannot leak.")
         elif result.get("tunnel_up"):
-            started = await start_tunneled_apps(stopped)
+            started = result.get("started_apps") or []
             notes.append("VPN started.")
             if started:
                 notes.append("Started " + ", ".join(started) + " on the tunnel.")

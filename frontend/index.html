@@ -2,11 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/logo-aio-media-manager.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.json" />
+    <!-- Served by the manager so the configured favicon is what the tab, iOS and installed apps get. -->
+    <link rel="icon" type="image/png" href="/api/branding/icon/favicon" />
+    <link rel="apple-touch-icon" href="/api/branding/icon/apple-touch-icon" />
+    <link rel="manifest" href="/api/branding/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0f17" />
+    <meta name="theme-color" content="#090D1F" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -26,6 +27,17 @@
           root.style.colorScheme = theme
           var meta = document.querySelector('meta[name="theme-color"]')
           if (meta) meta.setAttribute('content', theme === 'light' ? '#f4f6fb' : '#0b0f17')
+
+          var wallpaper = localStorage.getItem('amm-wallpaper') || 'default'
+          if (wallpaper !== 'jellyfin' && wallpaper !== 'plex' && wallpaper !== 'personal') wallpaper = 'default'
+          root.setAttribute('data-wallpaper', wallpaper)
+          if (wallpaper === 'personal') {
+            var wallpaperImage = localStorage.getItem('amm-wallpaper-image') || ''
+            if (wallpaperImage.indexOf('data:image/') === 0) {
+              root.style.setProperty('--wallpaper-image', 'url("' + wallpaperImage + '")')
+              root.classList.add('has-wallpaper-image')
+            }
+          }
 
           var accent = localStorage.getItem('amm-accent') || ''
           if (/^#[0-9a-fA-F]{6}$/.test(accent)) {
@@ -57,7 +69,7 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   </head>
   <body>
     <div id="app"></div>

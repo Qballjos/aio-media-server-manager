@@ -16,6 +16,7 @@ from core.recyclarr import (
     default_prefs,
     ensure_git_path_setting,
     load_prefs,
+    run_sync,
     save_yaml,
     write_recyclarr_config,
 )
@@ -68,7 +69,7 @@ def test_default_yaml_matches_trash_hd_templates(tmp_path: Path):
     assert "d1498e7d189fbe6c7110ceaabb7473e6" not in text
     assert "delete_old_custom_formats: true" in text
     assert "replace_existing_custom_formats" not in text
-    assert "custom_format_groups:" not in text
+    assert text.count("custom_format_groups:") == 1  # only the older tv shows scores
     prefs = load_prefs(tmp_path / "recyclarr")
     assert prefs["sonarr_web_1080p"] is True
     assert prefs["radarr_uhd"] is False
@@ -238,3 +239,68 @@ def test_ensure_git_path_setting_writes_and_updates(tmp_path: Path):
     updated = (root / "settings.yml").read_text(encoding="utf-8")
     assert 'git_path: "/usr/local/bin/git"' in updated
     assert updated.count("git_path:") == 1
+
+
+def test_failed_sync_names_recyclarrs_own_error(tmp_path: Path, monkeypatch):
+    cfg = _settings(tmp_path)
+    catalog = ApplicationCatalog(app_settings=cfg)
+    plugin = catalog.get("recyclarr")
+    plugin.install_dir.mkdir(parents=True, exist_ok=True)
+    (plugin.install_dir / "recyclarr").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr("core.recyclarr.ApplicationCatalog", lambda: catalog)
+    monkeypatch.setattr("core.recyclarr.get_application_api_key", lambda _name: "k")
+    monkeypatch.setattr("core.recyclarr.git_executable", lambda: "/usr/bin/git")
+    output = (
+        "[12:40:01 INF] Initializing provider: official (type: trash-guides)\n"
+        "[12:40:02 WRN] All references failed to fetch (will proceed with existing files)\n"
+        "[12:40:02 ERR] Git provider official failed initialization: fatal: unable to access the repository\n"
+        "[12:40:02 ERR] Exiting due to fatal error: fatal: unable to access the repository\n"
+    )
+    completed = MagicMock(returncode=1, stdout=output, stderr="")
+    with patch("core.recyclarr.subprocess.run", return_value=completed):
+        result = run_sync()
+    assert result["ok"] is False
+    assert result["detail"] == (
+        "Recyclarr exited 1: Git provider official failed initialization: fatal: unable to access the repository"
+    )
+
+
+def _render(tmp_path: Path, **changes) -> str:
+    path = write_recyclarr_config(
+        tmp_path / "recyclarr",
+        sonarr_url="http://127.0.0.1:8989",
+        sonarr_key="s",
+        radarr_url="http://127.0.0.1:7878",
+        radarr_key="r",
+        prefs={**default_prefs(), **changes},
+        force=True,
+    )
+    return path.read_text(encoding="utf-8")
+
+
+def _profile_block(text: str, marker: str) -> str:
+    return text.split(marker, 1)[1].split("\n      - ", 1)[0]
+
+
+def test_sonarr_web_profiles_accept_bluray_and_hdtv_by_default(tmp_path: Path):
+    text = _render(tmp_path, sonarr_web_2160p=True)
+    for marker, resolution in (("72dae194fc92bf828f32cde7744e51a1", "1080p"), ("d1498e7d189fbe6c7110ceaabb7473e6", "2160p")):
+        block = _profile_block(text, marker)
+        for source in ("WEBDL", "WEBRip", "Bluray", "HDTV"):
+            assert f"- {source}-{resolution}" in block
+        assert f"until_quality: {resolution}" in block
+    assert "Bluray-2160p" not in _render(tmp_path, sonarr_web_2160p=True, sonarr_all_sources=False)
+
+
+def test_older_tv_shows_profile_gets_720p_and_the_guide_scores(tmp_path: Path):
+    text = _render(tmp_path)
+    profile = text.split("- name: older tv shows", 1)[1].split("    custom_formats:", 1)[0]
+    for quality in ("WEBDL-1080p", "Bluray-1080p", "HDTV-1080p", "WEBDL-720p", "Bluray-720p", "HDTV-720p"):
+        assert f"- {quality}" in profile
+    unwanted = text.split("# [Unwanted] Unwanted Formats", 1)[1].split("\n        - trash_id:", 1)[0]
+    # Naming a default group by hand stops its auto-sync, so the enabled guide profile is listed too.
+    assert "- name: older tv shows" in unwanted
+    assert "- trash_id: 72dae194fc92bf828f32cde7744e51a1" in unwanted
+    assert "d1498e7d189fbe6c7110ceaabb7473e6" not in unwanted  # WEB-2160p is off by default
+    without = _render(tmp_path, sonarr_older_tv=False)
+    assert "older tv shows" not in without and "custom_format_groups" not in without

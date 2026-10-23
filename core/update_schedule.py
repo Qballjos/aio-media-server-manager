@@ -132,6 +132,21 @@ class UpdateScheduler:
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         self.state_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
+    @staticmethod
+    def _applied(outcome: dict[str, Any] | None) -> bool:
+        """Updated, or found already current: either way the app no longer belongs in the update list."""
+        if not outcome:
+            return False
+        return outcome.get("status") == "updated" or (outcome.get("status") == "skipped" and outcome.get("reason") == "already_current")
+
+    def forget_applied(self, name: str, outcome: dict[str, Any]) -> None:
+        """Drop an app updated by hand (Catalog, Settings → Updates) from the list, as a scheduled apply does."""
+        if not self._applied(outcome):
+            return
+        state = self.load_state()
+        state["available"] = [item for item in state.get("available") or [] if item.get("name") != name]
+        self.save_state(state)
+
     def _refresh_github(self) -> None:
         from core.crypto import secret_store
 
@@ -289,9 +304,7 @@ class UpdateScheduler:
         for item in targets:
             name = item.get("name")
             match = next((row for row in results if row.get("name") == name), None)
-            if match and match.get("status") == "updated":
-                continue
-            if match and match.get("status") == "skipped" and match.get("reason") == "already_current":
+            if self._applied(match):
                 continue
             still_available.append(item)
         state = self.load_state()

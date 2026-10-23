@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from pathlib import Path
+
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
@@ -17,6 +19,7 @@ router = APIRouter(prefix="/api/branding", tags=["Branding"])
 class BrandingPatch(BaseModel):
     title: Optional[str] = Field(default=None, max_length=branding_mod.MAX_TITLE_LEN)
     accent_color: Optional[str] = Field(default=None, max_length=16)
+    login_message: Optional[str] = Field(default=None, max_length=branding_mod.MAX_LOGIN_MESSAGE_LEN)
 
 
 def _ensure_authenticated(request: Request) -> str:
@@ -45,10 +48,38 @@ async def get_branding_file(slot: str):
     )
 
 
+_STATIC_ROOTS = [Path(__file__).resolve().parents[2] / "frontend" / sub for sub in ("dist", "public")]
+
+
+@router.get("/icon/{kind}", summary="The tab or home-screen icon: the custom favicon, else the default")
+async def get_app_icon(kind: str):
+    try:
+        custom, mime, default = branding_mod.app_icon(kind)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    # no-cache: browsers keep icons for a long time; revalidating (ETag) lets a new upload show up.
+    headers = {"Cache-Control": "no-cache"}
+    if custom is not None:
+        return FileResponse(custom, media_type=mime, headers=headers)
+    for root in _STATIC_ROOTS:
+        if (root / default.lstrip("/")).is_file():
+            return FileResponse(root / default.lstrip("/"), media_type="image/png", headers=headers)
+    return RedirectResponse(default)
+
+
+@router.get("/manifest.webmanifest", summary="PWA manifest with the configured title and favicon")
+async def get_web_manifest():
+    return JSONResponse(
+        branding_mod.web_manifest(),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 @router.patch("", summary="Update brand title and/or accent color")
 async def patch_branding(body: BrandingPatch, request: Request) -> dict:
     _ensure_authenticated(request)
-    if body.title is None and body.accent_color is None:
+    if body.title is None and body.accent_color is None and body.login_message is None:
         raise HTTPException(status_code=400, detail="No branding fields to update.")
     if body.title is not None:
         branding_mod.set_title(body.title)
@@ -57,6 +88,8 @@ async def patch_branding(body: BrandingPatch, request: Request) -> dict:
             branding_mod.set_accent(body.accent_color)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if body.login_message is not None:
+        branding_mod.set_login_message(body.login_message)
     return branding_mod.public_branding()
 
 

@@ -11,10 +11,12 @@ theme:
   name: material
   logo: assets/logo-aio-media-manager.png
   favicon: assets/logo-aio-media-manager.png
-  font:
-    text: Plus Jakarta Sans
-    code: IBM Plex Mono
+  font: false
   palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: custom
@@ -28,7 +30,7 @@ theme:
       accent: custom
       toggle:
         icon: material/weather-sunny
-        name: Switch to light mode
+        name: Switch to system preference
   features:
     - navigation.tabs
     - navigation.sections

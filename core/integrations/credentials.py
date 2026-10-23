@@ -82,7 +82,9 @@ def get_application_api_key(app_name: str, app_config_dir: Optional[Path] = None
         api_key = discover_jellyfin_api_key(cfg_dir if cfg_dir.exists() else None)
 
     if api_key:
-        secret_store.save_secret(secret_key_name, api_key)
+        # Only write when it changed: this runs on every poll and each save fsyncs the store.
+        if secret_store.get_secret(secret_key_name) != api_key:
+            secret_store.save_secret(secret_key_name, api_key)
         return api_key
 
     return None
@@ -109,16 +111,20 @@ APPS_WITH_FILE_API_KEYS = frozenset(
 
 
 async def wait_for_application_api_key(app_name: str, timeout: float = 90.0) -> Optional[str]:
-    """Poll config.xml / secret store until the app has generated an API key."""
+    """Poll config.xml / secret store until the app has generated an API key.
+
+    Discovery may sign in to the app or even restart it (Jellyfin), so it runs in
+    a worker thread; on the supervisor's loop those restarts cannot be awaited.
+    """
     if app_name not in APPS_WITH_FILE_API_KEYS:
-        return get_application_api_key(app_name)
+        return await asyncio.to_thread(get_application_api_key, app_name)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        key = get_application_api_key(app_name)
+        key = await asyncio.to_thread(get_application_api_key, app_name)
         if key:
             return key
         await asyncio.sleep(1.5)
-    return get_application_api_key(app_name)
+    return await asyncio.to_thread(get_application_api_key, app_name)
 
 
 def set_application_api_key(app_name: str, api_key: str) -> None:

@@ -61,6 +61,8 @@ If GHCR is private: `sudo docker login ghcr.io` before starting the project.
 
 The UI should show a single service `aio-media-manager`. Open `http://<nas-ip>:8080` for the manager. **Open UI** on catalog cards uses the app ports (Sonarr `8989`, Radarr `7878`, …), which the project compose now publishes. If you generated compose before that change, copy the `ports:` list from [`synology/docker-compose.yml`](synology/docker-compose.yml) into the project file and recreate the container.
 
+The install script also mounts host `/sys` read-only at `/host/sys` so Home's Server card shows the NAS network traffic. If the project compose was generated before that, add `- /sys:/host/sys:ro` under `volumes:` and recreate. Without it, the graph is only this container's traffic. Installed apps update later from **Settings → Updates** (schedules default to off). Recreating the project updates AIO.
+
 To start from SSH instead of the UI:
 
 ```bash
@@ -90,11 +92,11 @@ sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
 # scp wg0.conf into that directory
 ```
 
-Set `AMM_VPN_ENABLED=true` in the project compose, then start the project again. While VPN is on, Prowlarr and qBittorrent cannot use the house WAN: they only leave through the tunnel, and they stay stopped if the tunnel is down. Synology’s kernel often has no WireGuard module; the appliance image includes **wireguard-go** as a fallback. Recreate the container after pulling a current image, then save VPN in **Settings → Network**. OpenVPN works without that module if `/dev/net/tun` is present (privileged mode).
+Set `AMM_VPN_ENABLED=true` in the project compose, then start the project again. While VPN is on, Prowlarr and qBittorrent cannot use the house WAN: they only leave through the tunnel, and they stay stopped if the tunnel is down. Synology’s kernel often has no WireGuard module; the appliance image includes **wireguard-go** as a fallback and creates `/dev/net/tun` when it is missing. That only works if the project stays `privileged: true` (the install script sets this). Recreate the container after pulling a current image, then save VPN in **Settings → Network**. OpenVPN uses the same device node and also needs privileged mode.
 
 ## Cloudflare Tunnel
 
-Do not add a second project service. Write the token on the NAS, then set `AMM_CLOUDFLARE_TUNNEL_ENABLED=true` in the project compose. See [CLOUDFLARE.md](CLOUDFLARE.md).
+Do not add a second project service. Write the token on the NAS, then enable the tunnel in **Settings → Network** (saved across restarts). Optionally set `AMM_CLOUDFLARE_TUNNEL_ENABLED=true` in the project compose. See [CLOUDFLARE.md](CLOUDFLARE.md).
 
 ```bash
 sudo mkdir -p /volume1/docker/aio-media-manager/config/cloudflare

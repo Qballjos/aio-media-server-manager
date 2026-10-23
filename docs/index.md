@@ -28,21 +28,77 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 </div>
 </div>
 
+<div class="aio-pair" markdown>
+
 <div class="aio-shot" markdown>
-![AIO Media Manager sign-in](screenshots/login.png)
+
+![Administrator sign-in, light theme](screenshots/light/login.png)
+
 </div>
 
 <div class="aio-shot" markdown>
-![AIO Media Manager home dashboard](screenshots/dashboard.png)
+
+![Administrator sign-in, dark theme](screenshots/dark/login.png)
+
+</div>
+
+</div>
+
+<p class="aio-shot-caption">Sign-in — light and dark.</p>
+
+<div class="aio-pair" markdown>
+
+<div class="aio-shot" markdown>
+
+![Home before any applications are installed, light theme](screenshots/light/dashboard.png)
+
 </div>
 
 <div class="aio-shot" markdown>
-![AIO Media Manager application catalog](screenshots/catalog.png)
+
+![Home before any applications are installed, dark theme](screenshots/dark/dashboard.png)
+
+</div>
+
+</div>
+
+<p class="aio-shot-caption">Home before any apps with a WebUI are installed.</p>
+
+<div class="aio-pair" markdown>
+
+<div class="aio-shot" markdown>
+
+![Catalog with application cards and install controls, light theme](screenshots/light/catalog.png)
+
 </div>
 
 <div class="aio-shot" markdown>
-![AIO Media Manager settings](screenshots/settings.png)
+
+![Catalog with application cards and install controls, dark theme](screenshots/dark/catalog.png)
+
 </div>
+
+</div>
+
+<p class="aio-shot-caption">Catalog — search, filters, and install.</p>
+
+<div class="aio-pair" markdown>
+
+<div class="aio-shot" markdown>
+
+![Settings account page, light theme](screenshots/light/settings.png)
+
+</div>
+
+<div class="aio-shot" markdown>
+
+![Settings account page, dark theme](screenshots/dark/settings.png)
+
+</div>
+
+</div>
+
+<p class="aio-shot-caption">Settings. Visuals, catalog app settings, and the other sections are in <a href="USAGE.md#screens">Using the dashboard</a>.</p>
 
 ## Start where you are
 
@@ -60,7 +116,7 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 
     ---
 
-    Enable apps, open each web UI, wire libraries.
+    Home, Catalog, and each app's Open UI.
 
     [:octicons-arrow-right-24: Using the dashboard](USAGE.md)
 
@@ -128,13 +184,13 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 
     ---
 
-    Status, start/stop, and **Open UI** for every app you enable.
+    Home for what is new, playing, or needs a look. Catalog for install, start/stop, and **Open UI**.
 
 -   :material-television-play:{ .lg .middle } __Automation + libraries__
 
     ---
 
-    Sonarr, Radarr, Lidarr, Bazarr, and friends — when you want them.
+    Sonarr, Radarr, Lidarr, and Bazarr — when you want them.
 
 -   :material-download:{ .lg .middle } __Downloads__
 
@@ -146,7 +202,7 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 
     ---
 
-    Jellyfin, Plex, Seerr, and more — same appliance.
+    Jellyfin, Plex, and Seerr — same appliance.
 
 </div>
 
@@ -156,6 +212,15 @@ No Compose file full of Sonarr, Radarr, and qBittorrent containers.
 Do not add separate Sonarr/Radarr/qBittorrent containers next to it.
 
 </div>
+
+## Intended use
+
+AIO is a self-hosting management tool for a personal media library and a home lab:
+
+- Files you own (home videos, family photos, public-domain media, or your own backups of physical media).
+- Local network setup and server administration.
+
+This repository does not host or distribute copyrighted content. It is not a licence or a legal shield. Using it to acquire, download, stream, or share unauthorized copyrighted material breaks copyright law in most places. You are responsible for following the laws where you live.
 
 ## Vibe coded
 
