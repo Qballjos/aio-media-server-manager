@@ -1897,6 +1897,27 @@ onBeforeUnmount(() => {
           </p>
         </template>
       </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>Donate</h3>
+          <p>🤖 AI writes some code. I break it. We fix it together.</p>
+        </div>
+        <p class="share-idle">Can’t spare a few bucks? Drop a star on GitHub instead. It feeds the ego, and that’s almost as good.</p>
+        <div class="account-donate-actions">
+          <a
+            class="ui-btn"
+            href="https://www.paypal.com/donate/?business=P8CTXW8ER3PBY&no_recurring=0&item_name=Sponsor+My+Next+Bug&currency_code=EUR"
+            target="_blank"
+            rel="noopener noreferrer"
+          >PayPal</a>
+          <a
+            class="ui-btn"
+            href="https://ko-fi.com/qballjos"
+            target="_blank"
+            rel="noopener noreferrer"
+          >Ko-fi</a>
+        </div>
+      </div>
     </template>
 
     <template v-else-if="section === 'system'">
@@ -3271,6 +3292,12 @@ onBeforeUnmount(() => {
 }
 .account-avatar-block {
   margin-bottom: 1.25rem;
+}
+.account-donate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
 }
 .account-avatar-preview {
   width: 4.5rem;
