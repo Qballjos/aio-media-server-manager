@@ -542,6 +542,37 @@ body {
   }
 }
 
+.aio-donate {
+  margin: 2.5rem 0 0.5rem;
+  padding: 1.15rem 1.25rem 1.25rem;
+  border: 1px solid var(--aio-border);
+  border-radius: 1rem;
+  background: var(--aio-card);
+  box-shadow: var(--aio-shadow);
+}
+
+.aio-donate h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.15rem;
+  color: var(--aio-ink);
+}
+
+.aio-donate p {
+  margin: 0.35rem 0 0;
+  color: var(--aio-muted);
+}
+
+.aio-donate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+}
+
+.aio-donate__actions .md-button {
+  margin: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aio-hero,
   .aio-shot,

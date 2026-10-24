@@ -48,6 +48,9 @@ extra_css:
 plugins:
   - search
 
+hooks:
+  - docs/hooks/donate.py
+
 markdown_extensions:
   - admonition
   - attr_list
