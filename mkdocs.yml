@@ -9,6 +9,7 @@ site_dir: site
 
 theme:
   name: material
+  language: en
   logo: assets/logo-aio-media-manager.png
   favicon: assets/logo-aio-media-manager.png
   font: false
@@ -47,6 +48,52 @@ extra_css:
 
 plugins:
   - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: nl
+          name: Nederlands
+          build: true
+          site_description: Eén installatie voor je hele media-stack thuis — downloads, automatisering en afspelen.
+          nav_translations:
+            Home: Start
+            Getting started: Aan de slag
+            Install: Installeren
+            Using the dashboard: Het dashboard gebruiken
+            Deploy: Platforms
+            Overview: Overzicht
+            Remote access: Toegang van buitenaf
+        - locale: de
+          name: Deutsch
+          build: true
+          site_description: Eine Installation für den ganzen Medien-Stapel zu Hause — Downloads, Automatisierung und Wiedergabe.
+          nav_translations:
+            Home: Start
+            Getting started: Erste Schritte
+            Install: Installieren
+            Using the dashboard: Das Dashboard nutzen
+            Deploy: Bereitstellen
+            Overview: Überblick
+            Remote access: Fernzugriff
+        - locale: fr
+          name: Français
+          build: true
+          site_description: Une installation pour toute la pile média à la maison — téléchargements, automatisation et lecture.
+          nav_translations:
+            Home: Accueil
+            Getting started: Pour commencer
+            Install: Installer
+            Using the dashboard: Utiliser le tableau de bord
+            Deploy: Déployer
+            Overview: Aperçu
+            Remote access: Accès distant
 
 hooks:
   - docs/hooks/donate.py

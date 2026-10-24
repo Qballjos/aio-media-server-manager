@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
+from core.cloudflare_access import access_status, apply_access
 from core.cloudflare_api import (
     CloudflareApiError,
     api_token_configured,
@@ -58,6 +59,12 @@ class HostnamesPut(BaseModel):
 
 
 class PublishBody(BaseModel):
+    hostnames: Optional[dict[str, HostnameEntry]] = None
+    public_app_base_domain: Optional[str] = None
+
+
+class AccessBody(BaseModel):
+    emails: Optional[str | list[str]] = None
     hostnames: Optional[dict[str, HostnameEntry]] = None
     public_app_base_domain: Optional[str] = None
 
@@ -150,6 +157,44 @@ async def publish(request: Request, body: PublishBody | None = None) -> dict[str
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     clear_homepage_snapshot_cache()
     _sync_after_hostname_change()
+    return result
+
+
+def _apply_base_domain(value: Optional[str]) -> None:
+    if value is None:
+        return
+    domain = value.strip().strip(".").lower()
+    if domain and ("://" in domain or "/" in domain):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="public_app_base_domain is a DNS zone only (e.g. example.com), not a URL.",
+        )
+    settings.public_app_base_domain = domain
+    settings.save()
+
+
+@router.get("/access")
+async def get_access(request: Request) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    return await access_status()
+
+
+@router.post("/access")
+async def post_access(request: Request, body: AccessBody | None = None) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    body = body or AccessBody()
+    _apply_base_domain(body.public_app_base_domain)
+    host_map = _entries_as_dict(body.hostnames)
+    if host_map is not None:
+        try:
+            host_map = save_hostnames(host_map)
+        except PublicHostnameError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    try:
+        result = await apply_access(emails=body.emails, hostnames=host_map)
+    except CloudflareApiError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    clear_homepage_snapshot_cache()
     return result
 
 

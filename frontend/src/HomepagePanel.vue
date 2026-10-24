@@ -6,6 +6,7 @@ import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
 import { BP_ORDER, BREAKPOINTS, GRID_IDS, WIDGETS, collapseEmptyRows, dockHidden, firstFree, fitItem, homeEditing, homeGrid, homeGridSaves, layoutFor, resolve, restoreGrid, saveGridLayout, viewportBp } from './homeLayout.js'
+import UiSelect from './UiSelect.vue'
 import HomeEditBar from './HomeEditBar.vue'
 import HomeGrid from './HomeGrid.vue'
 import HomeGridSheet from './HomeGridSheet.vue'
@@ -814,10 +815,10 @@ function choiceFromServers(item, servers) {
   }
 }
 
-function onRequestServer(event) {
+function onRequestServer(serverId) {
   const choice = requestChoice.value
   if (!choice) return
-  const server = choice.servers.find((one) => one.id === Number(event.target.value))
+  const server = choice.servers.find((one) => one.id === serverId)
   if (!server) return
   requestChoice.value = {
     ...choice,
@@ -1441,13 +1442,18 @@ onUnmounted(() => {
       <section class="home-search">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
           <label class="home-sr" for="home-search-provider">{{ $t('Search in') }}</label>
-          <div class="home-search-provider-wrap">
-            <select id="home-search-provider" v-model="searchProvider" class="home-search-provider" :aria-label="$t('Search in')" @change="onProviderChange">
-              <option value="seerr">{{ $t('Movies & Series') }}</option>
-              <option value="prowlarr">{{ $t('Other') }}</option>
-            </select>
-            <svg class="home-search-provider-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
-          </div>
+          <UiSelect
+            id="home-search-provider"
+            v-model="searchProvider"
+            class="home-search-provider"
+            variant="search"
+            :aria-label="$t('Search in')"
+            :options="[
+              { value: 'seerr', label: $t('Movies & Series') },
+              { value: 'prowlarr', label: $t('Other') },
+            ]"
+            @change="onProviderChange"
+          />
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <label class="home-sr" for="home-search">{{ $t('Search') }}</label>
           <input
@@ -1669,18 +1675,31 @@ onUnmounted(() => {
             <h3>{{ calendarRangeLabel }}</h3>
             <div class="cal-tools">
               <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">{{ $t('Today') }}</button>
-              <select v-model="calFilter" class="ui-input cal-select" :aria-label="$t('Filter calendar')">
-                <option value="all">{{ $t('All') }}</option>
-                <option value="tv">{{ $t('TV') }}</option>
-                <option value="movies">{{ $t('Movies') }}</option>
-                <option value="missing">{{ $t('Not downloaded') }}</option>
-              </select>
-              <select :value="calView" class="ui-input cal-select" :aria-label="$t('Calendar view')" @change="setCalView($event.target.value)">
-                <option value="list">{{ $t('List') }}</option>
-                <option value="day">{{ $t('Day') }}</option>
-                <option value="week">{{ $t('Week') }}</option>
-                <option value="month">{{ $t('Month') }}</option>
-              </select>
+              <UiSelect
+                v-model="calFilter"
+                class="cal-select"
+                variant="inline"
+                :aria-label="$t('Filter calendar')"
+                :options="[
+                  { value: 'all', label: $t('All') },
+                  { value: 'tv', label: $t('TV') },
+                  { value: 'movies', label: $t('Movies') },
+                  { value: 'missing', label: $t('Not downloaded') },
+                ]"
+              />
+              <UiSelect
+                :model-value="calView"
+                class="cal-select"
+                variant="inline"
+                :aria-label="$t('Calendar view')"
+                :options="[
+                  { value: 'list', label: $t('List') },
+                  { value: 'day', label: $t('Day') },
+                  { value: 'week', label: $t('Week') },
+                  { value: 'month', label: $t('Month') },
+                ]"
+                @update:model-value="setCalView"
+              />
               <div class="cal-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" :aria-label="$t('Previous')">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" :aria-label="$t('Next')">›</button>
@@ -1772,22 +1791,34 @@ onUnmounted(() => {
           <div class="home-widget-head">
             <h3>{{ $t('Downloading') }}</h3>
             <span v-if="movingDownloads.length && !downloadPause.paused" class="home-card-stat">{{ movingDownloads.length }}<template v-if="totalSpeed"> · {{ totalSpeed }}</template></span>
-            <select v-if="movingDownloads.length > 1" v-model="downloadSort" class="ui-input home-sort" :aria-label="$t('Sort downloads')">
-              <option value="queue">{{ $t('Queue order') }}</option>
-              <option value="desc">{{ $t('Most done first') }}</option>
-              <option value="asc">{{ $t('Least done first') }}</option>
-            </select>
+            <UiSelect
+              v-if="movingDownloads.length > 1"
+              v-model="downloadSort"
+              class="home-sort"
+              variant="inline"
+              :aria-label="$t('Sort downloads')"
+              :options="[
+                { value: 'queue', label: $t('Queue order') },
+                { value: 'desc', label: $t('Most done first') },
+                { value: 'asc', label: $t('Least done first') },
+              ]"
+            />
             <div v-if="downloadPause.paused" class="home-pause is-paused">
               <span class="home-muted">{{ pausedLabel }}</span>
               <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(false)">{{ $t('Resume all') }}</button>
             </div>
             <div v-else-if="snapshot.downloads.length" class="home-pause">
-              <select v-model="pauseFor" class="ui-input" :aria-label="$t('Pause for')">
-                <option value="30">{{ $t('30 min') }}</option>
-                <option value="60">{{ $t('1 hour') }}</option>
-                <option value="180">{{ $t('3 hours') }}</option>
-                <option value="until">{{ $t('Until I resume') }}</option>
-              </select>
+              <UiSelect
+                v-model="pauseFor"
+                variant="inline"
+                :aria-label="$t('Pause for')"
+                :options="[
+                  { value: '30', label: $t('30 min') },
+                  { value: '60', label: $t('1 hour') },
+                  { value: '180', label: $t('3 hours') },
+                  { value: 'until', label: $t('Until I resume') },
+                ]"
+              />
               <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon" :disabled="pauseBusy" :title="$t('Pause all downloads')" :aria-label="$t('Pause all downloads')" @click="setDownloadsPaused(true)">
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
               </button>
@@ -2051,29 +2082,32 @@ onUnmounted(() => {
           <p class="home-muted">{{ $t('Choose where Seerr should add it.') }}</p>
           <label v-if="requestChoice.servers.length > 1" class="home-request-field">
             {{ $t('Server') }}
-            <select class="ui-input" :value="requestChoice.serverId" @change="onRequestServer">
-              <option v-for="server in requestChoice.servers" :key="server.id" :value="server.id">
-                {{ server.name }}{{ server.is4k ? ' (4K)' : '' }}
-              </option>
-            </select>
+            <UiSelect
+              :model-value="requestChoice.serverId"
+              :options="requestChoice.servers.map((server) => ({ value: server.id, label: server.name + (server.is4k ? ' (4K)' : '') }))"
+              @update:model-value="onRequestServer"
+            />
           </label>
           <label v-if="choiceServer.profiles.length > 1" class="home-request-field">
             {{ $t('Quality profile') }}
-            <select v-model="requestChoice.profileId" class="ui-input">
-              <option v-for="profile in choiceServer.profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
-            </select>
+            <UiSelect
+              v-model="requestChoice.profileId"
+              :options="choiceServer.profiles.map((profile) => ({ value: profile.id, label: profile.name }))"
+            />
           </label>
           <label v-if="choiceServer.folders.length > 1" class="home-request-field">
             {{ $t('Folder') }}
-            <select v-model="requestChoice.rootFolder" class="ui-input">
-              <option v-for="folder in choiceServer.folders" :key="folder.path" :value="folder.path">{{ folder.path }}</option>
-            </select>
+            <UiSelect
+              v-model="requestChoice.rootFolder"
+              :options="choiceServer.folders.map((folder) => ({ value: folder.path, label: folder.path }))"
+            />
           </label>
           <label v-if="choiceServer.languages.length > 1" class="home-request-field">
             {{ $t('Language profile') }}
-            <select v-model="requestChoice.languageProfileId" class="ui-input">
-              <option v-for="language in choiceServer.languages" :key="language.id" :value="language.id">{{ language.name }}</option>
-            </select>
+            <UiSelect
+              v-model="requestChoice.languageProfileId"
+              :options="choiceServer.languages.map((language) => ({ value: language.id, label: language.name }))"
+            />
           </label>
           <div class="home-request-actions">
             <button type="button" class="ui-btn" @click="requestChoice = null">{{ $t('Cancel') }}</button>
@@ -2320,45 +2354,11 @@ onUnmounted(() => {
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
   overflow: hidden;
 }
-.home-search-provider-wrap {
-  position: relative;
-  display: flex;
+.home-search-provider {
   align-self: stretch;
   flex: 0 1 12.4rem;
   min-width: 0;
   border-right: 1px solid var(--border-subtle);
-  border-radius: 999px 0 0 999px;
-  overflow: hidden;
-}
-.home-search-provider {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  padding: 0 1.7rem 0 1.15rem;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-}
-.home-search-provider:hover,
-.home-search-provider:focus-visible {
-  background: var(--pill-active);
-  outline: none;
-}
-.home-search-provider-chevron {
-  position: absolute;
-  top: 50%;
-  right: 0.72rem;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: var(--text-muted);
 }
 .home-search-pill svg {
   flex: 0 0 auto;
@@ -2423,16 +2423,10 @@ onUnmounted(() => {
 }
 /* A small search bar searches on Enter; the button would leave no room to type. */
 @container (max-width: 300px) {
-  .home-search-provider-wrap {
-    flex-basis: 7.1rem;
-  }
   .home-search-provider {
-    font-size: 0.8rem;
-    padding-left: 0.8rem;
-    padding-right: 1.35rem;
-  }
-  .home-search-provider-chevron {
-    right: 0.45rem;
+    flex-basis: 7.1rem;
+    --ui-select-font: 0.8rem;
+    --ui-select-pad: 0.8rem;
   }
   .home-search-btn {
     display: none;
@@ -3047,7 +3041,6 @@ onUnmounted(() => {
 }
 .home-card .cal-select {
   min-width: 0;
-  padding-left: 0.9rem;
 }
 .home-card-stat {
   font-size: 0.78rem;

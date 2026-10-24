@@ -19,6 +19,22 @@ MANAGER_KEY = "manager"
 # Apps that are rarely useful as public browser UIs.
 _SKIP_PUBLIC_UI = frozenset({"flaresolverr", "recyclarr"})
 
+# Public hostnames that get a Cloudflare Access application from AIO.
+# Jellyfin, Plex, and the manager keep their own login.
+ACCESS_GATE_APPS = frozenset(
+    {
+        "sonarr",
+        "radarr",
+        "lidarr",
+        "prowlarr",
+        "bazarr",
+        "qbittorrent",
+        "sabnzbd",
+        "nzbget",
+        "seerr",
+    }
+)
+
 
 class PublicHostnameError(ValueError):
     """Invalid public hostname preference."""

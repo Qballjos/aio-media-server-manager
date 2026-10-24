@@ -5,6 +5,7 @@ import { appWebUrl } from './appWebUrl.js'
 import { openApp } from './appOpen.js'
 import { copyText } from './clipboard.js'
 import { useToasts } from './useToasts.js'
+import UiSelect from './UiSelect.vue'
 
 const props = defineProps({
   service: { type: Object, default: null },
@@ -325,9 +326,10 @@ watch(
             </label>
             <label class="ui-field">
               {{ $t('Folder naming') }}
-              <select v-model="settingsForm.recyclarrNaming" class="ui-input">
-                <option v-for="opt in recyclarrMeta.naming_options" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
-              </select>
+              <UiSelect
+                v-model="settingsForm.recyclarrNaming"
+                :options="(recyclarrMeta.naming_options || []).map((opt) => ({ value: opt.id, label: opt.label }))"
+              />
             </label>
             <label class="ui-field">
               recyclarr.yml

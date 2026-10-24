@@ -668,4 +668,19 @@ export const TABLE = {
   "Violet": ["Violet", "Violett", "Violet"],
   "Cyan": ["Cyaan", "Cyan", "Cyan"],
   "Emerald": ["Smaragd", "Smaragd", "Émeraude"],
+  "Cloudflare Access": ["Cloudflare Access", "Cloudflare Access", "Cloudflare Access"],
+  "Own login": ["Eigen aanmelding", "Eigene Anmeldung", "Connexion propre"],
+  "Cloudflare Access emails": ["E-mailadressen voor Cloudflare Access", "E-Mail-Adressen für Cloudflare Access", "Adresses e-mail pour Cloudflare Access"],
+  "Add Cloudflare Access puts a login gate on the exposed *Arr apps, download clients, and Seerr, using a login method you already created in Zero Trust. Jellyfin, Plex, and this dashboard keep their own login. List the email addresses that may enter, separated by commas or new lines. Leave this empty only when the only login method is Cloudflare with Restrict to account members.": [
+    "Cloudflare Access toevoegen zet een aanmeldpoort voor de opengezette *Arr-apps, downloadclients en Seerr, met een aanmeldmethode die je al in Zero Trust hebt gemaakt. Jellyfin, Plex en dit dashboard houden hun eigen aanmelding. Zet de e-mailadressen die binnen mogen onder elkaar of gescheiden door komma’s. Laat dit leeg alleen als de enige aanmeldmethode Cloudflare is met Restrict to account members.",
+    "Cloudflare Access hinzufügen setzt eine Anmeldung vor die freigegebenen *Arr-Apps, Download-Clients und Seerr, mit einer Anmeldemethode, die Sie bereits in Zero Trust angelegt haben. Jellyfin, Plex und dieses Dashboard behalten ihre eigene Anmeldung. Tragen Sie die E-Mail-Adressen ein, die eintreten dürfen, getrennt durch Kommas oder Zeilenumbrüche. Lassen Sie das Feld leer, nur wenn die einzige Anmeldemethode Cloudflare mit Restrict to account members ist.",
+    "Ajouter Cloudflare Access place une connexion devant les apps *Arr exposées, les clients de téléchargement et Seerr, avec une méthode de connexion déjà créée dans Zero Trust. Jellyfin, Plex et ce tableau de bord gardent leur propre connexion. Indiquez les adresses e-mail autorisées, séparées par des virgules ou des retours à la ligne. Laissez vide seulement si la seule méthode est Cloudflare avec Restrict to account members.",
+  ],
+  "Login methods found:": ["Gevonden aanmeldmethoden:", "Gefundene Anmeldemethoden:", "Méthodes de connexion trouvées :"],
+  "Add Cloudflare Access": ["Cloudflare Access toevoegen", "Cloudflare Access hinzufügen", "Ajouter Cloudflare Access"],
+  "The API token also needs Access: Apps and Policies Write, and Access: Organizations, Identity Providers, and Groups Read. Publish the tunnel before adding Access. AIO does not create the login method itself.": [
+    "Het API-token heeft ook Access: Apps and Policies Write nodig, en Access: Organizations, Identity Providers, and Groups Read. Publiceer de tunnel vóór je Access toevoegt. AIO maakt de aanmeldmethode niet zelf.",
+    "Das API-Token braucht außerdem Access: Apps and Policies Write und Access: Organizations, Identity Providers, and Groups Read. Veröffentlichen Sie den Tunnel, bevor Sie Access hinzufügen. AIO legt die Anmeldemethode nicht selbst an.",
+    "Le jeton d’API a aussi besoin de Access: Apps and Policies Write et de Access: Organizations, Identity Providers, and Groups Read. Publiez le tunnel avant d’ajouter Access. AIO ne crée pas la méthode de connexion.",
+  ],
 }

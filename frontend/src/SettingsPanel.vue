@@ -9,6 +9,7 @@ import { versionLabel } from './statusChips.js'
 import { formatUptime } from './format.js'
 import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
+import UiSelect from './UiSelect.vue'
 import LanguageSelect from './LanguageSelect.vue'
 import {
   canPromptInstall,
@@ -136,6 +137,9 @@ const tunnelLive = ref({})
 const hostnameRoutes = ref([])
 const apiTokenConfigured = ref(false)
 const hostnameBusy = ref(false)
+const accessEmails = ref('')
+const accessIdps = ref([])
+const accessIdpError = ref('')
 const hostnameMeta = ref({
   tunnel_id: '',
   tunnel_account_id: '',
@@ -575,8 +579,23 @@ async function refreshHostnames() {
     if (data.public_app_base_domain != null) {
       form.value.public_app_base_domain = data.public_app_base_domain || ''
     }
+    await refreshAccess()
   } catch (err) {
     console.error('Hostname list error:', err)
+  }
+}
+
+async function refreshAccess() {
+  try {
+    const res = await apiRequest('/api/cloudflare/access')
+    if (!res.ok) return
+    const data = await readJson(res)
+    const joined = (data.emails || []).join('\n')
+    if (!accessEmails.value.trim()) accessEmails.value = joined
+    accessIdps.value = data.identity_providers || []
+    accessIdpError.value = data.idp_error || ''
+  } catch (err) {
+    console.error('Access status error:', err)
   }
 }
 
@@ -704,6 +723,79 @@ async function publishHostnames() {
     notice.value = `${bits.join('; ')}.${data.warning ? ` ${data.warning}` : ''}`
   } catch (err) {
     error.value = err?.message || 'Publish to Cloudflare failed.'
+  } finally {
+    hostnameBusy.value = false
+  }
+}
+
+async function addCloudflareAccess() {
+  const gated = (hostnameRoutes.value || []).filter((row) => row.enabled && row.access_gate)
+  if (!gated.length) {
+    error.value = 'Turn on Expose for at least one *Arr app, download client, or Seerr.'
+    notice.value = ''
+    return
+  }
+  const preview = gated
+    .map((row) => previewHostnameUrl(row))
+    .filter((url) => url && url !== '—')
+    .join('\n')
+  const okConfirm = window.confirm(
+    [
+      `Add Cloudflare Access for ${gated.length} hostname${gated.length === 1 ? '' : 's'}?`,
+      preview ? `\n${preview}` : '',
+      '\nJellyfin, Plex, and this dashboard stay on their own login.',
+      'Publish the tunnel first if these names are not public yet.',
+      'Turning Expose off and running this again removes only the Access apps AIO created.',
+    ].join('\n'),
+  )
+  if (!okConfirm) return
+  hostnameBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    if (form.value.cloudflare_api_token) {
+      const saveRes = await apiRequest('/api/cloudflare/hostnames', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hostnames: hostnamePayload(),
+          public_app_base_domain: form.value.public_app_base_domain,
+          cloudflare_api_token: form.value.cloudflare_api_token,
+        }),
+      })
+      const saveData = await readJson(saveRes)
+      if (!saveRes.ok) {
+        error.value = apiError(saveData, 'Could not save API token before adding Access.')
+        return
+      }
+      form.value.cloudflare_api_token = ''
+      apiTokenConfigured.value = !!saveData.api_token_configured
+    }
+    const res = await apiRequest('/api/cloudflare/hostnames/access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        emails: accessEmails.value,
+        hostnames: hostnamePayload(),
+        public_app_base_domain: form.value.public_app_base_domain,
+      }),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not add Cloudflare Access.')
+      return
+    }
+    accessEmails.value = (data.emails || []).join('\n')
+    accessIdps.value = data.identity_providers || accessIdps.value
+    accessIdpError.value = ''
+    await refreshHostnames()
+    const applied = (data.applied || []).length
+    const removed = (data.removed || []).length
+    const bits = [`Cloudflare Access is on ${applied} hostname${applied === 1 ? '' : 's'}`]
+    if (removed) bits.push(`removed ${removed} Access app${removed === 1 ? '' : 's'} AIO created`)
+    notice.value = `${bits.join('; ')}.`
+  } catch (err) {
+    error.value = err?.message || 'Could not add Cloudflare Access.'
   } finally {
     hostnameBusy.value = false
   }
@@ -1935,23 +2027,31 @@ onBeforeUnmount(() => {
         </div>
         <form class="form-stack" @submit.prevent="patchSettings({ timezone: form.timezone, log_level: form.log_level })">
           <label class="ui-field">{{ $t('Timezone') }}
-            <input v-model="form.timezone" class="ui-input font-mono" list="tz-list" />
-            <datalist id="tz-list">
-              <option value="UTC" />
-              <option value="Europe/Amsterdam" />
-              <option value="Europe/London" />
-              <option value="America/New_York" />
-              <option value="America/Los_Angeles" />
-              <option value="Australia/Sydney" />
-            </datalist>
+            <UiSelect
+              v-model="form.timezone"
+              :options="[
+                { value: 'UTC', label: 'UTC' },
+                { value: 'Europe/Amsterdam', label: 'Europe/Amsterdam' },
+                { value: 'Europe/London', label: 'Europe/London' },
+                { value: 'America/New_York', label: 'America/New_York' },
+                { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
+                { value: 'Australia/Sydney', label: 'Australia/Sydney' },
+                ...(form.timezone && !['UTC','Europe/Amsterdam','Europe/London','America/New_York','America/Los_Angeles','Australia/Sydney'].includes(form.timezone)
+                  ? [{ value: form.timezone, label: form.timezone }]
+                  : []),
+              ]"
+            />
           </label>
           <label class="ui-field">{{ $t('Log level') }}
-            <select v-model="form.log_level" class="ui-input">
-              <option>DEBUG</option>
-              <option>INFO</option>
-              <option>WARNING</option>
-              <option>ERROR</option>
-            </select>
+            <UiSelect
+              v-model="form.log_level"
+              :options="[
+                { value: 'DEBUG', label: 'DEBUG' },
+                { value: 'INFO', label: 'INFO' },
+                { value: 'WARNING', label: 'WARNING' },
+                { value: 'ERROR', label: 'ERROR' },
+              ]"
+            />
           </label>
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save') }}</button>
         </form>
@@ -2074,35 +2174,44 @@ onBeforeUnmount(() => {
           update_day_of_month: Number(form.update_day_of_month)
         })">
           <label class="ui-field">{{ $t('Check schedule') }}
-            <select v-model="form.update_check_schedule" class="ui-input">
-              <option value="off">{{ $t('Off') }}</option>
-              <option value="daily">{{ $t('Daily') }}</option>
-              <option value="weekly">{{ $t('Weekly') }}</option>
-              <option value="monthly">{{ $t('Monthly') }}</option>
-            </select>
+            <UiSelect
+              v-model="form.update_check_schedule"
+              :options="[
+                { value: 'off', label: $t('Off') },
+                { value: 'daily', label: $t('Daily') },
+                { value: 'weekly', label: $t('Weekly') },
+                { value: 'monthly', label: $t('Monthly') },
+              ]"
+            />
           </label>
           <label class="ui-field">{{ $t('Apply schedule') }}
-            <select v-model="form.update_apply_schedule" class="ui-input">
-              <option value="off">{{ $t('Off (notify only)') }}</option>
-              <option value="same">{{ $t('Same as check') }}</option>
-              <option value="daily">{{ $t('Daily') }}</option>
-              <option value="weekly">{{ $t('Weekly') }}</option>
-              <option value="monthly">{{ $t('Monthly') }}</option>
-            </select>
+            <UiSelect
+              v-model="form.update_apply_schedule"
+              :options="[
+                { value: 'off', label: $t('Off (notify only)') },
+                { value: 'same', label: $t('Same as check') },
+                { value: 'daily', label: $t('Daily') },
+                { value: 'weekly', label: $t('Weekly') },
+                { value: 'monthly', label: $t('Monthly') },
+              ]"
+            />
           </label>
           <label class="ui-field">{{ $t('Time of day') }}
             <input v-model="form.update_time" type="time" class="ui-input font-mono" />
           </label>
           <label v-if="form.update_check_schedule === 'weekly' || form.update_apply_schedule === 'weekly'" class="ui-field">{{ $t('Weekday') }}
-            <select v-model.number="form.update_weekday" class="ui-input">
-              <option :value="0">{{ $t('Monday') }}</option>
-              <option :value="1">{{ $t('Tuesday') }}</option>
-              <option :value="2">{{ $t('Wednesday') }}</option>
-              <option :value="3">{{ $t('Thursday') }}</option>
-              <option :value="4">{{ $t('Friday') }}</option>
-              <option :value="5">{{ $t('Saturday') }}</option>
-              <option :value="6">{{ $t('Sunday') }}</option>
-            </select>
+            <UiSelect
+              v-model="form.update_weekday"
+              :options="[
+                { value: 0, label: $t('Monday') },
+                { value: 1, label: $t('Tuesday') },
+                { value: 2, label: $t('Wednesday') },
+                { value: 3, label: $t('Thursday') },
+                { value: 4, label: $t('Friday') },
+                { value: 5, label: $t('Saturday') },
+                { value: 6, label: $t('Sunday') },
+              ]"
+            />
           </label>
           <label v-if="form.update_check_schedule === 'monthly' || form.update_apply_schedule === 'monthly'" class="ui-field">{{ $t('Day of month') }}
             <input v-model.number="form.update_day_of_month" type="number" min="1" max="28" class="ui-input font-mono" />
@@ -2185,26 +2294,32 @@ onBeforeUnmount(() => {
           backup_day_of_month: Number(form.backup_day_of_month)
         })">
           <label class="ui-field">{{ $t('Automatic backups') }}
-            <select v-model="form.backup_schedule" class="ui-input">
-              <option value="off">{{ $t('Off') }}</option>
-              <option value="daily">{{ $t('Daily') }}</option>
-              <option value="weekly">{{ $t('Weekly') }}</option>
-              <option value="monthly">{{ $t('Monthly') }}</option>
-            </select>
+            <UiSelect
+              v-model="form.backup_schedule"
+              :options="[
+                { value: 'off', label: $t('Off') },
+                { value: 'daily', label: $t('Daily') },
+                { value: 'weekly', label: $t('Weekly') },
+                { value: 'monthly', label: $t('Monthly') },
+              ]"
+            />
           </label>
           <label v-if="form.backup_schedule !== 'off'" class="ui-field">{{ $t('Time of day') }}
             <input v-model="form.backup_time" type="time" class="ui-input font-mono" />
           </label>
           <label v-if="form.backup_schedule === 'weekly'" class="ui-field">{{ $t('Weekday') }}
-            <select v-model.number="form.backup_weekday" class="ui-input">
-              <option :value="0">{{ $t('Monday') }}</option>
-              <option :value="1">{{ $t('Tuesday') }}</option>
-              <option :value="2">{{ $t('Wednesday') }}</option>
-              <option :value="3">{{ $t('Thursday') }}</option>
-              <option :value="4">{{ $t('Friday') }}</option>
-              <option :value="5">{{ $t('Saturday') }}</option>
-              <option :value="6">{{ $t('Sunday') }}</option>
-            </select>
+            <UiSelect
+              v-model="form.backup_weekday"
+              :options="[
+                { value: 0, label: $t('Monday') },
+                { value: 1, label: $t('Tuesday') },
+                { value: 2, label: $t('Wednesday') },
+                { value: 3, label: $t('Thursday') },
+                { value: 4, label: $t('Friday') },
+                { value: 5, label: $t('Saturday') },
+                { value: 6, label: $t('Sunday') },
+              ]"
+            />
           </label>
           <label v-if="form.backup_schedule === 'monthly'" class="ui-field">{{ $t('Day of month') }}
             <input v-model.number="form.backup_day_of_month" type="number" min="1" max="28" class="ui-input font-mono" />
@@ -2324,9 +2439,10 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <label class="ui-field">{{ $t('Provider') }}
-            <select v-model="form.vpn_provider" class="ui-input">
-              <option v-for="p in (vpnLive.supported_providers || ['privadovpn','custom'])" :key="p" :value="p">{{ p }}</option>
-            </select>
+            <UiSelect
+              v-model="form.vpn_provider"
+              :options="(vpnLive.supported_providers || ['privadovpn', 'custom']).map((p) => ({ value: p, label: p }))"
+            />
           </label>
           <VpnConfigFields
             v-model:protocol="form.vpn_protocol"
@@ -2488,7 +2604,7 @@ onBeforeUnmount(() => {
                   </td>
                   <td>
                     <strong>{{ row.display_name }}</strong>
-                    <span class="path-line">{{ row.name }} {{ $t('· port') }} {{ row.port }}{{ row.installed ? '' : $t(' · not installed') }}</span>
+                    <span class="path-line">{{ row.name }} {{ $t('· port') }} {{ row.port }}{{ row.installed ? '' : $t(' · not installed') }}{{ row.access_gate ? ' · ' + $t('Cloudflare Access') : ' · ' + $t('Own login') }}</span>
                   </td>
                   <td>
                     <input
@@ -2528,6 +2644,37 @@ onBeforeUnmount(() => {
               {{ $t('Clear API token') }}
             </button>
           </div>
+          <label class="ui-field">
+            {{ $t('Cloudflare Access emails') }}
+            <span class="ui-field-hint">
+              {{ $t('Add Cloudflare Access puts a login gate on the exposed *Arr apps, download clients, and Seerr, using a login method you already created in Zero Trust. Jellyfin, Plex, and this dashboard keep their own login. List the email addresses that may enter, separated by commas or new lines. Leave this empty only when the only login method is Cloudflare with Restrict to account members.') }}
+              <span v-if="accessIdps.length">
+                {{ $t('Login methods found:') }}
+                {{ accessIdps.map((row) => row.name || row.type).join(', ') }}.
+              </span>
+              <span v-else-if="accessIdpError">{{ accessIdpError }}</span>
+            </span>
+            <textarea
+              v-model="accessEmails"
+              class="ui-input font-mono"
+              rows="3"
+              autocomplete="off"
+              placeholder="name@example.com"
+            ></textarea>
+          </label>
+          <div class="share-row">
+            <button
+              type="button"
+              class="ui-btn ui-btn-primary"
+              :disabled="saving || hostnameBusy || (!apiTokenConfigured && !form.cloudflare_api_token)"
+              @click="addCloudflareAccess"
+            >
+              {{ $t('Add Cloudflare Access') }}
+            </button>
+          </div>
+          <p class="share-meta">
+            {{ $t('The API token also needs Access: Apps and Policies Write, and Access: Organizations, Identity Providers, and Groups Read. Publish the tunnel before adding Access. AIO does not create the login method itself.') }}
+          </p>
           <p class="share-meta">
             <strong>{{ $t('Save') }}</strong> {{ $t('updates Catalog Open UI and Home widget links in AIO.') }}
             <strong>{{ $t('Publish to Cloudflare') }}</strong> {{ $t('writes enabled hostnames into your tunnel (published applications) and creates proxied DNS CNAMEs under the public app domain. Changing an exposed app’s listen port updates the tunnel service when an API token is saved. Disabling an app and publishing removes its ingress hostname; the DNS CNAME may remain (tunnel 404). LAN browsing still uses') }} <code>http://nas-ip:port</code>{{ $t('. For zones like') }} <code>example.co.uk</code>{{ $t(', set Public app domain to that full zone. Secure public hostnames with') }} <code>deploy/CLOUDFLARE_ACCESS.md</code>.
@@ -2606,11 +2753,14 @@ onBeforeUnmount(() => {
             </label>
           </div>
           <label class="ui-field">{{ $t('Security') }}
-            <select v-model="notifForm.email.security" class="ui-input">
-              <option value="starttls">{{ $t('STARTTLS (usually port 587)') }}</option>
-              <option value="ssl">{{ $t('SSL/TLS (usually port 465)') }}</option>
-              <option value="none">{{ $t('None (local relay only)') }}</option>
-            </select>
+            <UiSelect
+              v-model="notifForm.email.security"
+              :options="[
+                { value: 'starttls', label: $t('STARTTLS (usually port 587)') },
+                { value: 'ssl', label: $t('SSL/TLS (usually port 465)') },
+                { value: 'none', label: $t('None (local relay only)') },
+              ]"
+            />
           </label>
           <div class="usenet-pair">
             <label class="ui-field">{{ $t('Username') }}

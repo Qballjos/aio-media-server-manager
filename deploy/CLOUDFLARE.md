@@ -123,7 +123,7 @@ Service URL must be `http://127.0.0.1:PORT` inside AIO. Then match the same labe
 - Changing an app’s listen port updates the tunnel service when an API token is saved.
 - At home, `http://nas-ip:8080` still opens apps as `http://nas-ip:port` even if a public domain is set.
 
-**Important:** published hostnames are on the public internet until you add [Cloudflare Access](CLOUDFLARE_ACCESS.md). Prefer Access (or very strong app passwords) for Sonarr, Radarr, qBittorrent, and the AIO manager itself.
+**Important:** published hostnames are on the public internet until you add [Cloudflare Access](CLOUDFLARE_ACCESS.md). Put Access in front of the *Arr apps, the download clients, and Seerr. Leave the AIO dashboard, Jellyfin, and Plex on their own login. AIO can create those Access applications after you add a login method in Zero Trust.
 
 SABnzbd blocks unknown public Hosts by default (`External internet access denied`). AIO sets `inet_exposure` and adds your published SABnzbd hostname to `host_whitelist` on start / Auto-Wire / Publish. After enabling `sabnzbd` under Public subdomains, restart SABnzbd or run Auto-Wire once if the page still denies access.
 
@@ -225,4 +225,4 @@ Access login gate: [CLOUDFLARE_ACCESS.md](CLOUDFLARE_ACCESS.md) — trusted prox
 4. Publish hostnames from AIO (**Public subdomains** → Save → Publish to Cloudflare), or add Published applications in the Cloudflare dashboard and Save matching labels in AIO.
 5. Leave trusted proxies empty unless you also run nginx/Caddy in front.
 6. Confirm Healthy / connected, then open the HTTPS URL.
-7. Lock it down with [Cloudflare Access](CLOUDFLARE_ACCESS.md).
+7. Put *Arr, the download clients, and Seerr behind [Cloudflare Access](CLOUDFLARE_ACCESS.md). Leave AIO, Jellyfin, and Plex on their own login.

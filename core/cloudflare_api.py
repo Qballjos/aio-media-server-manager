@@ -12,6 +12,7 @@ import httpx
 from core.cloudflare_tunnel import cloudflare_tunnel
 from core.crypto import secret_store
 from core.public_hostnames import (
+    ACCESS_GATE_APPS,
     catalog_public_apps,
     load_hostnames,
     mark_published,
@@ -297,6 +298,7 @@ def planned_routes(
                 "url": f"https://{host}" if host else "",
                 "service": _service_url(app["port"]),
                 "default_subdomain": app["default_subdomain"],
+                "access_gate": name in ACCESS_GATE_APPS,
             }
         )
     return routes
@@ -581,7 +583,8 @@ async def publish_hostnames(
         "dns": dns_results,
         "ingress_count": max(0, len(new_ingress) - 1),
         "warning": (
-            "Published hostnames are reachable from the internet unless you add Cloudflare Access. "
+            "Published hostnames are reachable from the internet unless you add Cloudflare Access "
+            "for the *Arr apps, download clients, and Seerr. "
             "DNS CNAMEs for disabled apps are left in place (published-application ingress hostname removed)."
             if enabled or cleared
             else ""

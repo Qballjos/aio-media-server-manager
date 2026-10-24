@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import UiSelect from './UiSelect.vue'
 
 const props = defineProps({
   protocol: { type: String, default: 'wireguard' },
@@ -38,10 +39,14 @@ function onFile(event) {
   <div class="vpn-config-fields">
     <label class="ui-field">
       <span>{{ $t('Protocol') }}</span>
-      <select class="ui-input" :value="protocol" @change="emit('update:protocol', $event.target.value)">
-        <option value="wireguard">{{ $t('WireGuard') }}</option>
-        <option value="openvpn">{{ $t('OpenVPN') }}</option>
-      </select>
+      <UiSelect
+        :model-value="protocol"
+        :options="[
+          { value: 'wireguard', label: $t('WireGuard') },
+          { value: 'openvpn', label: $t('OpenVPN') },
+        ]"
+        @update:model-value="emit('update:protocol', $event)"
+      />
     </label>
     <p class="vpn-hint">{{ $t('Upload a provider profile or paste it. It is stored as') }} {{ protocol === 'openvpn' ? 'client.ovpn' : 'wg0.conf' }} {{ $t('under the config VPN folder unless you set a path.') }}</p>
     <p v-if="hasConfig" class="vpn-hint">{{ $t('A config file is already saved') }}{{ path ? ` at ${path}` : '' }}.</p>

@@ -1842,9 +1842,11 @@ a.status-pill {
 }
 
 /* The catalog's sort select is a pill like the chips next to it, not a full-width form field. */
-.catalog-toolbar select.ui-input {
-  width: auto;
+.catalog-toolbar .catalog-sort-select {
+  align-self: flex-start;
+  width: max-content;
   min-width: 11rem;
+  max-width: 100%;
 }
 
 /* Home-screen web app (iOS): the system blurs a band below the status bar that reaches past the safe

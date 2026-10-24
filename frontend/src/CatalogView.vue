@@ -9,6 +9,7 @@ import { apiError, apiRequest, readJson } from './api.js'
 import { formatUpdateWhen, formatUptime } from './format.js'
 import { useToasts } from './useToasts.js'
 import { t } from './i18n/index.js'
+import UiSelect from './UiSelect.vue'
 
 const props = defineProps({
   catalogApps: { type: Array, default: () => [] },
@@ -739,10 +740,17 @@ onUnmounted(() => {
           </div>
           <div class="catalog-filter-group catalog-sort-group">
             <label class="catalog-filter-label" for="catalog-sort">{{ $t('Sort') }}</label>
-            <select id="catalog-sort" v-model="catalogSort" class="ui-input catalog-sort-select">
-              <option value="popularity">{{ $t('Popularity') }}</option>
-              <option value="az">{{ $t('A to Z') }}</option>
-            </select>
+            <UiSelect
+              id="catalog-sort"
+              v-model="catalogSort"
+              class="catalog-sort-select"
+              variant="inline"
+              :aria-label="$t('Sort')"
+              :options="[
+                { value: 'popularity', label: $t('Popularity') },
+                { value: 'az', label: $t('A to Z') },
+              ]"
+            />
           </div>
           <span class="catalog-count font-mono">{{ visibleServices.length }} {{ $t('shown ·') }} {{ installedAppCount }} {{ $t('installed ·') }} {{ availableAppCount }} {{ $t('available') }}</span>
         </div>

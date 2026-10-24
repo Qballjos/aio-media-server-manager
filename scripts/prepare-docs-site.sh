@@ -11,9 +11,18 @@ export DOCS_REPO_BLOB="${REPO_BLOB}"
 rm -rf "${OUT}"
 mkdir -p "${OUT}/deploy" "${OUT}/screenshots" "${OUT}/assets/app-icons" "${OUT}/stylesheets"
 
-cp "${ROOT}/docs/index.md" "${OUT}/index.md"
-cp "${ROOT}/docs/INSTALL.md" "${OUT}/INSTALL.md"
-cp "${ROOT}/docs/USAGE.md" "${OUT}/USAGE.md"
+copy_localized() {
+  local src_dir="$1" name="$2" dest_dir="$3" suffix
+  for suffix in "" .nl .de .fr; do
+    if [[ -f "${src_dir}/${name}${suffix}.md" ]]; then
+      cp "${src_dir}/${name}${suffix}.md" "${dest_dir}/${name}${suffix}.md"
+    fi
+  done
+}
+
+copy_localized "${ROOT}/docs" index "${OUT}"
+copy_localized "${ROOT}/docs" INSTALL "${OUT}"
+copy_localized "${ROOT}/docs" USAGE "${OUT}"
 
 if [[ -d "${ROOT}/docs/stylesheets" ]]; then
   cp -R "${ROOT}/docs/stylesheets/." "${OUT}/stylesheets/"
@@ -29,10 +38,7 @@ if [[ -d "${ROOT}/frontend/public/app-icons" ]]; then
 fi
 
 for name in README DOCKER LINUX UNRAID SYNOLOGY TRUENAS CLOUDFLARE CLOUDFLARE_ACCESS; do
-  src="${ROOT}/deploy/${name}.md"
-  if [[ -f "${src}" ]]; then
-    cp "${src}" "${OUT}/deploy/${name}.md"
-  fi
+  copy_localized "${ROOT}/deploy" "${name}" "${OUT}/deploy"
 done
 
 python3 <<'PY'
@@ -64,16 +70,22 @@ def rewrite(text: str, *, kind: str) -> str:
     return text
 
 
-(out / "INSTALL.md").write_text(
-    rewrite((out / "INSTALL.md").read_text(encoding="utf-8"), kind="install"),
-    encoding="utf-8",
-)
-(out / "USAGE.md").write_text(
-    rewrite((out / "USAGE.md").read_text(encoding="utf-8"), kind="usage"),
-    encoding="utf-8",
-)
-for path in sorted((out / "deploy").glob("*.md")):
-    path.write_text(rewrite(path.read_text(encoding="utf-8"), kind="deploy"), encoding="utf-8")
+def kind_for(path: Path) -> str | None:
+    if path.parent.name == "deploy":
+        return "deploy"
+    base = path.name.split(".", 1)[0]
+    if base == "INSTALL":
+        return "install"
+    if base == "USAGE":
+        return "usage"
+    return None
+
+
+for path in sorted(out.rglob("*.md")):
+    kind = kind_for(path)
+    if not kind:
+        continue
+    path.write_text(rewrite(path.read_text(encoding="utf-8"), kind=kind), encoding="utf-8")
 
 print(f"Prepared docs site at {out.resolve()}")
 PY
