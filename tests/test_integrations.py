@@ -856,6 +856,7 @@ def test_optimization_hooks(tmp_path: Path):
     assert "d1498e7d189fbe6c7110ceaabb7473e6" not in rec_text
     assert "trash_id: 72dae194fc92bf828f32cde7744e51a1" in rec_text
     assert "trash_id: d1d67249d3890e49bc12e275d989a7e9" in rec_text
+    assert "trash_id: 722b624f9af1e492284c4bc842153a38" in rec_text
     assert "reset_unmatched_scores" in rec_text
     assert rec_text.count("custom_format_groups:") == 1  # only the older tv shows scores
     assert "plex-imdb" in rec_text

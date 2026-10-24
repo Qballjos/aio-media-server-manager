@@ -221,7 +221,10 @@ watch(
 .ui-select.is-search {
   display: flex;
   align-self: stretch;
+  width: 100%;
+  min-width: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 .ui-select-btn {
@@ -298,13 +301,15 @@ watch(
 
 .ui-select.is-search .ui-select-btn {
   height: 100%;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
   border: 0;
   border-radius: 999px 0 0 999px;
   background: transparent;
   box-shadow: none;
   font-size: var(--ui-select-font, 0.92rem);
-  padding: 0 0.85rem 0 var(--ui-select-pad, 1.15rem);
+  padding: 0 0.7rem 0 var(--ui-select-pad, 1.15rem);
 }
 
 .ui-select.is-search .ui-select-btn:hover:not(:disabled),

@@ -66,14 +66,36 @@ def test_default_yaml_matches_trash_hd_templates(tmp_path: Path):
     assert "72dae194fc92bf828f32cde7744e51a1" in text
     assert "d1d67249d3890e49bc12e275d989a7e9" in text
     assert "20e0fc959f1f1704bed501f23bdae76f" in text
+    assert "722b624f9af1e492284c4bc842153a38" in text
+    assert "type: movie" in text
     assert "d1498e7d189fbe6c7110ceaabb7473e6" not in text
     assert "delete_old_custom_formats: true" in text
     assert "replace_existing_custom_formats" not in text
     assert text.count("custom_format_groups:") == 1  # only the older tv shows scores
     prefs = load_prefs(tmp_path / "recyclarr")
     assert prefs["sonarr_web_1080p"] is True
+    assert prefs["sonarr_anime"] is True
+    assert prefs["radarr_anime"] is True
     assert prefs["radarr_uhd"] is False
     assert prefs["user_edited"] is False
+
+
+def test_radarr_anime_only_uses_anime_quality_sizes(tmp_path: Path):
+    prefs = default_prefs()
+    prefs.update({"radarr_hd": False, "radarr_uhd": False, "radarr_anime": True})
+    path = write_recyclarr_config(
+        tmp_path / "recyclarr",
+        sonarr_url="http://127.0.0.1:8989",
+        sonarr_key="s",
+        radarr_url="http://127.0.0.1:7878",
+        radarr_key="r",
+        prefs=prefs,
+        force=True,
+    )
+    text = path.read_text(encoding="utf-8")
+    assert "722b624f9af1e492284c4bc842153a38" in text
+    assert "d1d67249d3890e49bc12e275d989a7e9" not in text
+    assert "type: anime" in text
 
 
 def test_uhd_opt_in_and_jellyfin_naming(tmp_path: Path):
@@ -289,7 +311,10 @@ def test_sonarr_web_profiles_accept_bluray_and_hdtv_by_default(tmp_path: Path):
         for source in ("WEBDL", "WEBRip", "Bluray", "HDTV"):
             assert f"- {source}-{resolution}" in block
         assert f"until_quality: {resolution}" in block
-    assert "Bluray-2160p" not in _render(tmp_path, sonarr_web_2160p=True, sonarr_all_sources=False)
+    # An old saved switch cannot turn the sources off; they are part of the Web profiles.
+    kept = _render(tmp_path, sonarr_web_2160p=True, sonarr_all_sources=False)
+    assert "Bluray-2160p" in _profile_block(kept, "d1498e7d189fbe6c7110ceaabb7473e6")
+    assert "sonarr_all_sources" not in default_prefs()
 
 
 def test_older_tv_shows_profile_gets_720p_and_the_guide_scores(tmp_path: Path):

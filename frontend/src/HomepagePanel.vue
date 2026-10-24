@@ -1454,19 +1454,23 @@ onUnmounted(() => {
             ]"
             @change="onProviderChange"
           />
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          <svg class="home-search-mark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <label class="home-sr" for="home-search">{{ $t('Search') }}</label>
           <input
             id="home-search"
             v-model="query"
             class="home-search-input"
             type="search"
+            enterkeyhint="search"
             autocomplete="off"
             :placeholder="searchPlaceholder"
             @input="onQueryInput"
             @keydown.esc="closeSearch"
           />
-          <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :disabled="searching">{{ $t('Search') }}</button>
+          <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :aria-label="$t('Search')" :disabled="searching">
+            <svg class="home-search-go" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            <span>{{ $t('Search') }}</span>
+          </button>
         </form>
         <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
           <div class="home-results-scroll">
@@ -2339,7 +2343,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
   container-type: inline-size;
 }
 .home-search-pill {
@@ -2349,7 +2355,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  height: 3.5rem;
+  height: min(3.5rem, 100%);
   padding: 0 0.5rem 0 0;
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
   overflow: hidden;
@@ -2357,22 +2363,37 @@ onUnmounted(() => {
 .home-search-provider {
   align-self: stretch;
   flex: 0 1 12.4rem;
+  width: 12.4rem;
+  max-width: 12.4rem;
   min-width: 0;
   border-right: 1px solid var(--border-subtle);
 }
-.home-search-pill svg {
+.home-search-mark {
   flex: 0 0 auto;
   color: var(--text-muted);
 }
+.home-search-go {
+  display: none;
+}
 .home-search-input {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 1rem;
+  /* 16px keeps iOS from zooming the page when the field is focused. */
+  font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
+}
+.home-search-input::-webkit-search-decoration,
+.home-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
 }
 .home-search-input::placeholder {
   color: var(--text-dim);
@@ -2383,11 +2404,12 @@ onUnmounted(() => {
 }
 .home-hero-results {
   position: absolute;
-  top: calc(50% + 1.75rem - 1px);
+  top: calc(50% + min(1.75rem, 50%) - 1px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
   width: min(720px, max(100%, min(28rem, calc(100vw - 2rem))));
+  max-width: calc(100vw - 1.5rem);
   padding: 0;
   text-align: left;
 }
@@ -2421,15 +2443,60 @@ onUnmounted(() => {
     display: none;
   }
 }
-/* A small search bar searches on Enter; the button would leave no room to type. */
-@container (max-width: 300px) {
+/* A phone-width bar keeps the field typeable. The worded button becomes an icon; Enter still submits. */
+@container (max-width: 560px) {
+  .home-search-pill {
+    gap: 0.4rem;
+    padding-right: 0.3rem;
+  }
   .home-search-provider {
-    flex-basis: 7.1rem;
-    --ui-select-font: 0.8rem;
-    --ui-select-pad: 0.8rem;
+    flex: 0 1 10.4rem;
+    width: auto;
+    max-width: min(10.4rem, 46%);
+    --ui-select-font: 0.92rem;
+    --ui-select-pad: 0.7rem;
+  }
+  .home-search-mark {
+    display: none;
+  }
+  .home-search-go {
+    display: block;
+    flex: 0 0 auto;
   }
   .home-search-btn {
-    display: none;
+    flex: 0 0 auto;
+    width: min(2.55rem, calc(100% - 0.35rem));
+    min-width: 0;
+    height: min(2.55rem, calc(100% - 0.35rem));
+    min-height: 0;
+    aspect-ratio: 1;
+    padding: 0;
+  }
+  .home-search-btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .home-hero-results,
+  .home-hero-results.is-left,
+  .home-hero-results.is-right {
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    transform: none;
+  }
+}
+@container (max-width: 280px) {
+  .home-search-provider {
+    max-width: min(6.4rem, 46%);
+    --ui-select-pad: 0.55rem;
   }
 }
 .home-request-dialog {

@@ -152,11 +152,11 @@ async function saveAppSettings() {
           method: 'PATCH',
           body: JSON.stringify({
             sonarr_web_1080p: !!settingsForm.value.recyclarrPrefs.sonarr_web_1080p,
-            sonarr_all_sources: !!settingsForm.value.recyclarrPrefs.sonarr_all_sources,
             sonarr_older_tv: !!settingsForm.value.recyclarrPrefs.sonarr_older_tv,
             sonarr_web_2160p: !!settingsForm.value.recyclarrPrefs.sonarr_web_2160p,
             sonarr_anime: !!settingsForm.value.recyclarrPrefs.sonarr_anime,
             radarr_hd: !!settingsForm.value.recyclarrPrefs.radarr_hd,
+            radarr_anime: !!settingsForm.value.recyclarrPrefs.radarr_anime,
             radarr_uhd: !!settingsForm.value.recyclarrPrefs.radarr_uhd,
             naming: settingsForm.value.recyclarrNaming
           })
