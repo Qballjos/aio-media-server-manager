@@ -10,6 +10,7 @@ import {
   shouldMigrateLocalVisuals,
   setWallpaperPreference,
 } from './background.js'
+import { setLocale } from './i18n/index.js'
 import { getThemePreference, setThemePreference } from './theme.js'
 import { applyGlass, glassProfileBody } from './glass.js'
 import {
@@ -29,6 +30,11 @@ async function patchVisuals(body) {
   if (!res.ok) throw new Error(apiError(data, 'Could not save visual preferences.'))
   applyVisualsFromProfile(data)
   return data
+}
+
+export async function saveLocaleToProfile(locale) {
+  setLocale(locale)
+  return patchVisuals({ locale })
 }
 
 export async function saveThemeToProfile(theme) {

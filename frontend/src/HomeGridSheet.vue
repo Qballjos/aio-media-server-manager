@@ -59,46 +59,46 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
         class="home-sheet glass-card"
         role="dialog"
         aria-modal="true"
-        :aria-label="mode === 'add' ? 'Add widget' : `${WIDGETS[item.id].label} settings`"
+        :aria-label="mode === 'add' ? $t('Add widget') : $t('{name} settings', { name: WIDGETS[item.id].label })"
       >
         <div class="home-sheet-head">
-          <h3>{{ mode === 'add' ? 'Add widget' : WIDGETS[item.id].label }}</h3>
-          <span class="home-sheet-dim">{{ mode === 'add' ? `${size.label} · ${size.cols} columns` : `${item.w} × ${item.h}` }}</span>
-          <button ref="closeButton" type="button" class="ui-btn ui-btn-ghost ui-btn-icon" aria-label="Close" @click="emit('close')">
+          <h3>{{ mode === 'add' ? $t('Add widget') : $t(WIDGETS[item.id].label) }}</h3>
+          <span class="home-sheet-dim">{{ mode === 'add' ? $t('{size} · {count} columns', { size: $t(size.label), count: size.cols }) : `${item.w} × ${item.h}` }}</span>
+          <button ref="closeButton" type="button" class="ui-btn ui-btn-ghost ui-btn-icon" :aria-label="$t('Close')" @click="emit('close')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
 
         <template v-if="mode === 'add'">
           <div class="home-sheet-section">
-            <span class="home-sheet-label">Add to</span>
-            <div class="home-sheet-options" role="group" aria-label="Add to">
+            <span class="home-sheet-label">{{ $t('Add to') }}</span>
+            <div class="home-sheet-options" role="group" :aria-label="$t('Add to')">
               <button type="button" class="home-sheet-option" :class="{ 'is-on': !everySize }" :aria-pressed="!everySize" @click="everySize = false">
-                This size<small>{{ size.label }} only</small>
+                {{ $t('This size') }}<small>{{ $t('{size} only', { size: $t(size.label) }) }}</small>
               </button>
               <button type="button" class="home-sheet-option" :class="{ 'is-on': everySize }" :aria-pressed="everySize" @click="everySize = true">
-                Every size<small>Phone, Tablet and Desktop</small>
+                {{ $t('Every size') }}<small>{{ $t('Phone, Tablet and Desktop') }}</small>
               </button>
             </div>
           </div>
           <div class="home-sheet-section">
-            <span class="home-sheet-label">Widgets</span>
+            <span class="home-sheet-label">{{ $t('Widgets') }}</span>
             <div v-if="missing.length" class="home-sheet-pick">
               <button v-for="id in missing" :key="id" type="button" class="home-sheet-row" @click="emit('add', id, everySize)">
                 <span class="home-sheet-row-text">
-                  <strong>{{ WIDGETS[id].label }}</strong>
-                  <span>{{ elsewhere[id]?.length ? `On ${elsewhere[id].join(', ')}` : 'Not on any screen size yet' }}</span>
+                  <strong>{{ $t(WIDGETS[id].label) }}</strong>
+                  <span>{{ elsewhere[id]?.length ? $t('On {sizes}', { sizes: elsewhere[id].map((label) => $t(label)).join(', ') }) : $t('Not on any screen size yet') }}</span>
                 </span>
                 <span class="home-sheet-dim">{{ startSize(id) }}</span>
               </button>
             </div>
-            <p v-else class="home-sheet-note">Every widget is already on this screen size.</p>
+            <p v-else class="home-sheet-note">{{ $t('Every widget is already on this screen size.') }}</p>
           </div>
         </template>
 
         <template v-else>
           <div class="home-sheet-section">
-            <span class="home-sheet-label">Size on {{ size.label }}</span>
+            <span class="home-sheet-label">{{ $t('Size on {size}', { size: $t(size.label) }) }}</span>
             <div class="home-sheet-options">
               <button
                 v-for="[w, h, name] in presets"
@@ -109,12 +109,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
                 :aria-pressed="item.w === w && item.h === h"
                 @click="emit('resize', w, h)"
               >
-                {{ name }}<small>{{ w }} × {{ h }}</small>
+                {{ $t(name) }}<small>{{ w }} × {{ h }}</small>
               </button>
             </div>
-            <p class="home-sheet-note">Or drag the corner of the widget for any size in between.</p>
+            <p class="home-sheet-note">{{ $t('Or drag the corner of the widget for any size in between.') }}</p>
           </div>
-          <button type="button" class="ui-btn ui-btn-ghost home-sheet-remove" @click="emit('remove')">Remove from {{ size.label }}</button>
+          <button type="button" class="ui-btn ui-btn-ghost home-sheet-remove" @click="emit('remove')">{{ $t('Remove from {size}', { size: $t(size.label) }) }}</button>
         </template>
       </div>
     </div>

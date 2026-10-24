@@ -298,21 +298,20 @@ watch(
             <h3>{{ settingsApp.displayName }} settings</h3>
             <span class="font-mono text-dim">({{ settingsApp.name }})</span>
           </div>
-          <button type="button" class="btn-icon btn-close" title="Close" @click="closeAppSettings">×</button>
+          <button type="button" class="btn-icon btn-close" :title="$t('Close')" @click="closeAppSettings">×</button>
         </div>
         <div v-if="settingsError" class="ui-alert ui-alert-error">{{ settingsError }}</div>
         <form class="app-settings-form" @submit.prevent="saveAppSettings">
           <div class="app-settings-body">
           <template v-if="settingsApp.name === 'recyclarr' && recyclarrMeta">
             <p class="settings-hint">
-              Official TRaSH Guides profiles via Recyclarr v8. HD is on by default; 4K is opt-in.
-              Saving profile checkboxes regenerates YAML. Editing YAML marks the file as custom until you reset.
+              {{ $t('Official TRaSH Guides profiles via Recyclarr v8. HD is on by default; 4K is opt-in. Saving profile checkboxes regenerates YAML. Editing YAML marks the file as custom until you reset.') }}
             </p>
             <p v-if="recyclarrMeta.yaml_path" class="settings-hint font-mono">{{ recyclarrMeta.yaml_path }}</p>
             <label v-for="profile in recyclarrMeta.profiles" :key="profile.id" class="ui-switch-row">
               <div class="ui-switch-copy">
                 <strong>{{ profile.label }}</strong>
-                <a :href="profile.guide" target="_blank" rel="noopener noreferrer" class="link-btn">Guide</a>
+                <a :href="profile.guide" target="_blank" rel="noopener noreferrer" class="link-btn">{{ $t('Guide') }}</a>
               </div>
               <button
                 type="button"
@@ -325,7 +324,7 @@ watch(
               </button>
             </label>
             <label class="ui-field">
-              Folder naming
+              {{ $t('Folder naming') }}
               <select v-model="settingsForm.recyclarrNaming" class="ui-input">
                 <option v-for="opt in recyclarrMeta.naming_options" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
               </select>
@@ -335,12 +334,12 @@ watch(
               <textarea v-model="settingsForm.recyclarrYaml" class="ui-input font-mono recyclarr-yaml" spellcheck="false" />
             </label>
             <p v-if="recyclarrMeta.user_edited || settingsForm.recyclarrYaml !== settingsForm.recyclarrOriginalYaml" class="settings-hint">
-              Custom YAML is kept as-is on Save. Profile checkboxes apply only when the YAML is unchanged.
+              {{ $t('Custom YAML is kept as-is on Save. Profile checkboxes apply only when the YAML is unchanged.') }}
             </p>
           </template>
           <template v-else>
           <label class="ui-field">
-            Listen port
+            {{ $t('Listen port') }}
             <input
               v-model.number="settingsForm.port"
               class="ui-input font-mono"
@@ -351,22 +350,22 @@ watch(
             />
           </label>
           <p v-if="settingsMeta?.default_port" class="settings-hint">
-            Default is {{ settingsMeta.default_port }}.
+            {{ $t('Default is') }} {{ settingsMeta.default_port }}.
             <button
               type="button"
               class="link-btn"
               @click="settingsForm.port = settingsMeta.default_port"
             >
-              Reset
+              {{ $t('Reset') }}
             </button>
           </p>
           <p v-if="openUiUrl" class="settings-hint">
-            Open UI:
+            {{ $t('Open UI:') }}
             <a :href="openUiUrl" target="_blank" rel="noopener noreferrer" class="link-btn font-mono" @click="openApp($event, service.name, openUiUrl)">{{ openUiUrl }}</a>
           </p>
           <div v-if="settingsApp.name === 'neutarr'" class="ui-field-block">
             <label class="ui-field">
-              First-run setup token
+              {{ $t('First-run setup token') }}
               <span class="setup-token-row">
                 <input
                   id="neutarr-setup-token"
@@ -374,7 +373,7 @@ watch(
                   type="text"
                   readonly
                   :value="settingsMeta?.setup_token || ''"
-                  placeholder="Appears after NeutArr starts, until setup finishes"
+                  :placeholder="$t('Appears after NeutArr starts, until setup finishes')"
                 />
                 <button
                   type="button"
@@ -387,14 +386,13 @@ watch(
               </span>
             </label>
             <p class="settings-hint">
-              NeutArr writes this the first time it starts. Paste it into NeutArr's setup screen.
-              The token is removed after the account is created.
+              {{ $t("NeutArr writes this the first time it starts. Paste it into NeutArr's setup screen. The token is removed after the account is created.") }}
             </p>
           </div>
           <div v-if="settingsMeta?.daemon !== false" class="ui-switch-row">
             <div class="ui-switch-copy">
-              <strong>Start with the manager</strong>
-              <span>When on, this app starts after the appliance boots if it is installed.</span>
+              <strong>{{ $t('Start with the manager') }}</strong>
+              <span>{{ $t('When on, this app starts after the appliance boots if it is installed.') }}</span>
             </div>
             <button
               type="button"
@@ -408,33 +406,32 @@ watch(
           </div>
           <div v-if="settingsApp.name === 'jellyfin' || settingsApp.name === 'seerr'" class="ui-field-block">
             <label class="ui-field">
-              {{ settingsApp.name === 'seerr' ? 'Seerr' : 'Jellyfin' }} API key
+              {{ settingsApp.name === 'seerr' ? 'Seerr' : 'Jellyfin' }} {{ $t('API key') }}
               <input
                 v-model="settingsForm.apiKey"
                 class="ui-input font-mono"
                 type="password"
                 autocomplete="off"
                 :placeholder="settingsMeta.api_key_configured
-                  ? 'Saved — paste a new key to replace'
-                  : (settingsApp.name === 'seerr' ? 'Settings → General → API Key' : 'Dashboard → API Keys')"
+                  ? $t('Saved — paste a new key to replace')
+                  : (settingsApp.name === 'seerr' ? $t('Settings → General → API Key') : $t('Dashboard → API Keys'))"
               />
             </label>
             <p class="settings-hint">
-              Optional. Saved keys are used for
-              {{ settingsApp.name === 'seerr' ? 'Home search and requests' : 'Recently added' }}.
-              Leave empty to keep the current key.
+              {{ $t('Optional. Saved keys are used for') }}
+              {{ settingsApp.name === 'seerr' ? $t('Home search and requests') : $t('Recently added') }}{{ $t('. Leave empty to keep the current key.') }}
             </p>
           </div>
           <div v-if="settingsApp.name === 'qbittorrent'" class="ui-switch-row">
             <div class="ui-switch-copy">
-              <strong>VueTorrent WebUI</strong>
+              <strong>{{ $t('VueTorrent WebUI') }}</strong>
               <span>
-                On by default. Uses
+                {{ $t('On by default. Uses') }}
                 <a href="https://github.com/VueTorrent/VueTorrent" target="_blank" rel="noopener noreferrer">VueTorrent</a>
-                instead of the stock qBittorrent WebUI. Turn off for the stock UI. Turning back on re-downloads the latest release. Sonarr, Radarr, and Lidarr still use the same WebAPI.
+                {{ $t('instead of the stock qBittorrent WebUI. Turn off for the stock UI. Turning back on re-downloads the latest release. Sonarr, Radarr, and Lidarr still use the same WebAPI.') }}
               </span>
               <span v-if="settingsMeta.vuetorrent_version" class="settings-hint">
-                Installed {{ settingsMeta.vuetorrent_version }}
+                {{ $t('Installed') }} {{ settingsMeta.vuetorrent_version }}
               </span>
               <button
                 v-if="settingsForm.vuetorrent"
@@ -459,9 +456,9 @@ watch(
             </button>
           </div>
           <dl v-if="settingsMeta" class="app-settings-dl font-mono">
-            <div><dt>Config</dt><dd>{{ settingsMeta.config_dir }}</dd></div>
-            <div><dt>Install</dt><dd>{{ settingsMeta.install_dir }}</dd></div>
-            <div><dt>Health</dt><dd>{{ settingsMeta.health_url }}</dd></div>
+            <div><dt>{{ $t('Config') }}</dt><dd>{{ settingsMeta.config_dir }}</dd></div>
+            <div><dt>{{ $t('Install') }}</dt><dd>{{ settingsMeta.install_dir }}</dd></div>
+            <div><dt>{{ $t('Health') }}</dt><dd>{{ settingsMeta.health_url }}</dd></div>
           </dl>
           <ul v-if="settingsMeta?.notes?.length" class="app-settings-notes">
             <li v-for="note in settingsMeta.notes" :key="note">{{ note }}</li>
@@ -469,7 +466,7 @@ watch(
           </template>
           </div>
           <div class="wizard-nav app-settings-actions">
-            <button type="button" class="ui-btn ui-btn-ghost" @click="closeAppSettings">Cancel</button>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="closeAppSettings">{{ $t('Cancel') }}</button>
             <button
               v-if="settingsApp.name === 'recyclarr'"
               type="button"
@@ -477,7 +474,7 @@ watch(
               :disabled="settingsLoading"
               @click="resetRecyclarrDefaults"
             >
-              Restore TRaSH defaults
+              {{ $t('Restore TRaSH defaults') }}
             </button>
             <button
               v-if="settingsApp.name === 'recyclarr'"
@@ -486,10 +483,10 @@ watch(
               :disabled="settingsLoading || !!actionLoading.recyclarr"
               @click="syncRecyclarr"
             >
-              Sync now
+              {{ $t('Sync now') }}
             </button>
             <button type="submit" class="ui-btn ui-btn-primary" :disabled="settingsLoading">
-              {{ settingsLoading ? 'Saving…' : 'Save' }}
+              {{ settingsLoading ? $t('Saving…') : $t('Save') }}
             </button>
           </div>
         </form>

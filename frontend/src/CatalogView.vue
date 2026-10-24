@@ -8,6 +8,7 @@ import { openApp } from './appOpen.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { formatUpdateWhen, formatUptime } from './format.js'
 import { useToasts } from './useToasts.js'
+import { t } from './i18n/index.js'
 
 const props = defineProps({
   catalogApps: { type: Array, default: () => [] },
@@ -144,6 +145,10 @@ const applianceUpdate = computed(
   () => (props.updateStatus.available || []).find((row) => row.kind === 'appliance')
 )
 
+function categoryLabel(name) {
+  return t(CATEGORY_LABELS[name] || name)
+}
+
 const CATEGORY_LABELS = {
   downloading: 'Downloading',
   automation: 'Automation',
@@ -157,7 +162,7 @@ const CATEGORY_LABELS = {
 
 const catalogCategories = computed(() => {
   const names = [...new Set(combinedServices.value.map(s => s.category).filter(Boolean))]
-  return names.sort((a, b) => (CATEGORY_LABELS[a] || a).localeCompare(CATEGORY_LABELS[b] || b))
+  return names.sort((a, b) => categoryLabel(a).localeCompare(categoryLabel(b), undefined, { sensitivity: 'base' }))
 })
 
 function isRunningService(s) {
@@ -236,6 +241,7 @@ const visibleServices = computed(() => {
         s.displayName,
         s.name,
         s.description,
+        categoryLabel(s.category),
         CATEGORY_LABELS[s.category] || s.category
       ].join(' ').toLowerCase()
       return haystack.includes(query)
@@ -486,7 +492,7 @@ onUnmounted(() => {
             role="button"
             tabindex="0"
             :aria-pressed="catalogStatusFilters.includes('active')"
-            title="Show only running apps"
+            :title="$t('Show only running apps')"
             @click="filterByActiveServices"
             @keydown.enter.prevent="filterByActiveServices"
             @keydown.space.prevent="filterByActiveServices"
@@ -497,10 +503,10 @@ onUnmounted(() => {
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">ACTIVE</div>
+              <div class="stat-label">{{ $t('ACTIVE') }}</div>
               <div class="stat-value font-mono">
                 <span class="text-glow-cyan">{{ activeAppCount }}</span>
-                <span class="stat-sub"> running</span>
+                <span class="stat-sub"> {{ $t('running') }}</span>
               </div>
             </div>
           </div>
@@ -511,7 +517,7 @@ onUnmounted(() => {
             role="button"
             tabindex="0"
             :aria-pressed="catalogStatusFilters.includes('installed')"
-            title="Show only installed applications"
+            :title="$t('Show only installed applications')"
             @click="filterByInstalledPlugins"
             @keydown.enter.prevent="filterByInstalledPlugins"
             @keydown.space.prevent="filterByInstalledPlugins"
@@ -524,10 +530,10 @@ onUnmounted(() => {
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">INSTALLED</div>
+              <div class="stat-label">{{ $t('INSTALLED') }}</div>
               <div class="stat-value font-mono">
                 <span class="text-glow-purple">{{ installedAppCount }}</span>
-                <span class="stat-sub"> of {{ catalogSize }}</span>
+                <span class="stat-sub"> {{ $t('of') }} {{ catalogSize }}</span>
               </div>
             </div>
           </div>
@@ -538,7 +544,7 @@ onUnmounted(() => {
             role="button"
             tabindex="0"
             :aria-pressed="catalogStatusFilters.includes('available')"
-            title="Show applications that are not installed yet"
+            :title="$t('Show applications that are not installed yet')"
             @click="filterByAvailablePlugins"
             @keydown.enter.prevent="filterByAvailablePlugins"
             @keydown.space.prevent="filterByAvailablePlugins"
@@ -552,10 +558,10 @@ onUnmounted(() => {
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">AVAILABLE</div>
+              <div class="stat-label">{{ $t('AVAILABLE') }}</div>
               <div class="stat-value font-mono">
                 <span class="text-glow-cyan">{{ availableAppCount }}</span>
-                <span class="stat-sub"> of {{ catalogSize }}</span>
+                <span class="stat-sub"> {{ $t('of') }} {{ catalogSize }}</span>
               </div>
             </div>
           </div>
@@ -565,7 +571,7 @@ onUnmounted(() => {
             :class="{ 'is-filter-on': showHealthModal }"
             role="button"
             tabindex="0"
-            title="Host health"
+            :title="$t('Host health')"
             @click="openHealthModal"
             @keydown.enter.prevent="openHealthModal"
             @keydown.space.prevent="openHealthModal"
@@ -576,7 +582,7 @@ onUnmounted(() => {
               </svg>
             </div>
             <div class="stat-content">
-              <div class="stat-label">HEALTH</div>
+              <div class="stat-label">{{ $t('HEALTH') }}</div>
               <div class="stat-value font-mono">
                 <span :class="healthTone === 'ok' ? 'text-emerald' : 'text-warn'">{{ healthTone === 'ok' ? 'OK' : 'HIGH' }}</span>
                 <span class="stat-sub"> · CPU {{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</span>
@@ -590,7 +596,7 @@ onUnmounted(() => {
           class="alert-banner alert-error"
           style="margin-bottom: 1.25rem;"
         >
-          A tunneled app (qBittorrent, Prowlarr, or Flaresolverr) is running without an active VPN tunnel while VPN enforcement is enabled. Usenet traffic is not routed through the VPN.
+          {{ $t('A tunneled app (qBittorrent, Prowlarr, or Flaresolverr) is running without an active VPN tunnel while VPN enforcement is enabled. Usenet traffic is not routed through the VPN.') }}
         </div>
 
         <div
@@ -598,7 +604,7 @@ onUnmounted(() => {
           class="alert-banner alert-error"
           style="margin-bottom: 1.25rem;"
         >
-          Cloudflare Tunnel is enabled but cloudflared is not connected. The manager is still available at http://server-ip:8080.
+          {{ $t('Cloudflare Tunnel is enabled but cloudflared is not connected. The manager is still available at http://server-ip:8080.') }}
         </div>
 
         <div
@@ -606,25 +612,25 @@ onUnmounted(() => {
           class="alert-banner alert-error"
           style="margin-bottom: 1.25rem;"
         >
-          Hardlinks are not available between downloads and media, so *Arr will copy files (extra disk I/O). Put both folders on the same host filesystem and the same btrfs subvolume, then bind-mount one parent as <code>/data</code> with <code>AMM_DOWNLOAD_DIR=/data/downloads</code> and <code>AMM_MEDIA_DIR=/data/media</code>.
+          {{ $t('Hardlinks are not available between downloads and media, so *Arr will copy files (extra disk I/O). Put both folders on the same host filesystem and the same btrfs subvolume, then bind-mount one parent as') }} <code>/data</code> {{ $t('with') }} <code>AMM_DOWNLOAD_DIR=/data/downloads</code> {{ $t('and') }} <code>AMM_MEDIA_DIR=/data/media</code>.
         </div>
 
 
         <!-- Services Section Header -->
         <div class="section-title-row">
           <div>
-            <h2 class="section-title">Applications</h2>
+            <h2 class="section-title">{{ $t('Applications') }}</h2>
             <p class="section-subtitle">
-              Install, start, and manage apps in this appliance.
+              {{ $t('Install, start, and manage apps in this appliance.') }}
               <span v-if="updateStatus.last_check_at || (updateStatus.available || []).length">
-                Last update check {{ formatUpdateWhen(updateStatus.last_check_at) }}
-                · last apply {{ formatUpdateWhen(updateStatus.last_apply_at) }}
-                · {{ catalogUpdateCount }} waiting
-                <span v-if="applianceUpdate"> · appliance image update</span>
+                {{ $t('Last update check') }} {{ formatUpdateWhen(updateStatus.last_check_at) }}
+                {{ $t('· last apply') }} {{ formatUpdateWhen(updateStatus.last_apply_at) }}
+                · {{ catalogUpdateCount }} {{ $t('waiting') }}
+                <span v-if="applianceUpdate"> {{ $t('· appliance image update') }}</span>
               </span>
               <span v-if="backupStatus.schedule">
-                · last backup {{ formatUpdateWhen(backupStatus.last_backup_at) }}
-                <span v-if="backupStatus.last_error" class="text-warn">(last attempt failed)</span>
+                {{ $t('· last backup') }} {{ formatUpdateWhen(backupStatus.last_backup_at) }}
+                <span v-if="backupStatus.last_error" class="text-warn">{{ $t('(last attempt failed)') }}</span>
               </span>
             </p>
           </div>
@@ -634,38 +640,38 @@ onUnmounted(() => {
               <polyline points="1 20 1 14 7 14"></polyline>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
-            <span>Refresh</span>
+            <span>{{ $t('Refresh') }}</span>
           </button>
         </div>
 
         <div id="catalog-toolbar" class="catalog-toolbar glass-card">
           <div class="catalog-filter-group catalog-search-group">
-            <label class="catalog-filter-label" for="catalog-search">Search</label>
+            <label class="catalog-filter-label" for="catalog-search">{{ $t('Search') }}</label>
             <input
               id="catalog-search"
               v-model="catalogSearchInput"
               type="search"
               class="ui-input catalog-search-input"
-              placeholder="Search apps…"
+              :placeholder="$t('Search apps…')"
               autocomplete="off"
               spellcheck="false"
             />
           </div>
           <div class="catalog-filter-group">
-            <span class="catalog-filter-label">Status</span>
-            <div class="catalog-chips" role="group" aria-label="Filter by status">
+            <span class="catalog-filter-label">{{ $t('Status') }}</span>
+            <div class="catalog-chips" role="group" :aria-label="$t('Filter by status')">
               <button
                 type="button"
                 class="catalog-chip"
                 :class="{ active: catalogStatusFilters.includes('active') }"
                 @click="toggleStatusFilter('active')"
               >
-                Active
+                {{ $t('Active') }}
                 <span
                   v-if="catalogStatusFilters.includes('active')"
                   class="chip-clear"
                   role="button"
-                  aria-label="Remove active filter"
+                  :aria-label="$t('Remove active filter')"
                   @click.stop="removeStatusFilter('active')"
                 >×</span>
               </button>
@@ -675,12 +681,12 @@ onUnmounted(() => {
                 :class="{ active: catalogStatusFilters.includes('installed') }"
                 @click="toggleStatusFilter('installed')"
               >
-                Installed
+                {{ $t('Installed') }}
                 <span
                   v-if="catalogStatusFilters.includes('installed')"
                   class="chip-clear"
                   role="button"
-                  aria-label="Remove installed filter"
+                  :aria-label="$t('Remove installed filter')"
                   @click.stop="removeStatusFilter('installed')"
                 >×</span>
               </button>
@@ -690,27 +696,27 @@ onUnmounted(() => {
                 :class="{ active: catalogStatusFilters.includes('available') }"
                 @click="toggleStatusFilter('available')"
               >
-                Available
+                {{ $t('Available') }}
                 <span
                   v-if="catalogStatusFilters.includes('available')"
                   class="chip-clear"
                   role="button"
-                  aria-label="Remove available filter"
+                  :aria-label="$t('Remove available filter')"
                   @click.stop="removeStatusFilter('available')"
                 >×</span>
               </button>
             </div>
           </div>
           <div class="catalog-filter-group">
-            <span class="catalog-filter-label">Category</span>
-            <div class="catalog-chips" role="group" aria-label="Filter by category">
+            <span class="catalog-filter-label">{{ $t('Category') }}</span>
+            <div class="catalog-chips" role="group" :aria-label="$t('Filter by category')">
               <button
                 type="button"
                 class="catalog-chip"
                 :class="{ active: catalogCategoriesSelected.length === 0 }"
                 @click="toggleCategoryFilter('all')"
               >
-                All
+                {{ $t('All') }}
               </button>
               <button
                 v-for="category in catalogCategories"
@@ -720,25 +726,25 @@ onUnmounted(() => {
                 :class="{ active: catalogCategoriesSelected.includes(category) }"
                 @click="toggleCategoryFilter(category)"
               >
-                {{ CATEGORY_LABELS[category] || category }}
+                {{ categoryLabel(category) }}
                 <span
                   v-if="catalogCategoriesSelected.includes(category)"
                   class="chip-clear"
                   role="button"
-                  :aria-label="'Remove ' + (CATEGORY_LABELS[category] || category) + ' filter'"
+                  :aria-label="t('Remove {category} filter', { category: categoryLabel(category) })"
                   @click.stop="removeCategoryFilter(category)"
                 >×</span>
               </button>
             </div>
           </div>
           <div class="catalog-filter-group catalog-sort-group">
-            <label class="catalog-filter-label" for="catalog-sort">Sort</label>
+            <label class="catalog-filter-label" for="catalog-sort">{{ $t('Sort') }}</label>
             <select id="catalog-sort" v-model="catalogSort" class="ui-input catalog-sort-select">
-              <option value="popularity">Popularity</option>
-              <option value="az">A to Z</option>
+              <option value="popularity">{{ $t('Popularity') }}</option>
+              <option value="az">{{ $t('A to Z') }}</option>
             </select>
           </div>
-          <span class="catalog-count font-mono">{{ visibleServices.length }} shown · {{ installedAppCount }} installed · {{ availableAppCount }} available</span>
+          <span class="catalog-count font-mono">{{ visibleServices.length }} {{ $t('shown ·') }} {{ installedAppCount }} {{ $t('installed ·') }} {{ availableAppCount }} {{ $t('available') }}</span>
         </div>
 
         <!-- Services Grid -->
@@ -771,20 +777,20 @@ onUnmounted(() => {
                       target="_blank"
                       rel="noopener noreferrer"
                       class="help-btn"
-                      :title="'Help / wiki for ' + service.displayName"
+                      :title="$t('Help / wiki for {name}', { name: service.displayName })"
                     >?</a>
-                    <span class="category-pill">{{ CATEGORY_LABELS[service.category] || service.category }}</span>
-                    <span v-if="service.updateAvailable" class="update-pill">Update available</span>
+                    <span class="category-pill">{{ categoryLabel(service.category) }}</span>
+                    <span v-if="service.updateAvailable" class="update-pill">{{ $t('Update available') }}</span>
                   </div>
                   <div v-if="service.daemon" class="service-port font-mono">
-                    <span class="port-label">PORT:</span>
+                    <span class="port-label">{{ $t('PORT:') }}</span>
                     <a
                       :href="service.webUrl"
                       target="_blank"
                       rel="noopener noreferrer"
                       class="port-link"
                       @click="openApp($event, service.name, service.webUrl)"
-                      title="Open UI"
+                      :title="$t('Open UI')"
                     >
                       :{{ service.port }}
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -809,15 +815,15 @@ onUnmounted(() => {
             <p v-if="service.installMessage && (service.installBusy || service.installJob === 'failed')" class="service-progress">
               <span aria-live="polite">{{ service.installMessage }}</span>
               <small v-if="service.installBusy && service.installUpdatedAt">
-                Last progress {{ formatUptime(Date.now() / 1000 - service.installUpdatedAt) }} ago
+                {{ $t('Last progress {when} ago', { when: formatUptime(Date.now() / 1000 - service.installUpdatedAt) }) }}
               </small>
             </p>
 
             <!-- Metadata footer -->
             <div class="service-meta font-mono">
               <span v-if="service.installedVersion">v{{ String(service.installedVersion).replace(/^v/, '') }}<template v-if="service.latestVersion"> → {{ service.latestVersion }}</template></span>
-              <span v-else-if="service.installed">Installed</span>
-              <span v-else class="text-dim">Not installed</span>
+              <span v-else-if="service.installed">{{ $t('Installed') }}</span>
+              <span v-else class="text-dim">{{ $t('Not installed') }}</span>
 
               <span v-if="service.uptime" class="uptime-text">
                 up {{ formatUptime(service.uptime) }}
@@ -833,11 +839,11 @@ onUnmounted(() => {
                   class="btn-action btn-install"
                   :disabled="actionLoading[service.name] === 'install' || service.installBusy"
                 >
-                  <span v-if="actionLoading[service.name] === 'install' || service.installBusy" class="spinner spinner-sm" aria-label="Installing"></span>
-                  <span v-else>Install</span>
+                  <span v-if="actionLoading[service.name] === 'install' || service.installBusy" class="spinner spinner-sm" :aria-label="$t('Installing')"></span>
+                  <span v-else>{{ $t('Install') }}</span>
                 </button>
                 <button type="button" class="btn-action btn-logs" @click.stop="openAppSettings(service)">
-                  Settings
+                  {{ $t('Settings') }}
                 </button>
               </template>
 
@@ -846,9 +852,9 @@ onUnmounted(() => {
                   v-if="service.is_crash_loop"
                   @click="resetCrashLoop(service.name)"
                   class="btn-action btn-stop"
-                  title="Clear crash history and unlock auto-restart"
+                  :title="$t('Clear crash history and unlock auto-restart')"
                 >
-                  Reset
+                  {{ $t('Reset') }}
                 </button>
                 <button
                   v-else-if="!isServiceActive(service) && service.daemon"
@@ -857,7 +863,7 @@ onUnmounted(() => {
                   :disabled="!!actionLoading[service.name]"
                 >
                   <span v-if="actionLoading[service.name] === 'start'" class="spinner spinner-sm"></span>
-                  <span v-else>Start</span>
+                  <span v-else>{{ $t('Start') }}</span>
                 </button>
                 <button
                   v-else-if="isServiceActive(service)"
@@ -866,7 +872,7 @@ onUnmounted(() => {
                   :disabled="!!actionLoading[service.name]"
                 >
                   <span v-if="actionLoading[service.name] === 'stop'" class="spinner spinner-sm"></span>
-                  <span v-else>Stop</span>
+                  <span v-else>{{ $t('Stop') }}</span>
                 </button>
                 <button
                   v-else-if="!service.daemon"
@@ -876,7 +882,7 @@ onUnmounted(() => {
                   @click="syncRecyclarr"
                 >
                   <span v-if="actionLoading[service.name] === 'sync'" class="spinner spinner-sm"></span>
-                  <span v-else>Sync</span>
+                  <span v-else>{{ $t('Sync') }}</span>
                 </button>
                 <a
                   v-if="service.daemon"
@@ -886,17 +892,17 @@ onUnmounted(() => {
                   class="btn-action btn-webui"
                   @click="openApp($event, service.name, service.webUrl)"
                 >
-                  Open UI
+                  {{ $t('Open UI') }}
                 </a>
                 <div class="card-menu-wrap" @click.stop>
                   <button
                     type="button"
                     class="btn-action btn-more"
                     :class="{ open: openCardMenu === service.name }"
-                    title="More actions"
+                    :title="$t('More actions')"
                     @click="toggleCardMenu(service.name)"
                   >
-                    More
+                    {{ $t('More') }}
                   </button>
                   <div v-if="openCardMenu === service.name" class="card-menu">
                     <button
@@ -904,10 +910,10 @@ onUnmounted(() => {
                       type="button"
                       @click="closeCardMenu(); restartApp(service.name)"
                     >
-                      Restart
+                      {{ $t('Restart') }}
                     </button>
-                    <button type="button" @click="closeCardMenu(); openLogs(service)">Logs</button>
-                    <button type="button" @click="openAppSettings(service)">Settings</button>
+                    <button type="button" @click="closeCardMenu(); openLogs(service)">{{ $t('Logs') }}</button>
+                    <button type="button" @click="openAppSettings(service)">{{ $t('Settings') }}</button>
                     <button
                       type="button"
                       :disabled="!!actionLoading[service.name]"
@@ -921,14 +927,14 @@ onUnmounted(() => {
                       :disabled="!!actionLoading[service.name]"
                       @click="closeCardMenu(); uninstallApp(service.name)"
                     >
-                      Uninstall
+                      {{ $t('Uninstall') }}
                     </button>
                   </div>
                 </div>
               </template>
             </div>
           </div>
-          <p v-if="visibleServices.length === 0" class="catalog-empty">No applications match these filters.</p>
+          <p v-if="visibleServices.length === 0" class="catalog-empty">{{ $t('No applications match these filters.') }}</p>
         </div>
 
 </template>

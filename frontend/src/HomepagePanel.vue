@@ -12,6 +12,11 @@ import HomeGridSheet from './HomeGridSheet.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { formatBytes, formatUptime } from './format.js'
+import { i18n, t } from './i18n/index.js'
+
+function i18nLocale() {
+  return i18n.global.locale.value
+}
 import { addNetSample } from './netRates.js'
 import { MOOD_COLORS, attentionMood, serverMood, storageMood } from './statusMood.js'
 import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepageDebug.js'
@@ -100,8 +105,8 @@ const searchProvider = ref((() => {
   }
 })())
 const searchPlaceholder = computed(() => {
-  if (searchProvider.value === 'prowlarr') return 'Search Prowlarr indexers'
-  return snapshot.value.seerr?.available ? 'Search movies and TV to request' : 'Search Sonarr and Radarr'
+  if (searchProvider.value === 'prowlarr') return t('Search Prowlarr indexers')
+  return snapshot.value.seerr?.available ? t('Search movies and TV to request') : t('Search Sonarr and Radarr')
 })
 const downloadsFresh = ref(false)
 const downloadPause = ref({ paused: false, resume_at: null })
@@ -172,8 +177,9 @@ watch(downloadSort, (value) => {
 })
 const pausedLabel = computed(() => {
   const at = downloadPause.value.resume_at
-  if (!at) return 'Paused until you resume'
-  return `Paused · resumes ${new Date(at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+  if (!at) return t('Paused until you resume')
+  const time = new Date(at * 1000).toLocaleTimeString(i18nLocale(), { hour: '2-digit', minute: '2-digit' })
+  return t('Paused · resumes {time}', { time })
 })
 const requestsFilter = ref('all')
 const trendingFilter = ref('all')
@@ -285,7 +291,7 @@ function removeWidget(id) {
   const before = JSON.parse(JSON.stringify(homeGrid.value))
   saveGridLayout(activeBp.value, gridLayout.value.filter((item) => item.id !== id))
   if (sheet.value?.id === id) sheet.value = null
-  showToast(`${WIDGETS[id].label} removed from ${BREAKPOINTS[activeBp.value].label}`, () => restoreGrid(before))
+  showToast(t('{name} removed from {size}', { name: t(WIDGETS[id].label), size: t(BREAKPOINTS[activeBp.value].label) }), () => restoreGrid(before))
 }
 
 function openWidget(id) {
@@ -322,22 +328,23 @@ function onArrangeKey(event) {
   if (event.key === 'Escape' && editing.value && !sheet.value && !event.defaultPrevented) editing.value = false
 }
 
-const todayLabel = computed(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))
+const todayLabel = computed(() => new Date().toLocaleDateString(i18nLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))
 const greeting = computed(() => {
   const hour = new Date().getHours()
-  const part = hour < 6 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-  const name = props.username ? `, ${props.username}` : ''
-  return `${part}${name}.`
+  const part = t(hour < 6 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening')
+  return props.username ? `${part}, ${props.username}.` : `${part}.`
 })
 /** One line under the greeting: what is moving and what needs a look. */
 const heroSummary = computed(() => {
   const parts = []
   const n = movingDownloads.value.length
   if (downloadPause.value.paused) parts.push(pausedLabel.value)
-  else if (n) parts.push(`${n} download${n === 1 ? '' : 's'} on the way`)
+  else if (n === 1) parts.push(t('{n} download on the way', { n }))
+  else if (n) parts.push(t('{n} downloads on the way', { n }))
   const sick = (snapshot.value.apps || []).filter((app) => app.sick).map((app) => app.display_name)
-  if (sick.length) parts.push(`${sick.join(', ')} need${sick.length === 1 ? 's' : ''} a look`)
-  if (!parts.length) parts.push(snapshot.value.apps?.length ? 'Everything is running.' : 'Nothing running yet.')
+  if (sick.length === 1) parts.push(t('{names} needs a look', { names: sick[0] }))
+  else if (sick.length) parts.push(t('{names} need a look', { names: sick.join(', ') }))
+  if (!parts.length) parts.push(snapshot.value.apps?.length ? t('Everything is running.') : t('Nothing running yet.'))
   return parts.join('. ').replace(/\.?$/, '.')
 })
 const totalSpeed = computed(() => {
@@ -1362,7 +1369,7 @@ onUnmounted(() => {
 
 <template>
   <section class="home-shell" :class="{ 'has-floating-dock': !loading && snapshot.apps.length && !dockHidden, 'is-arranging': editing }" :style="{ '--home-dock-height': `${dockHeight}px` }">
-    <div v-if="loading" class="home-skeleton" role="status" aria-label="Loading Home">
+    <div v-if="loading" class="home-skeleton" role="status" :aria-label="$t('Loading Home')">
       <div class="home-dock glass-pill" aria-hidden="true">
         <div class="home-dock-row">
           <span v-for="n in 8" :key="n" class="home-skel home-skel-icon"></span>
@@ -1378,18 +1385,18 @@ onUnmounted(() => {
     <p v-if="snapshotError" class="home-notice">{{ snapshotError }}</p>
     <p v-if="vpnNotice" class="home-notice">
       {{ vpnNotice }}
-      <a href="#/settings/network" class="home-notice-link">Open Settings → Network</a>
+      <a href="#/settings/network" class="home-notice-link">{{ $t('Open Settings → Network') }}</a>
     </p>
 
     <div v-if="!loading && !snapshot.apps.length" class="home-empty glass-card">
-      <h3>Nothing to launch yet</h3>
-      <p>Finish setup or install apps from Catalog. This page only lists installed applications with a WebUI.</p>
-      <button type="button" class="ui-btn ui-btn-primary" @click="emit('manage')">Go to Catalog</button>
+      <h3>{{ $t('Nothing to launch yet') }}</h3>
+      <p>{{ $t('Finish setup or install apps from Catalog. This page only lists installed applications with a WebUI.') }}</p>
+      <button type="button" class="ui-btn ui-btn-primary" @click="emit('manage')">{{ $t('Go to Catalog') }}</button>
     </div>
 
     <template v-else-if="!loading">
       <Teleport to=".app-container" defer>
-      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating glass-pill" aria-label="Apps">
+      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating glass-pill" :aria-label="$t('Apps')">
         <div class="home-dock-row">
           <component
             :is="launcherOpen(app) ? 'a' : 'span'"
@@ -1433,13 +1440,16 @@ onUnmounted(() => {
       <template #searchbar>
       <section class="home-search">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
-          <label class="home-sr" for="home-search-provider">Search in</label>
-          <select id="home-search-provider" v-model="searchProvider" class="home-search-provider" aria-label="Search in" @change="onProviderChange">
-            <option value="seerr">Movies &amp; series</option>
-            <option value="prowlarr">Other</option>
-          </select>
+          <label class="home-sr" for="home-search-provider">{{ $t('Search in') }}</label>
+          <div class="home-search-provider-wrap">
+            <select id="home-search-provider" v-model="searchProvider" class="home-search-provider" :aria-label="$t('Search in')" @change="onProviderChange">
+              <option value="seerr">{{ $t('Movies & Series') }}</option>
+              <option value="prowlarr">{{ $t('Other') }}</option>
+            </select>
+            <svg class="home-search-provider-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+          </div>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-          <label class="home-sr" for="home-search">Search</label>
+          <label class="home-sr" for="home-search">{{ $t('Search') }}</label>
           <input
             id="home-search"
             v-model="query"
@@ -1450,21 +1460,21 @@ onUnmounted(() => {
             @input="onQueryInput"
             @keydown.esc="closeSearch"
           />
-          <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :disabled="searching">Search</button>
+          <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :disabled="searching">{{ $t('Search') }}</button>
         </form>
         <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
           <div class="home-results-scroll">
-            <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" aria-label="Close search results" title="Close" @click="closeSearch">
+            <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" :aria-label="$t('Close search results')" :title="$t('Close')" @click="closeSearch">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
             </button>
             <p v-if="notice" class="home-notice">{{ notice }}</p>
             <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
             <p v-else-if="searchProvider === 'seerr' && !snapshot.seerr.available && !notice" class="home-muted">
-              Install and start Seerr to request titles from this page.
+              {{ $t('Install and start Seerr to request titles from this page.') }}
             </p>
-            <p v-if="searching" class="home-muted">Searching…</p>
+            <p v-if="searching" class="home-muted">{{ $t('Searching…') }}</p>
             <p v-else-if="searchedFor && !results.length && !searchError" class="home-muted">
-              No results for “{{ searchedFor }}”.
+              {{ $t('No results for “{query}”.', { query: searchedFor }) }}
             </p>
             <ul v-if="results.length" class="home-results">
               <li v-for="item in results" :key="resultKey(item)" class="home-result">
@@ -1472,7 +1482,7 @@ onUnmounted(() => {
                 <div class="home-result-body">
                   <strong>{{ item.title }}</strong>
                   <span v-if="item.source === 'prowlarr'">{{ item.detail }}</span>
-                  <span v-else>{{ item.mediaType === 'tv' ? 'TV' : 'Movie' }} {{ String(item.year || '').slice(0, 4) }}</span>
+                  <span v-else>{{ item.mediaType === 'tv' ? $t('TV') : 'Movie' }} {{ String(item.year || '').slice(0, 4) }}</span>
                   <span v-if="statusLabel(item)" class="home-status" :class="`is-${item.status}`">{{ statusLabel(item) }}</span>
                 </div>
                 <button
@@ -1482,7 +1492,7 @@ onUnmounted(() => {
                   :disabled="requestBusy === resultKey(item)"
                   @click="requestTitle(item)"
                 >
-                  {{ requestBusy === resultKey(item) ? (item.source === 'prowlarr' ? 'Sending…' : 'Requesting…') : (item.source === 'prowlarr' ? 'Download' : 'Get it now') }}
+                  {{ requestBusy === resultKey(item) ? (item.source === 'prowlarr' ? $t('Sending…') : $t('Requesting…')) : (item.source === 'prowlarr' ? $t('Download') : $t('Get it now')) }}
                 </button>
               </li>
             </ul>
@@ -1494,11 +1504,11 @@ onUnmounted(() => {
       <template #recent>
         <article class="home-card glass-card">
           <div class="home-rail-head">
-            <h3>Recently added</h3>
+            <h3>{{ $t('Recently added') }}</h3>
             <div class="home-rail-tools">
               <div v-if="snapshot.recent.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous recently added" @click="scrollRail('recent', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next recently added" @click="scrollRail('recent', 1)">›</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous recently added')" @click="scrollRail('recent', -1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next recently added')" @click="scrollRail('recent', 1)">›</button>
               </div>
             </div>
           </div>
@@ -1527,7 +1537,7 @@ onUnmounted(() => {
             </div>
             <p v-if="waitingLabel('recent')" class="home-muted">{{ waitingLabel('recent') }}</p>
           </template>
-          <p v-else class="home-muted">Nothing recently added.</p>
+          <p v-else class="home-muted">{{ $t('Nothing recently added.') }}</p>
           <ul v-if="widgetDebug && notesFor('recent').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('recent')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1539,16 +1549,16 @@ onUnmounted(() => {
       <template #requests>
         <article class="home-card glass-card">
           <div class="home-rail-head">
-            <h3>Requests</h3>
+            <h3>{{ $t('Requests') }}</h3>
             <div class="home-rail-tools">
-              <div v-if="snapshot.requests.length" class="home-type-filter" role="group" aria-label="Filter requests">
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'all' }" @click="requestsFilter = 'all'">All</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">Movies</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">Series</button>
+              <div v-if="snapshot.requests.length" class="home-type-filter" role="group" :aria-label="$t('Filter requests')">
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'all' }" @click="requestsFilter = 'all'">{{ $t('All') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">{{ $t('Movies') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
               <div v-if="requestItems.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous requests')" @click="scrollRail('requests', -1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next requests')" @click="scrollRail('requests', 1)">›</button>
               </div>
             </div>
           </div>
@@ -1579,9 +1589,9 @@ onUnmounted(() => {
             <p v-if="waitingLabel('requests')" class="home-muted">{{ waitingLabel('requests') }}</p>
           </template>
           <p v-else-if="snapshot.requests.length" class="home-muted">
-            No {{ requestsFilter === 'movie' ? 'movie' : requestsFilter === 'tv' ? 'series' : '' }} requests in this filter.
+            {{ requestsFilter === 'movie' ? $t('No movie requests in this filter.') : requestsFilter === 'tv' ? $t('No series requests in this filter.') : $t('No requests in this filter.') }}
           </p>
-          <p v-else class="home-muted">No Seerr requests yet. Search above to request a title.</p>
+          <p v-else class="home-muted">{{ $t('No Seerr requests yet. Search above to request a title.') }}</p>
           <ul v-if="widgetDebug && notesFor('requests').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('requests')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1593,16 +1603,16 @@ onUnmounted(() => {
       <template #trending>
         <article class="home-card glass-card home-card-trending">
           <div class="home-rail-head">
-            <h3>Trending</h3>
+            <h3>{{ $t('Trending') }}</h3>
             <div class="home-rail-tools">
-              <div v-if="snapshot.trending.length" class="home-type-filter" role="group" aria-label="Filter trending">
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">All</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">Movies</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" @click="trendingFilter = 'tv'">Series</button>
+              <div v-if="snapshot.trending.length" class="home-type-filter" role="group" :aria-label="$t('Filter trending')">
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">{{ $t('All') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">{{ $t('Movies') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" @click="trendingFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
               <div v-if="trendingItems.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous trending" @click="scrollRail('trending', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next trending" @click="scrollRail('trending', 1)">›</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous trending')" @click="scrollRail('trending', -1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next trending')" @click="scrollRail('trending', 1)">›</button>
               </div>
             </div>
           </div>
@@ -1631,7 +1641,7 @@ onUnmounted(() => {
                 :disabled="requestBusy === resultKey(item)"
                 @click="requestTitle(item)"
               >
-                {{ requestBusy === resultKey(item) ? 'Requesting…' : 'Request' }}
+                {{ requestBusy === resultKey(item) ? $t('Requesting…') : $t('Request') }}
               </button>
             </div>
           </div>
@@ -1642,7 +1652,7 @@ onUnmounted(() => {
             <p v-if="waitingLabel('trending')" class="home-muted">{{ waitingLabel('trending') }}</p>
           </template>
           <p v-else-if="snapshot.trending.length" class="home-muted">
-            No {{ trendingFilter === 'movie' ? 'movies' : trendingFilter === 'tv' ? 'series' : 'titles' }} in this filter.
+            {{ trendingFilter === 'movie' ? $t('No movies in this filter.') : trendingFilter === 'tv' ? $t('No series in this filter.') : $t('No titles in this filter.') }}
           </p>
           <p v-else class="home-muted">{{ snapshot.seerr?.available ? 'No trending titles right now.' : 'Trending titles appear when Seerr is running.' }}</p>
           <ul v-if="widgetDebug && notesFor('trending').length" class="home-debug">
@@ -1658,22 +1668,22 @@ onUnmounted(() => {
           <div class="cal-head">
             <h3>{{ calendarRangeLabel }}</h3>
             <div class="cal-tools">
-              <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">Today</button>
-              <select v-model="calFilter" class="ui-input cal-select" aria-label="Filter calendar">
-                <option value="all">All</option>
-                <option value="tv">TV</option>
-                <option value="movies">Movies</option>
-                <option value="missing">Not downloaded</option>
+              <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">{{ $t('Today') }}</button>
+              <select v-model="calFilter" class="ui-input cal-select" :aria-label="$t('Filter calendar')">
+                <option value="all">{{ $t('All') }}</option>
+                <option value="tv">{{ $t('TV') }}</option>
+                <option value="movies">{{ $t('Movies') }}</option>
+                <option value="missing">{{ $t('Not downloaded') }}</option>
               </select>
-              <select :value="calView" class="ui-input cal-select" aria-label="Calendar view" @change="setCalView($event.target.value)">
-                <option value="list">List</option>
-                <option value="day">Day</option>
-                <option value="week">Week</option>
-                <option value="month">Month</option>
+              <select :value="calView" class="ui-input cal-select" :aria-label="$t('Calendar view')" @change="setCalView($event.target.value)">
+                <option value="list">{{ $t('List') }}</option>
+                <option value="day">{{ $t('Day') }}</option>
+                <option value="week">{{ $t('Week') }}</option>
+                <option value="month">{{ $t('Month') }}</option>
               </select>
               <div class="cal-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" aria-label="Previous">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" aria-label="Next">›</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" :aria-label="$t('Previous')">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" :aria-label="$t('Next')">›</button>
               </div>
             </div>
           </div>
@@ -1682,7 +1692,7 @@ onUnmounted(() => {
             <div v-if="!calendarList.length && isPending('calendar')" aria-hidden="true">
               <span v-for="n in 4" :key="n" class="home-skel home-skel-line"></span>
             </div>
-            <p v-else-if="!calendarList.length" class="home-muted">Nothing in this range.</p>
+            <p v-else-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
             <ul v-else>
               <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
                 <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
@@ -1696,7 +1706,7 @@ onUnmounted(() => {
               </li>
             </ul>
           </div>
-          <div v-else class="cal" :class="'cal-mode-' + calView" role="grid" aria-label="Upcoming releases calendar">
+          <div v-else class="cal" :class="'cal-mode-' + calView" role="grid" :aria-label="$t('Upcoming releases calendar')">
             <div v-if="calView === 'week'" class="cal-weekdays">
               <span v-for="day in calendarDays" :key="day.key">{{ day.weekday }} {{ day.date }}-{{ day.month }}</span>
             </div>
@@ -1747,7 +1757,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <p v-if="!snapshot.calendar.length && widgetDebug" class="home-muted">Nothing on the calendar.</p>
+          <p v-if="!snapshot.calendar.length && widgetDebug" class="home-muted">{{ $t('Nothing on the calendar.') }}</p>
           <ul v-if="widgetDebug && notesFor('calendar').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('calendar')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1760,31 +1770,31 @@ onUnmounted(() => {
       <template #downloads>
         <article class="home-card glass-card home-card-downloads">
           <div class="home-widget-head">
-            <h3>Downloading</h3>
+            <h3>{{ $t('Downloading') }}</h3>
             <span v-if="movingDownloads.length && !downloadPause.paused" class="home-card-stat">{{ movingDownloads.length }}<template v-if="totalSpeed"> · {{ totalSpeed }}</template></span>
-            <select v-if="movingDownloads.length > 1" v-model="downloadSort" class="ui-input home-sort" aria-label="Sort downloads">
-              <option value="queue">Queue order</option>
-              <option value="desc">Most done first</option>
-              <option value="asc">Least done first</option>
+            <select v-if="movingDownloads.length > 1" v-model="downloadSort" class="ui-input home-sort" :aria-label="$t('Sort downloads')">
+              <option value="queue">{{ $t('Queue order') }}</option>
+              <option value="desc">{{ $t('Most done first') }}</option>
+              <option value="asc">{{ $t('Least done first') }}</option>
             </select>
             <div v-if="downloadPause.paused" class="home-pause is-paused">
               <span class="home-muted">{{ pausedLabel }}</span>
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(false)">Resume all</button>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(false)">{{ $t('Resume all') }}</button>
             </div>
             <div v-else-if="snapshot.downloads.length" class="home-pause">
-              <select v-model="pauseFor" class="ui-input" aria-label="Pause for">
-                <option value="30">30 min</option>
-                <option value="60">1 hour</option>
-                <option value="180">3 hours</option>
-                <option value="until">Until I resume</option>
+              <select v-model="pauseFor" class="ui-input" :aria-label="$t('Pause for')">
+                <option value="30">{{ $t('30 min') }}</option>
+                <option value="60">{{ $t('1 hour') }}</option>
+                <option value="180">{{ $t('3 hours') }}</option>
+                <option value="until">{{ $t('Until I resume') }}</option>
               </select>
-              <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon" :disabled="pauseBusy" title="Pause all downloads" aria-label="Pause all downloads" @click="setDownloadsPaused(true)">
+              <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon" :disabled="pauseBusy" :title="$t('Pause all downloads')" :aria-label="$t('Pause all downloads')" @click="setDownloadsPaused(true)">
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
               </button>
             </div>
           </div>
           <div v-if="movingDownloads.length && !downloadPause.paused" class="home-dl-compact">
-            <span class="home-dl-count">{{ movingDownloads.length }}<small>active</small></span>
+            <span class="home-dl-count">{{ movingDownloads.length }}<small>{{ $t('active') }}</small></span>
             <span class="home-muted home-dl-meta">{{ totalSpeed || 'Waiting for speed' }}</span>
             <span class="home-bar"><span :style="{ width: `${downloadsProgress}%` }" /></span>
           </div>
@@ -1803,12 +1813,12 @@ onUnmounted(() => {
               </span>
             </li>
           </ul>
-          <p v-else class="home-muted">No active downloads.</p>
+          <p v-else class="home-muted">{{ $t('No active downloads.') }}</p>
           <details v-if="stuckItems.length" class="home-stuck">
-            <summary class="home-muted">Not moving: {{ stuckSummary }}</summary>
+            <summary class="home-muted">{{ $t('Not moving:') }} {{ stuckSummary }}</summary>
             <div class="home-stuck-head">
-              <span class="home-muted">Removing blocklists the release; Sonarr and Radarr search for another.</span>
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="removeBusy.size > 0" @click="removeDownloads(stuckItems, true)">Remove all</button>
+              <span class="home-muted">{{ $t('Removing blocklists the release; Sonarr and Radarr search for another.') }}</span>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="removeBusy.size > 0" @click="removeDownloads(stuckItems, true)">{{ $t('Remove all') }}</button>
             </div>
             <ul>
               <li v-for="item in stuckItems" :key="item.download_id || item.title" class="home-stuck-item">
@@ -1819,8 +1829,8 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="home-stuck-remove"
-                  :aria-label="`Remove ${item.title}`"
-                  :title="`Remove ${item.title}`"
+                  :aria-label="$t('Remove {name}', { name: item.title })"
+                  :title="$t('Remove {name}', { name: item.title })"
                   :disabled="!item.download_id || removeBusy.has(item.download_id)"
                   @click="removeDownloads([item])"
                 >
@@ -1850,7 +1860,7 @@ onUnmounted(() => {
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
                 {{ nowItem.device || (nowItem.source === 'plex' ? 'Plex' : 'Jellyfin') }}
               </span>
-              <span v-if="homeStatus.playing.length > 1" class="gh-pill">+{{ homeStatus.playing.length - 1 }} watching</span>
+              <span v-if="homeStatus.playing.length > 1" class="gh-pill">+{{ homeStatus.playing.length - 1 }} {{ $t('watching') }}</span>
             </div>
             <component
               :is="nowItem.url ? 'a' : 'div'"
@@ -1862,19 +1872,19 @@ onUnmounted(() => {
               <span v-if="nowItem.detail" class="np-sub">{{ nowItem.detail }}</span>
               <span class="np-progress"><span :style="{ width: `${nowItem.progress}%` }" /></span>
               <span class="np-foot">
-                <span>{{ nowItem.user }}<template v-if="nowItem.paused"> · Paused</template></span>
-                <span>{{ nowItem.transcoding ? 'Transcoding' : 'Direct play' }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} min left</template></span>
+                <span>{{ nowItem.user }}<template v-if="nowItem.paused"> {{ $t('· Paused') }}</template></span>
+                <span>{{ nowItem.transcoding ? $t('Transcoding') : $t('Direct play') }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} {{ $t('min left') }}</template></span>
               </span>
             </component>
           </template>
           <template v-else>
             <div class="gh-head">
-              <h3>Now playing</h3>
-              <span class="gh-status is-idle">{{ !statusLoaded ? 'Checking who is watching…' : hasMediaServer ? 'Nobody is watching' : 'Install Jellyfin or Plex' }}</span>
+              <h3>{{ $t('Now playing') }}</h3>
+              <span class="gh-status is-idle">{{ !statusLoaded ? $t('Checking who is watching…') : hasMediaServer ? $t('Nobody is watching') : $t('Install Jellyfin or Plex') }}</span>
             </div>
             <div v-if="statusLoaded && hasMediaServer" class="gh-empty">
-              <span class="gh-big">Nothing on</span>
-              <span class="gh-label">What plays on Jellyfin or Plex shows up here.</span>
+              <span class="gh-big">{{ $t('Nothing on') }}</span>
+              <span class="gh-label">{{ $t('What plays on Jellyfin or Plex shows up here.') }}</span>
             </div>
           </template>
         </article>
@@ -1882,14 +1892,14 @@ onUnmounted(() => {
       <template #storage>
         <article class="home-card glass-card home-card-storage">
           <div class="gh-head">
-            <h3>Storage</h3>
+            <h3>{{ $t('Storage') }}</h3>
             <span v-if="storageStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[storageStatus.level] }">{{ storageStatus.text }}</span>
             <span v-else class="gh-status is-idle">{{ statusLoaded ? 'No data folders found' : 'Checking disks…' }}</span>
           </div>
           <template v-if="fullestVolume">
             <div class="gh-figure">
-              <span class="gh-big">{{ fullestFree[0] }}<small>{{ fullestFree[1] }} free</small></span>
-              <span class="gh-label">of {{ formatBytes(fullestVolume.total) }} · {{ Math.round(fullestVolume.percent) }}% used</span>
+              <span class="gh-big">{{ fullestFree[0] }}<small>{{ fullestFree[1] }} {{ $t('free') }}</small></span>
+              <span class="gh-label">{{ $t('of') }} {{ formatBytes(fullestVolume.total) }} · {{ Math.round(fullestVolume.percent) }}{{ $t('% used') }}</span>
             </div>
             <span class="gh-meter" :class="`is-${storageStatus.level}`"><span :style="{ width: `${fullestVolume.percent}%` }" /></span>
             <div class="gh-pills">
@@ -1925,29 +1935,29 @@ onUnmounted(() => {
             <span class="sv-end is-up" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.up}%` }" aria-hidden="true"></span>
           </div>
           <div class="gh-head">
-            <h3>Server</h3>
+            <h3>{{ $t('Server') }}</h3>
             <span v-if="serverStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[serverStatus.level] }">{{ serverStatus.text }}</span>
-            <span v-else class="gh-status is-idle">Reading the server…</span>
+            <span v-else class="gh-status is-idle">{{ $t('Reading the server…') }}</span>
           </div>
           <template v-if="homeStatus.server">
             <div class="sv-figures">
               <div class="gh-figure">
                 <span class="gh-big">{{ Math.round(homeStatus.server.cpu_percent) }}<small>%</small></span>
-                <span class="gh-label">CPU</span>
+                <span class="gh-label">{{ $t('CPU') }}</span>
               </div>
               <div class="gh-figure">
                 <span class="gh-big">{{ Math.round(homeStatus.server.memory_percent) }}<small>%</small></span>
-                <span class="gh-label">Memory<span class="sv-mem-bytes"> · {{ formatBytes(homeStatus.server.memory_used) }} of {{ formatBytes(homeStatus.server.memory_total) }}</span></span>
+                <span class="gh-label">{{ $t('Memory') }}<span class="sv-mem-bytes"> · {{ formatBytes(homeStatus.server.memory_used) }} {{ $t('of') }} {{ formatBytes(homeStatus.server.memory_total) }}</span></span>
               </div>
               <div class="gh-figure sv-net-figure">
                 <span class="gh-big">{{ netParts(netShown?.rxRate)[0] }}<small>{{ netParts(netShown?.rxRate)[1] }} <b class="sv-key">↓</b></small></span>
-                <span class="gh-label">{{ netAgo || 'Network' }}<template v-if="netShown"> · <b class="sv-key is-up">↑</b> {{ netRate(netShown.txRate) }}</template></span>
+                <span class="gh-label">{{ netAgo || $t('Network') }}<template v-if="netShown"> · <b class="sv-key is-up">↑</b> {{ netRate(netShown.txRate) }}</template></span>
               </div>
             </div>
             <div class="gh-pills sv-pills">
               <span class="gh-pill">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" /></svg>
-                {{ homeStatus.server.cpu_count }} cores
+                {{ homeStatus.server.cpu_count }} {{ $t('cores') }}
               </span>
               <span v-if="homeStatus.server.temperature != null" class="gh-pill">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0z" /></svg>
@@ -1964,9 +1974,9 @@ onUnmounted(() => {
       <template #attention>
         <article class="home-card glass-card home-card-attention">
           <div class="gh-head">
-            <h3>Needs attention</h3>
+            <h3>{{ $t('Needs attention') }}</h3>
             <span v-if="statusLoaded" class="gh-status" :style="{ '--dot': MOOD_COLORS[attentionStatus.level] }">{{ attentionStatus.text }}</span>
-            <span v-else class="gh-status is-idle">Checking…</span>
+            <span v-else class="gh-status is-idle">{{ $t('Checking…') }}</span>
           </div>
           <div class="home-card-body">
             <ol v-if="homeStatus.attention.length" class="at-timeline">
@@ -1982,8 +1992,8 @@ onUnmounted(() => {
               </li>
             </ol>
             <div v-else-if="statusLoaded" class="gh-empty">
-              <span class="gh-big">All clear</span>
-              <span class="gh-label">Apps, VPN, tunnel, updates and disks look fine.</span>
+              <span class="gh-big">{{ $t('All clear') }}</span>
+              <span class="gh-label">{{ $t('Apps, VPN, tunnel, updates and disks look fine.') }}</span>
             </div>
           </div>
         </article>
@@ -2017,15 +2027,14 @@ onUnmounted(() => {
         @close="sheet = null"
       />
       <p v-if="!showWidgets" class="home-muted">
-        Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.
-        Turn on Widget debug in Settings → Diagnostics to see why a source is skipped or failing.
+        {{ $t('Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.') }}
+        {{ $t('Turn on Widget debug in Settings → Diagnostics to see why a source is skipped or failing.') }}
       </p>
     </template>
     <article v-if="!loading && widgetDebug" class="home-widget glass-card home-debug-panel">
-      <h3>Widget debug</h3>
+      <h3>{{ $t('Widget debug') }}</h3>
       <p class="home-muted">
-        Per-source status for Home. API keys are never shown. Toggle this under
-        Settings → Diagnostics, or add <code>?debug=1</code> to the URL.
+        {{ $t('Per-source status for Home. API keys are never shown. Toggle this under Settings → Diagnostics, or add') }} <code>?debug=1</code> {{ $t('to the URL.') }}
       </p>
       <ul v-if="widgetNotes.length" class="home-debug">
         <li v-for="(note, idx) in widgetNotes" :key="idx">
@@ -2033,15 +2042,15 @@ onUnmounted(() => {
           <span>{{ note.widget }} / {{ note.source }} — {{ note.detail }}</span>
         </li>
       </ul>
-      <p v-else class="home-muted">No widget sources reported yet. Reload Home.</p>
+      <p v-else class="home-muted">{{ $t('No widget sources reported yet. Reload Home.') }}</p>
     </article>
     <Teleport to="body">
       <div v-if="requestChoice && choiceServer" class="modal-backdrop" @click.self="requestChoice = null">
         <form class="modal-content home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
-          <h3 id="home-request-title">Request {{ requestChoice.item.title }}</h3>
-          <p class="home-muted">Choose where Seerr should add it.</p>
+          <h3 id="home-request-title">{{ $t('Request') }} {{ requestChoice.item.title }}</h3>
+          <p class="home-muted">{{ $t('Choose where Seerr should add it.') }}</p>
           <label v-if="requestChoice.servers.length > 1" class="home-request-field">
-            Server
+            {{ $t('Server') }}
             <select class="ui-input" :value="requestChoice.serverId" @change="onRequestServer">
               <option v-for="server in requestChoice.servers" :key="server.id" :value="server.id">
                 {{ server.name }}{{ server.is4k ? ' (4K)' : '' }}
@@ -2049,27 +2058,27 @@ onUnmounted(() => {
             </select>
           </label>
           <label v-if="choiceServer.profiles.length > 1" class="home-request-field">
-            Quality profile
+            {{ $t('Quality profile') }}
             <select v-model="requestChoice.profileId" class="ui-input">
               <option v-for="profile in choiceServer.profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
             </select>
           </label>
           <label v-if="choiceServer.folders.length > 1" class="home-request-field">
-            Folder
+            {{ $t('Folder') }}
             <select v-model="requestChoice.rootFolder" class="ui-input">
               <option v-for="folder in choiceServer.folders" :key="folder.path" :value="folder.path">{{ folder.path }}</option>
             </select>
           </label>
           <label v-if="choiceServer.languages.length > 1" class="home-request-field">
-            Language profile
+            {{ $t('Language profile') }}
             <select v-model="requestChoice.languageProfileId" class="ui-input">
               <option v-for="language in choiceServer.languages" :key="language.id" :value="language.id">{{ language.name }}</option>
             </select>
           </label>
           <div class="home-request-actions">
-            <button type="button" class="ui-btn" @click="requestChoice = null">Cancel</button>
+            <button type="button" class="ui-btn" @click="requestChoice = null">{{ $t('Cancel') }}</button>
             <button type="submit" class="ui-btn ui-btn-primary" :disabled="requestBusy === resultKey(requestChoice.item)">
-              {{ requestBusy === resultKey(requestChoice.item) ? 'Requesting…' : 'Request' }}
+              {{ requestBusy === resultKey(requestChoice.item) ? $t('Requesting…') : $t('Request') }}
             </button>
           </div>
         </form>
@@ -2307,20 +2316,49 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.6rem;
   height: 3.5rem;
-  padding: 0 0.5rem 0 0.45rem;
+  padding: 0 0.5rem 0 0;
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  overflow: hidden;
+}
+.home-search-provider-wrap {
+  position: relative;
+  display: flex;
+  align-self: stretch;
+  flex: 0 1 12.4rem;
+  min-width: 0;
+  border-right: 1px solid var(--border-subtle);
+  border-radius: 999px 0 0 999px;
+  overflow: hidden;
 }
 .home-search-provider {
-  flex: 0 1 11.5rem;
-  min-width: 0;
-  height: 2.5rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.7rem;
-  background: var(--control-bg);
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: inherit;
   font: inherit;
   font-size: 0.92rem;
-  padding: 0 0.45rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 0 1.7rem 0 1.15rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.home-search-provider:hover,
+.home-search-provider:focus-visible {
+  background: var(--pill-active);
+  outline: none;
+}
+.home-search-provider-chevron {
+  position: absolute;
+  top: 50%;
+  right: 0.72rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text-muted);
 }
 .home-search-pill svg {
   flex: 0 0 auto;
@@ -2385,12 +2423,16 @@ onUnmounted(() => {
 }
 /* A small search bar searches on Enter; the button would leave no room to type. */
 @container (max-width: 300px) {
-  .home-search-pill {
-    padding-left: 0.35rem;
+  .home-search-provider-wrap {
+    flex-basis: 7.1rem;
   }
   .home-search-provider {
-    flex-basis: 6.4rem;
     font-size: 0.8rem;
+    padding-left: 0.8rem;
+    padding-right: 1.35rem;
+  }
+  .home-search-provider-chevron {
+    right: 0.45rem;
   }
   .home-search-btn {
     display: none;

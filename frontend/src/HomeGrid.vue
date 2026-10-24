@@ -359,13 +359,13 @@ function onKey(event, id) {
     >
       <div class="hg-body"><slot :name="item.id" /></div>
       <template v-if="editing">
-        <button type="button" class="hg-x" tabindex="-1" :aria-label="`Remove ${label(item.id)}`" :title="`Remove ${label(item.id)}`" @click.stop="emit('remove', item.id)">
+        <button type="button" class="hg-x" tabindex="-1" :aria-label="$t('Remove {name}', { name: label(item.id) })" :title="$t('Remove {name}', { name: label(item.id) })" @click.stop="emit('remove', item.id)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
-        <span class="hg-grip" data-grip :title="`Move ${label(item.id)}`" aria-hidden="true">
+        <span class="hg-grip" data-grip :title="$t('Move {name}', { name: label(item.id) })" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7" /><circle cx="15" cy="6" r="1.7" /><circle cx="9" cy="12" r="1.7" /><circle cx="15" cy="12" r="1.7" /><circle cx="9" cy="18" r="1.7" /><circle cx="15" cy="18" r="1.7" /></svg>
         </span>
-        <span class="hg-rz" data-rz :title="`Resize ${label(item.id)}`" aria-hidden="true">
+        <span class="hg-rz" data-rz :title="$t('Resize {name}', { name: label(item.id) })" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M8 19L19 8M14 19l5-5" /></svg>
         </span>
       </template>

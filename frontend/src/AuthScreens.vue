@@ -4,6 +4,8 @@ import { apiError, apiJson, applySession } from './api.js'
 import { brandLogoUrl, brandLoginMessage, brandTitle } from './branding.js'
 import { useToasts } from './useToasts.js'
 import AppLoader from './AppLoader.vue'
+import LanguageSelect from './LanguageSelect.vue'
+import { t } from './i18n/index.js'
 
 const emit = defineEmits(['status', 'session'])
 const { showToast } = useToasts()
@@ -44,28 +46,28 @@ async function checkAuthStatus({ retries = 6 } = {}) {
         authReady.value = true
         return
       }
-      lastError = apiError(data, `Could not reach the manager (HTTP ${res.status}).`)
+      lastError = apiError(data, t('Could not reach the manager (HTTP {status}).', { status: res.status }))
     } catch (err) {
-      lastError = err?.message || 'Could not reach the manager API.'
+      lastError = err?.message || t('Could not reach the manager API.')
       console.error('Failed to check auth status:', err)
     }
   }
-  authStatusError.value = lastError || 'Could not reach the manager API.'
+  authStatusError.value = lastError || t('Could not reach the manager API.')
   authReady.value = true
 }
 
 async function handleSetup() {
   authError.value = ''
   if (authForm.value.password.length < 8) {
-    authError.value = 'Password must be at least 8 characters long.'
+    authError.value = t('Password must be at least 8 characters long.')
     return
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authForm.value.email.trim())) {
-    authError.value = 'A valid email address is required.'
+    authError.value = t('A valid email address is required.')
     return
   }
   if (authForm.value.password !== authForm.value.confirmPassword) {
-    authError.value = 'Passwords do not match.'
+    authError.value = t('Passwords do not match.')
     return
   }
 
@@ -81,17 +83,17 @@ async function handleSetup() {
     })
 
     if (!res.ok) {
-      authError.value = apiError(data, 'Setup failed.')
+      authError.value = apiError(data, t('Setup failed.'))
       return
     }
 
     applySession(data)
     authForm.value.password = ''
     authForm.value.confirmPassword = ''
-    showToast('Admin setup completed successfully! Welcome to AIO Media Server Manager.', 'success')
+    showToast(t('Admin setup completed successfully! Welcome to AIO Media Server Manager.'), 'success')
     emit('session', data)
   } catch (err) {
-    authError.value = 'Network error during setup: ' + err.message
+    authError.value = t('Network error during setup: {message}', { message: err.message })
   } finally {
     authLoading.value = false
   }
@@ -110,16 +112,16 @@ async function handleLogin() {
     })
 
     if (!res.ok) {
-      authError.value = apiError(data, 'Invalid username or password.')
+      authError.value = apiError(data, t('Invalid username or password.'))
       return
     }
 
     applySession(data)
     authForm.value.password = ''
-    showToast(`Welcome back, ${data.username}!`, 'success')
+    showToast(t('Welcome back, {name}!', { name: data.username }), 'success')
     emit('session', data)
   } catch (err) {
-    authError.value = 'Login error: ' + err.message
+    authError.value = t('Login error: {message}', { message: err.message })
   } finally {
     authLoading.value = false
   }
@@ -131,17 +133,20 @@ onMounted(() => {
 </script>
 
 <template>
+      <div v-if="authReady" class="auth-language">
+        <LanguageSelect />
+      </div>
       <section v-if="!authReady" class="auth-card-wrapper animate-fade">
         <AppLoader label="Connecting to the manager" />
       </section>
       <section v-else-if="authStatusError" class="auth-card-wrapper animate-fade">
         <div class="glass-card auth-card">
           <div class="card-header-accent">
-            <h2>Manager unreachable</h2>
+            <h2>{{ $t('Manager unreachable') }}</h2>
             <p>{{ authStatusError }}</p>
           </div>
           <button type="button" class="ui-btn ui-btn-primary btn-block" @click="checkAuthStatus({ retries: 6 })">
-            Retry connection
+            {{ $t('Retry connection') }}
           </button>
         </div>
       </section>
@@ -155,9 +160,9 @@ onMounted(() => {
               :alt="brandTitle"
               class="auth-logo"
             />
-            <span class="accent-badge">SETUP</span>
-            <h2>Create administrator</h2>
-            <p>Create the local admin account that protects the dashboard and API.</p>
+            <span class="accent-badge">{{ $t('SETUP') }}</span>
+            <h2>{{ $t('Create administrator') }}</h2>
+            <p>{{ $t('Create the local admin account that protects the dashboard and API.') }}</p>
           </div>
 
           <form @submit.prevent="handleSetup" class="auth-form">
@@ -166,7 +171,7 @@ onMounted(() => {
             </div>
 
             <div class="form-group">
-              <label class="ui-field">Username
+              <label class="ui-field">{{ $t('Username') }}
               <input
                 v-model="authForm.username"
                 type="text"
@@ -179,7 +184,7 @@ onMounted(() => {
             </div>
 
             <div class="form-group">
-              <label class="ui-field">Email address
+              <label class="ui-field">{{ $t('Email address') }}
               <input
                 v-model="authForm.email"
                 type="email"
@@ -192,7 +197,7 @@ onMounted(() => {
             </div>
 
             <div class="form-group">
-              <label class="ui-field">Password (minimum 8 characters)
+              <label class="ui-field">{{ $t('Password (minimum 8 characters)') }}
               <input
                 v-model="authForm.password"
                 type="password"
@@ -204,7 +209,7 @@ onMounted(() => {
             </div>
 
             <div class="form-group">
-              <label class="ui-field">Confirm password
+              <label class="ui-field">{{ $t('Confirm password') }}
               <input
                 v-model="authForm.confirmPassword"
                 type="password"
@@ -217,7 +222,7 @@ onMounted(() => {
 
             <button type="submit" :disabled="authLoading" class="ui-btn ui-btn-primary btn-block">
               <span v-if="authLoading" class="spinner"></span>
-              <span v-else>Create account</span>
+              <span v-else>{{ $t('Create account') }}</span>
             </button>
           </form>
         </div>
@@ -233,8 +238,8 @@ onMounted(() => {
               :alt="brandTitle"
               class="auth-logo"
             />
-            <h2>Sign in</h2>
-            <p>Use the administrator username and password.</p>
+            <h2>{{ $t('Sign in') }}</h2>
+            <p>{{ $t('Use the administrator username and password.') }}</p>
             <p v-if="brandLoginMessage" class="auth-personal-message">{{ brandLoginMessage }}</p>
           </div>
 
@@ -244,7 +249,7 @@ onMounted(() => {
             </div>
 
             <div class="form-group">
-              <label class="ui-field">Username
+              <label class="ui-field">{{ $t('Username') }}
               <input
                 v-model="authForm.username"
                 type="text"
@@ -258,7 +263,7 @@ onMounted(() => {
             </div>
 
             <div class="form-group">
-              <label class="ui-field">Password
+              <label class="ui-field">{{ $t('Password') }}
               <input
                 v-model="authForm.password"
                 type="password"
@@ -271,7 +276,7 @@ onMounted(() => {
 
             <button type="submit" :disabled="authLoading" class="ui-btn ui-btn-primary btn-block">
               <span v-if="authLoading" class="spinner"></span>
-              <span v-else>Sign in</span>
+              <span v-else>{{ $t('Sign in') }}</span>
             </button>
           </form>
         </div>

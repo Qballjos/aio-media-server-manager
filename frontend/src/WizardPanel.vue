@@ -4,6 +4,7 @@ import { appIconSrc } from './appIcons.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { brandLogoUrl, brandTitle } from './branding.js'
 import { formatUptime } from './format.js'
+import { t } from './i18n/index.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 
 const emit = defineEmits(['done'])
@@ -50,17 +51,17 @@ const installPercent = computed(() => {
   if (!installTotal.value) return 0
   return Math.round((installDoneCount.value / installTotal.value) * 100)
 })
-const headerTitle = computed(() => (installing.value ? 'Installing applications' : TITLE[step.value]))
+const headerTitle = computed(() => t(installing.value ? 'Installing applications' : TITLE[step.value] || 'Setup'))
 const headerSubtitle = computed(() => {
   if (installing.value && !installTotal.value) {
-    return 'Saving your choices and starting catalog installs.'
+    return t('Saving your choices and starting catalog installs.')
   }
   if (installing.value) {
     const current = installActive.value
     if (current) return `${displayName(current.name)}: ${current.message || installStatusLabel(current.status).toLowerCase()}`
-    return `Finished ${installDoneCount.value} of ${installTotal.value} selected apps.`
+    return t('Finished {done} of {total} selected apps.', { done: installDoneCount.value, total: installTotal.value })
   }
-  return `Step ${flowIndex.value} of ${FLOW.length} — pick your stack, then save and install.`
+  return t('Step {step} of {total} — pick your stack, then save and install.', { step: flowIndex.value, total: FLOW.length })
 })
 
 function isSelected(listKey, id) {
@@ -447,10 +448,10 @@ onUnmounted(() => {
           :alt="brandTitle"
           class="wizard-logo"
         />
-        <span class="wizard-badge">FIRST-RUN SETUP</span>
+        <span class="wizard-badge">{{ $t('FIRST-RUN SETUP') }}</span>
         <h2>{{ headerTitle }}</h2>
         <p>{{ headerSubtitle }}</p>
-        <ol class="wizard-steps" aria-label="Setup steps">
+        <ol class="wizard-steps" :aria-label="$t('Setup steps')">
           <li
             v-for="(id, index) in FLOW"
             :key="id"
@@ -465,7 +466,7 @@ onUnmounted(() => {
       </div>
 
       <p v-if="error" class="ui-alert ui-alert-error">{{ error }}</p>
-      <p v-if="loading" class="wizard-muted">Loading…</p>
+      <p v-if="loading" class="wizard-muted">{{ $t('Loading…') }}</p>
 
       <div v-else class="wizard-body">
         <template v-if="installing">
@@ -481,7 +482,7 @@ onUnmounted(() => {
               :aria-valuemax="100"
               :aria-valuenow="installTotal ? installPercent : undefined"
               :aria-valuetext="`${installDoneCount} of ${installTotal} apps finished`"
-              aria-label="Application setup"
+              :aria-label="$t('Application setup')"
             >
               <div
                 class="wizard-bar-fill"
@@ -506,7 +507,7 @@ onUnmounted(() => {
                   <template v-else-if="['queued', 'installing', 'configuring'].includes(item.status)">
                     <small v-if="item.message" class="wizard-install-detail" aria-live="polite">{{ item.message }}</small>
                     <small v-if="item.updatedAt" class="wizard-install-detail">
-                      Last progress {{ formatUptime(progressNow - item.updatedAt) }} ago
+                      {{ $t('Last progress {when} ago', { when: formatUptime(progressNow - item.updatedAt) }) }}
                     </small>
                   </template>
                 </span>
@@ -522,22 +523,22 @@ onUnmounted(() => {
 
         <template v-else-if="step === 3">
           <label class="ui-field">
-            <span>Media directory</span>
+            <span>{{ $t('Media directory') }}</span>
             <input v-model="selections.media_dir" class="ui-input font-mono" />
           </label>
           <label class="ui-field">
-            <span>Download directory</span>
+            <span>{{ $t('Download directory') }}</span>
             <input v-model="selections.download_dir" class="ui-input font-mono" />
           </label>
           <label class="ui-field">
-            <span>Config directory</span>
+            <span>{{ $t('Config directory') }}</span>
             <input v-model="selections.config_dir" class="ui-input font-mono" />
           </label>
-          <p class="wizard-muted">{{ payload.hardlink_message }} Put both media and downloads under one host folder (for example <code>/data/media</code> and <code>/data/downloads</code>) so *Arr can hardlink instead of copying.</p>
+          <p class="wizard-muted">{{ payload.hardlink_message }} Put both media and downloads under one host folder (for example <code>/data/media</code> {{ $t('and') }} <code>/data/downloads</code>{{ $t(') so *Arr can hardlink instead of copying.') }}</p>
         </template>
 
         <template v-else-if="step === 4">
-          <p class="wizard-muted">Filled from this host’s PUID/PGID (compose <code>PUID</code>/<code>PGID</code>, otherwise 1000). Change only if the media user is different.</p>
+          <p class="wizard-muted">{{ $t('Filled from this host’s PUID/PGID (compose') }} <code>PUID</code>/<code>PGID</code>{{ $t(', otherwise 1000). Change only if the media user is different.') }}</p>
           <label class="ui-field">
             <span>PUID</span>
             <input v-model="selections.puid" type="number" min="1" class="ui-input font-mono" />
@@ -561,28 +562,28 @@ onUnmounted(() => {
                 <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
               </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" :title="$t('Official help')">?</a>
             </label>
           </div>
           <template v-if="showQbitCreds">
             <label class="ui-field">
-              <span>qBittorrent username</span>
-              <input v-model="selections.qbittorrent_username" class="ui-input font-mono" placeholder="Leave blank to use the manager username" />
+              <span>{{ $t('qBittorrent username') }}</span>
+              <input v-model="selections.qbittorrent_username" class="ui-input font-mono" :placeholder="$t('Leave blank to use the manager username')" />
             </label>
             <label class="ui-field">
-              <span>qBittorrent password</span>
-              <input v-model="selections.qbittorrent_password" type="password" class="ui-input" placeholder="Leave blank to use the manager password" />
+              <span>{{ $t('qBittorrent password') }}</span>
+              <input v-model="selections.qbittorrent_password" type="password" class="ui-input" :placeholder="$t('Leave blank to use the manager password')" />
             </label>
-            <p class="wizard-muted">Blank qBittorrent username and password use the same login as AIO Media Server Manager.</p>
+            <p class="wizard-muted">{{ $t('Blank qBittorrent username and password use the same login as AIO Media Server Manager.') }}</p>
           </template>
           <template v-if="showUsenetCreds">
-            <p class="wizard-muted">Optional. These Usenet provider details are pushed into SABnzbd and/or NZBGet after install.</p>
+            <p class="wizard-muted">{{ $t('Optional. These Usenet provider details are pushed into SABnzbd and/or NZBGet after install.') }}</p>
             <label class="ui-field">
-              <span>Usenet server host</span>
+              <span>{{ $t('Usenet server host') }}</span>
               <input v-model="selections.usenet_host" class="ui-input font-mono" placeholder="news.example.com" />
             </label>
             <label class="ui-field">
-              <span>Port</span>
+              <span>{{ $t('Port') }}</span>
               <input v-model.number="selections.usenet_port" type="number" min="1" max="65535" class="ui-input font-mono" />
             </label>
             <label class="wizard-option" :class="{ selected: selections.usenet_ssl }">
@@ -590,15 +591,15 @@ onUnmounted(() => {
               SSL / TLS
             </label>
             <label class="ui-field">
-              <span>Usenet username</span>
+              <span>{{ $t('Usenet username') }}</span>
               <input v-model="selections.usenet_username" class="ui-input font-mono" placeholder="username" autocomplete="off" />
             </label>
             <label class="ui-field">
-              <span>Usenet password</span>
-              <input v-model="selections.usenet_password" type="password" class="ui-input" :placeholder="payload.has_usenet_password ? 'Saved — leave blank to keep' : ''" />
+              <span>{{ $t('Usenet password') }}</span>
+              <input v-model="selections.usenet_password" type="password" class="ui-input" :placeholder="payload.has_usenet_password ? $t('Saved — leave blank to keep') : ''" />
             </label>
             <label class="ui-field">
-              <span>Connections</span>
+              <span>{{ $t('Connections') }}</span>
               <input v-model.number="selections.usenet_connections" type="number" min="1" max="100" class="ui-input font-mono" />
             </label>
           </template>
@@ -624,19 +625,19 @@ onUnmounted(() => {
               :has-config="!!selections.has_vpn_config"
             />
           </template>
-          <p class="wizard-muted">Remote access (optional). A Cloudflare Tunnel reaches the dashboard and apps over HTTPS without opening router ports; it starts right after this wizard.</p>
+          <p class="wizard-muted">{{ $t('Remote access (optional). A Cloudflare Tunnel reaches the dashboard and apps over HTTPS without opening router ports; it starts right after this wizard.') }}</p>
           <label class="wizard-option" :class="{ selected: selections.cloudflare_tunnel_enabled }">
             <input type="checkbox" v-model="selections.cloudflare_tunnel_enabled" />
             Cloudflare Tunnel
           </label>
           <label v-if="selections.cloudflare_tunnel_enabled" class="ui-field">
-            <span>Tunnel token</span>
+            <span>{{ $t('Tunnel token') }}</span>
             <input
               v-model="selections.cloudflare_tunnel_token"
               type="password"
               class="ui-input font-mono"
               autocomplete="off"
-              :placeholder="selections.has_cloudflare_token ? 'Saved — leave blank to keep' : 'Token from Cloudflare Zero Trust → Tunnels'"
+              :placeholder="selections.has_cloudflare_token ? $t('Saved — leave blank to keep') : $t('Token from Cloudflare Zero Trust → Tunnels')"
             />
           </label>
         </template>
@@ -654,7 +655,7 @@ onUnmounted(() => {
                 <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
               </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" :title="$t('Official help')">?</a>
             </label>
           </div>
         </template>
@@ -672,13 +673,13 @@ onUnmounted(() => {
                 <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
               </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" :title="$t('Official help')">?</a>
             </label>
           </div>
           <label v-if="showPlexClaim" class="ui-field">
-            <span>Plex claim token</span>
+            <span>{{ $t('Plex claim token') }}</span>
             <input v-model="selections.plex_claim" class="ui-input font-mono" placeholder="claim-…" />
-            <span class="wizard-muted">Optional. Get a token from plex.tv/claim, or sign in from the Plex UI later.</span>
+            <span class="wizard-muted">{{ $t('Optional. Get a token from plex.tv/claim, or sign in from the Plex UI later.') }}</span>
           </label>
         </template>
 
@@ -695,11 +696,11 @@ onUnmounted(() => {
                 <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
               </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" :title="$t('Official help')">?</a>
             </label>
             <label class="wizard-option" :class="{ selected: selections.request_system === 'none' }">
               <input type="radio" name="seerr" value="none" v-model="selections.request_system" />
-              <span>Skip for now</span>
+              <span>{{ $t('Skip for now') }}</span>
             </label>
           </div>
         </template>
@@ -717,15 +718,15 @@ onUnmounted(() => {
                 <img v-if="appIconSrc(option.id)" :src="appIconSrc(option.id)" :alt="option.name" class="wizard-icon" />
               </span>
               <span>{{ option.name }}</span>
-              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" title="Official help">?</a>
+              <a v-if="optionHelp(option)" :href="optionHelp(option)" target="_blank" rel="noopener noreferrer" class="wizard-help" :title="$t('Official help')">?</a>
             </label>
           </div>
         </template>
 
         <template v-else>
           <p class="wizard-review-lead">
-            Your stack: {{ reviewAppCount }} {{ reviewAppCount === 1 ? 'app' : 'apps' }}.
-            Save &amp; install sets them up with your AIO account.
+            {{ $t('Your stack:') }} {{ reviewAppCount }} {{ reviewAppCount === 1 ? $t('app') : $t('apps') }}.
+            {{ $t('Save and install sets them up with your AIO account.') }}
           </p>
           <ul class="wizard-review">
             <li v-for="group in reviewGroups" :key="group.id" class="wizard-review-row">
@@ -738,13 +739,13 @@ onUnmounted(() => {
                   </span>
                   {{ appLabel(name) }}
                 </span>
-                <span v-if="!group.apps.length" class="wizard-review-empty">None</span>
+                <span v-if="!group.apps.length" class="wizard-review-empty">{{ $t('None') }}</span>
                 <span v-if="group.note" class="wizard-review-note">{{ group.note }}</span>
               </span>
             </li>
           </ul>
           <p class="wizard-review-network">
-            VPN: {{ reviewVpn }}. Remote access: {{ summary.cloudflare_tunnel_enabled ? 'Cloudflare Tunnel' : 'off' }}.
+            {{ $t('VPN: {vpn}. Remote access: {remote}.', { vpn: reviewVpn, remote: summary.cloudflare_tunnel_enabled ? 'Cloudflare Tunnel' : $t('off') }) }}
           </p>
         </template>
       </div>
@@ -755,18 +756,18 @@ onUnmounted(() => {
           type="button"
           class="ui-btn ui-btn-ghost"
           @click="leaveToHome"
-        >Open Home</button>
+        >{{ $t('Open Home') }}</button>
         <button
           v-else
           type="button"
           class="ui-btn ui-btn-ghost"
           :disabled="saving"
           @click="skip"
-        >Skip for now</button>
+        >{{ $t('Skip for now') }}</button>
         <div class="wizard-nav">
-          <button type="button" class="ui-btn ui-btn-ghost" :disabled="step === FIRST || saving || installing" @click="back">Back</button>
+          <button type="button" class="ui-btn ui-btn-ghost" :disabled="step === FIRST || saving || installing" @click="back">{{ $t('Back') }}</button>
           <button v-if="step !== LAST" type="button" class="ui-btn ui-btn-primary" :disabled="saving || loading" @click="next">
-            {{ saving ? 'Saving…' : 'Next' }}
+            {{ saving ? $t('Saving…') : $t('Next') }}
           </button>
           <button v-else type="button" class="ui-btn ui-btn-primary" :disabled="installing" @click="finish">
             <span v-if="installing" class="spinner spinner-sm"></span>

@@ -115,21 +115,21 @@ onUnmounted(() => {
       <div class="health-modal glass-card animate-scale" @click.stop>
         <div class="modal-header">
           <div class="modal-title-group">
-            <h3>Host health</h3>
+            <h3>{{ $t('Host health') }}</h3>
             <span class="font-mono" :class="healthTone === 'ok' ? 'text-emerald' : 'text-warn'">
               {{ healthTone === 'ok' ? 'OK' : 'HIGH LOAD' }}
             </span>
           </div>
-          <button type="button" class="btn-icon" title="Close" @click="closeHealthModal">×</button>
+          <button type="button" class="btn-icon" :title="$t('Close')" @click="closeHealthModal">×</button>
         </div>
         <div class="health-body">
           <div class="health-charts">
           <article class="health-chart-card">
             <div class="health-chart-head">
-              <span>CPU</span>
+              <span>{{ $t('CPU') }}</span>
               <strong class="font-mono">{{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</strong>
             </div>
-            <p class="health-chart-meta">{{ info?.metrics?.cpu_count || '—' }} cores</p>
+            <p class="health-chart-meta">{{ info?.metrics?.cpu_count || '—' }} {{ $t('cores') }}</p>
             <svg class="health-svg" :viewBox="`0 0 ${cpuChart.w} ${cpuChart.h}`" preserveAspectRatio="none" aria-hidden="true">
               <path :d="cpuChart.fill" class="health-fill cpu"></path>
               <path :d="cpuChart.line" class="health-line cpu"></path>
@@ -142,7 +142,7 @@ onUnmounted(() => {
             </div>
             <p class="health-chart-meta">
               {{ formatBytes((info?.metrics?.memory?.total || 0) - (info?.metrics?.memory?.available || 0)) }}
-              used of {{ formatBytes(info?.metrics?.memory?.total) }}
+              {{ $t('used of') }} {{ formatBytes(info?.metrics?.memory?.total) }}
             </p>
             <svg class="health-svg" :viewBox="`0 0 ${memChart.w} ${memChart.h}`" preserveAspectRatio="none" aria-hidden="true">
               <path :d="memChart.fill" class="health-fill mem"></path>
@@ -151,13 +151,12 @@ onUnmounted(() => {
           </article>
           <article class="health-chart-card">
             <div class="health-chart-head">
-              <span>Disk</span>
+              <span>{{ $t('Disk') }}</span>
               <strong class="font-mono">{{ diskPercent != null ? Math.round(diskPercent) + '%' : '—' }}</strong>
             </div>
             <p class="health-chart-meta">
               {{ formatBytes(info?.metrics?.disk?.used) }}
-              used · {{ formatBytes(diskFree) }} free
-              of {{ formatBytes(info?.metrics?.disk?.total) }}
+              {{ $t('used ·') }} {{ formatBytes(diskFree) }} {{ $t('free of') }} {{ formatBytes(info?.metrics?.disk?.total) }}
             </p>
             <svg class="health-svg" :viewBox="`0 0 ${diskChart.w} ${diskChart.h}`" preserveAspectRatio="none" aria-hidden="true">
               <path :d="diskChart.fill" class="health-fill disk"></path>
@@ -167,26 +166,26 @@ onUnmounted(() => {
           </div>
           <article class="health-apps-card">
             <div class="health-chart-head">
-              <span>Applications</span>
+              <span>{{ $t('Applications') }}</span>
               <strong class="font-mono">{{ healthProcesses.length }}</strong>
             </div>
-            <p class="health-chart-meta">CPU and RAM include all processes for each app.</p>
-            <p v-if="!healthProcesses.length" class="health-chart-meta">No running apps yet. Start them from Catalog.</p>
+            <p class="health-chart-meta">{{ $t('CPU and RAM include all processes for each app.') }}</p>
+            <p v-if="!healthProcesses.length" class="health-chart-meta">{{ $t('No running apps yet. Start them from Catalog.') }}</p>
             <div v-else class="health-apps-table-wrap">
               <table class="health-apps-table">
                 <thead>
                   <tr>
                     <th>App</th>
-                    <th>CPU</th>
+                    <th>{{ $t('CPU') }}</th>
                     <th>RAM</th>
-                    <th class="hide-narrow">Share</th>
+                    <th class="hide-narrow">{{ $t('Share') }}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="row in healthProcesses" :key="row.name">
                     <td>
                       <span class="health-app-name">{{ row.displayName }}</span>
-                      <span class="health-app-state">{{ row.state || 'stopped' }}</span>
+                      <span class="health-app-state">{{ row.state || $t('stopped') }}</span>
                     </td>
                     <td class="font-mono">{{ formatCpu(row.cpu_percent) }}</td>
                     <td class="font-mono">{{ row.memory_rss != null ? formatBytes(row.memory_rss) : '—' }}</td>

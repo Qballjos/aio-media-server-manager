@@ -18,6 +18,7 @@ WALLPAPER_BASENAME = "wallpaper"
 MAX_BYTES = branding_mod.MAX_BYTES
 MAX_WALLPAPER_BYTES = 4 * 1024 * 1024
 THEMES = frozenset({"dark", "light", "system"})
+LOCALES = frozenset({"en", "nl", "de", "fr"})
 WALLPAPERS = frozenset({
     "default", "aurora", "candy", "mono", "jellyfin", "plex",
     "forest", "northern", "city", "ocean", "alpine", "dunes", "lavender", "starry", "sunset", "nebula",
@@ -29,6 +30,7 @@ GLASS_RANGES = {"glass_alpha": (0.15, 0.9), "glass_blur": (0, 60), "glass_depth"
 _DEFAULT_META: dict[str, Any] = {
     "avatar": None,
     "theme": "dark",
+    "locale": "",
     "wallpaper": "default",
     "wallpaper_image": None,
     "homepage_widget_debug": False,
@@ -127,6 +129,11 @@ def _meta_path() -> Path:
     return profile_dir(create=False) / META_NAME
 
 
+def _normalize_locale(value: Any) -> str:
+    code = str(value or "").strip().lower()
+    return code if code in LOCALES else ""
+
+
 def _normalize_theme(value: Any) -> str:
     text = str(value or "").strip().lower()
     return text if text in THEMES else "dark"
@@ -152,6 +159,7 @@ def _load_meta() -> dict[str, Any]:
     if data.get("avatar"):
         meta["avatar"] = str(data["avatar"])
     meta["theme"] = _normalize_theme(data.get("theme", meta["theme"]))
+    meta["locale"] = _normalize_locale(data.get("locale", meta.get("locale")))
     meta["wallpaper"] = _normalize_wallpaper(data.get("wallpaper", meta["wallpaper"]))
     if data.get("wallpaper_image"):
         meta["wallpaper_image"] = str(data["wallpaper_image"])
@@ -170,6 +178,7 @@ def _save_meta(meta: dict[str, Any]) -> None:
     payload = {
         "avatar": meta.get("avatar") or None,
         "theme": _normalize_theme(meta.get("theme")),
+        "locale": _normalize_locale(meta.get("locale")),
         "wallpaper": _normalize_wallpaper(meta.get("wallpaper")),
         "wallpaper_image": meta.get("wallpaper_image") or None,
         "homepage_widget_debug": bool(meta.get("homepage_widget_debug", False)),
@@ -220,6 +229,7 @@ def visual_preferences() -> dict[str, Any]:
     url = wallpaper_url()
     return {
         "theme": _normalize_theme(meta.get("theme")),
+        "locale": _normalize_locale(meta.get("locale")),
         "wallpaper": _normalize_wallpaper(meta.get("wallpaper")),
         "wallpaper_url": url,
         "has_wallpaper_image": url is not None,
@@ -250,6 +260,7 @@ def public_profile() -> dict[str, Any]:
 def save_visual_preferences(
     *,
     theme: str | None = None,
+    locale: str | None = None,
     wallpaper: str | None = None,
     homepage_widget_debug: bool | None = None,
     homepage_layout: list[str] | None = None,
@@ -264,6 +275,8 @@ def save_visual_preferences(
     meta = _load_meta()
     if theme is not None:
         meta["theme"] = _normalize_theme(theme)
+    if locale is not None:
+        meta["locale"] = _normalize_locale(locale)
     if wallpaper is not None:
         pref = _normalize_wallpaper(wallpaper)
         meta["wallpaper"] = pref

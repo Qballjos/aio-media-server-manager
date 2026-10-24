@@ -1103,6 +1103,28 @@ select.ui-input {
   gap: 0.5rem;
 }
 
+.language-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.language-picker.is-compact,
+.auth-language .language-picker {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auth-language {
+  width: min(28rem, calc(100% - 2rem));
+  margin: 0 auto 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .language-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .theme-option {
   padding-inline: 0.6rem;
 }

@@ -41,6 +41,7 @@ class AuthStatusResponse(BaseModel):
     csrf_token: Optional[str] = None
     avatar_url: Optional[str] = None
     theme: Optional[str] = None
+    locale: Optional[str] = None
     wallpaper: Optional[str] = None
     wallpaper_url: Optional[str] = None
     has_wallpaper_image: Optional[bool] = None
@@ -72,6 +73,7 @@ def _empty_auth(*, setup_required: bool) -> dict:
         "csrf_token": None,
         "avatar_url": None,
         "theme": None,
+        "locale": None,
         "wallpaper": None,
         "wallpaper_url": None,
         "has_wallpaper_image": None,
@@ -232,6 +234,7 @@ async def delete_avatar(request: Request) -> dict:
 
 class VisualsPatch(BaseModel):
     theme: Optional[str] = None
+    locale: Optional[str] = None
     wallpaper: Optional[str] = None
     homepage_widget_debug: Optional[bool] = None
     homepage_layout: Optional[list[str]] = Field(default=None, max_length=20)
@@ -250,10 +253,12 @@ async def patch_visuals(body: VisualsPatch, request: Request) -> dict:
     if all(value is None for value in body.model_dump().values()):
         raise HTTPException(
             status_code=422,
-            detail="Provide theme, wallpaper, homepage_widget_debug, homepage_layout, homepage_hidden, homepage_sizes, homepage_grid or a glass_* value.",
+            detail="Provide theme, locale, wallpaper, homepage_widget_debug, homepage_layout, homepage_hidden, homepage_sizes, homepage_grid or a glass_* value.",
         )
     if body.theme is not None and body.theme not in profile_mod.THEMES:
         raise HTTPException(status_code=422, detail="theme must be dark, light, or system.")
+    if body.locale is not None and body.locale not in profile_mod.LOCALES:
+        raise HTTPException(status_code=422, detail="locale must be en, nl, de, or fr.")
     if body.wallpaper is not None and body.wallpaper not in profile_mod.WALLPAPERS:
         raise HTTPException(
             status_code=422,
@@ -261,6 +266,7 @@ async def patch_visuals(body: VisualsPatch, request: Request) -> dict:
         )
     visuals = profile_mod.save_visual_preferences(
         theme=body.theme,
+        locale=body.locale,
         wallpaper=body.wallpaper,
         homepage_widget_debug=body.homepage_widget_debug,
         homepage_layout=body.homepage_layout,

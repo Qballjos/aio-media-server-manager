@@ -41,29 +41,29 @@ watch(
     <div class="home-edit" :style="{ '--edit-dock': `${dockOffset}px` }">
       <div v-if="toast" class="home-edit-toast glass-pill" role="status">
         <span>{{ toast.text }}</span>
-        <button type="button" class="ui-btn ui-btn-ghost" @click="emit('undo')">Undo</button>
+        <button type="button" class="ui-btn ui-btn-ghost" @click="emit('undo')">{{ $t('Undo') }}</button>
       </div>
-      <div class="home-edit-bar glass-pill" role="toolbar" aria-label="Arrange Home">
-        <div v-if="previewOptions.length > 1" class="home-edit-sizes" role="group" aria-label="Screen size to arrange">
+      <div class="home-edit-bar glass-pill" role="toolbar" :aria-label="$t('Arrange Home')">
+        <div v-if="previewOptions.length > 1" class="home-edit-sizes" role="group" :aria-label="$t('Screen size to arrange')">
           <button
             v-for="size in previewOptions"
             :key="size"
             type="button"
             :aria-pressed="size === bp"
-            :title="`${BREAKPOINTS[size].label} layout · ${BREAKPOINTS[size].cols} columns`"
-            :aria-label="`${BREAKPOINTS[size].label} layout`"
+            :title="$t('{label} layout · {count} columns', { label: $t(BREAKPOINTS[size].label), count: BREAKPOINTS[size].cols })"
+            :aria-label="$t('{label} layout', { label: $t(BREAKPOINTS[size].label) })"
             @click="emit('preview', size)"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="ICONS[size]" /></svg>
           </button>
         </div>
-        <button v-if="notOn" type="button" class="home-edit-noton" @click="emit('add')">{{ notOn }} not on {{ BREAKPOINTS[bp].label }}</button>
+        <button v-if="notOn" type="button" class="home-edit-noton" @click="emit('add')">{{ $t('{count} not on {size}', { count: notOn, size: $t(BREAKPOINTS[bp].label) }) }}</button>
         <button type="button" class="ui-btn ui-btn-primary" @click="emit('add')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          Add widget
+          {{ $t('Add widget') }}
         </button>
-        <button type="button" class="ui-btn ui-btn-ghost" @click="emit('done')">Done</button>
-        <span class="home-edit-saved" :class="{ 'is-on': saved }" aria-hidden="true">Saved</span>
+        <button type="button" class="ui-btn ui-btn-ghost" @click="emit('done')">{{ $t('Done') }}</button>
+        <span class="home-edit-saved" :class="{ 'is-on': saved }" aria-hidden="true">{{ $t('Saved') }}</span>
       </div>
     </div>
   </Teleport>

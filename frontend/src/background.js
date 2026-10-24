@@ -1,6 +1,7 @@
 /** Wallpaper presets and the personal image — localStorage cache + profile sync. */
 
 import { ref } from 'vue'
+import { applyLocaleFromProfile } from './i18n/index.js'
 import { getThemePreference, setThemePreference } from './theme.js'
 import { applyHomepageWidgetDebugFromProfile, readHomepageWidgetDebug } from './homepageDebug.js'
 import { applyHomeLayoutFromProfile } from './homeLayout.js'
@@ -244,6 +245,7 @@ export function applyVisualsFromProfile(payload = {}) {
   if (payload.theme) {
     setThemePreference(payload.theme)
   }
+  applyLocaleFromProfile(payload.locale)
   if (payload.wallpaper) {
     cacheWallpaperPreference(payload.wallpaper)
   }

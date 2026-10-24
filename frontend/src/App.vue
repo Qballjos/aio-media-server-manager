@@ -11,6 +11,8 @@ import HealthModal from './HealthModal.vue'
 import AppSettingsModal from './AppSettingsModal.vue'
 import WallpaperLayer from './WallpaperLayer.vue'
 import AppLoader from './AppLoader.vue'
+import LanguageSelect from './LanguageSelect.vue'
+import { isLocale, readStoredLocale, t } from './i18n/index.js'
 import { homeEditing } from './homeLayout.js'
 import { startGuardedInterval } from './pageVisible.js'
 import {
@@ -23,7 +25,7 @@ import {
 import { useToasts } from './useToasts.js'
 import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInstall.js'
 import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
-import { migrateLocalVisualsIfNeeded } from './visualsProfile.js'
+import { migrateLocalVisualsIfNeeded, saveLocaleToProfile } from './visualsProfile.js'
 import { lockThemeToSystem, unlockTheme } from './theme.js'
 import { tunnelChip, vpnChip } from './statusChips.js'
 
@@ -111,17 +113,17 @@ function maybeNotifyUpdates(status) {
   } catch (_) {}
   const appliance = items.some((row) => row.kind === 'appliance')
   const catalog = items.filter((row) => row.kind !== 'appliance')
-  let message = 'Updates available'
+  let message = t('Updates available')
   if (catalog.length && appliance) {
-    message = `${catalog.length} app update(s) and a newer appliance image are available`
+    message = t('{count} app updates and a newer appliance image are available', { count: catalog.length })
   } else if (appliance) {
-    message = 'A newer appliance image is available. Pull and recreate on the host.'
+    message = t('A newer appliance image is available. Pull and recreate on the host.')
   } else if (catalog.length === 1) {
     const row = catalog[0]
     const version = row.latest_version ? ` ${row.latest_version}` : ''
-    message = `${row.display_name || row.name}${version} is available`
+    message = t('{name} is available', { name: `${row.display_name || row.name}${version}` })
   } else {
-    message = `${catalog.length} catalog updates are available`
+    message = t('{count} catalog updates are available', { count: catalog.length })
   }
   showToast(message, 'info')
 }
@@ -130,15 +132,21 @@ setUnauthorizedHandler(() => {
   if (!authStatus.value.authenticated) return
   authStatus.value.authenticated = false
   clearSession()
-  showToast('Session expired. Please log in again.', 'warning')
+  showToast(t('Session expired. Please log in again.'), 'warning')
 })
+
+function rememberLocale(data) {
+  if (!data?.authenticated || isLocale(data.locale)) return
+  const stored = readStoredLocale()
+  if (stored) saveLocaleToProfile(stored).catch(() => {})
+}
 
 function onAuthStatus(data) {
   authStatusKnown.value = true
   authStatus.value = data
   applySession(data)
   if (data?.authenticated) {
-    migrateLocalVisualsIfNeeded(data).catch(() => {})
+    migrateLocalVisualsIfNeeded(data).then(() => rememberLocale(data)).catch(() => {})
   }
 }
 
@@ -152,6 +160,7 @@ async function onAuthSession(data) {
   }
   applySession(data)
   await migrateLocalVisualsIfNeeded(data).catch(() => {})
+  rememberLocale(data)
   await Promise.all([refreshDashboard(), fetchWizardStatus()])
 }
 
@@ -166,7 +175,7 @@ async function handleLogout() {
   vpnLive.value = {}
   cloudflareLive.value = {}
   router.replace({ name: 'home' })
-  showToast('Logged out successfully.', 'info')
+  showToast(t('Logged out successfully.'), 'info')
 }
 
 async function fetchCatalog() {
@@ -409,22 +418,22 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <nav v-if="authStatus.authenticated && wizardCompleted" class="nav-tabs glass-pill" aria-label="Pages">
+      <nav v-if="authStatus.authenticated && wizardCompleted" class="nav-tabs glass-pill" :aria-label="$t('Pages')">
         <RouterLink
           :to="{ name: 'home', query: route.name === 'home' ? route.query : {} }"
           class="metric-pill metric-pill-action"
           :class="{ 'is-active': currentView === 'home' }"
-          title="Home"
+          :title="$t('Home')"
         >
-          Home
+          {{ $t('Home') }}
         </RouterLink>
         <RouterLink
           :to="{ name: 'catalog', query: route.name === 'catalog' ? route.query : {} }"
           class="metric-pill metric-pill-action"
           :class="{ 'is-active': currentView === 'catalog' }"
-          title="Install and manage applications"
+          :title="$t('Install and manage applications')"
         >
-          Catalog
+          {{ $t('Catalog') }}
         </RouterLink>
         <RouterLink
           :to="route.name === 'settings'
@@ -432,9 +441,9 @@ onUnmounted(() => {
             : { name: 'settings', params: { section: 'account' } }"
           class="metric-pill metric-pill-action"
           :class="{ 'is-active': currentView === 'settings' }"
-          title="Appliance settings"
+          :title="$t('Appliance settings')"
         >
-          Settings
+          {{ $t('Settings') }}
         </RouterLink>
         <template v-if="currentView === 'home'">
           <span class="nav-tabs-divider" aria-hidden="true"></span>
@@ -443,8 +452,8 @@ onUnmounted(() => {
             class="metric-pill metric-pill-action nav-edit-btn"
             :class="{ 'is-active': homeEditing }"
             :aria-pressed="homeEditing"
-            :title="homeEditing ? 'Done arranging Home' : 'Edit the Home layout'"
-            :aria-label="homeEditing ? 'Done arranging Home' : 'Edit the Home layout'"
+            :title="homeEditing ? $t('Done arranging Home') : $t('Edit the Home layout')"
+            :aria-label="homeEditing ? $t('Done arranging Home') : $t('Edit the Home layout')"
             @click="homeEditing = !homeEditing"
           >
             <svg v-if="!homeEditing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="9" rx="2" /><rect x="13" y="3" width="8" height="5" rx="2" /><rect x="13" y="12" width="8" height="9" rx="2" /><rect x="3" y="16" width="8" height="5" rx="2" /></svg>
@@ -458,7 +467,7 @@ onUnmounted(() => {
           v-if="showUpdatesPill"
           :to="{ name: 'settings', params: { section: 'updates' } }"
           class="metric-pill is-updates"
-          title="Open Settings → Updates"
+          :title="$t('Open Settings → Updates')"
         >
           <span class="metric-val font-mono">{{ updatesPillLabel }}</span>
         </RouterLink>
@@ -467,10 +476,10 @@ onUnmounted(() => {
           @click="runAutomatedWiring"
           class="metric-pill metric-pill-action"
           :disabled="wiringRunning"
-          title="Wire installed apps to each other"
+          :title="$t('Wire installed apps to each other')"
         >
           <span v-if="wiringRunning" class="spinner spinner-sm"></span>
-          <span v-else>⚡ <span class="hide-compact">Auto-Wire</span></span>
+          <span v-else>⚡ <span class="hide-compact">{{ $t('Auto-Wire') }}</span></span>
         </button>
       </div>
 
@@ -496,7 +505,7 @@ onUnmounted(() => {
             :to="{ name: 'settings', params: { section: 'account' } }"
             class="metric-pill metric-pill-action"
             @click="$event.currentTarget.closest('details').removeAttribute('open')"
-          >{{ authStatus.username }} · Account</RouterLink>
+          >{{ authStatus.username }} · {{ $t('Account') }}</RouterLink>
           <template v-if="wizardCompleted">
             <RouterLink
               v-for="chip in statusChips"
@@ -512,9 +521,9 @@ onUnmounted(() => {
               <span>{{ chip.label }}</span>
             </RouterLink>
           </template>
-          <div v-if="transcodingAvailable" class="metric-pill nav-account-info" title="Hardware transcoding available">
+          <div v-if="transcodingAvailable" class="metric-pill nav-account-info" :title="$t('Hardware transcoding available')">
             <span class="status-dot" aria-hidden="true"></span>
-            <span>GPU · hardware transcoding</span>
+            <span>{{ $t('GPU · hardware transcoding') }}</span>
           </div>
           <RouterLink
             v-if="showUpdatesPill"
@@ -527,14 +536,15 @@ onUnmounted(() => {
             @click="runAutomatedWiring"
             class="metric-pill metric-pill-action nav-account-phone-only"
             :disabled="wiringRunning"
-            title="Wire installed apps to each other"
+            :title="$t('Wire installed apps to each other')"
           >
             <span v-if="wiringRunning" class="spinner spinner-sm"></span>
             <span v-else>⚡</span>
-            Auto-Wire
+            {{ $t('Auto-Wire') }}
           </button>
-          <button v-if="showPwaInstall" type="button" class="metric-pill metric-pill-action" @click="installPwa">Install app</button>
-          <button type="button" @click="handleLogout" class="metric-pill metric-pill-action">Log out</button>
+          <LanguageSelect persist compact />
+          <button v-if="showPwaInstall" type="button" class="metric-pill metric-pill-action" @click="installPwa">{{ $t('Install app') }}</button>
+          <button type="button" @click="handleLogout" class="metric-pill metric-pill-action">{{ $t('Log out') }}</button>
         </div>
       </details>
     </header>
