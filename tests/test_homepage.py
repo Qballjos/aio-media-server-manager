@@ -19,7 +19,10 @@ from core.homepage import (
     collapse_recent_series,
     homepage_downloads,
     homepage_recent,
+    clear_prowlarr_grab_cache,
+    homepage_prowlarr_grab,
     homepage_request,
+    homepage_request_options,
     homepage_search,
     homepage_snapshot,
     homepage_trending,
@@ -60,8 +63,10 @@ class FakeCatalog:
 @pytest.fixture(autouse=True)
 def _clear_homepage_cache():
     clear_homepage_snapshot_cache()
+    clear_prowlarr_grab_cache()
     yield
     clear_homepage_snapshot_cache()
+    clear_prowlarr_grab_cache()
 
 
 def test_calendar_fetch_span_covers_adjacent_months():
@@ -783,6 +788,125 @@ def test_jellyfin_auth_header_carries_token():
     headers = jellyfin_auth_headers("abc123")
     assert 'Token="abc123"' in headers["Authorization"]
     assert headers["X-Emby-Token"] == "abc123"
+
+
+def test_homepage_search_prowlarr_hides_download_urls(tmp_path):
+    catalog = FakeCatalog([_plugin("prowlarr", 9696, tmp_path)])
+    release = {
+        "guid": "abc",
+        "indexerId": 3,
+        "indexer": "Knaben",
+        "title": "Some.Album.2024.FLAC",
+        "size": 900_000_000,
+        "protocol": "torrent",
+        "seeders": 12,
+        "downloadUrl": "magnet:?xt=urn:btih:secret",
+    }
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"prowlarr"}),
+        patch("core.homepage._fetch_json", return_value=([release], None)),
+    ):
+        data = homepage_search("host", "album", "prowlarr")
+    assert data["provider"] == "prowlarr"
+    assert data["error"] is None
+    assert data["results"][0]["title"] == "Some.Album.2024.FLAC"
+    assert "Knaben" in data["results"][0]["detail"]
+    assert "secret" not in str(data["results"])
+    assert "downloadUrl" not in data["results"][0]
+    token = data["results"][0]["token"]
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"prowlarr"}),
+        patch("core.homepage.requests.post") as posted,
+    ):
+        posted.return_value.status_code = 200
+        posted.return_value.json.return_value = {}
+        grabbed = homepage_prowlarr_grab(token)
+    assert grabbed["ok"] is True
+    sent = posted.call_args.kwargs["json"]
+    assert sent["guid"] == "abc"
+    assert sent["downloadUrl"].startswith("magnet:")
+
+
+def test_homepage_prowlarr_grab_expired_token():
+    assert homepage_prowlarr_grab("not-a-real-token")["ok"] is False
+
+
+def test_request_options_when_a_movie_has_several_folders(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+
+    def fake_fetch(url, **kwargs):
+        if url.endswith("/service/radarr"):
+            return (
+                [{"id": 1, "name": "Radarr", "isDefault": True, "activeProfileId": 6, "activeDirectory": "/movies"}],
+                None,
+            )
+        if url.endswith("/service/radarr/1"):
+            return (
+                {
+                    "profiles": [{"id": 6, "name": "HD-1080p"}, {"id": 7, "name": "Ultra-HD"}],
+                    "rootFolders": [{"id": 1, "path": "/movies"}, {"id": 2, "path": "/kids"}],
+                },
+                None,
+            )
+        return (None, "HTTP 404")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        options = homepage_request_options("movie")
+    assert options["needsChoice"] is True
+    assert options["servers"][0]["folders"] == [{"path": "/movies"}, {"path": "/kids"}]
+    assert [profile["name"] for profile in options["servers"][0]["profiles"]] == ["HD-1080p", "Ultra-HD"]
+
+
+def test_request_options_skip_popup_for_one_folder_and_profile(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+
+    def fake_fetch(url, **kwargs):
+        if url.endswith("/service/radarr"):
+            return ([{"id": 1, "name": "Radarr", "isDefault": True, "activeProfileId": 6, "activeDirectory": "/movies"}], None)
+        if url.endswith("/service/radarr/1"):
+            return (
+                {"profiles": [{"id": 6, "name": "HD-1080p"}], "rootFolders": [{"id": 1, "path": "/movies"}]},
+                None,
+            )
+        return (None, "HTTP 404")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        options = homepage_request_options("movie")
+    assert options["needsChoice"] is False
+
+
+def test_homepage_request_sends_chosen_folder_and_profile(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage.requests.post") as posted,
+        patch("core.homepage.clear_homepage_snapshot_cache"),
+    ):
+        posted.return_value.status_code = 201
+        posted.return_value.json.return_value = {}
+        result = homepage_request(
+            {"mediaType": "movie", "mediaId": 42, "serverId": 1, "profileId": 7, "rootFolder": "/kids"}
+        )
+    assert result["ok"] is True
+    sent = posted.call_args.kwargs["json"]
+    assert sent["profileId"] == 7
+    assert sent["rootFolder"] == "/kids"
+    assert sent["serverId"] == 1
+    assert sent["mediaId"] == 42
 
 
 def test_homepage_request_without_seerr(tmp_path):

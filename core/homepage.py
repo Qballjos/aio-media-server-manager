@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import secrets
 import threading
 import time
 from calendar import monthrange
@@ -45,6 +46,10 @@ _LAUNCHER_CATEGORY_ORDER = (
 _cache_guard = threading.Lock()
 _snapshots: dict[str, "_SnapshotEntry"] = {}
 _host_build_locks: dict[str, threading.Lock] = {}
+_grab_guard = threading.Lock()
+_grab_releases: dict[str, tuple[float, dict[str, Any]]] = {}
+_GRAB_TTL = 15 * 60
+_PROWLARR_SEARCH_TIMEOUT = 25.0
 
 
 class _SnapshotEntry:
@@ -352,17 +357,24 @@ def _build_homepage_snapshot(host: str, scheme: str = "http") -> dict[str, Any]:
     }
 
 
-def homepage_search(host: str, query: str) -> dict[str, Any]:
+def clear_prowlarr_grab_cache() -> None:
+    with _grab_guard:
+        _grab_releases.clear()
+
+
+def homepage_search(host: str, query: str, provider: str = "seerr") -> dict[str, Any]:
     catalog = ApplicationCatalog()
     running = _running_names()
     term = (query or "").strip()
     if len(term) < 2:
-        return {"query": term, "results": [], "seerr": False, "error": None}
+        return {"query": term, "results": [], "seerr": False, "provider": "seerr", "error": None}
+    if (provider or "").strip().lower() in {"prowlarr", "other"}:
+        return _prowlarr_search(catalog, running, term)
     seerr_error: str | None = None
     if catalog.has("seerr") and catalog.get("seerr").is_installed() and "seerr" in running:
         results, seerr_error = _seerr_search(catalog, term)
         if not seerr_error:
-            return {"query": term, "results": results, "seerr": True, "error": None}
+            return {"query": term, "results": results, "seerr": True, "provider": "seerr", "error": None}
     results = []
     if catalog.has("sonarr") and catalog.get("sonarr").is_installed() and "sonarr" in running:
         results.extend(_sonarr_lookup(catalog, term))
@@ -374,7 +386,7 @@ def homepage_search(host: str, query: str) -> dict[str, Any]:
         for name in ("seerr", "sonarr", "radarr")
     ):
         error = "Start Seerr, Sonarr or Radarr to search."
-    return {"query": term, "results": results[:20], "seerr": False, "error": error}
+    return {"query": term, "results": results[:20], "seerr": False, "provider": "seerr", "error": error}
 
 
 def homepage_trending(host: str, page: int, scheme: str = "http") -> dict[str, Any]:
@@ -412,6 +424,17 @@ def homepage_request(payload: dict[str, Any]) -> dict[str, Any]:
     seasons = payload.get("seasons")
     if media_type == "tv":
         body["seasons"] = seasons if seasons is not None else "all"
+    for key in ("serverId", "profileId", "languageProfileId"):
+        raw = payload.get(key)
+        if raw is None or raw == "":
+            continue
+        try:
+            body[key] = int(raw)
+        except (TypeError, ValueError):
+            continue
+    root_folder = str(payload.get("rootFolder") or "").strip()
+    if root_folder:
+        body["rootFolder"] = root_folder
     plugin = catalog.get("seerr")
     key = get_application_api_key("seerr", plugin.config_dir)
     headers = {"Content-Type": "application/json"}
@@ -427,10 +450,96 @@ def homepage_request(payload: dict[str, Any]) -> dict[str, Any]:
         if resp.status_code in (200, 201):
             clear_homepage_snapshot_cache()
             return {"ok": True, "detail": "Request submitted."}
-        return {"ok": False, "detail": f"Seerr returned HTTP {resp.status_code}."}
+        return {"ok": False, "detail": _http_error_detail(resp, "Seerr")}
     except Exception as exc:
         logger.debug("Seerr request failed: %s", exc)
         return {"ok": False, "detail": "Could not reach Seerr."}
+
+
+def homepage_request_options(media_type: str) -> dict[str, Any]:
+    """Folders and quality profiles Seerr can use for one request.
+
+    A popup is needed when more than one server, folder, or profile would apply.
+    """
+    media_type = str(media_type or "").strip().lower()
+    if media_type in {"series", "show", "tv"}:
+        media_type = "tv"
+    empty = {"ok": True, "needsChoice": False, "servers": [], "mediaType": media_type}
+    if media_type not in {"movie", "tv"}:
+        return {**empty, "ok": False, "detail": "mediaType must be movie or tv."}
+    catalog = ApplicationCatalog()
+    running = _running_names()
+    if not (catalog.has("seerr") and catalog.get("seerr").is_installed() and "seerr" in running):
+        return {**empty, "ok": False, "detail": "Seerr is not installed or not running."}
+    plugin = catalog.get("seerr")
+    headers = {"Content-Type": "application/json"}
+    key = get_application_api_key("seerr", plugin.config_dir)
+    if key:
+        headers["X-Api-Key"] = key
+    service = "radarr" if media_type == "movie" else "sonarr"
+    rows, error = _fetch_json(
+        f"http://127.0.0.1:{plugin.port}/api/v1/service/{service}",
+        headers=headers,
+        timeout=8.0,
+    )
+    if error or not isinstance(rows, list):
+        return empty
+    servers: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        detail, _detail_error = _fetch_json(
+            f"http://127.0.0.1:{plugin.port}/api/v1/service/{service}/{row['id']}",
+            headers=headers,
+            timeout=8.0,
+        )
+        source = detail if isinstance(detail, dict) else row
+        folders = []
+        for folder in source.get("rootFolders") or []:
+            if isinstance(folder, dict) and str(folder.get("path") or "").strip():
+                folders.append({"path": str(folder["path"]).strip()})
+        servers.append(
+            {
+                "id": int(row["id"]),
+                "name": str(row.get("name") or service.title()),
+                "isDefault": bool(row.get("isDefault")),
+                "is4k": bool(row.get("is4k")),
+                "profileId": row.get("activeProfileId"),
+                "rootFolder": str(row.get("activeDirectory") or ""),
+                "languageProfileId": row.get("activeLanguageProfileId"),
+                "profiles": _named_options(source.get("profiles")),
+                "folders": folders,
+                "languages": _named_options(source.get("languageProfiles")),
+            }
+        )
+    servers.sort(key=lambda item: (not item["isDefault"], item["name"].lower()))
+    return {**empty, "needsChoice": _request_needs_choice(servers), "servers": servers}
+
+
+def homepage_prowlarr_grab(token: str) -> dict[str, Any]:
+    """Send one cached Prowlarr search hit to Prowlarr's download client."""
+    release = _cached_release(token)
+    if release is None:
+        return {"ok": False, "detail": "That result expired. Search again."}
+    catalog = ApplicationCatalog()
+    running = _running_names()
+    if not (catalog.has("prowlarr") and catalog.get("prowlarr").is_installed() and "prowlarr" in running):
+        return {"ok": False, "detail": "Prowlarr is not installed or not running."}
+    plugin = catalog.get("prowlarr")
+    headers = _arr_headers("prowlarr", plugin.config_dir)
+    try:
+        resp = requests.post(
+            f"http://127.0.0.1:{plugin.port}/api/v1/search",
+            headers=headers,
+            json=release,
+            timeout=30.0,
+        )
+    except Exception as exc:
+        logger.debug("Prowlarr grab failed: %s", exc)
+        return {"ok": False, "detail": "Could not reach Prowlarr."}
+    if resp.status_code in (200, 201, 204):
+        return {"ok": True, "detail": "Sent to the download client."}
+    return {"ok": False, "detail": _http_error_detail(resp, "Prowlarr")}
 
 
 _SICK_STATES = frozenset({"crash_loop", "failed"})
@@ -1562,6 +1671,156 @@ def seerr_media_status(row: dict[str, Any]) -> str:
     except (TypeError, ValueError):
         code = 0
     return _SEERR_MEDIA_STATUS.get(code, "missing")
+
+
+def _prowlarr_search(catalog: ApplicationCatalog, running: set[str], term: str) -> dict[str, Any]:
+    if not (catalog.has("prowlarr") and catalog.get("prowlarr").is_installed() and "prowlarr" in running):
+        return {
+            "query": term,
+            "results": [],
+            "seerr": False,
+            "provider": "prowlarr",
+            "error": "Start Prowlarr to search other releases.",
+        }
+    plugin = catalog.get("prowlarr")
+    data, error = _fetch_json(
+        f"http://127.0.0.1:{plugin.port}/api/v1/search",
+        headers=_arr_headers("prowlarr", plugin.config_dir),
+        params={"query": term, "type": "search", "limit": 20, "offset": 0},
+        timeout=_PROWLARR_SEARCH_TIMEOUT,
+    )
+    if error:
+        return {"query": term, "results": [], "seerr": False, "provider": "prowlarr", "error": f"Prowlarr search failed ({error})"}
+    rows = data if isinstance(data, list) else None
+    if rows is None and isinstance(data, dict):
+        rows = data.get("releases") or data.get("results")
+    items: list[dict[str, Any]] = []
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("title") or "").strip()
+            guid = str(row.get("guid") or "").strip()
+            if not title or not guid:
+                continue
+            token = _remember_release(row)
+            protocol = str(row.get("protocol") or "").lower()
+            items.append(
+                {
+                    "source": "prowlarr",
+                    "token": token,
+                    "title": title,
+                    "detail": _prowlarr_detail(row),
+                    "protocol": protocol,
+                    "indexer": str(row.get("indexer") or ""),
+                    "can_request": True,
+                }
+            )
+            if len(items) >= 20:
+                break
+    return {"query": term, "results": items, "seerr": False, "provider": "prowlarr", "error": None}
+
+
+def _prowlarr_detail(row: dict[str, Any]) -> str:
+    parts: list[str] = []
+    indexer = str(row.get("indexer") or "").strip()
+    if indexer:
+        parts.append(indexer)
+    size = _format_bytes(row.get("size"))
+    if size:
+        parts.append(size)
+    protocol = str(row.get("protocol") or "").lower()
+    if protocol == "torrent":
+        try:
+            seeders = int(row.get("seeders"))
+        except (TypeError, ValueError):
+            seeders = None
+        if seeders is not None:
+            parts.append(f"{seeders} seeders")
+    if protocol:
+        parts.append("Usenet" if protocol == "usenet" else "Torrent")
+    return " · ".join(parts)
+
+
+def _format_bytes(raw: Any) -> str:
+    try:
+        size = float(raw)
+    except (TypeError, ValueError):
+        return ""
+    if size >= 1_073_741_824:
+        return f"{size / 1_073_741_824:.1f} GB"
+    if size >= 1_048_576:
+        return f"{size / 1_048_576:.0f} MB"
+    return ""
+
+
+def _remember_release(release: dict[str, Any]) -> str:
+    token = secrets.token_urlsafe(16)
+    now = time.monotonic()
+    with _grab_guard:
+        expired = [key for key, (stored, _row) in _grab_releases.items() if now - stored > _GRAB_TTL]
+        for key in expired:
+            _grab_releases.pop(key, None)
+        _grab_releases[token] = (now, release)
+    return token
+
+
+def _cached_release(token: str) -> dict[str, Any] | None:
+    now = time.monotonic()
+    with _grab_guard:
+        stored = _grab_releases.get((token or "").strip())
+        if not stored:
+            return None
+        at, release = stored
+        if now - at > _GRAB_TTL:
+            _grab_releases.pop((token or "").strip(), None)
+            return None
+        return release
+
+
+def _named_options(rows: Any) -> list[dict[str, Any]]:
+    options: list[dict[str, Any]] = []
+    if not isinstance(rows, list):
+        return options
+    for row in rows:
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        name = str(row.get("name") or "").strip()
+        if not name:
+            continue
+        try:
+            options.append({"id": int(row["id"]), "name": name})
+        except (TypeError, ValueError):
+            continue
+    return options
+
+
+def _request_needs_choice(servers: list[dict[str, Any]]) -> bool:
+    if len(servers) > 1:
+        return True
+    for server in servers:
+        if len(server.get("profiles") or []) > 1:
+            return True
+        if len(server.get("folders") or []) > 1:
+            return True
+        if len(server.get("languages") or []) > 1:
+            return True
+    return False
+
+
+def _http_error_detail(resp: requests.Response, name: str) -> str:
+    message = ""
+    try:
+        payload = resp.json()
+    except Exception:
+        payload = None
+    if isinstance(payload, dict):
+        message = str(payload.get("message") or payload.get("error") or "").strip()
+    elif isinstance(payload, list) and payload:
+        message = str(payload[0]).strip()
+    if message:
+        return message[:300]
+    return f"{name} returned HTTP {resp.status_code}."
 
 
 def _seerr_search(catalog: ApplicationCatalog, term: str) -> tuple[list[dict[str, Any]], str | None]:

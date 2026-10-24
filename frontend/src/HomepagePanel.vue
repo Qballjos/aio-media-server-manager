@@ -90,6 +90,19 @@ const searchError = ref('')
 const searchedFor = ref('')
 const notice = ref('')
 const requestBusy = ref('')
+const requestChoice = ref(null)
+const SEARCH_PROVIDER_KEY = 'amm-home-search-provider'
+const searchProvider = ref((() => {
+  try {
+    return localStorage.getItem(SEARCH_PROVIDER_KEY) === 'prowlarr' ? 'prowlarr' : 'seerr'
+  } catch (_) {
+    return 'seerr'
+  }
+})())
+const searchPlaceholder = computed(() => {
+  if (searchProvider.value === 'prowlarr') return 'Search Prowlarr indexers'
+  return snapshot.value.seerr?.available ? 'Search movies and TV to request' : 'Search Sonarr and Radarr'
+})
 const downloadsFresh = ref(false)
 const downloadPause = ref({ paused: false, resume_at: null })
 const pauseFor = ref('60')
@@ -677,8 +690,11 @@ function formatSpeed(bps) {
   return `${Math.round(n)} B/s`
 }
 
+let searchGen = 0
+
 async function runSearch() {
   const q = query.value.trim()
+  const gen = ++searchGen
   if (q.length < 2) {
     results.value = []
     searchSeerr.value = false
@@ -687,8 +703,10 @@ async function runSearch() {
     return
   }
   searching.value = true
+  const provider = searchProvider.value === 'prowlarr' ? 'prowlarr' : 'seerr'
   try {
-    const res = await apiRequest(`/api/homepage/search?q=${encodeURIComponent(q)}`)
+    const res = await apiRequest(`/api/homepage/search?q=${encodeURIComponent(q)}&provider=${provider}`)
+    if (gen !== searchGen) return
     if (res.ok) {
       const data = await readJson(res)
       results.value = data.results || []
@@ -699,12 +717,33 @@ async function runSearch() {
       searchError.value = `Search failed (HTTP ${res.status})`
     }
   } catch (err) {
+    if (gen !== searchGen) return
     results.value = []
     searchError.value = err?.message || 'Search failed'
   } finally {
-    searchedFor.value = q
-    searching.value = false
+    if (gen === searchGen) {
+      searchedFor.value = q
+      searching.value = false
+    }
   }
+}
+
+function onProviderChange() {
+  try {
+    localStorage.setItem(SEARCH_PROVIDER_KEY, searchProvider.value)
+  } catch (_) {
+    /* the choice still applies for this visit */
+  }
+  results.value = []
+  searchedFor.value = ''
+  searchError.value = ''
+  notice.value = ''
+  if (query.value.trim().length >= 2) runSearch()
+}
+
+function resultKey(item) {
+  if (item?.source === 'prowlarr') return item.token
+  return `${item?.mediaType}-${item?.mediaId}`
 }
 
 /** Search results open over the widgets below the greeting instead of making it taller. */
@@ -740,12 +779,97 @@ function statusLabel(item) {
 function onQueryInput() {
   notice.value = ''
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(runSearch, 280)
+  const wait = searchProvider.value === 'prowlarr' ? 700 : 280
+  searchTimer = setTimeout(runSearch, wait)
 }
+
+function preferredId(options, current) {
+  const ids = (options || []).map((option) => option.id)
+  if (ids.includes(current)) return current
+  return ids[0] ?? null
+}
+
+function preferredPath(folders, current) {
+  const paths = (folders || []).map((folder) => folder.path)
+  if (paths.includes(current)) return current
+  return paths[0] || ''
+}
+
+function choiceFromServers(item, servers) {
+  const server = servers.find((one) => one.isDefault) || servers[0]
+  return {
+    item,
+    servers,
+    serverId: server.id,
+    profileId: preferredId(server.profiles, server.profileId),
+    rootFolder: preferredPath(server.folders, server.rootFolder),
+    languageProfileId: preferredId(server.languages, server.languageProfileId),
+  }
+}
+
+function onRequestServer(event) {
+  const choice = requestChoice.value
+  if (!choice) return
+  const server = choice.servers.find((one) => one.id === Number(event.target.value))
+  if (!server) return
+  requestChoice.value = {
+    ...choice,
+    serverId: server.id,
+    profileId: preferredId(server.profiles, server.profileId),
+    rootFolder: preferredPath(server.folders, server.rootFolder),
+    languageProfileId: preferredId(server.languages, server.languageProfileId),
+  }
+}
+
+const choiceServer = computed(() => {
+  const choice = requestChoice.value
+  if (!choice) return null
+  return choice.servers.find((one) => one.id === choice.serverId) || choice.servers[0] || null
+})
 
 async function requestTitle(item) {
   if (!item?.can_request) return
-  const key = `${item.mediaType}-${item.mediaId}`
+  if (item.source === 'prowlarr') {
+    await downloadRelease(item)
+    return
+  }
+  const key = resultKey(item)
+  requestBusy.value = key
+  notice.value = ''
+  try {
+    const opt = await apiRequest(`/api/homepage/request-options?mediaType=${encodeURIComponent(item.mediaType)}`)
+    if (opt.ok) {
+      const options = await readJson(opt)
+      if (options.needsChoice && options.servers?.length) {
+        requestChoice.value = choiceFromServers(item, options.servers)
+        requestBusy.value = ''
+        return
+      }
+    }
+    await submitRequest(item)
+  } catch (err) {
+    notice.value = err.message || 'Request failed.'
+  } finally {
+    if (!requestChoice.value) requestBusy.value = ''
+  }
+}
+
+async function confirmRequest() {
+  const choice = requestChoice.value
+  const server = choiceServer.value
+  if (!choice || !server) return
+  const extra = { serverId: choice.serverId }
+  if (choice.profileId != null && server.profiles?.length) extra.profileId = choice.profileId
+  if (choice.rootFolder && server.folders?.length) extra.rootFolder = choice.rootFolder
+  if (choice.languageProfileId != null && (server.languages?.length || 0) > 1) {
+    extra.languageProfileId = choice.languageProfileId
+  }
+  const ok = await submitRequest(choice.item, extra)
+  if (ok) requestChoice.value = null
+}
+
+async function submitRequest(item, extra = {}) {
+  const key = resultKey(item)
   requestBusy.value = key
   notice.value = ''
   try {
@@ -755,6 +879,7 @@ async function requestTitle(item) {
         mediaType: item.mediaType,
         mediaId: item.mediaId,
         seasons: item.mediaType === 'tv' ? 'all' : undefined,
+        ...extra,
       }),
     })
     const data = await readJson(res)
@@ -762,16 +887,41 @@ async function requestTitle(item) {
       notice.value = data.detail || 'Request submitted.'
       item.status = 'requested'
       item.can_request = false
-      // Later trending pages are not in the snapshot, so mark them here.
       trendingMore.value = trendingMore.value.map((t) =>
-        `${t.mediaType}-${t.mediaId}` === key ? { ...t, status: 'requested', can_request: false } : t,
+        resultKey(t) === key ? { ...t, status: 'requested', can_request: false } : t,
       )
       loadSnapshot(true)
-    } else {
-      notice.value = apiError(data, 'Request failed.')
+      return true
     }
+    notice.value = apiError(data, 'Request failed.')
+    return false
   } catch (err) {
     notice.value = err.message || 'Request failed.'
+    return false
+  } finally {
+    requestBusy.value = ''
+  }
+}
+
+async function downloadRelease(item) {
+  const key = resultKey(item)
+  requestBusy.value = key
+  notice.value = ''
+  try {
+    const res = await apiRequest('/api/homepage/grab', {
+      method: 'POST',
+      body: JSON.stringify({ token: item.token }),
+    })
+    const data = await readJson(res)
+    if (res.ok && data.ok !== false) {
+      notice.value = data.detail || 'Sent to the download client.'
+      item.status = 'requested'
+      item.can_request = false
+      return
+    }
+    notice.value = apiError(data, 'Download failed.')
+  } catch (err) {
+    notice.value = err.message || 'Download failed.'
   } finally {
     requestBusy.value = ''
   }
@@ -1283,6 +1433,11 @@ onUnmounted(() => {
       <template #searchbar>
       <section class="home-search">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
+          <label class="home-sr" for="home-search-provider">Search in</label>
+          <select id="home-search-provider" v-model="searchProvider" class="home-search-provider" aria-label="Search in" @change="onProviderChange">
+            <option value="seerr">Movies &amp; series</option>
+            <option value="prowlarr">Other</option>
+          </select>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <label class="home-sr" for="home-search">Search</label>
           <input
@@ -1291,7 +1446,7 @@ onUnmounted(() => {
             class="home-search-input"
             type="search"
             autocomplete="off"
-            :placeholder="snapshot.seerr.available ? 'Search movies and TV to request' : 'Search Sonarr and Radarr'"
+            :placeholder="searchPlaceholder"
             @input="onQueryInput"
             @keydown.esc="closeSearch"
           />
@@ -1304,7 +1459,7 @@ onUnmounted(() => {
             </button>
             <p v-if="notice" class="home-notice">{{ notice }}</p>
             <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
-            <p v-else-if="!snapshot.seerr.available && !notice" class="home-muted">
+            <p v-else-if="searchProvider === 'seerr' && !snapshot.seerr.available && !notice" class="home-muted">
               Install and start Seerr to request titles from this page.
             </p>
             <p v-if="searching" class="home-muted">Searching…</p>
@@ -1312,21 +1467,22 @@ onUnmounted(() => {
               No results for “{{ searchedFor }}”.
             </p>
             <ul v-if="results.length" class="home-results">
-              <li v-for="item in results" :key="`${item.source}-${item.mediaType}-${item.mediaId}`" class="home-result">
+              <li v-for="item in results" :key="resultKey(item)" class="home-result">
                 <img v-if="item.poster" :src="item.poster" alt="" class="home-poster" />
                 <div class="home-result-body">
                   <strong>{{ item.title }}</strong>
-                  <span>{{ item.mediaType === 'tv' ? 'TV' : 'Movie' }} {{ String(item.year || '').slice(0, 4) }}</span>
+                  <span v-if="item.source === 'prowlarr'">{{ item.detail }}</span>
+                  <span v-else>{{ item.mediaType === 'tv' ? 'TV' : 'Movie' }} {{ String(item.year || '').slice(0, 4) }}</span>
                   <span v-if="statusLabel(item)" class="home-status" :class="`is-${item.status}`">{{ statusLabel(item) }}</span>
                 </div>
                 <button
-                  v-if="item.can_request && searchSeerr"
+                  v-if="item.can_request && (searchSeerr || item.source === 'prowlarr')"
                   type="button"
                   class="ui-btn ui-btn-primary"
-                  :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
+                  :disabled="requestBusy === resultKey(item)"
                   @click="requestTitle(item)"
                 >
-                  {{ requestBusy === `${item.mediaType}-${item.mediaId}` ? 'Requesting…' : 'Get it now' }}
+                  {{ requestBusy === resultKey(item) ? (item.source === 'prowlarr' ? 'Sending…' : 'Requesting…') : (item.source === 'prowlarr' ? 'Download' : 'Get it now') }}
                 </button>
               </li>
             </ul>
@@ -1472,10 +1628,10 @@ onUnmounted(() => {
                 v-if="item.can_request"
                 type="button"
                 class="ui-btn ui-btn-ghost home-tile-request"
-                :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
+                :disabled="requestBusy === resultKey(item)"
                 @click="requestTitle(item)"
               >
-                {{ requestBusy === `${item.mediaType}-${item.mediaId}` ? 'Requesting…' : 'Request' }}
+                {{ requestBusy === resultKey(item) ? 'Requesting…' : 'Request' }}
               </button>
             </div>
           </div>
@@ -1879,6 +2035,46 @@ onUnmounted(() => {
       </ul>
       <p v-else class="home-muted">No widget sources reported yet. Reload Home.</p>
     </article>
+    <Teleport to="body">
+      <div v-if="requestChoice && choiceServer" class="modal-backdrop" @click.self="requestChoice = null">
+        <form class="modal-content home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
+          <h3 id="home-request-title">Request {{ requestChoice.item.title }}</h3>
+          <p class="home-muted">Choose where Seerr should add it.</p>
+          <label v-if="requestChoice.servers.length > 1" class="home-request-field">
+            Server
+            <select class="ui-input" :value="requestChoice.serverId" @change="onRequestServer">
+              <option v-for="server in requestChoice.servers" :key="server.id" :value="server.id">
+                {{ server.name }}{{ server.is4k ? ' (4K)' : '' }}
+              </option>
+            </select>
+          </label>
+          <label v-if="choiceServer.profiles.length > 1" class="home-request-field">
+            Quality profile
+            <select v-model="requestChoice.profileId" class="ui-input">
+              <option v-for="profile in choiceServer.profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
+            </select>
+          </label>
+          <label v-if="choiceServer.folders.length > 1" class="home-request-field">
+            Folder
+            <select v-model="requestChoice.rootFolder" class="ui-input">
+              <option v-for="folder in choiceServer.folders" :key="folder.path" :value="folder.path">{{ folder.path }}</option>
+            </select>
+          </label>
+          <label v-if="choiceServer.languages.length > 1" class="home-request-field">
+            Language profile
+            <select v-model="requestChoice.languageProfileId" class="ui-input">
+              <option v-for="language in choiceServer.languages" :key="language.id" :value="language.id">{{ language.name }}</option>
+            </select>
+          </label>
+          <div class="home-request-actions">
+            <button type="button" class="ui-btn" @click="requestChoice = null">Cancel</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="requestBusy === resultKey(requestChoice.item)">
+              {{ requestBusy === resultKey(requestChoice.item) ? 'Requesting…' : 'Request' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -2106,13 +2302,25 @@ onUnmounted(() => {
 .home-search-pill {
   background: var(--control-bg);
   width: 100%;
-  max-width: 620px;
+  max-width: 720px;
   display: flex;
   align-items: center;
   gap: 0.6rem;
   height: 3.5rem;
-  padding: 0 0.5rem 0 1.25rem;
+  padding: 0 0.5rem 0 0.45rem;
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+}
+.home-search-provider {
+  flex: 0 1 11.5rem;
+  min-width: 0;
+  height: 2.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.7rem;
+  background: var(--control-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 0 0.45rem;
 }
 .home-search-pill svg {
   flex: 0 0 auto;
@@ -2178,11 +2386,33 @@ onUnmounted(() => {
 /* A small search bar searches on Enter; the button would leave no room to type. */
 @container (max-width: 300px) {
   .home-search-pill {
-    padding-left: 1rem;
+    padding-left: 0.35rem;
+  }
+  .home-search-provider {
+    flex-basis: 6.4rem;
+    font-size: 0.8rem;
   }
   .home-search-btn {
     display: none;
   }
+}
+.home-request-dialog {
+  max-width: 28rem;
+  padding: 1.15rem 1.25rem 1.2rem;
+  gap: 0.75rem;
+}
+.home-request-dialog h3 {
+  margin: 0;
+}
+.home-request-field {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.92rem;
+}
+.home-request-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 .home-sr {
   position: absolute;

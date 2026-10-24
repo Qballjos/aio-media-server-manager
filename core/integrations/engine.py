@@ -1,7 +1,7 @@
 """
 core/integrations/engine.py — Automatic Integration Engine Orchestrator.
 
-Wires download clients, *Arr apps, Seerr, Bazarr, and optimization-tool configs.
+Wires download clients into *Arr and Prowlarr, plus Seerr, Bazarr, and optimization-tool configs.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from core.integrations.jellyfin import JellyfinClient
 from core.integrations.local_auth import apply_shared_local_logins
 from core.integrations.nzbget import NZBGetClient, nzbget_credentials
 from core.integrations.plex import PlexClient
-from core.integrations.prowlarr import ProwlarrClient
+from core.integrations.prowlarr import PROWLARR_DOWNLOAD_CATEGORY, ProwlarrClient
 from core.integrations.qbittorrent import QBittorrentClient, apply_qbittorrent_webui_login, qbittorrent_credentials
 from core.integrations.radarr import RadarrClient
 from core.integrations.sabnzbd import SABnzbdClient, read_sabnzbd_ini
@@ -109,6 +109,18 @@ class IntegrationEngine:
             return dict(wizard_engine._state.get("selections") or {})
         except Exception:
             return {}
+
+    def _prowlarr_client_host(self, name: str) -> str:
+        """Address Prowlarr uses for a download client.
+
+        Prowlarr shares qBittorrent's network namespace. Usenet apps stay on the
+        host, so OpenVPN isolation reaches them through the veth bridge.
+        """
+        if name == "qbittorrent" or not vpn_manager.uses_netns_isolation():
+            return "127.0.0.1"
+        from core.vpn import TORRENT_BRIDGE_HOST
+
+        return TORRENT_BRIDGE_HOST
 
     def _downloaders_for_arr(self, *, sab_key: str | None) -> list[str]:
         """Register every installed, running downloader *Arr can talk to."""
@@ -305,6 +317,10 @@ class IntegrationEngine:
             radarr_url = f"http://{bridge}:{radarr_port}"
             lidarr_url = f"http://{bridge}:{lidarr_port}"
 
+        if self._installed("prowlarr"):
+            (layout.complete / PROWLARR_DOWNLOAD_CATEGORY).mkdir(parents=True, exist_ok=True)
+            (layout.torrents / PROWLARR_DOWNLOAD_CATEGORY).mkdir(parents=True, exist_ok=True)
+
         if not self._skip_unavailable(steps, "sabnzbd", "configure_folders_and_categories"):
             from core.integrations.sabnzbd import ensure_sabnzbd_public_access
 
@@ -313,6 +329,10 @@ class IntegrationEngine:
             sab_ok = sab_client.set_folders(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
                 sab_ok = sab_client.add_category(category.name, dir_path=category.library) and sab_ok
+            if self._installed("prowlarr"):
+                sab_ok = (
+                    sab_client.add_category(PROWLARR_DOWNLOAD_CATEGORY, dir_path=PROWLARR_DOWNLOAD_CATEGORY) and sab_ok
+                )
             sab_client.remove_accidental_servers(sab_cfg)
             usenet = load_usenet_server()
             if usenet and usenet.get("host"):
@@ -329,6 +349,14 @@ class IntegrationEngine:
             nzb_ok = nzb.set_download_dirs(str(layout.complete), str(layout.incomplete))
             for category in DOWNLOAD_CATEGORIES:
                 nzb_ok = nzb.add_category(category.name, dest_dir=str(layout.complete_path(category.library))) and nzb_ok
+            if self._installed("prowlarr"):
+                nzb_ok = (
+                    nzb.add_category(
+                        PROWLARR_DOWNLOAD_CATEGORY,
+                        dest_dir=str(layout.complete / PROWLARR_DOWNLOAD_CATEGORY),
+                    )
+                    and nzb_ok
+                )
             usenet = load_usenet_server()
             if usenet and usenet.get("host"):
                 nzb_ok = nzb.add_news_server(**usenet) and nzb_ok
@@ -349,6 +377,14 @@ class IntegrationEngine:
                         category.name,
                         save_path=str(layout.torrent_path(category.library)),
                     ) and qb_ok
+                if self._installed("prowlarr"):
+                    qb_ok = (
+                        qb_client.create_category(
+                            PROWLARR_DOWNLOAD_CATEGORY,
+                            save_path=str(layout.torrents / PROWLARR_DOWNLOAD_CATEGORY),
+                        )
+                        and qb_ok
+                    )
             steps.append(
                 _step(
                     "qbittorrent",
@@ -374,6 +410,8 @@ class IntegrationEngine:
             set_wiring_progress("Checking SABnzbd download categories")
             for category in DOWNLOAD_CATEGORIES:
                 sab_live.add_category(category.name, dir_path=category.library)
+            if self._installed("prowlarr"):
+                sab_live.add_category(PROWLARR_DOWNLOAD_CATEGORY, dir_path=PROWLARR_DOWNLOAD_CATEGORY)
         downloader_register = self._downloaders_for_arr(sab_key=sab_key)
 
         roots = arr_root_folders(layout)
@@ -481,8 +519,38 @@ class IntegrationEngine:
                 set_wiring_progress("Connecting Prowlarr to FlareSolverr")
                 flare_port = self._port("flaresolverr", 8191)
                 syncs.append(prowlarr_client.add_flaresolverr(f"http://127.0.0.1:{flare_port}"))
-            prowl_ok = all(syncs) if syncs else True
-            steps.append(_step("prowlarr", "sync_applications", prowl_ok, "Prowlarr → Sonarr/Radarr/Lidarr/Flaresolverr"))
+            set_wiring_progress("Connecting Prowlarr to download clients")
+            outside_host = self._prowlarr_client_host("sabnzbd")
+            prowlarr_dl = _register_download_clients(
+                downloader_register,
+                add_sab=lambda: prowlarr_client.add_sabnzbd_client(
+                    host=outside_host,
+                    port=sab_port,
+                    api_key=sab_key or "",
+                    category=PROWLARR_DOWNLOAD_CATEGORY,
+                    username=sab_user,
+                    password=sab_pass,
+                ),
+                add_nzb=lambda: prowlarr_client.add_nzbget_client(
+                    host=outside_host,
+                    port=nzb_port,
+                    username=nzb_user,
+                    password=nzb_pass,
+                    category=PROWLARR_DOWNLOAD_CATEGORY,
+                ),
+                add_qb=lambda: prowlarr_client.add_qbittorrent_client(
+                    host=self._prowlarr_client_host("qbittorrent"),
+                    port=qb_port,
+                    username=qb_user,
+                    password=qb_pass,
+                    category=PROWLARR_DOWNLOAD_CATEGORY,
+                ),
+            )
+            prowl_ok = (all(syncs) if syncs else True) and prowlarr_dl
+            detail = "Prowlarr → Sonarr/Radarr/Lidarr/Flaresolverr"
+            if downloader_register:
+                detail += f" clients={','.join(downloader_register)}"
+            steps.append(_step("prowlarr", "sync_applications", prowl_ok, detail))
 
         if not self._skip_uninstalled(steps, "jellyfin", "configure_libraries_and_transcode"):
             set_wiring_progress("Configuring Jellyfin media libraries")

@@ -13,8 +13,10 @@ from core.debug_access import require_local_or_session
 from core.homepage import (
     homepage_art,
     homepage_downloads,
+    homepage_prowlarr_grab,
     homepage_recent,
     homepage_request,
+    homepage_request_options,
     homepage_search,
     homepage_snapshot,
     homepage_trending,
@@ -29,6 +31,14 @@ class HomepageRequestBody(BaseModel):
     mediaType: str = Field(min_length=2)
     mediaId: int
     seasons: Any | None = None
+    serverId: int | None = None
+    profileId: int | None = None
+    rootFolder: str | None = None
+    languageProfileId: int | None = None
+
+
+class HomepageGrabBody(BaseModel):
+    token: str = Field(min_length=8)
 
 
 def _ensure_authenticated(request: Request) -> None:
@@ -86,17 +96,32 @@ async def homepage_artwork(request: Request, source: str = "", item_id: str = ""
     return Response(content=body, media_type=content_type or "image/jpeg")
 
 
-@router.get("/search", summary="Search library and Seerr")
-async def search_homepage(request: Request, q: str = "") -> dict[str, Any]:
+@router.get("/search", summary="Search Seerr or Prowlarr")
+async def search_homepage(request: Request, q: str = "", provider: str = "seerr") -> dict[str, Any]:
     _ensure_authenticated(request)
     host = request.url.hostname or "127.0.0.1"
-    return await asyncio.to_thread(homepage_search, host, q)
+    return await asyncio.to_thread(homepage_search, host, q, provider)
+
+
+@router.get("/request-options", summary="Folders and quality profiles for a Seerr request")
+async def request_options(request: Request, mediaType: str = "movie") -> dict[str, Any]:
+    _ensure_authenticated(request)
+    return await asyncio.to_thread(homepage_request_options, mediaType)
 
 
 @router.post("/request", summary="Submit a Seerr request")
 async def request_media(request: Request, body: HomepageRequestBody) -> dict[str, Any]:
     _ensure_authenticated(request)
     result = await asyncio.to_thread(homepage_request, body.model_dump())
+    if not result.get("ok"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("detail"))
+    return result
+
+
+@router.post("/grab", summary="Send a Prowlarr search result to a download client")
+async def grab_release(request: Request, body: HomepageGrabBody) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    result = await asyncio.to_thread(homepage_prowlarr_grab, body.token)
     if not result.get("ok"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("detail"))
     return result
