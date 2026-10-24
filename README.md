@@ -17,11 +17,14 @@
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-informational" alt="linux/amd64 and linux/arm64">
   <img src="https://img.shields.io/badge/vibe%20coded-yes-ff69b4" alt="Vibe coded">
   <a href="https://www.paypal.com/donate/?business=P8CTXW8ER3PBY&amp;no_recurring=0&amp;item_name=Sponsor+My+Next+Bug&amp;currency_code=EUR"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&amp;logoColor=white" alt="Donate with PayPal"></a>
+  <a href="https://ko-fi.com/qballjos"><img src="https://img.shields.io/badge/Ko--fi-qballjos-FF5E5B?logo=kofi&amp;logoColor=white" alt="Donate on Ko-fi"></a>
 </p>
 
 You run **one** Docker container (or one native Linux service). AIO installs the apps you choose, starts them, wires folders and APIs together, and gives you one web dashboard. There is no per-app Compose stack and no Debrid functionality.
 
 **This project was vibe coded** — built with AI pair-programming in Cursor, guided by a human who wanted one appliance instead of a Compose novel. Expect a fast-moving stack; issues and PRs are welcome when something feels off.
+
+🤖 AI writes some code. I break it. We fix it together.
 
 Can’t spare a few bucks? Drop a star on GitHub instead. It feeds the ego, and that’s almost as good.
 
