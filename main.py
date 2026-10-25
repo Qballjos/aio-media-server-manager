@@ -25,6 +25,7 @@ import threading
 import uvicorn
 
 from core.logging_config import configure_logging
+from core.version import app_version
 from core.settings import settings
 from core.storage import StorageManager
 from core.supervisor import ProcessSupervisor
@@ -46,7 +47,7 @@ _BANNER = r"""
 | |_| || | |_| || |  | |  __/ (_| | | (_| | |  | | (_| | | | |
  \___/|___\___/ |_|  |_|\___|\__,_|_|\__,_|_|  |_|\__,_|_| |_|
 
-              AIO Media Server Manager  v0.1.0
+              AIO Media Server Manager  v""" + app_version() + """
 """
 
 

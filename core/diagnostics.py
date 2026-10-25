@@ -14,6 +14,7 @@ from typing import Any
 
 from core.log_redactor import redact_log_line
 from core.settings import settings
+from core.version import app_version
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +175,7 @@ class DiagnosticsStore:
         return {
             "generated_at": _utcnow().isoformat(),
             "purpose": "debug-share",
-            "version": "0.1.0",
+            "version": app_version(),
             "architecture": detect_system_arch().value,
             "catalog": {
                 "counts": catalog.counts(entries),

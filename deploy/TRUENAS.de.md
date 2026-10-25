@@ -62,4 +62,4 @@ Die Oberfläche des Managers ist `http://<truenas-ip>:8080`. Erstellen Sie die C
 
 ## Updates
 
-TrueNAS holt ein neueres `:latest`, wenn Sie die App aktualisieren. Pinnen Sie ein Semver-Tag (`:0.1.0`), wenn Sie langsamer aktualisieren wollen, sobald Git-Tags existieren. Das aktualisiert AIO. Installierte Apps aktualisieren Sie unter **Einstellungen → Updates** (Zeitpläne sind standardmäßig aus).
+TrueNAS holt ein neueres `:latest`, wenn Sie die App aktualisieren. Pinnen Sie ein Semver-Tag (`:0.2.0`), wenn Sie langsamer aktualisieren wollen, sobald Git-Tags existieren. Das aktualisiert AIO. Installierte Apps aktualisieren Sie unter **Einstellungen → Updates** (Zeitpläne sind standardmäßig aus).

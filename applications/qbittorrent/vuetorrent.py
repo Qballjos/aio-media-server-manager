@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from core.app_prefs import app_option
+from core.version import app_version
 from core.installer.extractor import ArchiveExtractor
 from core.installer.github import GitHubReleaseClient
 from core.settings import settings
@@ -130,7 +131,7 @@ def _pick_zip(release: dict[str, Any]) -> dict[str, Any]:
 def _download(url: str, destination: Path, *, token: str | None) -> None:
     import requests
 
-    headers = {"User-Agent": "AIO-Media-Server-Manager/0.1.0", "Accept": "application/octet-stream"}
+    headers = {"User-Agent": f"AIO-Media-Server-Manager/{app_version()}", "Accept": "application/octet-stream"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     with requests.get(url, headers=headers, stream=True, timeout=(15, 120)) as resp:

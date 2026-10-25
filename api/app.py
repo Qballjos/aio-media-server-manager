@@ -33,6 +33,7 @@ from api.routers import vpn as vpn_router
 from api.routers import cloudflare_hostnames as cloudflare_hostnames_router
 from api.routers import cloudflare_tunnel as cloudflare_tunnel_router
 from core.settings import settings
+from core.version import app_version
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="AIO Media Server Manager",
         description=_APP_DESCRIPTION,
-        version="0.1.0",
+        version=app_version(),
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",

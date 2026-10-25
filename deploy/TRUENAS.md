@@ -62,4 +62,4 @@ The manager UI is `http://<truenas-ip>:8080`. Recreate the custom app after an i
 
 ## Updates
 
-TrueNAS will pull a newer `:latest` when you update the app. Pin a semver tag (`:0.1.0`) if you want slower upgrades once git tags exist. That updates AIO. Installed apps update from **Settings → Updates** (schedules default to off).
+TrueNAS will pull a newer `:latest` when you update the app. Pin a semver tag (`:0.2.0`) if you want slower upgrades once git tags exist. That updates AIO. Installed apps update from **Settings → Updates** (schedules default to off).
