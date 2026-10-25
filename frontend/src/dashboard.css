@@ -1869,8 +1869,21 @@ a.status-pill {
   .service-actions > .btn-install,
   .service-actions > .card-menu-wrap {
     flex: 1 1 100%;
+    width: 100%;
     min-width: 0;
     max-width: 100%;
+  }
+
+  .card-menu-wrap > .btn-more {
+    width: 100%;
+  }
+
+  .card-menu {
+    left: 0;
+    right: 0;
+    width: auto;
+    min-width: 0;
+    max-width: none;
   }
 
   .service-actions > .btn-action {

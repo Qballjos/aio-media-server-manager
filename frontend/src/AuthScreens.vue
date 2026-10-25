@@ -180,9 +180,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-      <div v-if="authReady" class="auth-language">
-        <LanguageSelect />
-      </div>
+      <LanguageSelect v-if="authReady" codes />
       <section v-if="!authReady" class="auth-card-wrapper animate-fade">
         <AppLoader label="Connecting to the manager" />
       </section>

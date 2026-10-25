@@ -1130,14 +1130,8 @@ select.ui-input {
   gap: 0.5rem;
 }
 
-.language-picker.is-compact,
-.auth-language .language-picker {
+.language-picker.is-compact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.auth-language {
-  width: min(28rem, calc(100% - 2rem));
-  margin: 0 auto 0.85rem;
 }
 
 @media (max-width: 720px) {
