@@ -63,6 +63,7 @@ export const TABLE = {
   'Welcome back, {name}!': ['Welkom terug, {name}!', 'Willkommen zurück, {name}!', 'Bon retour, {name} !'],
   'Login error: {message}': ['Aanmeldfout: {message}', 'Anmeldefehler: {message}', 'Erreur de connexion : {message}'],
   'Search': ['Zoeken', 'Suchen', 'Rechercher'],
+  'No matches': ['Geen resultaten', 'Keine Treffer', 'Aucun résultat'],
   'Search in': ['Zoeken in', 'Suchen in', 'Rechercher dans'],
   'Movies & Series': ['Films en series', 'Filme und Serien', 'Films et séries'],
   'Other': ['Overig', 'Sonstiges', 'Autre'],

@@ -65,6 +65,9 @@ def test_public_branding_defaults(tmp_path: Path, monkeypatch):
     assert data["accent_color"] == "#0a6cff"
     assert data["header_url"].endswith("logo-aio-media-manager.png")
     assert data["slots"]["favicon"]["recommended"]
+    assert "wide" in data["slots"]["logo"]["recommended"]
+    assert "square" not in data["slots"]["logo"]["recommended"]
+    assert "square" in data["slots"]["header"]["recommended"]
 
 
 def test_brand_title_and_image_upload(tmp_path: Path, monkeypatch):

@@ -37,10 +37,10 @@ SLOTS: dict[str, dict[str, str]] = {
         "label": "Logo",
         "help": (
             "Shown on the login and first-run setup screens. "
-            "Starts as the built-in placeholder; upload a square PNG or WebP to replace it. "
-            "Recommended size: 512 × 512 px (minimum 128 × 128). Displayed at about 72 × 72."
+            "Starts as the built-in placeholder; upload a wide PNG or WebP to replace it. "
+            "Recommended size: 720 × 240 px (minimum 240 × 80). Displayed up to about 256 × 80."
         ),
-        "recommended": "512 × 512 px (square)",
+        "recommended": "720 × 240 px (wide)",
         "basename": "logo",
     },
     "favicon": {

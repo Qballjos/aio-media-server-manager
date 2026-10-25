@@ -809,12 +809,15 @@ onUnmounted(() => {
   position: relative;
 }
 .wizard-logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
-  object-fit: cover;
+  width: auto;
+  height: auto;
+  max-width: min(18rem, 100%);
+  max-height: 5rem;
+  border-radius: 12px;
+  object-fit: contain;
+  object-position: center;
   display: block;
-  margin-bottom: 0.85rem;
+  margin: 0 auto 0.85rem;
   border: none;
   box-shadow: none;
 }

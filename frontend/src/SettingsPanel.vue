@@ -10,6 +10,7 @@ import { formatUptime } from './format.js'
 import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 import UiSelect from './UiSelect.vue'
+import { timezoneChoices } from './timezones.js'
 import LanguageSelect from './LanguageSelect.vue'
 import {
   canPromptInstall,
@@ -115,6 +116,7 @@ const form = ref({
   accent_color: DEFAULT_ACCENT,
   login_message: '',
 })
+const timezoneOptions = computed(() => timezoneChoices(form.value.timezone))
 const branding = ref({
   title: 'AIO Media Server Manager',
   accent_color: DEFAULT_ACCENT,
@@ -1875,7 +1877,7 @@ onBeforeUnmount(() => {
             :key="key"
             class="brand-asset-row"
           >
-            <img :src="slot.url" :alt="slot.label" class="brand-asset-preview" />
+            <img :src="slot.url" :alt="slot.label" class="brand-asset-preview" :class="{ 'is-logo': key === 'logo' }" />
             <div class="brand-asset-copy">
               <strong>{{ slot.label }}</strong>
               <span>{{ slot.help }}</span>
@@ -2029,17 +2031,11 @@ onBeforeUnmount(() => {
           <label class="ui-field">{{ $t('Timezone') }}
             <UiSelect
               v-model="form.timezone"
-              :options="[
-                { value: 'UTC', label: 'UTC' },
-                { value: 'Europe/Amsterdam', label: 'Europe/Amsterdam' },
-                { value: 'Europe/London', label: 'Europe/London' },
-                { value: 'America/New_York', label: 'America/New_York' },
-                { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
-                { value: 'Australia/Sydney', label: 'Australia/Sydney' },
-                ...(form.timezone && !['UTC','Europe/Amsterdam','Europe/London','America/New_York','America/Los_Angeles','Australia/Sydney'].includes(form.timezone)
-                  ? [{ value: form.timezone, label: form.timezone }]
-                  : []),
-              ]"
+              searchable
+              :search-placeholder="$t('Search')"
+              :empty-label="$t('No matches')"
+              :aria-label="$t('Timezone')"
+              :options="timezoneOptions"
             />
           </label>
           <label class="ui-field">{{ $t('Log level') }}
@@ -3380,13 +3376,19 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-subtle);
 }
 .brand-asset-preview {
-  width: 56px;
-  height: 56px;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: 12px;
   object-fit: cover;
-  background: transparent;
+  background: var(--bg-input);
   border: none;
   flex-shrink: 0;
+}
+.brand-asset-preview.is-logo {
+  width: 10.5rem;
+  height: 3.5rem;
+  object-fit: contain;
+  object-position: center;
 }
 .brand-asset-copy {
   display: flex;

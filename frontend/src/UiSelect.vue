@@ -9,6 +9,10 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   /** field fills the form row. inline hugs its label. search sits in the Home search pill. */
   variant: { type: String, default: 'field' },
+  /** Filter box for long lists (timezones). The menu still scrolls inside the viewport. */
+  searchable: { type: Boolean, default: false },
+  searchPlaceholder: { type: String, default: 'Search' },
+  emptyLabel: { type: String, default: 'No matches' },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -17,6 +21,9 @@ const open = ref(false)
 const root = ref(null)
 const button = ref(null)
 const menu = ref(null)
+const list = ref(null)
+const searchInput = ref(null)
+const query = ref('')
 const activeIndex = ref(-1)
 const menuStyle = ref({})
 const listId = `ui-select-${Math.random().toString(36).slice(2, 9)}`
@@ -25,6 +32,16 @@ const current = computed(
   () => props.options.find((opt) => opt.value === props.modelValue) || null,
 )
 const currentLabel = computed(() => current.value?.label || '')
+const visible = computed(() => {
+  const rows = props.options.map((opt, index) => ({ opt, index }))
+  const q = query.value.trim().toLowerCase()
+  if (!props.searchable || !q) return rows
+  return rows.filter(({ opt }) => {
+    const label = String(opt.label ?? opt.value).toLowerCase()
+    const value = String(opt.value).toLowerCase()
+    return label.includes(q) || value.includes(q)
+  })
+})
 
 function optionId(index) {
   return `${listId}-opt-${index}`
@@ -35,32 +52,48 @@ function place() {
   if (!el) return
   const rect = el.getBoundingClientRect()
   const gap = 6
-  const width = Math.min(Math.max(rect.width, 168), window.innerWidth - 16)
+  const margin = 8
+  const minWidth = props.searchable ? 240 : 168
+  const width = Math.min(Math.max(rect.width, minWidth), window.innerWidth - margin * 2)
   let left = rect.left
-  if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - width)
-  const below = window.innerHeight - rect.bottom
-  const above = rect.top
-  const openUp = below < 140 && above > below
+  if (left + width > window.innerWidth - margin) left = Math.max(margin, window.innerWidth - margin - width)
+  const below = Math.max(0, window.innerHeight - rect.bottom - gap - margin)
+  const above = Math.max(0, rect.top - gap - margin)
+  const openUp = above > below
+  const room = Math.floor(openUp ? above : below)
   menuStyle.value = {
     left: `${left}px`,
     width: `${width}px`,
+    maxHeight: `${room > 0 ? Math.min(room, 352) : 160}px`,
     top: openUp ? 'auto' : `${rect.bottom + gap}px`,
     bottom: openUp ? `${window.innerHeight - rect.top + gap}px` : 'auto',
   }
 }
 
-function onPlace() {
-  if (open.value) place()
+function onPlace(event) {
+  if (!open.value) return
+  const target = event?.target
+  if (target && menu.value && (target === menu.value || menu.value.contains(target))) return
+  place()
+}
+
+function highlightCurrent() {
+  const idx = visible.value.findIndex((row) => row.opt.value === props.modelValue)
+  activeIndex.value = idx >= 0 ? idx : (visible.value.length ? 0 : -1)
 }
 
 async function setOpen(next) {
   if (props.disabled) return
   open.value = next
-  if (!next) return
-  const idx = props.options.findIndex((opt) => opt.value === props.modelValue)
-  activeIndex.value = idx >= 0 ? idx : 0
+  if (!next) {
+    query.value = ''
+    return
+  }
+  highlightCurrent()
   await nextTick()
   place()
+  if (props.searchable) searchInput.value?.focus()
+  list.value?.querySelector(`#${optionId(activeIndex.value)}`)?.scrollIntoView({ block: 'nearest' })
 }
 
 function toggle() {
@@ -72,18 +105,19 @@ function choose(opt) {
   emit('update:modelValue', opt.value)
   emit('change', opt.value)
   open.value = false
+  query.value = ''
   button.value?.focus()
 }
 
 function move(delta) {
-  const count = props.options.length
+  const count = visible.value.length
   if (!count) return
   let index = activeIndex.value
   for (let step = 0; step < count; step += 1) {
     index = (index + delta + count) % count
-    if (!props.options[index].disabled) {
+    if (!visible.value[index].opt.disabled) {
       activeIndex.value = index
-      menu.value?.querySelector(`#${optionId(index)}`)?.scrollIntoView({ block: 'nearest' })
+      list.value?.querySelector(`#${optionId(index)}`)?.scrollIntoView({ block: 'nearest' })
       return
     }
   }
@@ -93,6 +127,7 @@ function onKey(event) {
   if (props.disabled) return
   if (event.key === 'Tab') {
     open.value = false
+    query.value = ''
     return
   }
   if (!open.value) {
@@ -105,6 +140,8 @@ function onKey(event) {
   if (event.key === 'Escape') {
     event.preventDefault()
     open.value = false
+    query.value = ''
+    button.value?.focus()
     return
   }
   if (event.key === 'ArrowDown') {
@@ -115,14 +152,19 @@ function onKey(event) {
     move(-1)
   } else if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault()
-    choose(props.options[activeIndex.value])
+    choose(visible.value[activeIndex.value]?.opt)
   } else if (event.key === 'Home') {
     event.preventDefault()
     activeIndex.value = 0
   } else if (event.key === 'End') {
     event.preventDefault()
-    activeIndex.value = props.options.length - 1
+    activeIndex.value = Math.max(0, visible.value.length - 1)
   }
+}
+
+function onSearchKey(event) {
+  if (event.key === ' ') return
+  onKey(event)
 }
 
 function onPointerDown(event) {
@@ -148,6 +190,12 @@ watch(
     if (disabled) open.value = false
   },
 )
+
+watch(query, () => {
+  if (!open.value) return
+  if (!query.value.trim()) highlightCurrent()
+  else activeIndex.value = visible.value.length ? 0 : -1
+})
 </script>
 
 <template>
@@ -170,35 +218,54 @@ watch(
       @click="toggle"
       @keydown="onKey"
     >
-      <span class="ui-select-value">{{ currentLabel }}</span>
+      <span class="ui-select-value" :title="currentLabel">{{ currentLabel }}</span>
       <svg class="ui-select-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
     </button>
     <Teleport to="body">
       <div
         v-if="open"
-        :id="listId"
         ref="menu"
         class="ui-select-menu"
-        role="listbox"
-        :aria-label="ariaLabel || undefined"
         :style="menuStyle"
       >
-        <button
-          v-for="(opt, index) in options"
-          :id="optionId(index)"
-          :key="`${index}-${opt.value}`"
-          type="button"
-          class="ui-select-option"
-          role="option"
-          :aria-selected="opt.value === modelValue ? 'true' : 'false'"
-          :disabled="!!opt.disabled"
-          :class="{ 'is-selected': opt.value === modelValue, 'is-active': index === activeIndex }"
-          :title="opt.label"
-          @mouseenter="activeIndex = index"
-          @click="choose(opt)"
+        <div v-if="searchable" class="ui-select-search-bar">
+          <input
+            ref="searchInput"
+            v-model="query"
+            class="ui-select-search"
+            type="search"
+            autocomplete="off"
+            :placeholder="searchPlaceholder"
+            :aria-label="searchPlaceholder"
+            :aria-controls="listId"
+            @keydown="onSearchKey"
+          />
+        </div>
+        <div
+          :id="listId"
+          ref="list"
+          class="ui-select-list"
+          role="listbox"
+          :aria-label="ariaLabel || undefined"
         >
-          <span>{{ opt.label }}</span>
-        </button>
+          <p v-if="!visible.length" class="ui-select-empty">{{ emptyLabel }}</p>
+          <button
+            v-for="(row, index) in visible"
+            :id="optionId(index)"
+            :key="`${row.index}-${row.opt.value}`"
+            type="button"
+            class="ui-select-option"
+            role="option"
+            :aria-selected="row.opt.value === modelValue ? 'true' : 'false'"
+            :disabled="!!row.opt.disabled"
+            :class="{ 'is-selected': row.opt.value === modelValue, 'is-active': index === activeIndex }"
+            :title="row.opt.label"
+            @mouseenter="activeIndex = index"
+            @click="choose(row.opt)"
+          >
+            <span>{{ row.opt.label }}</span>
+          </button>
+        </div>
       </div>
     </Teleport>
   </div>
@@ -325,18 +392,63 @@ watch(
   z-index: 180;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
   margin: 0;
-  padding: 0.4rem;
-  max-height: min(18rem, calc(100vh - 1rem));
+  padding: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   border-radius: var(--radius-glass, 26px);
   background: var(--control-bg);
   border: 1px solid var(--border-subtle);
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
+}
+
+.ui-select-search-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.4rem 0.4rem 0.3rem;
+  background: var(--control-bg);
+}
+
+.ui-select-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.ui-select-search:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.ui-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.15rem 0.4rem 0.4rem;
+}
+
+.ui-select-empty {
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .ui-select-option {
@@ -362,9 +474,8 @@ watch(
 
 .ui-select-option span {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .ui-select-option:hover:not(:disabled),

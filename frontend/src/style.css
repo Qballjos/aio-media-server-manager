@@ -873,7 +873,8 @@ select.ui-input {
 }
 
 /* Buttons — one shape for the whole app: a glass pill, --btn-h high, 700 weight. The primary one is the accent;
-   round icon buttons are the same pill squeezed to a circle. Text colour (not shape) hints at start/stop/open. */
+   round icon buttons are the same pill squeezed to a circle. Text colour (not shape) hints at start/stop/open.
+   Labels wrap inside the pill when a translation is longer than the row, so the words stay inside the border. */
 .ui-btn,
 .wizard-btn,
 .btn-primary,
@@ -888,8 +889,9 @@ select.ui-input {
   position: relative;
   box-sizing: border-box;
   min-height: var(--btn-h);
+  max-width: 100%;
   margin: 0;
-  padding: 0.3rem 1.1rem;
+  padding: 0.35rem 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
   background: var(--pill-bg);
@@ -905,8 +907,11 @@ select.ui-input {
   justify-content: center;
   gap: 0.45rem;
   cursor: pointer;
+  text-align: center;
   text-decoration: none;
-  white-space: nowrap;
+  text-wrap: balance;
+  white-space: normal;
+  overflow-wrap: break-word;
   transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 
@@ -942,7 +947,10 @@ select.ui-input {
   background: var(--color-primary-button);
   border-color: transparent;
   color: var(--color-primary-contrast);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), 0 8px 20px -8px var(--color-primary);
+  /* Soft glow in the button's own colour. The raw accent is brighter than the fill, so it read as a hard smear. */
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    0 6px 14px -6px color-mix(in srgb, var(--color-primary-button) 75%, transparent);
 }
 
 .ui-btn-primary:hover:not(:disabled),
@@ -952,6 +960,9 @@ select.ui-input {
   background: var(--color-primary-button-hover);
   border-color: transparent;
   color: var(--color-primary-contrast);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    0 8px 16px -6px color-mix(in srgb, var(--color-primary-button) 85%, transparent);
   transform: translateY(-1px);
 }
 
@@ -984,6 +995,8 @@ select.ui-input {
 
 .btn-webui {
   color: var(--color-primary-text);
+  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  box-shadow: 0 6px 14px -8px color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 
 .ui-btn:disabled,
@@ -1126,7 +1139,13 @@ select.ui-input {
 }
 
 .theme-option {
+  width: 100%;
   padding-inline: 0.6rem;
+}
+
+.settings-nav-btn,
+.catalog-chip {
+  flex-shrink: 0;
 }
 
 /* Theme cards: the wallpaper at night with a diagonal slice of the day version, and four colour dots. */
