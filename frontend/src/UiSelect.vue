@@ -311,7 +311,7 @@ watch(query, () => {
   color: var(--text-main);
   box-shadow: inset 0 1px 0 var(--glass-highlight);
   font-family: inherit;
-  font-size: 16px;
+  font-size: var(--text-ui);
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.01em;
@@ -375,7 +375,7 @@ watch(query, () => {
   border-radius: 999px 0 0 999px;
   background: transparent;
   box-shadow: none;
-  font-size: var(--ui-select-font, 0.92rem);
+  font-size: var(--ui-select-font, var(--text-body));
   padding: 0 0.7rem 0 var(--ui-select-pad, 1.15rem);
 }
 
@@ -426,7 +426,7 @@ watch(query, () => {
   background: var(--bg-input);
   color: var(--text-main);
   font: inherit;
-  font-size: 0.88rem;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 
@@ -447,7 +447,7 @@ watch(query, () => {
   margin: 0;
   padding: 0.45rem 0.9rem;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 
@@ -464,7 +464,7 @@ watch(query, () => {
   background: transparent;
   color: var(--text-main);
   font-family: inherit;
-  font-size: 0.92rem;
+  font-size: var(--text-body);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.25;

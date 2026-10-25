@@ -823,7 +823,7 @@ onUnmounted(() => {
 }
 .wizard-badge {
   display: inline-block;
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 0.2rem 0.5rem;
@@ -833,7 +833,7 @@ onUnmounted(() => {
   margin-bottom: 0.5rem;
 }
 .wizard-header h2 {
-  font-size: 1.5rem;
+  font-size: var(--text-display);
   font-weight: 700;
   margin: 0.25rem 0 0.5rem;
   color: var(--text-heading);
@@ -841,7 +841,7 @@ onUnmounted(() => {
 .wizard-header p,
 .wizard-muted {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   line-height: 1.4;
   margin: 0;
 }
@@ -859,7 +859,7 @@ onUnmounted(() => {
   border-radius: 6px;
   display: grid;
   place-items: center;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   color: var(--text-muted);
   border: 1px solid var(--border-subtle);
@@ -899,7 +899,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-subtle);
   color: var(--text-main);
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   min-width: 0;
 }
 .wizard-option > span:not(.wizard-app-badge) {
@@ -926,7 +926,7 @@ onUnmounted(() => {
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   color: var(--color-primary-soft);
 }
@@ -944,7 +944,7 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--color-info-fg);
   border: 1px solid color-mix(in srgb, var(--color-info) 40%, transparent);
   text-decoration: none;
@@ -954,7 +954,7 @@ onUnmounted(() => {
 .wizard-review-lead {
   margin: 0 0 0.9rem;
   color: var(--text-main);
-  font-size: 0.95rem;
+  font-size: var(--text-body);
   line-height: 1.45;
 }
 .wizard-review {
@@ -976,7 +976,7 @@ onUnmounted(() => {
 }
 .wizard-review-label {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   line-height: 1.3;
   padding-top: 0.5rem;
 }
@@ -992,18 +992,18 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.55rem;
   color: var(--text-main);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
 }
 .wizard-review-empty,
 .wizard-review-note {
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   padding: 0.5rem 0;
 }
 .wizard-review-network {
   margin: 0.9rem 0 0;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   line-height: 1.45;
 }
 @media (max-width: 520px) {
@@ -1026,7 +1026,7 @@ onUnmounted(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.4rem;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--text-main);
 }
@@ -1076,7 +1076,7 @@ onUnmounted(() => {
 .wizard-install-name {
   flex: 1 1 8rem;
   min-width: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--text-main);
   overflow-wrap: anywhere;
@@ -1085,7 +1085,7 @@ onUnmounted(() => {
 .wizard-install-detail {
   display: block;
   margin-top: 0.2rem;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   font-weight: 500;
   color: var(--color-danger-fg);
 }
@@ -1098,7 +1098,7 @@ onUnmounted(() => {
   gap: 0.35rem;
   padding: 0.25rem 0.6rem;
   border-radius: 6px;
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.03em;
 }

@@ -492,7 +492,7 @@ function onKey(event, id) {
   border-radius: 999px;
   background: var(--control-bg);
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 .hg-marker.is-sizing span {

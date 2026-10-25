@@ -26,7 +26,14 @@
   --radius-glass: 26px;
   --radius-tile: 18px;
   --btn-h: 2.5rem;
-  --btn-font: 0.88rem;
+  /* One type scale for every screen. Sizes are rem so they follow the fluid root below. */
+  --text-kicker: 0.75rem;
+  --text-body: 0.9375rem;
+  --text-ui: 1rem;
+  --text-strong: 1.125rem;
+  --text-title: 1.375rem;
+  --text-display: 1.625rem;
+  --btn-font: var(--text-body);
   --glass-shine: linear-gradient(160deg, rgb(255 255 255 / 0.12) 0%, rgb(255 255 255 / 0.03) 36%, transparent 62%);
   --glass-rim: linear-gradient(
     160deg,
@@ -179,7 +186,7 @@ body {
   color: var(--text-main);
   min-height: 100vh;
   line-height: 1.45;
-  font-size: 1rem;
+  font-size: var(--text-ui);
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -193,8 +200,9 @@ html {
   max-width: 100%;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  /* The mock is set at 14px; 15px keeps the same density without shrinking inputs below iOS's 16px zoom limit. */
-  font-size: 15px;
+  /* 16px on iPhone (keeps focused fields from zooming), about 17px on iPad,
+     18px on a MacBook, and 19px on a large display. */
+  font-size: clamp(16px, 14.5px + 0.28vw, 19px);
 }
 
 /* Background gradient blur glow */
@@ -282,13 +290,13 @@ html {
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 20px;
+  font-size: var(--text-title);
   color: var(--color-primary-contrast);
   box-shadow: var(--shadow-glow);
 }
 
 .brand-title {
-  font-size: 20px;
+  font-size: var(--text-title);
   font-weight: 700;
   letter-spacing: -0.02em;
   background: var(--brand-title-gradient);
@@ -297,7 +305,7 @@ html {
 }
 
 .brand-subtitle {
-  font-size: 12px;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   font-weight: 500;
 }
@@ -315,7 +323,7 @@ html {
   background: var(--bg-surface-elevated);
   padding: 6px 14px;
   border-radius: 9999px;
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: 500;
   border: 1px solid var(--border-subtle);
 }
@@ -353,14 +361,14 @@ html {
 }
 
 .auth-header h2 {
-  font-size: 24px;
+  font-size: var(--text-display);
   font-weight: 700;
   margin-bottom: 8px;
 }
 
 .auth-header p {
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--text-body);
 }
 
 /* Forms */
@@ -370,7 +378,7 @@ html {
 
 .form-label {
   display: block;
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--text-muted);
   margin-bottom: 8px;
@@ -383,7 +391,7 @@ html {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   color: var(--text-main);
-  font-size: 14px;
+  font-size: var(--text-ui);
   font-family: inherit;
   transition: all 0.2s ease;
 }
@@ -396,7 +404,7 @@ html {
 
 .form-help {
   display: block;
-  font-size: 11px;
+  font-size: var(--text-kicker);
   color: var(--text-dim);
   margin-top: 6px;
 }
@@ -409,7 +417,7 @@ html {
   gap: 8px;
   padding: 9px 18px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -442,7 +450,7 @@ html {
 
 .btn-sm {
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--text-kicker);
 }
 
 .btn-block {
@@ -470,7 +478,7 @@ html {
 }
 
 .stat-title {
-  font-size: 12px;
+  font-size: var(--text-kicker);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -479,7 +487,7 @@ html {
 }
 
 .stat-value {
-  font-size: 18px;
+  font-size: var(--text-strong);
   font-weight: 700;
   color: var(--text-main);
   display: flex;
@@ -488,7 +496,7 @@ html {
 }
 
 .stat-detail {
-  font-size: 12px;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   margin-top: 4px;
   font-family: var(--font-mono);
@@ -505,13 +513,13 @@ html {
 }
 
 .section-title {
-  font-size: 18px;
+  font-size: var(--text-strong);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
 .section-subtitle {
-  font-size: 13px;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 
@@ -572,19 +580,19 @@ html {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 18px;
+  font-size: var(--text-strong);
   color: var(--color-primary-text);
 }
 
 .app-info h3 {
-  font-size: 16px;
+  font-size: var(--text-ui);
   font-weight: 700;
   color: var(--text-main);
   margin-bottom: 2px;
 }
 
 .app-category {
-  font-size: 11px;
+  font-size: var(--text-kicker);
   font-weight: 600;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -592,7 +600,7 @@ html {
 }
 
 .app-desc {
-  font-size: 13px;
+  font-size: var(--text-body);
   color: var(--text-muted);
   margin-bottom: 16px;
   line-height: 1.45;
@@ -613,7 +621,7 @@ html {
   gap: 6px;
   padding: 3px 10px;
   border-radius: 9999px;
-  font-size: 11px;
+  font-size: var(--text-kicker);
   font-weight: 600;
 }
 
@@ -718,7 +726,7 @@ html {
 }
 
 .modal-title {
-  font-size: 17px;
+  font-size: var(--text-strong);
   font-weight: 700;
 }
 
@@ -727,7 +735,7 @@ html {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 20px;
+  font-size: var(--text-title);
 }
 
 .modal-close:hover {
@@ -739,7 +747,7 @@ html {
   padding: 16px 20px;
   overflow-y: auto;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-body);
   line-height: 1.6;
   color: #e2e8f0;
   flex: 1;
@@ -763,7 +771,7 @@ html {
 .alert {
   padding: 12px 16px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--text-body);
   margin-bottom: 16px;
   display: flex;
   align-items: center;
@@ -805,14 +813,14 @@ html {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 500;
   color: var(--text-muted);
 }
 
 .ui-field-hint {
   font-weight: 400;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   line-height: 1.45;
   color: var(--text-dim);
 }
@@ -829,7 +837,7 @@ textarea.ui-input {
   border-radius: 14px;
   color: var(--text-main);
   /* 16px minimum — iOS Safari zooms the viewport when focused inputs are smaller. */
-  font-size: 16px;
+  font-size: var(--text-ui);
   line-height: 1.3;
   box-sizing: border-box;
   font-family: inherit;
@@ -1020,7 +1028,7 @@ select.ui-input {
 .alert-banner {
   padding: 0.75rem 1rem;
   border-radius: 8px;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -1059,13 +1067,13 @@ select.ui-input {
 }
 
 .ui-switch-copy strong {
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--text-heading);
 }
 
 .ui-switch-copy span {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   font-weight: 400;
   color: var(--text-muted);
   line-height: 1.4;
@@ -1217,7 +1225,7 @@ select.ui-input {
 }
 
 .theme-card-name {
-  font-size: 0.95rem;
+  font-size: var(--text-body);
   font-weight: 700;
   padding-left: 0.2rem;
 }
@@ -1272,7 +1280,7 @@ select.ui-input {
   inset: 0;
   display: grid;
   place-items: center;
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -1299,7 +1307,7 @@ select.ui-input {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 
@@ -1314,7 +1322,7 @@ select.ui-input {
 }
 
 .glass-slider-hint {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   color: var(--text-dim);
 }
 

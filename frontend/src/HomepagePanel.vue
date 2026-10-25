@@ -2179,7 +2179,7 @@ onUnmounted(() => {
 }
 .home-muted {
   color: var(--text-muted);
-  font-size: 0.92rem;
+  font-size: var(--text-body);
 }
 .home-empty {
   padding: 1.5rem;
@@ -2294,7 +2294,7 @@ onUnmounted(() => {
 .home-dock-notes {
   margin: 0;
   padding: 0 0.6rem 0.2rem;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   text-align: center;
 }
@@ -2315,7 +2315,7 @@ onUnmounted(() => {
   container-type: size;
 }
 .home-hero-date {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2333,7 +2333,7 @@ onUnmounted(() => {
 }
 .home-hero-sub {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-ui);
   color: var(--text-main);
   text-shadow: var(--wallpaper-text-shadow);
 }
@@ -2384,7 +2384,7 @@ onUnmounted(() => {
   color: inherit;
   font: inherit;
   /* 16px keeps iOS from zooming the page when the field is focused. */
-  font-size: 16px;
+  font-size: var(--text-ui);
   -webkit-appearance: none;
   appearance: none;
   border-radius: 0;
@@ -2510,7 +2510,7 @@ onUnmounted(() => {
 .home-request-field {
   display: grid;
   gap: 0.3rem;
-  font-size: 0.92rem;
+  font-size: var(--text-body);
 }
 .home-request-actions {
   display: flex;
@@ -2526,7 +2526,7 @@ onUnmounted(() => {
 }
 .home-notice {
   color: var(--color-info);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
 }
 .home-notice-error {
   color: var(--color-danger, #f87171);
@@ -2556,14 +2556,14 @@ onUnmounted(() => {
 }
 .home-result-body span {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--text-body);
 }
 .home-result-body .home-status {
   justify-self: start;
   margin-top: 0.2rem;
   padding: 0.05rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   border: 1px solid currentColor;
 }
@@ -2612,7 +2612,7 @@ onUnmounted(() => {
 }
 .home-card h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
   font-weight: 800;
   letter-spacing: -0.01em;
 }
@@ -2659,7 +2659,7 @@ onUnmounted(() => {
   min-width: var(--btn-h);
   padding: 0;
   border-radius: 50%;
-  font-size: 1.15rem;
+  font-size: var(--text-strong);
 }
 .home-rail {
   flex: 1 1 auto;
@@ -2756,12 +2756,12 @@ onUnmounted(() => {
 .home-tile-fallback {
   display: grid;
   place-items: center;
-  font-size: 1.4rem;
+  font-size: var(--text-title);
   font-weight: 700;
   color: var(--text-muted);
 }
 .home-tile-title {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   font-weight: 700;
   line-height: 1.2;
   height: calc(1.2em * 2);
@@ -2773,7 +2773,7 @@ onUnmounted(() => {
   word-break: break-word;
 }
 .home-tile-meta {
-  font-size: 0.74rem;
+  font-size: var(--text-kicker);
   line-height: 1.25;
   height: 1.25em;
   color: var(--text-muted);
@@ -2805,7 +2805,7 @@ onUnmounted(() => {
 }
 .cal-head h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-ui);
 }
 .cal-nav,
 .cal-tools,
@@ -2872,7 +2872,7 @@ onUnmounted(() => {
   min-width: 0;
 }
 .cal-weekdays span {
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -2924,7 +2924,7 @@ onUnmounted(() => {
   background: color-mix(in srgb, rgba(var(--color-primary-rgb), 0.16) 55%, var(--bg-surface-elevated, var(--bg-card)));
 }
 .cal-num {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -2955,7 +2955,7 @@ onUnmounted(() => {
   border-left-color: var(--color-success, #10b981);
 }
 .cal-event-time {
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-family: var(--font-mono);
   color: var(--color-warning, #f59e0b);
 }
@@ -2963,11 +2963,11 @@ onUnmounted(() => {
   color: var(--color-success, #10b981);
 }
 .cal-event strong {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   line-height: 1.2;
 }
 .cal-event-detail {
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
@@ -3034,13 +3034,13 @@ onUnmounted(() => {
   border-radius: 12px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  font-size: 0.64rem;
+  font-size: var(--text-kicker);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: 0.04em;
 }
 .cal-chip strong {
-  font-size: 0.9rem;
+  font-size: var(--text-body);
 }
 .cal-row.is-today .cal-chip {
   background: var(--color-primary-button);
@@ -3052,14 +3052,14 @@ onUnmounted(() => {
   min-width: 0;
 }
 .cal-row-body strong {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cal-row-meta {
-  font-size: 0.74rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -3101,7 +3101,7 @@ onUnmounted(() => {
   gap: 0.4rem 0.6rem;
 }
 .home-card .cal-head h3 {
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
 }
 .home-card .ui-input {
   width: auto;
@@ -3110,7 +3110,7 @@ onUnmounted(() => {
   min-width: 0;
 }
 .home-card-stat {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   color: var(--color-success-fg);
 }
@@ -3161,7 +3161,7 @@ onUnmounted(() => {
 }
 .home-dl-count small {
   margin-left: 0.4rem;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 600;
   letter-spacing: 0;
   color: var(--text-muted);
@@ -3182,7 +3182,7 @@ onUnmounted(() => {
   gap: 0.6rem;
 }
 .home-dl-row strong {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 700;
   min-width: 0;
   white-space: nowrap;
@@ -3191,14 +3191,14 @@ onUnmounted(() => {
 }
 .home-dl-pct {
   flex: 0 0 auto;
-  font-size: 0.76rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
 }
 .home-dl-meta {
-  font-size: 0.74rem;
+  font-size: var(--text-kicker);
 }
 .home-when {
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--color-info);
   font-family: var(--font-mono);
 }
@@ -3224,7 +3224,7 @@ onUnmounted(() => {
 }
 .home-stuck summary {
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -3235,7 +3235,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.5rem 0.75rem;
   margin: 0.6rem 0;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
 }
 .home-card .home-stuck-item {
   display: flex;
@@ -3247,7 +3247,7 @@ onUnmounted(() => {
   display: grid;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
 }
 .home-stuck-remove {
   flex: 0 0 auto;
@@ -3284,13 +3284,13 @@ onUnmounted(() => {
   display: flex;
   gap: 0.5rem;
   align-items: flex-start;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .home-debug-state {
   flex: 0 0 auto;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 0.1rem 0.35rem;
@@ -3316,7 +3316,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.86rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .gh-status::before {
@@ -3353,7 +3353,7 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 .gh-label {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -3375,7 +3375,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -3460,7 +3460,7 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 .np-sub {
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -3490,7 +3490,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
 }
@@ -3670,7 +3670,7 @@ onUnmounted(() => {
   gap: 0.1rem;
 }
 .at-text strong {
-  font-size: 0.95rem;
+  font-size: var(--text-body);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -3678,7 +3678,7 @@ onUnmounted(() => {
 }
 .at-kind {
   flex: 0 0 auto;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .gh-empty {

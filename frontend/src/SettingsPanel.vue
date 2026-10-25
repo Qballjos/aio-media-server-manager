@@ -3056,13 +3056,13 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
 }
 .section-title {
-  font-size: 1.25rem;
+  font-size: var(--text-title);
   font-weight: 700;
   margin: 0;
   color: var(--text-heading);
 }
 .section-subtitle {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--text-dim);
   margin: 0.2rem 0 0;
 }
@@ -3077,7 +3077,7 @@ onBeforeUnmount(() => {
 }
 .settings-card-head h3 {
   margin: 0.4rem 0 0.35rem;
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
   color: var(--text-heading);
 }
 .settings-card-head p {
@@ -3087,7 +3087,7 @@ onBeforeUnmount(() => {
 }
 .accent-badge {
   display: inline-block;
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 0.2rem 0.5rem;
@@ -3131,7 +3131,7 @@ onBeforeUnmount(() => {
 }
 .info-grid dt {
   color: var(--text-dim);
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3139,7 +3139,7 @@ onBeforeUnmount(() => {
 .info-grid dd {
   margin: 0.3rem 0 0;
   color: var(--text-main);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   overflow-wrap: anywhere;
 }
 .storage-table-wrap {
@@ -3149,12 +3149,12 @@ onBeforeUnmount(() => {
 .storage-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
 }
 .storage-table th {
   text-align: left;
   color: var(--text-dim);
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0.4rem 0.6rem 0.65rem;
@@ -3175,7 +3175,7 @@ onBeforeUnmount(() => {
 .path-line {
   display: block;
   color: var(--text-dim);
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   overflow-wrap: anywhere;
 }
 .hostname-table-wrap {
@@ -3191,7 +3191,7 @@ onBeforeUnmount(() => {
   max-width: 12rem;
 }
 .hostname-preview {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
@@ -3207,7 +3207,7 @@ onBeforeUnmount(() => {
 .share-meta,
 .share-idle {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   margin-top: 0.55rem;
 }
 .setting-status {
@@ -3219,7 +3219,7 @@ onBeforeUnmount(() => {
 .setting-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3345,7 +3345,7 @@ onBeforeUnmount(() => {
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   text-transform: capitalize;
 }
 .error-log {
@@ -3356,7 +3356,7 @@ onBeforeUnmount(() => {
   max-height: 360px;
   overflow: auto;
   white-space: pre-wrap;
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   color: var(--text-main);
 }
 .brand-asset-list {
@@ -3399,11 +3399,11 @@ onBeforeUnmount(() => {
 }
 .brand-asset-copy strong {
   color: var(--text-heading);
-  font-size: 0.92rem;
+  font-size: var(--text-body);
 }
 .brand-asset-copy span {
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   line-height: 1.4;
 }
 .brand-asset-size {
@@ -3437,7 +3437,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 1.5rem;
+  font-size: var(--text-display);
   line-height: 1;
 }
 .account-avatar-preview img {
@@ -3469,10 +3469,10 @@ onBeforeUnmount(() => {
   gap: 0.15rem;
 }
 .theme-accent-copy strong {
-  font-size: 0.95rem;
+  font-size: var(--text-body);
 }
 .theme-accent-copy span {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .accent-picker {

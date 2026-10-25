@@ -135,7 +135,7 @@ watch(
   background: var(--color-warning-bg);
   color: var(--color-warning-fg);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 700;
   cursor: pointer;
 }
@@ -143,7 +143,7 @@ watch(
   position: absolute;
   right: 1rem;
   top: -1.4rem;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   color: var(--color-success-fg);
   opacity: 0;
@@ -159,7 +159,7 @@ watch(
   gap: 0.75rem;
   padding: 0.3rem 0.35rem 0.3rem 1rem;
   background: var(--control-bg);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
 }
 @media (prefers-reduced-motion: reduce) {

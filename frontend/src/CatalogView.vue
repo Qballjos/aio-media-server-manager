@@ -953,7 +953,7 @@ onUnmounted(() => {
   gap: 0.25rem;
   margin: 0 0 0.8rem;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
