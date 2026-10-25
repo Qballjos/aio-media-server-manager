@@ -82,6 +82,8 @@ const uploading = ref(false)
 let stopJobPollFn = null
 const form = ref({
   username: '',
+  first_name: '',
+  last_name: '',
   email: '',
   current_password: '',
   new_password: '',
@@ -936,6 +938,8 @@ async function loadAll() {
     if (meRes.ok) {
       const me = await readJson(meRes)
       form.value.username = me.username || 'admin'
+      form.value.first_name = me.first_name || ''
+      form.value.last_name = me.last_name || ''
       form.value.email = me.email || ''
       applyProfileAvatar(me)
       applyVisualsFromProfile(me)
@@ -1245,6 +1249,8 @@ async function saveAccount() {
     const body = {
       current_password: form.value.current_password,
       username: form.value.username,
+      first_name: form.value.first_name,
+      last_name: form.value.last_name,
       email: form.value.email
     }
     if (form.value.new_password) body.new_password = form.value.new_password
@@ -1917,7 +1923,7 @@ onBeforeUnmount(() => {
         <div class="settings-card-head">
           <span class="accent-badge">{{ $t('ACCOUNT') }}</span>
           <h3>{{ $t('Administrator') }}</h3>
-          <p>{{ $t('Current password is required for any change. Email is used for Seerr wiring.') }}</p>
+          <p>{{ $t('Current password is required for any change. The welcome line uses your first name when it is filled in. Email is used for Seerr wiring.') }}</p>
         </div>
         <div class="brand-asset-list account-avatar-block">
           <div class="brand-asset-row">
@@ -1962,6 +1968,12 @@ onBeforeUnmount(() => {
         <form class="form-stack" @submit.prevent="saveAccount">
           <label class="ui-field">{{ $t('Username') }}
             <input v-model="form.username" class="ui-input" required />
+          </label>
+          <label class="ui-field">{{ $t('First name') }}
+            <input v-model="form.first_name" class="ui-input" maxlength="80" autocomplete="given-name" />
+          </label>
+          <label class="ui-field">{{ $t('Last name') }}
+            <input v-model="form.last_name" class="ui-input" maxlength="80" autocomplete="family-name" />
           </label>
           <label class="ui-field">{{ $t('Email') }}
             <input v-model="form.email" type="email" class="ui-input" required />

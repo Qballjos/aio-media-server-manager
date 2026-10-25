@@ -25,6 +25,7 @@ import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepage
 const props = defineProps({
   systemInfo: { type: Object, default: null },
   username: { type: String, default: '' },
+  firstName: { type: String, default: '' },
 })
 const emit = defineEmits(['manage'])
 const route = useRoute()
@@ -333,7 +334,8 @@ const todayLabel = computed(() => new Date().toLocaleDateString(i18nLocale(), { 
 const greeting = computed(() => {
   const hour = new Date().getHours()
   const part = t(hour < 6 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening')
-  return props.username ? `${part}, ${props.username}.` : `${part}.`
+  const who = props.firstName.trim() || props.username
+  return who ? `${part}, ${who}.` : `${part}.`
 })
 /** One line under the greeting: what is moving and what needs a look. */
 const heroSummary = computed(() => {

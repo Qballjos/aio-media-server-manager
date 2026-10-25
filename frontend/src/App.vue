@@ -36,6 +36,8 @@ const authStatus = ref({
   setup_required: false,
   authenticated: false,
   username: null,
+  first_name: null,
+  last_name: null,
   avatar_url: null,
 })
 const catalogApps = ref([])
@@ -156,6 +158,8 @@ async function onAuthSession(data) {
     setup_required: false,
     authenticated: true,
     username: data.username,
+    first_name: data.first_name || null,
+    last_name: data.last_name || null,
     avatar_url: data.avatar_url || null,
   }
   applySession(data)
@@ -171,6 +175,8 @@ async function handleLogout() {
   clearSession()
   authStatus.value.authenticated = false
   authStatus.value.username = null
+  authStatus.value.first_name = null
+  authStatus.value.last_name = null
   authStatus.value.avatar_url = null
   vpnLive.value = {}
   cloudflareLive.value = {}
@@ -282,6 +288,8 @@ async function onWizardDone() {
 function onSettingsSession(data) {
   applySession(data)
   if (data?.username) authStatus.value.username = data.username
+  if (data && 'first_name' in data) authStatus.value.first_name = data.first_name || null
+  if (data && 'last_name' in data) authStatus.value.last_name = data.last_name || null
   if (data && 'avatar_url' in data) authStatus.value.avatar_url = data.avatar_url || null
 }
 
@@ -575,6 +583,7 @@ onUnmounted(() => {
           v-else-if="currentView === 'home'"
           :system-info="systemInfo"
           :username="authStatus.username || ''"
+          :first-name="authStatus.first_name || ''"
           @manage="openCatalog"
         />
         <CatalogView

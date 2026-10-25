@@ -287,7 +287,6 @@ onUnmounted(() => {
               class="auth-logo"
             />
             <h2>{{ $t('Sign in') }}</h2>
-            <p>{{ $t('Use the administrator username and password.') }}</p>
             <p v-if="brandLoginMessage" class="auth-personal-message">{{ brandLoginMessage }}</p>
           </div>
 
