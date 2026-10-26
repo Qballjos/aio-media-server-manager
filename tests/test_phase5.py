@@ -202,6 +202,42 @@ def test_vpn_wraps_wireguard_with_setpriv_uid(tmp_path: Path, monkeypatch):
     assert "qbittorrent-nox" in wrapped
 
 
+def test_vpn_wraps_wireguard_with_private_resolv(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+        vpn_protocol="wireguard",
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_is_linux", lambda: True)
+    monkeypatch.setattr(mgr, "_ensure_vpn_app_user", lambda: None)
+    monkeypatch.setattr(
+        "core.vpn.shutil.which",
+        lambda name: "/usr/bin/" + name if name in {"setpriv", "unshare"} else None,
+    )
+    # /run is not the test's to write; the config-dir fallback must be used.
+    original_mkdir = Path.mkdir
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        if str(self) == "/run/amm-vpn":
+            raise OSError("no /run")
+        return original_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    wrapped = mgr.wrap_torrent_command(["qbittorrent-nox"])
+    assert wrapped[:6] == ["unshare", "--mount", "--propagation", "private", "--", "sh"]
+    resolv = tmp_path / "config" / "vpn" / ".run" / "resolv.tunneled.conf"
+    assert resolv.read_text(encoding="utf-8") == "nameserver 1.1.1.1\nnameserver 1.0.0.1\n"
+    assert str(resolv) in wrapped
+    assert "qbittorrent-nox" in wrapped
+    assert f"--reuid={VPN_APP_UID}" in wrapped
+    from core.vpn import unwrap_isolation_command
+
+    assert unwrap_isolation_command(wrapped) == ["qbittorrent-nox"]
+
+
 def test_vpn_wrap_fails_closed_without_setpriv(tmp_path: Path, monkeypatch):
     from core.vpn import unwrap_isolation_command
 
@@ -358,6 +394,29 @@ def test_uid_kill_switch_without_readable_runtime_config(tmp_path: Path, monkeyp
     mgr._apply_uid_output_kill_switch("wg0")
     assert not any("--dport" in args for args in calls)
     assert sum("REJECT" in args for args in calls) == 2
+
+
+def test_uid_dns_redirect_only_targets_vpn_uid(tmp_path: Path, monkeypatch):
+    mgr = VpnManager(Settings(config_dir=tmp_path / "config"))
+    calls: list[list[str]] = []
+
+    def firewall(args):
+        calls.append(args)
+        code = 1 if "-C" in args else 0
+        return subprocess.CompletedProcess(args, code, "", "")
+
+    monkeypatch.setattr(mgr, "_host_iptables", firewall)
+    mgr._apply_uid_dns_redirect()
+    flat = [" ".join(args) for args in calls]
+    assert " ".join(["-t", "nat", "-A", "AMM-UID-DNS", "-p", "udp", "--dport", "53", "-j", "DNAT", "--to-destination", "1.1.1.1:53"]) in flat
+    assert " ".join(["-t", "nat", "-A", "AMM-UID-DNS", "-p", "tcp", "--dport", "53", "-j", "DNAT", "--to-destination", "1.1.1.1:53"]) in flat
+    assert f"-t nat -I OUTPUT 1 -m owner --uid-owner {VPN_APP_UID} -j AMM-UID-DNS" in flat
+    assert not any(row.startswith("-A ") or row.startswith("-I ") for row in flat)
+
+    mgr._clear_uid_dns_redirect()
+    cleared = [" ".join(args) for args in calls]
+    assert f"-t nat -D OUTPUT -m owner --uid-owner {VPN_APP_UID} -j AMM-UID-DNS" in cleared
+    assert "-t nat -X AMM-UID-DNS" in cleared
 
 
 @pytest.mark.parametrize(

@@ -4,7 +4,7 @@ core/vpn.py — Optional VPN isolation for BitTorrent, Prowlarr, and Flaresolver
 Usenet (SABnzbd/NZBGet) always stays on the host network. WireGuard runs in the
 container's main network namespace (the pattern that works on Synology). Only
 qBittorrent / Prowlarr / Flaresolverr are forced through wg0 via UID policy
-routing — no nested netns and no iptables NAT.
+routing — no nested netns. The only NAT is a DNS redirect for that uid.
 """
 
 from __future__ import annotations
@@ -45,6 +45,15 @@ _DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191}
 _FALLBACK_DNS = ("1.1.1.1", "9.9.9.9")
 _KS_CHAIN = "AMM-KS"
 _UID_KS_CHAIN = "AMM-UID-KS"
+_UID_DNS_CHAIN = "AMM-UID-DNS"
+# Public resolvers for the VPN uid only. They ride wg0 because that uid's
+# default route is the tunnel. The container resolver (the NAS) stays in place
+# for Sonarr, Radarr, Usenet and the manager. 1.0.0.1 is the second Cloudflare
+# address, used when 1.1.1.1 does not answer. Provider DNS from the profile
+# (Privado's 198.18.0.0/15, Surfshark, …) is not used: those resolvers are a
+# frequent cause of every indexer failing together while the handshake stays up.
+_VPN_UID_DNS_SERVERS = ("1.1.1.1", "1.0.0.1")
+_VPN_UID_DNS = _VPN_UID_DNS_SERVERS[0]
 _VPN_TABLE = 200
 _VPN_UID_RULE_PRIORITY = 100
 _VPN_RULE_PRIORITY = 100
@@ -57,8 +66,17 @@ _UID_REPLY_RULE_PRIORITY = 97
 
 
 def unwrap_isolation_command(cmd: list[str] | None) -> list[str]:
-    """Strip setpriv / netns / env wrappers so reclaim can match the real binary."""
+    """Strip setpriv / netns / resolv-mount / env wrappers so reclaim can match the real binary."""
     out = list(cmd or [])
+    if out and Path(out[0]).name == "unshare":
+        if "--" in out:
+            out = out[out.index("--") + 1 :]
+        if out and Path(out[0]).name == "sh":
+            out = out[1:]
+        if out and Path(out[0]).name == "enter-tunnel.sh":
+            out = out[1:]
+        if out and Path(out[0]).name == "resolv.tunneled.conf":
+            out = out[1:]
     if len(out) >= 4 and out[0] == "ip" and out[1] == "netns" and out[2] == "exec":
         out = out[4:]
     if out and Path(out[0]).name == "setpriv":
@@ -591,7 +609,7 @@ class VpnManager:
             self._ensure_vpn_app_user()
             home = f"/tmp/{VPN_APP_USER}"
             gid = self._vpn_app_gid()
-            return [
+            isolated = [
                 "setpriv",
                 f"--reuid={VPN_APP_UID}",
                 f"--regid={gid}",
@@ -603,11 +621,60 @@ class VpnManager:
                 f"LOGNAME={VPN_APP_USER}",
                 *cmd,
             ]
+            return self._wrap_tunneled_resolv(isolated)
         if shutil.which("ip") is None:
             raise VpnIsolationError(
                 "iproute2 (`ip`) is required for OpenVPN network-namespace isolation."
             )
         return ["ip", "netns", "exec", TORRENT_NETNS, *cmd]
+
+    def _wrap_tunneled_resolv(self, cmd: list[str]) -> list[str]:
+        """Show VPN apps a resolver of their own. Everyone else keeps the container file.
+
+        Hotio points the whole container at one resolver. AIO cannot: Usenet and
+        the Arr apps stay on the house network. A private mount of resolv.conf
+        does the split without iptables NAT, which DSM often rejects.
+        """
+        unshare = shutil.which("unshare")
+        resolv = self._write_tunneled_resolv() if unshare else None
+        if not unshare or resolv is None:
+            return cmd
+        script = resolv.parent / "enter-tunnel.sh"
+        # `sh script` still runs when the config volume is mounted noexec.
+        return [
+            unshare,
+            "--mount",
+            "--propagation",
+            "private",
+            "--",
+            "sh",
+            str(script),
+            str(resolv),
+            *cmd,
+        ]
+
+    def _write_tunneled_resolv(self) -> Path | None:
+        content = "".join(f"nameserver {server}\n" for server in _VPN_UID_DNS_SERVERS)
+        script = "#!/bin/sh\nmount --bind \"$1\" /etc/resolv.conf || exit 1\nshift\nexec \"$@\"\n"
+        for directory in (Path("/run/amm-vpn"), Path(self.settings.config_dir) / "vpn" / ".run"):
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+                path = directory / "resolv.tunneled.conf"
+                if not path.is_file() or path.read_text(encoding="utf-8") != content:
+                    path.write_text(content, encoding="utf-8")
+                    logger.info(
+                        "VPN apps resolve via %s. Other apps keep the container resolver.",
+                        ", ".join(_VPN_UID_DNS_SERVERS),
+                    )
+                launcher = directory / "enter-tunnel.sh"
+                if not launcher.is_file() or launcher.read_text(encoding="utf-8") != script:
+                    launcher.write_text(script, encoding="utf-8")
+                    launcher.chmod(0o755)
+                return path
+            except OSError:
+                continue
+        logger.warning("Could not write the VPN uid resolver. Tunneled apps keep the container DNS.")
+        return None
 
     def assert_can_start_tunneled_app(self, name: str) -> None:
         """Kill switch only applies while the VPN switch is on."""
@@ -1119,6 +1186,7 @@ class VpnManager:
         self._apply_uid_ipv6_blackhole()
         self._apply_uid_reply_routing()
         self._apply_uid_output_kill_switch(wg)
+        self._apply_uid_dns_redirect()
         return None
 
     def _house_interface(self) -> str | None:
@@ -1285,7 +1353,53 @@ class VpnManager:
             helper(["-F", _UID_KS_CHAIN])
             helper(["-X", _UID_KS_CHAIN])
 
+    def _apply_uid_dns_redirect(self) -> None:
+        """Fallback when a tunneled app still queries the container resolver.
+
+        The primary path is a private resolv.conf (see ``_wrap_tunneled_resolv``).
+        This DNAT covers the same uid if that mount is unavailable and the
+        kernel has the owner match. A missing nat table or owner match logs a
+        warning and leaves the tunnel up.
+        """
+        helper = self._host_iptables
+        helper(["-t", "nat", "-N", _UID_DNS_CHAIN])
+        helper(["-t", "nat", "-F", _UID_DNS_CHAIN])
+        for proto in ("udp", "tcp"):
+            result = helper(
+                [
+                    "-t", "nat", "-A", _UID_DNS_CHAIN,
+                    "-p", proto, "--dport", "53",
+                    "-j", "DNAT", "--to-destination", f"{_VPN_UID_DNS}:53",
+                ]
+            )
+            if result.returncode != 0:
+                logger.warning(
+                    "Could not redirect VPN uid DNS to %s: %s",
+                    _VPN_UID_DNS,
+                    (result.stderr or "")[:160],
+                )
+                return
+        jump = ["OUTPUT", "-m", "owner", "--uid-owner", str(VPN_APP_UID), "-j", _UID_DNS_CHAIN]
+        if helper(["-t", "nat", "-C", *jump]).returncode != 0:
+            result = helper(["-t", "nat", "-I", "OUTPUT", "1", *jump[1:]])
+            if result.returncode != 0:
+                logger.warning(
+                    "VPN uid DNS redirect unavailable (%s). "
+                    "Prowlarr keeps using the container resolver.",
+                    (result.stderr or "")[:160],
+                )
+                return
+        logger.info("VPN uid %s DNS redirected to %s; other apps keep the container resolver.", VPN_APP_UID, _VPN_UID_DNS)
+
+    def _clear_uid_dns_redirect(self) -> None:
+        helper = self._host_iptables
+        jump = ["OUTPUT", "-m", "owner", "--uid-owner", str(VPN_APP_UID), "-j", _UID_DNS_CHAIN]
+        helper(["-t", "nat", "-D", *jump])
+        helper(["-t", "nat", "-F", _UID_DNS_CHAIN])
+        helper(["-t", "nat", "-X", _UID_DNS_CHAIN])
+
     def _clear_uid_wireguard_routing(self) -> None:
+        self._clear_uid_dns_redirect()
         self._clear_uid_output_kill_switch()
         self._clear_uid_reply_routing()
         self._ip(
