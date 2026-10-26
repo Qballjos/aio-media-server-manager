@@ -55,7 +55,7 @@ Wenn User Home nicht aktiv ist, legen Sie es unter Credentials → Users an, ode
    - `/mnt/tank/backups/aio-media-manager` → `/backups`
    - `/sys` → `/host/sys` (nur lesend), damit die Server-Karte auf Start den Netzwerkverkehr des Servers zeigt. Ohne diesen Mount ist die Grafik nur der Verkehr dieses Containers.
 5. Umgebung: `PUID` / `PGID` = die UID/GID aus Ihrem `chown`, plus `TZ`, `AMM_DOWNLOAD_DIR=/data/downloads` und `AMM_MEDIA_DIR=/data/media`. Optional `GITHUB_TOKEN` für das GitHub-Limit (oder Einstellungen → Updates nach der Ersteinrichtung).
-6. Privileged / `NET_ADMIN`, wenn Sie das qBittorrent-VPN einschalten.
+6. Privileged / `NET_ADMIN`, wenn Sie VPN für qBittorrent, Prowlarr und Flaresolverr einschalten. Diese Apps warten auf einen Live-Tunnel; ihr DNS wird über den Tunnel gecacht (Usenet bleibt draußen). Details: [DOCKER.md](DOCKER.md#optionales-vpn).
 7. GPU: reichen Sie `/dev/dri` durch (Intel/AMD) oder die NVIDIA-Laufzeit beim Transkodieren.
 
 Die Oberfläche des Managers ist `http://<truenas-ip>:8080`. Erstellen Sie die Custom App nach einem Image-Update neu, damit neu veröffentlichte Ports gelten.

@@ -19,8 +19,9 @@ Vervang het IP (en de poort, als je die hebt gewijzigd).
 
 1. Maak het **beheerders**account wanneer daarom wordt gevraagd (gebruikersnaam, **e-mail**, wachtwoord).
 2. Rond de wizard van de eerste start af: de apps die je wilt, een Usenet-server als je die gebruikt, optioneel VPN en een optionele Cloudflare Tunnel. De wizard installeert die keuze. De tunnel en de VPN starten meteen als de wizard klaar is, als je ze hebt aangezet.
-3. Wacht tot **Catalogus** die apps als **actief** toont. Gebruik **Interface openen** voor alles wat nog een eigen account heeft (Plex, Jellyfin, NZBGet).
-4. Voeg later meer toe vanuit **Catalogus**. Je hebt niet elke app nodig.
+3. Na het opnieuw aanmaken van de container antwoordt het dashboard terwijl apps nog starten. Met VPN aan wachten qBittorrent, Prowlarr en Flaresolverr tot de WireGuard-handshake klaar is (AIO probeert de VPN opnieuw als de eerste poging mislukt). Cloudflare Tunnel start als laatste, nadat de apps antwoorden, zodat cloudflared geen connection refused logt tegen origins die nog niet luisteren.
+4. Wacht tot **Catalogus** die apps als **actief** toont. Gebruik **Interface openen** voor alles wat nog een eigen account heeft (Plex, Jellyfin, NZBGet).
+5. Voeg later meer toe vanuit **Catalogus**. Je hebt niet elke app nodig.
 
 Begin klein (bijvoorbeeld Radarr + één downloadclient + Jellyfin) en voeg de rest daarna toe.
 
@@ -105,7 +106,7 @@ Namen in de interface kunnen kort zijn; dit is wat ze in de praktijk betekenen.
 | **Systeem** | Tijdzone, logniveau, PUID/PGID en de AIO-versie. Opslagpaden staan hier; mounts wijzig je in compose, niet in dit scherm. De luisterpoort van de manager is alleen compose/env |
 | **Updates** | Updates van geïnstalleerde apps controleren en toepassen, één voor één of allemaal. Schema’s staan standaard **uit**. Een nieuwere AIO-image is alleen een melding — ophalen en opnieuw aanmaken op de host |
 | **Back-ups** | Config-back-up, controleren, herstellen per app en een schema |
-| **Netwerk** | VPN voor qBittorrent, Prowlarr en Flaresolverr (Usenet blijft erbuiten), Cloudflare Tunnel, publieke subdomeinen en vertrouwde proxy’s |
+| **Netwerk** | VPN voor qBittorrent, Prowlarr en Flaresolverr (Usenet blijft erbuiten), met een lokale DNS-cache voor die apps zodat korte tunnelhaperingen Prowlarr-indexers niet offline gooien; Cloudflare Tunnel (start na de apps bij boot); publieke subdomeinen; en vertrouwde proxy’s |
 | **Meldingen** | Discord-webhook en e-mail als een app blijft crashen, de VPN of tunnel wegvalt, er een update is, of een schijf over 90% vol is |
 | **Usenet** | Nieuwsserver (host, poort, SSL, login, verbindingen), gestuurd naar SABnzbd en NZBGet. NZB-indexers voeg je toe in Prowlarr |
 | **Startpagina** | Aanmeldtekst, app-balk en Jellyfin- / Seerr-API-sleutels als Start ze niet kan lezen |
@@ -217,6 +218,9 @@ De image werkt die apps niet vanzelf bij. Lees de release-opmerkingen op GitHub 
 | De servergrafiek telt alleen deze container | Mount host-`/sys` alleen-lezen op `/host/sys` en maak opnieuw aan ([Docker](deploy/DOCKER.md)) |
 | Recent toegevoegd van Jellyfin lijkt kort | Scroll de rij — er worden meer pagina’s geladen. Blijft de rij leeg, zet dan een Jellyfin-API-sleutel bij **Instellingen → Startpagina** |
 | Recent toegevoegd van Plex stopt bij 20 | Die lijst is de laatste 20 van Plex |
+| qBittorrent / Prowlarr / Flaresolverr blijven gestopt na boot | VPN staat aan zonder live handshake. Kijk bij **Instellingen → Netwerk**; AIO probeert de tunnel opnieuw en start die apps als hij omhoog is. Een handmatige VPN-**Stop** annuleert die poging |
+| Prowlarr-indexers niet beschikbaar / RSS-fouten | Vaak een DNS-timeout via de VPN. Maak na een AIO-update de container opnieuw aan, klik daarna **Test All** in Prowlarr (en test opnieuw in Sonarr/Radarr) zodat de oude fout-backoff weg is. Een debug-share toont hits van de VPN-DNS-cache en fouten per resolver |
+| cloudflared logt connection refused bij boot | Verwacht op oudere images toen de tunnel vóór de apps startte. Huidige images starten Cloudflare als laatste; maak opnieuw aan vanaf een actuele `nightly` / `latest` |
 
 ---
 

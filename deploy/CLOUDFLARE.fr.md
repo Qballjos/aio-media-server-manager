@@ -59,6 +59,8 @@ Cloudflare affiche des commandes d’installation pour Docker, Windows, et ainsi
 4. Le statut doit afficher **Enabled**, **Token saved**, **Tunnel up** et **cloudflared ready**.  
    La pastille **CF** de l’en-tête passe au vert/bleu quand tout va bien.
 
+Au démarrage du conteneur, AIO démarre d’abord le VPN (s’il est activé) et les apps du catalogue, puis `cloudflared` en dernier pour qu’il ne sonde pas des origines encore en démarrage. Le tableau de bord reste joignable pendant ce temps. Après l’assistant de première exécution, le tunnel démarre toujours dès que vous terminez (avant ou avec le VPN), pour pouvoir publier les noms d’hôte tout de suite.
+
 Bloqué sur **Tunnel down** ? Regardez les journaux cloudflared dans Catalogue/Diagnostic, l’accès sortant vers Cloudflare (port **7844**), et qu’aucun autre processus n’utilise le même jeton.
 
 ---
@@ -209,11 +211,12 @@ Porte de connexion Access : [CLOUDFLARE_ACCESS.md](CLOUDFLARE_ACCESS.md) — les
 | Symptôme | À vérifier |
 |---------|----------------|
 | Pas connecté | `eyJ…` complet collé ; un seul `cloudflared` utilise ce jeton |
-| 502 sur le nom d’hôte | Le service doit être `http://127.0.0.1:PORT` dans AIO, pas une IP du LAN |
+| 502 sur le nom d’hôte | Le service doit être `http://127.0.0.1:PORT` dans AIO, pas une IP du LAN. Juste après le boot, attendez que le Catalogue montre l’app **active** — cloudflared démarre après les apps, mais une app très lente peut encore donner un 502 un instant |
 | Ouvrir l’interface échoue via le tunnel | Ajoutez une Published application pour `https://app.your.domain` ; définissez **Domaine public des apps** dans AIO ; n’attendez pas `:8989` sur le nom d’hôte du gestionnaire |
 | Ça marche sur le LAN, pas à distance | Pare-feu sortant / port **7844** ; CNAME DNS vers `<tunnel-id>.cfargotunnel.com` et l’ingress de la published application |
 | Connexion ou cookies bizarres | Laissez les proxys de confiance vides pour un tunnel seul |
 | Champ du jeton vide après enregistrement | Normal — stocké sur le disque, jamais réaffiché |
+| Connection refused dans les journaux cloudflared à chaque boot | Tirez une image actuelle et **recréez** le conteneur. Les anciennes builds démarraient le tunnel avant les apps ; les builds actuelles le démarrent en dernier |
 
 ---
 

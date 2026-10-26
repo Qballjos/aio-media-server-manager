@@ -98,8 +98,8 @@ Kopieer [`.env.example`](../.env.example) voor native installs. Veel hiervan kun
 | `TZ` / `AMM_TIMEZONE` | Tijdzone voor logs en schema’s |
 | `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Paden in de container (host-mounts wijzig je in compose) |
 | `GITHUB_TOKEN` | Optioneel; hogere GitHub-API-limiet voor updates |
-| `AMM_CLOUDFLARE_TUNNEL_*` | Optionele tunnel voor toegang van buitenaf |
-| `AMM_VPN_*` | Optionele VPN voor torrent-gerelateerde apps |
+| `AMM_CLOUDFLARE_TUNNEL_*` | Optionele tunnel voor toegang van buitenaf (`cloudflared` start na de apps bij boot) |
+| `AMM_VPN_*` | Optionele VPN voor qBittorrent, Prowlarr en Flaresolverr (ze wachten op de tunnel; lokale DNS-cache voor die apps) |
 
 ## Als er iets misgaat
 

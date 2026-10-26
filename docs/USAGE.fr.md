@@ -19,8 +19,9 @@ Remplacez l’IP (et le port, si vous l’avez changé).
 
 1. Créez le compte **administrateur** quand on vous le demande (nom, **e-mail**, mot de passe).
 2. Terminez l’assistant de première exécution : les apps voulues, un serveur Usenet si vous en utilisez un, un VPN facultatif et un Cloudflare Tunnel facultatif. L’assistant installe ce choix. Le tunnel et le VPN démarrent dès que l’assistant est fini, si vous les avez activés.
-3. Attendez que **Catalogue** affiche ces apps comme **actives**. Utilisez **Ouvrir l’interface** pour tout ce qui a encore un compte propre (Plex, Jellyfin, NZBGet).
-4. Ajoutez-en plus tard depuis **Catalogue**. Vous n’avez pas besoin de chaque app.
+3. Après une recréation du conteneur, le tableau de bord répond pendant que les apps démarrent encore. Avec le VPN activé, qBittorrent, Prowlarr et Flaresolverr attendent que la poignée de main WireGuard soit établie (AIO réessaie le VPN si le premier essai échoue). Cloudflare Tunnel démarre en dernier, une fois que les apps répondent, pour que cloudflared ne journalise pas de connection refused vers des origines qui n’écoutent pas encore.
+4. Attendez que **Catalogue** affiche ces apps comme **actives**. Utilisez **Ouvrir l’interface** pour tout ce qui a encore un compte propre (Plex, Jellyfin, NZBGet).
+5. Ajoutez-en plus tard depuis **Catalogue**. Vous n’avez pas besoin de chaque app.
 
 Commencez petit (par exemple Radarr + un client de téléchargement + Jellyfin), puis ajoutez le reste.
 
@@ -105,7 +106,7 @@ Les noms dans l’interface peuvent être courts ; voici ce qu’ils veulent dir
 | **Système** | Fuseau horaire, niveau de journal, PUID/PGID et version d’AIO. Les chemins de stockage sont ici ; les montages se changent dans Compose, pas dans cet écran. Le port d’écoute du gestionnaire est seulement Compose/environnement |
 | **Mises à jour** | Vérifier et appliquer les mises à jour des apps installées, une par une ou toutes. Les planifications sont **désactivées** par défaut. Une image AIO plus récente n’est qu’un signal — tirez et recréez sur l’hôte |
 | **Sauvegardes** | Sauvegarde de la config, vérification, restauration par app et une planification |
-| **Réseau** | VPN pour qBittorrent, Prowlarr et Flaresolverr (Usenet reste dehors), Cloudflare Tunnel, sous-domaines publics et proxys de confiance |
+| **Réseau** | VPN pour qBittorrent, Prowlarr et Flaresolverr (Usenet reste dehors), avec un cache DNS local pour ces apps afin qu’un court trou du tunnel ne coupe pas les indexeurs Prowlarr ; Cloudflare Tunnel (démarre après les apps au boot) ; sous-domaines publics ; et proxys de confiance |
 | **Notifications** | Webhook Discord et e-mail si une app continue de planter, si le VPN ou le tunnel tombe, s’il y a une mise à jour, ou si un disque dépasse 90 % |
 | **Usenet** | Serveur de news (hôte, port, SSL, identifiants, connexions), envoyé à SABnzbd et NZBGet. Les indexeurs NZB s’ajoutent dans Prowlarr |
 | **Page d’accueil** | Texte de connexion, barre d’apps et clés d’API Jellyfin / Seerr si Accueil ne peut pas les lire |
@@ -217,6 +218,9 @@ L’image ne met pas ces apps à jour toute seule. Lisez les notes de version su
 | Le graphique serveur ne compte que ce conteneur | Montez `/sys` de l’hôte en lecture seule sur `/host/sys` et recréez ([Docker](deploy/DOCKER.md)) |
 | Ajouts récents Jellyfin semblent courts | Faites défiler la rangée — d’autres pages se chargent. Si la rangée reste vide, mettez une clé d’API Jellyfin dans **Réglages → Page d’accueil** |
 | Ajouts récents Plex s’arrêtent à 20 | Cette liste, ce sont les 20 derniers de Plex |
+| qBittorrent / Prowlarr / Flaresolverr restent arrêtés après le boot | Le VPN est actif sans poignée de main. Vérifiez **Réglages → Réseau** ; AIO réessaie le tunnel et démarre ces apps quand il est à nouveau up. Un **Stop** manuel du VPN annule cette reprise |
+| Indexeurs Prowlarr indisponibles / échecs RSS | Souvent un délai DNS via le VPN. Après une mise à jour d’AIO, recréez le conteneur, puis **Test All** dans Prowlarr (et retestez dans Sonarr/Radarr) pour effacer l’ancien backoff. Un partage de diagnostic montre les hits du cache DNS VPN et les échecs par résolveur |
+| cloudflared journalise connection refused au boot | Attendu sur les anciennes images où le tunnel démarrait avant les apps. Les images actuelles démarrent Cloudflare en dernier ; recréez depuis un `nightly` / `latest` actuel |
 
 ---
 

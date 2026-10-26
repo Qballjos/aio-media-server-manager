@@ -153,8 +153,15 @@ sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager/config/vpn
 
 1. Set `AMM_VPN_ENABLED=true` (and `AMM_VPN_ENFORCE=true` if torrents must not run without VPN).
 2. Leave Usenet clients off the VPN — they use the normal network.
+3. Save the profile under **Settings → Network** (or mount it and enable via env), then **recreate** the container so WireGuard comes up on boot.
 
-Privileged mode is required for network namespaces and `/dev/net/tun`.
+Privileged mode is required for `/dev/net/tun` and the VPN uid routing (WireGuard in the main network namespace; torrent apps run as a dedicated uid). Synology often needs **wireguard-go** from the image when the host has no WireGuard kernel module — see [SYNOLOGY.md](SYNOLOGY.md).
+
+### What AIO does while VPN is on
+
+- Those three apps start only after a live WireGuard handshake. If the tunnel is down at boot, they wait; AIO retries the VPN with backoff and starts them when it is up. A manual VPN **Stop** cancels that retry.
+- DNS for those apps goes through a small caching forwarder inside AIO (`127.0.0.153`), bound to the tunnel interface so lookups cannot leak onto the house WAN. It asks several public resolvers in parallel and can serve a recent answer when upstream is briefly quiet — which keeps Prowlarr indexers from failing on a single timeout. Other apps (Sonarr, Radarr, SABnzbd, …) keep the container resolver.
+- Usenet traffic never uses the tunnel.
 
 ---
 

@@ -98,8 +98,8 @@ Copiez [`.env.example`](../.env.example) pour une installation native. Beaucoup 
 | `TZ` / `AMM_TIMEZONE` | Fuseau pour les journaux et les planifications |
 | `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Chemins dans le conteneur (les montages hôte se changent dans Compose) |
 | `GITHUB_TOKEN` | Facultatif ; limite d’API GitHub plus haute pour les mises à jour |
-| `AMM_CLOUDFLARE_TUNNEL_*` | Tunnel distant facultatif |
-| `AMM_VPN_*` | VPN facultatif pour les apps liées au torrent |
+| `AMM_CLOUDFLARE_TUNNEL_*` | Tunnel distant facultatif (`cloudflared` démarre après les apps au boot) |
+| `AMM_VPN_*` | VPN facultatif pour qBittorrent, Prowlarr et Flaresolverr (ils attendent le tunnel ; cache DNS local pour ces apps) |
 
 ## Si quelque chose ne va pas
 
