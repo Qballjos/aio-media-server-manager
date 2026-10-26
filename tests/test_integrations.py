@@ -874,3 +874,35 @@ def test_optimization_hooks(tmp_path: Path):
     assert "hourly_cap" in sonarr_hunt
     assert "http://127.0.0.1:8989" in sonarr_hunt
     assert (tmp_path / "neutarr" / "lidarr.json").is_file()
+
+
+def test_neutarr_wiring_fills_empty_default_instance(tmp_path: Path):
+    root = tmp_path / "neutarr"
+    root.mkdir()
+    (root / "sonarr.json").write_text(
+        '{"instances":[{"name":"Default","api_url":"","api_key":"","enabled":false}],"sleep_duration":1200}\n',
+        encoding="utf-8",
+    )
+    (root / "radarr.json").write_text(
+        '{"instances":[{"name":"Radarr (AMM)","api_url":"http://127.0.0.1:7878","api_key":"kept","enabled":true}]}\n',
+        encoding="utf-8",
+    )
+    write_neutarr_config(
+        root,
+        sonarr_url="http://127.0.0.1:8989",
+        sonarr_key="sonarr-key",
+        radarr_url="http://127.0.0.1:7878",
+        radarr_key="radarr-key",
+    )
+    sonarr = json.loads((root / "sonarr.json").read_text(encoding="utf-8"))
+    assert sonarr["instances"] == [
+        {
+            "name": "Sonarr (AMM)",
+            "api_url": "http://127.0.0.1:8989",
+            "api_key": "sonarr-key",
+            "enabled": True,
+        }
+    ]
+    assert sonarr["sleep_duration"] == 1200
+    radarr = json.loads((root / "radarr.json").read_text(encoding="utf-8"))
+    assert radarr["instances"][0]["api_key"] == "kept"

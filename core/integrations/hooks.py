@@ -57,7 +57,7 @@ def write_neutarr_config(
             encoding="utf-8",
         )
 
-    _write_json_if_missing(
+    _write_hunt_config(
         root / "sonarr.json",
         {
             "instances": [
@@ -78,7 +78,7 @@ def write_neutarr_config(
             "hourly_cap": 20,
         },
     )
-    _write_json_if_missing(
+    _write_hunt_config(
         root / "radarr.json",
         {
             "instances": [
@@ -100,7 +100,7 @@ def write_neutarr_config(
         },
     )
     if lidarr_url:
-        _write_json_if_missing(
+        _write_hunt_config(
             root / "lidarr.json",
             {
                 "instances": [
@@ -124,7 +124,35 @@ def write_neutarr_config(
     return general
 
 
-def _write_json_if_missing(path: Path, payload: dict[str, Any]) -> None:
-    if path.exists():
+def _instance_is_wired(instance: object) -> bool:
+    if not isinstance(instance, dict):
+        return False
+    return bool(str(instance.get("api_url") or "").strip() and str(instance.get("api_key") or "").strip())
+
+
+def _write_hunt_config(path: Path, payload: dict[str, Any]) -> None:
+    """Write a NeutArr app file, or fill one NeutArr already created empty.
+
+    NeutArr copies default ``sonarr.json`` / ``radarr.json`` on startup, with a
+    disabled instance named Default and no API key. Skipping those files leaves
+    the app unwired. A file that already has a URL and key is left as-is.
+    """
+    if not path.exists():
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         return
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    try:
+        current = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        current = {}
+    if not isinstance(current, dict):
+        current = {}
+    instances = current.get("instances")
+    if isinstance(instances, list) and any(_instance_is_wired(item) for item in instances):
+        return
+    desired = payload.get("instances") or []
+    if not any(_instance_is_wired(item) for item in desired):
+        return
+    merged = dict(payload)
+    merged.update({key: value for key, value in current.items() if key != "instances"})
+    merged["instances"] = desired
+    path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
