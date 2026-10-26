@@ -682,6 +682,9 @@ def test_homepage_seerr_trending_row(tmp_path):
                             "title": "Trending Hit",
                             "posterPath": "/t.jpg",
                             "releaseDate": "2026-01-15",
+                            "overview": "A court herbalist solves mysteries.",
+                            "voteAverage": 8.2,
+                            "voteCount": 400,
                             "mediaInfo": {"status": 1},
                         },
                         {
@@ -713,6 +716,8 @@ def test_homepage_seerr_trending_row(tmp_path):
     assert snap["trending"][0]["detail"] == "2026"
     assert snap["trending"][0]["can_request"] is True
     assert snap["trending"][0]["mediaId"] == 99
+    assert snap["trending"][0]["overview"] == "A court herbalist solves mysteries."
+    assert snap["trending"][0]["voteAverage"] == 8.2
     assert "image.tmdb.org" in snap["trending"][0]["poster"]
     assert snap["trending"][1]["title"] == "Hot Show"
     assert snap["trending"][1]["can_request"] is False

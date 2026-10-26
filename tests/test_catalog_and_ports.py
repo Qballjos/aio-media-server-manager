@@ -12,6 +12,7 @@ from applications.catalog import ApplicationCatalog
 from applications.manifest import AppCategory, AppTier
 from core.port_manager import PortManager
 from core.settings import Settings
+from core.integrations.lifecycle import boot_autostart_order
 
 
 @pytest.fixture
@@ -39,6 +40,21 @@ def test_catalog_discovery():
         "seerr",
     }
     assert expected_mvp.issubset(app_names), f"Missing apps: {expected_mvp - app_names}"
+
+
+def test_boot_starts_download_clients_before_arr():
+    """Sonarr health-checks qBittorrent the moment it starts, so the client must already be up."""
+    catalog = ApplicationCatalog()
+    names = [plugin.name for plugin in catalog.all_plugins()]
+    order = boot_autostart_order(names)
+    for client in ("qbittorrent", "sabnzbd", "flaresolverr"):
+        assert order.index(client) < order.index("sonarr")
+        assert order.index(client) < order.index("radarr")
+        assert order.index(client) < order.index("prowlarr")
+    assert order.index("prowlarr") < order.index("sonarr")
+    assert order.index("jellyfin") > order.index("radarr")
+    # Catalog display order is unchanged; only the boot sequence is rearranged.
+    assert names.index("prowlarr") < names.index("qbittorrent")
 
 
 def test_catalog_manifest_metadata():

@@ -410,11 +410,22 @@ def homepage_title(host: str, scheme: str, media_type: str, media_id: int) -> di
     }
     kind = "tv" if media_type == "tv" else "movie"
     base = f"http://127.0.0.1:{plugin.port}/api/v1/{kind}/{int(media_id)}"
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        fut_detail = pool.submit(_fetch_json, base, headers=headers, timeout=4)
-        fut_ratings = pool.submit(_fetch_json, f"{base}/ratings", headers=headers, timeout=4)
-        data, error = fut_detail.result()
-        ratings, _ratings_error = fut_ratings.result()
+    # Ratings scrape Rotten Tomatoes and IMDb and can sit open long after the title itself is back.
+    # Leaving the pool without waiting means that scrape cannot hold the dialog response.
+    pool = ThreadPoolExecutor(max_workers=2)
+    try:
+        fut_detail = pool.submit(_fetch_json, base, headers=headers, timeout=6)
+        fut_ratings = pool.submit(_fetch_json, f"{base}/ratings", headers=headers, timeout=3)
+        try:
+            data, error = fut_detail.result(timeout=7)
+        except TimeoutError:
+            data, error = None, "timed out after 6s"
+        try:
+            ratings, _ratings_error = fut_ratings.result(timeout=3)
+        except TimeoutError:
+            ratings = None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
     if not isinstance(data, dict):
         detail = f"Seerr did not return this title ({error})." if error else "Seerr did not return this title."
         return {"ok": False, "detail": detail}
@@ -1981,11 +1992,14 @@ def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str, scheme: str =
         year = str(row.get("releaseDate") or row.get("firstAirDate") or "")[:4]
         status = seerr_media_status(row)
         path = f"tv/{media_id}" if media_type == "tv" else f"movie/{media_id}"
+        vote_count = _as_int(row.get("voteCount"))
         items.append(
             {
                 "source": "seerr",
                 "title": title,
                 "detail": year or ("TV" if media_type == "tv" else "Movie"),
+                "overview": " ".join(str(row.get("overview") or "").split())[:4000],
+                "voteAverage": _score_10(row.get("voteAverage")) if vote_count else None,
                 "poster": f"https://image.tmdb.org/t/p/w185{poster}" if poster else "",
                 "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
                 "mediaType": media_type,

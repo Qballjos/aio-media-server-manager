@@ -21,8 +21,34 @@ from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager
 
 logger = logging.getLogger(__name__)
 
+# Sonarr, Radarr, and Prowlarr probe these as soon as their own process is up
+# and keep a "connection refused" health warning until the next check (~15 min).
+_LISTEN_BEFORE_ARR = frozenset({"flaresolverr", "qbittorrent", "sabnzbd", "nzbget"})
+_BOOT_ARR = frozenset({"sonarr", "radarr", "lidarr"})
+_LISTEN_WAIT_SECONDS = 40.0
+
 _wiring_lock = asyncio.Lock()
 _pending_wiring = 0
+
+
+def boot_autostart_order(names: list[str]) -> list[str]:
+    """Start clients before the apps that health-check them on startup.
+
+    Catalog order starts Prowlarr, Sonarr, and Radarr first and qBittorrent
+    and FlareSolverr last. Those checks then run against a closed port.
+    """
+
+    def rank(name: str) -> int:
+        if name in _LISTEN_BEFORE_ARR:
+            return 0
+        if name == "prowlarr":
+            return 1
+        if name in _BOOT_ARR:
+            return 2
+        return 3
+
+    position = {name: index for index, name in enumerate(names)}
+    return sorted(names, key=lambda name: (rank(name), position[name]))
 
 
 async def schedule_full_wiring(*, wait_for_apps: bool = False) -> dict[str, Any]:
@@ -219,10 +245,13 @@ async def start_tunneled_apps(names: list[str] | None = None) -> list[str]:
     supervisor = ProcessSupervisor.get()
     log_dir = settings.config_dir / "logs"
     wanted = set(names) if names is not None else set(VPN_TUNNELED_APPS)
+    order = boot_autostart_order(sorted(name for name in wanted if name in VPN_TUNNELED_APPS))
     started: list[str] = []
-    for name in sorted(wanted):
-        if name not in VPN_TUNNELED_APPS:
-            continue
+    pending_listen: list[BaseApplication] = []
+    for name in order:
+        if name == "prowlarr" and pending_listen:
+            await _wait_listeners(pending_listen)
+            pending_listen = []
         if not catalog.has(name):
             continue
         plugin = catalog.get(name)
@@ -242,6 +271,8 @@ async def start_tunneled_apps(names: list[str] | None = None) -> list[str]:
                 log_dir=log_dir,
             )
             started.append(name)
+            if name in _LISTEN_BEFORE_ARR:
+                pending_listen.append(plugin)
         except Exception as exc:
             logger.warning("Could not start tunneled app %s: %s", name, exc)
     return started
@@ -259,6 +290,25 @@ async def _wait_healthy(plugin: BaseApplication, timeout: float = 90.0) -> bool:
             pass
         await asyncio.sleep(1.5)
     return False
+
+
+async def _wait_listeners(plugins: list[BaseApplication], timeout: float = _LISTEN_WAIT_SECONDS) -> None:
+    """Wait until download clients answer, without stacking one timeout per app."""
+    if not plugins:
+        return
+    results = await asyncio.gather(
+        *(_wait_healthy(plugin, timeout=timeout) for plugin in plugins),
+        return_exceptions=True,
+    )
+    for plugin, result in zip(plugins, results):
+        if result is True:
+            continue
+        logger.warning(
+            "%s did not answer on %s within %.0fs; *Arr may report connection refused until its next check.",
+            plugin.manifest.display_name,
+            plugin.health_check_url(),
+            timeout,
+        )
 
 
 async def _wait_wiring_prereqs(timeout: float = 90.0) -> None:

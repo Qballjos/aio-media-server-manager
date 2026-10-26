@@ -800,30 +800,56 @@ function closeTrending() {
   trendingDetail.value = null
 }
 
+function trendingSeed(item) {
+  return {
+    title: item.title,
+    overview: item.overview || '',
+    year: item.detail || '',
+    poster: item.poster || '',
+    voteAverage: item.voteAverage ?? null,
+    imdb: null,
+    rtCritics: null,
+    rtAudience: null,
+    trailer: '',
+    url: item.url || '',
+    status: item.status,
+    can_request: item.can_request,
+  }
+}
+
 async function openTrending(item) {
   if (!item?.mediaId) return
-  trendingDetail.value = { item, loading: true, error: '', data: null }
+  const key = `${item.mediaType}:${item.mediaId}`
+  trendingDetail.value = { key, item, loading: !item.overview, pending: true, error: '', data: trendingSeed(item) }
   try {
     const res = await apiRequest(
       `/api/homepage/title?mediaType=${encodeURIComponent(item.mediaType || '')}&mediaId=${encodeURIComponent(item.mediaId)}`,
+      { signal: AbortSignal.timeout(12000) },
     )
     const data = await readJson(res)
-    if (trendingDetail.value?.item !== item) return
+    if (trendingDetail.value?.key !== key) return
     if (!res.ok) {
       trendingDetail.value = {
         ...trendingDetail.value,
         loading: false,
-        error: apiError(data, t('Could not load this title from Seerr.')),
+        pending: false,
+        error: trendingDetail.value.data?.overview ? '' : apiError(data, t('Could not load this title from Seerr.')),
       }
       return
     }
-    trendingDetail.value = { ...trendingDetail.value, loading: false, data }
+    const next = { ...trendingDetail.value.data }
+    for (const [field, value] of Object.entries(data || {})) {
+      if (value == null || value === '') continue
+      next[field] = value
+    }
+    trendingDetail.value = { ...trendingDetail.value, loading: false, pending: false, error: '', data: next }
   } catch (err) {
-    if (trendingDetail.value?.item !== item) return
+    if (trendingDetail.value?.key !== key) return
     trendingDetail.value = {
       ...trendingDetail.value,
       loading: false,
-      error: err.message || t('Could not load this title from Seerr.'),
+      pending: false,
+      error: trendingDetail.value.data?.overview ? '' : (err.message || t('Could not load this title from Seerr.')),
     }
   }
 }
@@ -2182,8 +2208,7 @@ onUnmounted(() => {
             <h3 id="home-title-heading">{{ trendingDetail.data?.title || trendingDetail.item.title }}</h3>
             <button type="button" class="ui-btn ui-btn-ghost" @click="closeTrending">{{ $t('Close') }}</button>
           </div>
-          <p v-if="trendingDetail.loading" class="home-muted">{{ $t('Loading title…') }}</p>
-          <p v-else-if="trendingDetail.error" class="home-notice home-notice-error">{{ trendingDetail.error }}</p>
+          <p v-if="trendingDetail.error" class="home-notice home-notice-error">{{ trendingDetail.error }}</p>
           <div v-else class="home-title-body">
             <img v-if="trendingDetail.data?.poster || trendingDetail.item.poster" :src="trendingDetail.data?.poster || trendingDetail.item.poster" alt="" class="home-title-poster" />
             <div>
@@ -2192,11 +2217,13 @@ onUnmounted(() => {
                 <span>{{ trendingDetail.data?.year || trendingDetail.item.detail }}</span>
                 <span v-if="statusLabel(trendingDetail.data || trendingDetail.item)">{{ statusLabel(trendingDetail.data || trendingDetail.item) }}</span>
               </p>
-              <p class="home-title-overview">{{ trendingDetail.data?.overview || $t('No overview from Seerr.') }}</p>
+              <p v-if="trendingDetail.data?.overview" class="home-title-overview">{{ trendingDetail.data.overview }}</p>
+              <p v-else-if="trendingDetail.loading" class="home-muted">{{ $t('Loading title…') }}</p>
+              <p v-else class="home-title-overview home-muted">{{ $t('No overview from Seerr.') }}</p>
               <ul v-if="trendingRatings.length" class="home-title-ratings" :aria-label="$t('Ratings')">
                 <li v-for="row in trendingRatings" :key="row.label"><span>{{ row.label }}</span> {{ row.value }}</li>
               </ul>
-              <p v-else class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
+              <p v-else-if="!trendingDetail.pending" class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
               <div class="home-request-actions">
                 <a
                   v-if="trendingDetail.data?.trailer"

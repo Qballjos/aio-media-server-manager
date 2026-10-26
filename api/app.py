@@ -92,7 +92,9 @@ def create_app() -> FastAPI:
 
         supervisor = ProcessSupervisor.get()
         boot_catalog = ApplicationCatalog()
-        started = False
+        from core.integrations.lifecycle import _LISTEN_BEFORE_ARR, _wait_listeners, boot_autostart_order
+
+        pending = []
         for plugin in boot_catalog.all_plugins():
             if not plugin.manifest.daemon or not plugin.is_installed():
                 continue
@@ -110,6 +112,23 @@ def create_app() -> FastAPI:
                 except VpnIsolationError as err:
                     logger.warning("Autostart skipped for %s: %s", plugin.name, err)
                     continue
+            pending.append(plugin)
+        by_name = {plugin.name: plugin for plugin in pending}
+        ordered = [by_name[name] for name in boot_autostart_order([plugin.name for plugin in pending])]
+        started = False
+        phase = 0
+        started_phase: list = []
+        for plugin in ordered:
+            if plugin.name in _LISTEN_BEFORE_ARR:
+                plugin_phase = 0
+            elif plugin.name == "prowlarr":
+                plugin_phase = 1
+            else:
+                plugin_phase = 2
+            if plugin_phase > phase and started_phase:
+                await _wait_listeners(started_phase)
+                started_phase = []
+            phase = plugin_phase
             try:
                 await supervisor.start(
                     name=plugin.name,
@@ -119,6 +138,8 @@ def create_app() -> FastAPI:
                     log_dir=settings.config_dir / "logs",
                 )
                 started = True
+                if plugin_phase < 2:
+                    started_phase.append(plugin)
             except Exception as err:
                 logger.warning("Autostart skipped for %s: %s", plugin.name, err)
         if started:
