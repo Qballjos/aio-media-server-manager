@@ -43,7 +43,7 @@ def test_catalog_discovery():
 
 
 def test_boot_starts_flaresolverr_qbittorrent_then_sabnzbd():
-    """Cloudflare and the VPN start first; these three apps are next, in this order."""
+    """The VPN starts first; these three apps are next, in this order."""
     catalog = ApplicationCatalog()
     names = [plugin.name for plugin in catalog.all_plugins()]
     order = boot_autostart_order(names)

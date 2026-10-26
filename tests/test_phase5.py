@@ -231,9 +231,7 @@ def test_vpn_wraps_wireguard_with_private_resolv(tmp_path: Path, monkeypatch):
     assert wrapped[:6] == ["/usr/bin/unshare", "--mount", "--propagation", "private", "--", "sh"]
     resolv = tmp_path / "config" / "vpn" / ".run" / "resolv.tunneled.conf"
     text = resolv.read_text(encoding="utf-8")
-    assert "nameserver 1.1.1.1\n" in text
-    assert "nameserver 9.9.9.9\n" in text
-    assert "nameserver 1.0.0.1\n" in text
+    assert text.startswith("nameserver 127.0.0.153\nnameserver 1.1.1.1\nnameserver 9.9.9.9\n")
     assert "single-request-reopen" in text
     assert str(resolv) in wrapped
     assert "qbittorrent-nox" in wrapped
@@ -489,6 +487,9 @@ def test_uid_dns_redirect_only_targets_vpn_uid(tmp_path: Path, monkeypatch):
         ]
     )
     assert local_udp in flat
+    cache_return = "-t nat -A AMM-UID-DNS -d 127.0.0.153/32 -j RETURN"
+    assert cache_return in flat
+    assert flat.index(cache_return) < flat.index(local_udp)
     assert any("-d 198.18.0.0/15" in row and "--dport 53" in row for row in flat)
     assert not any(
         row.startswith("-t nat -A AMM-UID-DNS -p ") and "-d " not in row

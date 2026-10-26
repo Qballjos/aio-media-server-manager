@@ -65,16 +65,42 @@ def create_app() -> FastAPI:
             settings.api_host,
             settings.api_port,
         )
-        # Boot order: Cloudflare, then the VPN, then FlareSolverr, qBittorrent, SABnzbd, then the rest.
-        if settings.cloudflare_tunnel_enabled:
-            from core.cloudflare_tunnel import cloudflare_tunnel
-
-            result = await cloudflare_tunnel.start()
-            if result.get("status") == "error":
-                logger.warning("Cloudflare Tunnel did not start: %s", result.get("detail"))
         from core.diagnostics import diagnostics
 
         diagnostics.install_logging_hook()
+        # uvicorn serves nothing until lifespan yields; boot apps in the background so the
+        # dashboard is reachable while the VPN handshakes and apps come up.
+        boot = asyncio.create_task(_boot_apps(), name="aio-boot")
+        yield
+        if not boot.done():
+            boot.cancel()
+        logger.info("FastAPI application shutting down.")
+
+    async def _boot_apps() -> None:
+        started_all: list = []
+        try:
+            started_all = await _boot_apps_in_order()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("App boot failed; start apps from the dashboard.")
+        from core.integrations.lifecycle import vpn_isolation_loop
+        from core.update_schedule import scheduler_loop
+
+        from core.downloads_pause import resume_when_due_loop
+        from core.notifications import notifications_loop
+
+        asyncio.create_task(vpn_isolation_loop())
+        asyncio.create_task(scheduler_loop())
+        asyncio.create_task(resume_when_due_loop())
+        asyncio.create_task(notifications_loop())
+        if settings.cloudflare_tunnel_enabled:
+            from core.integrations.lifecycle import start_cloudflare_tunnel_last
+
+            asyncio.create_task(start_cloudflare_tunnel_last(started_all))
+
+    async def _boot_apps_in_order() -> list:
+        # Boot order: the VPN, then FlareSolverr, qBittorrent, SABnzbd, then the rest, Cloudflare last.
         from core.app_prefs import autostart_for
         from applications.catalog import ApplicationCatalog
         from core.supervisor import ProcessSupervisor
@@ -84,7 +110,7 @@ def create_app() -> FastAPI:
             result = await asyncio.to_thread(vpn_manager.start)
             if result.get("status") == "error" or not result.get("tunnel_up"):
                 logger.warning(
-                    "VPN did not come up; qBittorrent, Prowlarr, and Flaresolverr stay stopped. %s",
+                    "VPN did not come up; qBittorrent, Prowlarr, and FlareSolverr wait for the tunnel. %s",
                     result.get("detail") or result.get("status"),
                 )
                 from core.integrations.lifecycle import enforce_vpn_isolation
@@ -93,9 +119,15 @@ def create_app() -> FastAPI:
 
         supervisor = ProcessSupervisor.get()
         boot_catalog = ApplicationCatalog()
-        from core.integrations.lifecycle import _LISTEN_BEFORE_ARR, _wait_listeners, boot_autostart_order
+        from core.integrations.lifecycle import (
+            _LISTEN_BEFORE_ARR,
+            _wait_listeners,
+            boot_autostart_order,
+            hold_for_tunnel,
+        )
 
         pending = []
+        held: list[str] = []
         for plugin in boot_catalog.all_plugins():
             if not plugin.manifest.daemon or not plugin.is_installed():
                 continue
@@ -109,14 +141,18 @@ def create_app() -> FastAPI:
                 continue
             if plugin.name in VPN_TUNNELED_APPS:
                 try:
-                    vpn_manager.assert_can_start_tunneled_app(plugin.name)
-                except VpnIsolationError as err:
-                    logger.warning("Autostart skipped for %s: %s", plugin.name, err)
+                    await asyncio.to_thread(vpn_manager.assert_can_start_tunneled_app, plugin.name)
+                except VpnIsolationError:
+                    held.append(plugin.name)
                     continue
             pending.append(plugin)
+        if held:
+            logger.warning("%s will start once the VPN tunnel is up.", ", ".join(held))
+            hold_for_tunnel(held)
         by_name = {plugin.name: plugin for plugin in pending}
         ordered = [by_name[name] for name in boot_autostart_order([plugin.name for plugin in pending])]
         started = False
+        started_all: list = []
         phase = 0
         started_phase: list = []
         for plugin in ordered:
@@ -139,6 +175,7 @@ def create_app() -> FastAPI:
                     log_dir=settings.config_dir / "logs",
                 )
                 started = True
+                started_all.append(plugin)
                 if plugin_phase < 2:
                     started_phase.append(plugin)
             except Exception as err:
@@ -147,18 +184,7 @@ def create_app() -> FastAPI:
             from core.integrations.lifecycle import schedule_full_wiring
 
             asyncio.create_task(schedule_full_wiring(wait_for_apps=True))
-        from core.integrations.lifecycle import vpn_isolation_loop
-        from core.update_schedule import scheduler_loop
-
-        from core.downloads_pause import resume_when_due_loop
-        from core.notifications import notifications_loop
-
-        asyncio.create_task(vpn_isolation_loop())
-        asyncio.create_task(scheduler_loop())
-        asyncio.create_task(resume_when_due_loop())
-        asyncio.create_task(notifications_loop())
-        yield
-        logger.info("FastAPI application shutting down.")
+        return started_all
 
     app = FastAPI(
         title="AIO Media Server Manager",

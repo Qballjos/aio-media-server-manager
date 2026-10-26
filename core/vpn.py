@@ -17,12 +17,14 @@ import shutil
 import stat
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from core.settings import Settings, settings
 from core.supervisor import ProcessSupervisor
+from core.vpn_dns import LISTEN_HOST as _VPN_DNS_CACHE, vpn_dns_forwarder
 from core.vpn_proxy import vpn_webui_proxy
 from core.vpn_relay import vpn_endpoint_relay
 
@@ -52,11 +54,13 @@ _UID_DNS_CHAIN = "AMM-UID-DNS"
 # address, used when 1.1.1.1 does not answer. Provider DNS from the profile
 # (Privado's 198.18.0.0/15, Surfshark, …) is not used: those resolvers are a
 # frequent cause of every indexer failing together while the handshake stays up.
-_VPN_UID_DNS_SERVERS = ("1.1.1.1", "9.9.9.9", "1.0.0.1")
+_VPN_UID_DNS_SERVERS = ("1.1.1.1", "9.9.9.9")
 _VPN_UID_DNS = _VPN_UID_DNS_SERVERS[0]
-# One reply per socket. WireGuard paths often answer only the first of the
-# parallel A/AAAA queries, and glibc then reports a temporary DNS failure.
-_VPN_UID_RESOLV_OPTIONS = "options single-request-reopen timeout:2 attempts:2 rotate\n"
+# The local cache answers first. If it is not listening the kernel refuses the
+# query at once and glibc moves to the public resolvers. single-request-reopen:
+# WireGuard paths often answer only one of the parallel A/AAAA queries.
+_VPN_UID_RESOLV_OPTIONS = "options single-request-reopen timeout:5 attempts:2\n"
+_PREPARE_REUSE_SECONDS = 120.0
 # Container and provider resolvers. Queries already aimed at a public resolver
 # are left alone so the backup nameserver in resolv.conf can be reached.
 _LOCAL_DNS_DESTINATIONS = (
@@ -533,8 +537,12 @@ class VpnManager:
         self._cached_underlay_ips: list[str] | None = None
         self._handshake_cache: bool | None = None
         self._handshake_cache_at = 0.0
+        self._start_lock = threading.Lock()
+        self._prepared_at: dict[str, tuple[float, int]] = {}
+        self._prepared_downloads: set[str] = set()
         self._wg_ifaces_cache: list[str] | None = None
         self._wg_ifaces_cache_at = 0.0
+        self._wireguard_impl = ""
 
     def _invalidate_runtime_cache(self) -> None:
         self._handshake_cache = None
@@ -585,6 +593,8 @@ class VpnManager:
             "flaresolverr_unprotected": "flaresolverr" in unprotected,
             "tunneled_apps": sorted(VPN_TUNNELED_APPS),
             "unprotected_apps": unprotected,
+            "dns_cache": vpn_dns_forwarder.status(),
+            "wireguard_impl": self._wireguard_impl,
             "supported_providers": list(PROVIDERS),
             "usenet_bypasses_vpn": True,
             "last_error": self._last_error or "",
@@ -682,7 +692,8 @@ class VpnManager:
         ]
 
     def _write_tunneled_resolv(self) -> Path | None:
-        content = "".join(f"nameserver {server}\n" for server in _VPN_UID_DNS_SERVERS) + _VPN_UID_RESOLV_OPTIONS
+        servers = (_VPN_DNS_CACHE, *_VPN_UID_DNS_SERVERS)
+        content = "".join(f"nameserver {server}\n" for server in servers) + _VPN_UID_RESOLV_OPTIONS
         script = "#!/bin/sh\nmount --bind \"$1\" /etc/resolv.conf || exit 1\nshift\nexec \"$@\"\n"
         for directory in (Path("/run/amm-vpn"), Path(self.settings.config_dir) / "vpn" / ".run"):
             try:
@@ -734,14 +745,28 @@ class VpnManager:
         """Ensure config/data paths are writable by the VPN app UID."""
         if not self.uses_uid_isolation():
             return
+        from applications.catalog import ApplicationCatalog
+
+        try:
+            catalog = ApplicationCatalog(app_settings=self.settings)
+            config_dir = Path(catalog.get(name).config_dir) if catalog.has(name) else None
+        except Exception:
+            logger.debug("Could not resolve config dir for %s", name, exc_info=True)
+            config_dir = None
+        # VPN start, the boot check, and the supervisor all prepare the same app within seconds.
+        # An install in between touches the config dir, which changes its mtime and forces a redo.
+        try:
+            stamp = config_dir.stat().st_mtime_ns if config_dir else 0
+        except OSError:
+            stamp = -1
+        now = time.monotonic()
+        last = self._prepared_at.get(name)
+        if last and last[1] == stamp and now - last[0] < _PREPARE_REUSE_SECONDS:
+            return
         self._ensure_vpn_app_user()
         gid = self._vpn_app_gid()
         try:
-            from applications.catalog import ApplicationCatalog
-
-            if ApplicationCatalog(app_settings=self.settings).has(name):
-                app = ApplicationCatalog(app_settings=self.settings).get(name)
-                config_dir = Path(app.config_dir)
+            if config_dir is not None:
                 self._chown_tree(config_dir, uid=VPN_APP_UID, gid=gid)
                 self._strip_posix_acls(config_dir)
                 self._chmod_tree(config_dir, dir_mode=0o755, file_mode=0o644)
@@ -768,6 +793,11 @@ class VpnManager:
             logger.debug("Could not resolve config dir for %s", name, exc_info=True)
         # Downloads stay owned by PUID:PGID so Arr can import; VPN uid shares PGID.
         self._prepare_shared_download_tree(Path(self.settings.download_dir), gid=gid)
+        try:
+            stamp = config_dir.stat().st_mtime_ns if config_dir else 0
+        except OSError:
+            stamp = -1
+        self._prepared_at[name] = (time.monotonic(), stamp)
 
     def _vpn_uid_can_write(self, path: Path, *, gid: int) -> bool:
         if not path.is_dir():
@@ -824,16 +854,14 @@ class VpnManager:
         except OSError as exc:
             logger.debug("chmod %s failed: %s", path, exc)
         for root, dirs, files in os.walk(path):
-            for name in dirs:
-                try:
-                    os.chmod(Path(root) / name, dir_mode)
-                except OSError:
-                    pass
-            for name in files:
-                try:
-                    os.chmod(Path(root) / name, file_mode)
-                except OSError:
-                    pass
+            for names, want in ((dirs, dir_mode), (files, file_mode)):
+                for name in names:
+                    target = os.path.join(root, name)
+                    try:
+                        if stat.S_IMODE(os.stat(target).st_mode) != want:
+                            os.chmod(target, want)
+                    except OSError:
+                        pass
 
     def _prepare_shared_download_tree(self, path: Path, *, gid: int) -> None:
         try:
@@ -841,14 +869,20 @@ class VpnManager:
         except OSError as exc:
             logger.warning("Could not create download dir %s: %s", path, exc)
             return
+        # A full walk of the downloads share is slow on Unraid /mnt/user; once per boot is enough
+        # because setgid directories keep new files in the shared group.
+        key = f"{path}:{gid}"
+        if key in self._prepared_downloads:
+            return
+        self._prepared_downloads.add(key)
         try:
             puid = int(self.settings.puid)
         except (TypeError, ValueError):
             puid = VPN_APP_UID
         # Owner stays PUID; group PGID with setgid so new files stay group-accessible.
-        self._chown_tree(path, uid=puid, gid=gid, mode=0o2775)
-        # VPN uid must be able to write into the tree even when some files are 644/755.
-        self._ensure_group_writable(path)
+        if not self._chown_tree(path, uid=puid, gid=gid, mode=0o2775):
+            # VPN uid must be able to write into the tree even when some files are 644/755.
+            self._ensure_group_writable(path)
 
     def _ensure_group_writable(self, path: Path) -> None:
         if not path.is_dir():
@@ -858,18 +892,25 @@ class VpnManager:
                 target = Path(root) / name
                 try:
                     mode = target.stat().st_mode
-                    os.chmod(target, mode | 0o2770)
+                    if mode | 0o2770 != mode:
+                        os.chmod(target, mode | 0o2770)
                 except OSError:
                     pass
             for name in files:
                 target = Path(root) / name
                 try:
                     mode = target.stat().st_mode
-                    os.chmod(target, mode | 0o660)
+                    if mode | 0o660 != mode:
+                        os.chmod(target, mode | 0o660)
                 except OSError:
                     pass
 
     def start(self) -> dict[str, Any]:
+        # The watchdog retry and Settings can both start the VPN; one build at a time.
+        with self._start_lock:
+            return self._start_unlocked()
+
+    def _start_unlocked(self) -> dict[str, Any]:
         if not self.config_path.is_file():
             return self._fail(f"VPN config missing: {self.config_path}")
         self._cached_underlay_ips = None
@@ -957,8 +998,10 @@ class VpnManager:
         )
         if go_bin:
             env["WG_QUICK_USERSPACE_IMPLEMENTATION"] = go_bin
+            self._wireguard_impl = "wireguard-go"
             logger.info("WireGuard using wireguard-go; this kernel has no WireGuard module.")
         else:
+            self._wireguard_impl = "kernel"
             logger.info("WireGuard using the kernel module.")
         try:
             subprocess.run(
@@ -992,6 +1035,7 @@ class VpnManager:
                 "and that outbound UDP is not blocked."
             )
         self._last_error = ""
+        vpn_dns_forwarder.ensure(self.tunnel_interface_name)
         for name in sorted(VPN_TUNNELED_APPS):
             self.prepare_tunneled_app(name)
         logger.info(
@@ -1011,6 +1055,7 @@ class VpnManager:
     def stop(self) -> dict[str, Any]:
         vpn_webui_proxy.stop_all()
         vpn_endpoint_relay.stop()
+        vpn_dns_forwarder.stop()
         proto = self.settings.vpn_protocol
         if proto == "wireguard" and shutil.which("wg-quick"):
             down_conf = (
@@ -1096,13 +1141,14 @@ class VpnManager:
         uid: int = VPN_APP_UID,
         gid: int = VPN_APP_GID,
         mode: int | None = 0o755,
-    ) -> None:
+    ) -> bool:
+        """Own and mode the tree; False when the top-level chown failed and chown -R was tried."""
         if not path.exists():
             try:
                 path.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
                 logger.warning("Could not create %s for VPN apps: %s", path, exc)
-                return
+                return False
         try:
             os.chown(path, uid, gid)
             if mode is not None:
@@ -1111,20 +1157,31 @@ class VpnManager:
             logger.warning("chown/chmod %s -> %s:%s failed: %s", path, uid, gid, exc)
             # Fall back to recursive chown(1) which sometimes succeeds when os.chown fails.
             self._chown_cli(path, uid, gid)
-            return
+            return False
         if not path.is_dir():
-            return
+            return True
+        file_mode = None if mode is None else (0o644 if mode == 0o755 else (mode & 0o666))
+        # Stat first and only write what differs: chown/chmod on every file is what makes a
+        # large downloads share slow, and most entries are already right after the first boot.
         for root, dirs, files in os.walk(path):
             for name in dirs + files:
-                target = Path(root) / name
+                target = os.path.join(root, name)
                 try:
-                    os.chown(target, uid, gid)
-                    if mode is not None and target.is_dir():
-                        os.chmod(target, mode)
-                    elif mode is not None and target.is_file():
-                        os.chmod(target, 0o644 if mode == 0o755 else (mode & 0o666))
+                    st = os.stat(target)
+                    changed = st.st_uid != uid or st.st_gid != gid
+                    if changed:
+                        os.chown(target, uid, gid)
+                    if stat.S_ISDIR(st.st_mode):
+                        want = mode
+                    elif stat.S_ISREG(st.st_mode):
+                        want = file_mode
+                    else:
+                        want = None
+                    if want is not None and (changed or stat.S_IMODE(st.st_mode) != want):
+                        os.chmod(target, want)
                 except OSError:
                     pass
+        return True
 
     def _chown_cli(self, path: Path, uid: int, gid: int) -> None:
         chown = shutil.which("chown")
@@ -1513,6 +1570,7 @@ class VpnManager:
         helper = self._host_iptables
         helper(["-t", "nat", "-N", _UID_DNS_CHAIN])
         helper(["-t", "nat", "-F", _UID_DNS_CHAIN])
+        helper(["-t", "nat", "-A", _UID_DNS_CHAIN, "-d", f"{_VPN_DNS_CACHE}/32", "-j", "RETURN"])
         for proto in ("udp", "tcp"):
             for destination in _LOCAL_DNS_DESTINATIONS:
                 result = helper(
@@ -2491,6 +2549,7 @@ class VpnManager:
             vpn_webui_proxy.stop_all()
             vpn_endpoint_relay.stop()
             self._apply_uid_wireguard_routing()
+            vpn_dns_forwarder.ensure(self.tunnel_interface_name)
             return
         self._forward_local_ports()
         self._write_netns_resolv(self._dns_for_netns())
