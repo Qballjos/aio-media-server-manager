@@ -55,6 +55,10 @@ _UID_DNS_CHAIN = "AMM-UID-DNS"
 _VPN_UID_DNS_SERVERS = ("1.1.1.1", "1.0.0.1")
 _VPN_UID_DNS = _VPN_UID_DNS_SERVERS[0]
 _VPN_TABLE = 200
+# Tunnel default wins. The blackhole default stays when the kernel drops the
+# device route, so a failed table-200 lookup cannot fall through to the house WAN.
+_VPN_ROUTE_METRIC = 1
+_VPN_BLACKHOLE_METRIC = 32766
 _VPN_UID_RULE_PRIORITY = 100
 _VPN_RULE_PRIORITY = 100
 _VPN_LOCAL_RULE_PRIORITY = 99
@@ -1119,15 +1123,69 @@ class VpnManager:
         if not ifaces:
             return "WireGuard came up but no wg interface was found."
         wg = ifaces[0]
+        # Install the blackhole before the tunnel route. iptables owner match is
+        # missing on DSM, so this route is what stops uid 910 from using the house
+        # default when wg0 disappears. A rejected blackhole is logged once; the
+        # tunnel still comes up and the iptables reject covers kernels that have it.
+        hole = self._ip(
+            [
+                "route",
+                "replace",
+                "blackhole",
+                "default",
+                "metric",
+                str(_VPN_BLACKHOLE_METRIC),
+                "table",
+                str(_VPN_TABLE),
+            ]
+        )
+        if hole.returncode != 0:
+            self._warn_once(
+                "uid-blackhole",
+                "VPN uid %s has no routing blackhole (%s). "
+                "Clear-net fallback stays possible where iptables owner match is missing.",
+                VPN_APP_UID,
+                (hole.stderr or "")[:160],
+            )
+        else:
+            self._log_once(
+                "uid-blackhole",
+                "VPN uid %s drops clear-net traffic when the tunnel route is gone",
+                VPN_APP_UID,
+            )
         # Pin the tunnel address as the source. Without it, wireguard-go on DSM
         # sends uid 910 packets (DNS included) with the container's bridge address.
         # The VPN peer drops those, so lookups time out and FlareSolverr exits.
         src = self._tunnel_ipv4(wg)
-        plain = ["route", "replace", "default", "dev", wg, "table", str(_VPN_TABLE)]
+        plain = [
+            "route",
+            "replace",
+            "default",
+            "dev",
+            wg,
+            "metric",
+            str(_VPN_ROUTE_METRIC),
+            "table",
+            str(_VPN_TABLE),
+        ]
         pinned = False
         result = None
         if src:
-            result = self._ip(["route", "replace", "default", "dev", wg, "src", src, "table", str(_VPN_TABLE)])
+            result = self._ip(
+                [
+                    "route",
+                    "replace",
+                    "default",
+                    "dev",
+                    wg,
+                    "src",
+                    src,
+                    "metric",
+                    str(_VPN_ROUTE_METRIC),
+                    "table",
+                    str(_VPN_TABLE),
+                ]
+            )
             pinned = result.returncode == 0
         if not pinned:
             result = self._ip(plain)
@@ -1135,7 +1193,7 @@ class VpnManager:
             detail = "" if result is None else (result.stderr or "")
             return f"Could not install WireGuard default route: {detail[:180]}"
         if pinned:
-            logger.info("VPN uid %s egress uses tunnel address %s", VPN_APP_UID, src)
+            self._log_once("uid-src", "VPN uid %s egress uses tunnel address %s", VPN_APP_UID, src)
         # Localhost / link-local always from main table for the VPN UID.
         self._ip(
             [
@@ -1233,6 +1291,16 @@ class VpnManager:
             return
         seen.add(key)
         logger.warning(message, *args)
+
+    def _log_once(self, key: str, message: str, *args: object) -> None:
+        seen = getattr(self, "_warned_once", None)
+        if seen is None:
+            seen = set()
+            self._warned_once = seen
+        if key in seen:
+            return
+        seen.add(key)
+        logger.info(message, *args)
 
     def _house_interface(self) -> str | None:
         """Interface of the main table's default route: where Docker and the LAN come in."""

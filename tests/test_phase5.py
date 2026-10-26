@@ -307,7 +307,8 @@ def test_uid_routing_applies_ipv6_blackhole_and_output_ks(tmp_path: Path, monkey
     monkeypatch.setattr(mgr, "_host_ip6tables", fake_iptables)
     assert mgr._apply_uid_wireguard_routing() is None
     flat = [" ".join(c) for c in calls]
-    assert "route replace default dev wg0 table 200" in flat
+    assert "route replace blackhole default metric 32766 table 200" in flat
+    assert "route replace default dev wg0 metric 1 table 200" in flat
     assert any("uidrange" in row and "blackhole" in row and "-6" in row for row in flat)
     assert any("AMM-UID-KS" in row and "owner" in row for row in flat)
     assert any("REJECT" in row for row in flat)
@@ -348,7 +349,47 @@ def test_uid_route_pins_tunnel_source_address(tmp_path: Path, monkeypatch):
     mgr._active_wg_conf = tmp_path / "wg0.conf"
     mgr._active_wg_conf.write_text("[Interface]\nAddress = 10.64.0.8/32\n")
     assert mgr._apply_uid_wireguard_routing() is None
-    assert calls[0] == ["route", "replace", "default", "dev", "wg0", "src", "10.64.0.8", "table", "200"]
+    assert calls[0] == ["route", "replace", "blackhole", "default", "metric", "32766", "table", "200"]
+    assert calls[1] == [
+        "route",
+        "replace",
+        "default",
+        "dev",
+        "wg0",
+        "src",
+        "10.64.0.8",
+        "metric",
+        "1",
+        "table",
+        "200",
+    ]
+
+
+def test_uid_route_stays_up_when_blackhole_is_rejected(tmp_path: Path, monkeypatch):
+    mgr = VpnManager(Settings(config_dir=tmp_path / "config"))
+    calls: list[list[str]] = []
+
+    def fake_ip(args):
+        calls.append(list(args))
+        from subprocess import CompletedProcess
+
+        code = 2 if args[:3] == ["route", "replace", "blackhole"] else 0
+        return CompletedProcess(["ip", *args], code, "", "Operation not supported")
+
+    monkeypatch.setattr(mgr, "_main_tunnel_interface_names", lambda: ["wg0"])
+    monkeypatch.setattr(mgr, "_house_interface", lambda: "eth0")
+    monkeypatch.setattr(mgr, "_ip", fake_ip)
+    monkeypatch.setattr(mgr, "_host_iptables", fake_ip)
+    monkeypatch.setattr(mgr, "_host_ip6tables", fake_ip)
+    monkeypatch.setattr(mgr, "_apply_uid_ipv6_blackhole", lambda: None)
+    monkeypatch.setattr(mgr, "_apply_uid_reply_routing", lambda: None)
+    monkeypatch.setattr(mgr, "_apply_uid_output_kill_switch", lambda iface: None)
+    monkeypatch.setattr(mgr, "_apply_uid_dns_redirect", lambda: None)
+    mgr._active_wg_conf = tmp_path / "wg0.conf"
+    mgr._active_wg_conf.write_text("[Interface]\nPrivateKey = aa\n")
+    assert mgr._apply_uid_wireguard_routing() is None
+    flat = [" ".join(c) for c in calls]
+    assert "route replace default dev wg0 metric 1 table 200" in flat
 
 
 @pytest.mark.parametrize(
