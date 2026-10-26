@@ -28,19 +28,38 @@ export const ACCENT_PRESETS = [
   ['#10b981', 'Emerald'],
 ]
 
+const ICON_TYPE_BY_EXT = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.ico': 'image/x-icon',
+}
+
+function typeForIcon(href) {
+  const path = String(href || '').split('?')[0].toLowerCase()
+  const ext = Object.keys(ICON_TYPE_BY_EXT).find((item) => path.endsWith(item))
+  return ICON_TYPE_BY_EXT[ext] || 'image/png'
+}
+
 function ensureLink(rel, attrs = {}) {
   if (typeof document === 'undefined') return null
-  let el = document.querySelector(`link[rel="${rel}"]`)
-  if (!el) {
-    el = document.createElement('link')
+  // Safari re-reads every icon link. Update them all so one stale href is not the one it keeps.
+  let nodes = [...document.querySelectorAll(`link[rel="${rel}"]`)]
+  if (!nodes.length) {
+    const el = document.createElement('link')
     el.setAttribute('rel', rel)
     document.head.appendChild(el)
+    nodes = [el]
   }
-  Object.entries(attrs).forEach(([key, value]) => {
-    if (value == null) el.removeAttribute(key)
-    else el.setAttribute(key, value)
+  nodes.forEach((el) => {
+    Object.entries(attrs).forEach(([key, value]) => {
+      if (value == null) el.removeAttribute(key)
+      else el.setAttribute(key, value)
+    })
   })
-  return el
+  return nodes[0]
 }
 
 function normalizeHex(value) {
@@ -170,10 +189,32 @@ export function applyBranding(data) {
   const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]')
   if (appleTitle) appleTitle.setAttribute('content', title.slice(0, 12))
 
-  // Tab icon + Apple touch icon follow the favicon slot; the version query makes a new upload show at once.
+  // Safari ignores an icon URL with no image extension, and it drops the icon if the type is removed.
+  // The version query makes a new upload show at once without telling Safari the response is uncacheable.
   const version = favicon.includes('?') ? favicon.slice(favicon.indexOf('?')) : ''
-  ensureLink('icon', { type: null, href: `/api/branding/icon/favicon${version}` })
-  ensureLink('apple-touch-icon', { href: `/api/branding/icon/apple-touch-icon${version}` })
+  const icon = data?.icon_url || '/api/branding/icon/favicon.png'
+  const apple = data?.apple_touch_url || '/api/branding/icon/apple-touch-icon.png'
+  const iconType = data?.icon_type || typeForIcon(icon)
+  let pngLink = null
+  document.querySelectorAll('link[rel="icon"]').forEach((el) => {
+    const href = el.getAttribute('href') || ''
+    if (href.startsWith('/favicon.ico')) {
+      el.setAttribute('type', 'image/x-icon')
+      el.setAttribute('href', `/favicon.ico${version}`)
+      return
+    }
+    pngLink = el
+    el.setAttribute('type', iconType)
+    el.setAttribute('href', `${icon}${version}`)
+  })
+  if (!pngLink && document.head) {
+    const el = document.createElement('link')
+    el.setAttribute('rel', 'icon')
+    el.setAttribute('type', iconType)
+    el.setAttribute('href', `${icon}${version}`)
+    document.head.appendChild(el)
+  }
+  ensureLink('apple-touch-icon', { type: typeForIcon(apple), href: `${apple}${version}` })
 }
 
 /** A square 512 px PNG of an uploaded icon (contained, centred), so every place that shows it gets a sharp image. */

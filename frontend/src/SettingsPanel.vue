@@ -735,7 +735,7 @@ async function publishHostnames() {
 async function addCloudflareAccess() {
   const gated = (hostnameRoutes.value || []).filter((row) => row.enabled && row.access_gate)
   if (!gated.length) {
-    error.value = 'Turn on Expose for at least one *Arr app, download client, or Seerr.'
+    error.value = 'Turn on Expose for at least one *Arr app, download client, Seerr, or NeutArr.'
     notice.value = ''
     return
   }
@@ -2655,7 +2655,7 @@ onBeforeUnmount(() => {
           <label class="ui-field">
             {{ $t('Cloudflare Access emails') }}
             <span class="ui-field-hint">
-              {{ $t('Add Cloudflare Access puts a login gate on the exposed *Arr apps, download clients, and Seerr, using a login method you already created in Zero Trust. Jellyfin, Plex, and this dashboard keep their own login. List the email addresses that may enter, separated by commas or new lines. Leave this empty only when the only login method is Cloudflare with Restrict to account members.') }}
+              {{ $t('Add Cloudflare Access puts a login gate on the exposed *Arr apps, download clients, Seerr, and NeutArr, using a login method you already created in Zero Trust. Jellyfin, Plex, and this dashboard keep their own login. List the email addresses that may enter, separated by commas or new lines. Leave this empty only when the only login method is Cloudflare with Restrict to account members.') }}
               <span v-if="accessIdps.length">
                 {{ $t('Login methods found:') }}
                 {{ accessIdps.map((row) => row.name || row.type).join(', ') }}.

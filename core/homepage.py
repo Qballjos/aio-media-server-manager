@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import re
 import secrets
 import threading
 import time
@@ -11,7 +12,7 @@ from calendar import monthrange
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlparse
 
 import requests
 
@@ -299,7 +300,7 @@ def _build_homepage_snapshot(host: str, scheme: str = "http") -> dict[str, Any]:
     seerr_notes: list[dict[str, Any]] = []
     trending_notes: list[dict[str, Any]] = []
 
-    with ThreadPoolExecutor(max_workers=9) as pool:
+    with ThreadPoolExecutor(max_workers=10) as pool:
         fut_sonarr = pool.submit(_collect_sonarr_calendar, catalog, running, start, end, sonarr_notes)
         fut_radarr = pool.submit(_collect_radarr_calendar, catalog, running, start, end, radarr_notes)
         fut_downloads = pool.submit(_collect_download_queues, catalog, running)
@@ -307,8 +308,10 @@ def _build_homepage_snapshot(host: str, scheme: str = "http") -> dict[str, Any]:
         fut_plex = pool.submit(_collect_plex_recent, catalog, running, plex_notes, host, scheme)
         fut_seerr = pool.submit(_collect_seerr_requests, catalog, running, seerr_notes, host, scheme)
         fut_trending = pool.submit(_collect_seerr_trending, catalog, running, trending_notes, host, scheme)
+        fut_play = pool.submit(_collect_play_index, catalog, running, host, scheme, start, end)
         calendar.extend(fut_sonarr.result())
         calendar.extend(fut_radarr.result())
+        calendar = _link_calendar(calendar, catalog, host, scheme, fut_play.result())
         dl_items, dl_notes = fut_downloads.result()
         downloads.extend(dl_items)
         recent.extend(fut_jelly.result())
@@ -387,6 +390,134 @@ def homepage_search(host: str, query: str, provider: str = "seerr") -> dict[str,
     ):
         error = "Start Seerr, Sonarr or Radarr to search."
     return {"query": term, "results": results[:20], "seerr": False, "provider": "seerr", "error": error}
+
+
+def homepage_title(host: str, scheme: str, media_type: str, media_id: int) -> dict[str, Any]:
+    """Overview, ratings and trailer for one Seerr title. Home opens this when a trending tile is clicked."""
+    catalog = ApplicationCatalog()
+    running = _running_names()
+    media_type = str(media_type or "").strip().lower()
+    if media_type in {"series", "show", "tv"}:
+        media_type = "tv"
+    if media_type not in {"movie", "tv"} or int(media_id or 0) <= 0:
+        return {"ok": False, "detail": "Unknown title."}
+    if not (catalog.has("seerr") and catalog.get("seerr").is_installed() and "seerr" in running):
+        return {"ok": False, "detail": "Seerr is not installed or not running."}
+    plugin = catalog.get("seerr")
+    headers = {
+        "Content-Type": "application/json",
+        "X-Api-Key": get_application_api_key("seerr", plugin.config_dir) or "",
+    }
+    kind = "tv" if media_type == "tv" else "movie"
+    base = f"http://127.0.0.1:{plugin.port}/api/v1/{kind}/{int(media_id)}"
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_detail = pool.submit(_fetch_json, base, headers=headers, timeout=4)
+        fut_ratings = pool.submit(_fetch_json, f"{base}/ratings", headers=headers, timeout=4)
+        data, error = fut_detail.result()
+        ratings, _ratings_error = fut_ratings.result()
+    if not isinstance(data, dict):
+        detail = f"Seerr did not return this title ({error})." if error else "Seerr did not return this title."
+        return {"ok": False, "detail": detail}
+    poster = data.get("posterPath") or ""
+    year = str(data.get("releaseDate") or data.get("firstAirDate") or "")[:4]
+    vote_count = _as_int(data.get("voteCount"))
+    path = f"tv/{int(media_id)}" if media_type == "tv" else f"movie/{int(media_id)}"
+    status = seerr_media_status(data)
+    rt = ratings.get("rt") if isinstance(ratings, dict) and isinstance(ratings.get("rt"), dict) else {}
+    imdb = ratings.get("imdb") if isinstance(ratings, dict) and isinstance(ratings.get("imdb"), dict) else {}
+    return {
+        "ok": True,
+        "title": data.get("title") or data.get("name") or "",
+        "overview": " ".join(str(data.get("overview") or "").split())[:4000],
+        "year": year,
+        "mediaType": media_type,
+        "mediaId": int(media_id),
+        "poster": f"https://image.tmdb.org/t/p/w342{poster}" if poster else "",
+        "voteAverage": _score_10(data.get("voteAverage")) if vote_count else None,
+        "imdb": _score_10(imdb.get("criticsScore")),
+        "rtCritics": _score_percent(rt.get("criticsScore")),
+        "rtAudience": _score_percent(rt.get("audienceScore")),
+        "trailer": _seerr_trailer(data.get("relatedVideos")),
+        "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
+        "status": status,
+        "can_request": status in {"missing", "partial"},
+    }
+
+
+def _score_10(value: Any) -> float | None:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    if num < 0 or num > 10:
+        return None
+    return round(num, 1)
+
+
+def _score_percent(value: Any) -> int | None:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    if num < 0 or num > 100:
+        return None
+    return int(round(num))
+
+
+_YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]{6,32}$")
+
+
+def _youtube_id(video: dict[str, Any]) -> str:
+    key = str(video.get("key") or "").strip()
+    site = str(video.get("site") or "YouTube").strip().lower()
+    if site in {"", "youtube"} and _YOUTUBE_ID.match(key):
+        return key
+    url = str(video.get("url") or "").strip()
+    if not url:
+        return ""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return ""
+    host = parsed.netloc.lower().removeprefix("www.")
+    if host == "youtu.be":
+        ident = parsed.path.strip("/").split("/")[0]
+    elif host in {"youtube.com", "m.youtube.com", "youtube-nocookie.com"}:
+        ident = (parse_qs(parsed.query).get("v") or [""])[0]
+        if not ident and parsed.path.startswith("/embed/"):
+            parts = [part for part in parsed.path.split("/") if part]
+            ident = parts[1] if len(parts) > 1 else ""
+    else:
+        return ""
+    return ident if _YOUTUBE_ID.match(ident) else ""
+
+
+def _seerr_trailer(videos: Any) -> str:
+    """The official YouTube trailer Seerr attached, else the first trailer, else a teaser."""
+    if not isinstance(videos, list):
+        return ""
+    ranked: list[tuple[int, str]] = []
+    for video in videos:
+        if not isinstance(video, dict):
+            continue
+        ident = _youtube_id(video)
+        if not ident:
+            continue
+        kind = str(video.get("type") or "").strip().lower()
+        name = str(video.get("name") or "").strip().lower()
+        if kind == "trailer" and "official" in name:
+            rank = 0
+        elif kind == "trailer":
+            rank = 1
+        elif kind == "teaser":
+            rank = 2
+        else:
+            rank = 3
+        ranked.append((rank, ident))
+    if not ranked:
+        return ""
+    ranked.sort(key=lambda item: item[0])
+    return f"https://www.youtube.com/watch?v={ranked[0][1]}"
 
 
 def homepage_trending(host: str, page: int, scheme: str = "http") -> dict[str, Any]:
@@ -878,6 +1009,12 @@ def _parse_sonarr_calendar(data: Any) -> list[dict[str, Any]]:
                 "detail": " ".join(part for part in (ep, row.get("title") or "") if part),
                 "when": _iso_when(row.get("airDateUtc") or row.get("airDate")),
                 "has_file": bool(row.get("hasFile")),
+                "_slug": str(series.get("titleSlug") or "").strip(),
+                "_tvdb": _as_int(series.get("tvdbId")),
+                "_episode_tvdb": _as_int(row.get("tvdbId")),
+                "_season": _as_int(row.get("seasonNumber")),
+                "_episode": _as_int(row.get("episodeNumber")),
+                "_title_key": str(title).strip().lower(),
             }
         )
     return items
@@ -916,17 +1053,327 @@ def _parse_radarr_calendar(data: Any) -> list[dict[str, Any]]:
         if not isinstance(row, dict):
             continue
         when = row.get("digitalRelease") or row.get("physicalRelease") or row.get("inCinemas") or ""
+        title = row.get("title") or "Movie"
         items.append(
             {
                 "source": "radarr",
                 "kind": "movie",
-                "title": row.get("title") or "Movie",
+                "title": title,
                 "detail": str(row.get("year") or ""),
                 "when": _iso_when(when),
                 "has_file": bool(row.get("hasFile")),
+                "_slug": str(row.get("titleSlug") or "").strip(),
+                "_tmdb": _as_int(row.get("tmdbId")),
+                "_year": _as_int(row.get("year")),
+                "_title_key": str(title).strip().lower(),
             }
         )
     return items
+
+
+def _app_web(catalog: ApplicationCatalog, name: str, host: str, scheme: str) -> str:
+    if not catalog.has(name):
+        return ""
+    return _web_url(name, catalog.get(name).port, host, scheme)
+
+
+def _arr_item_url(source: str, slug: str, web: str) -> str:
+    """Sonarr series page or Radarr movie page. The app root still opens when the slug is missing."""
+    base = (web or "").rstrip("/")
+    if not base:
+        return ""
+    if source == "sonarr" and slug:
+        return f"{base}/series/{quote(slug, safe='')}"
+    if source == "radarr" and slug:
+        return f"{base}/movie/{quote(slug, safe='')}"
+    return base
+
+
+def _details_url(app: str, web: str, item_id: str) -> str:
+    if not item_id or not web:
+        return ""
+    ident = quote(str(item_id), safe="")
+    base = web.rstrip("/")
+    if app == "jellyfin":
+        return f"{base}/web/#/details?id={ident}"
+    if app == "plex":
+        return f"{base}/web/index.html#!/server/library/metadata/{ident}"
+    return ""
+
+
+def _provider_int(ids: Any, *names: str) -> int | None:
+    if not isinstance(ids, dict):
+        return None
+    folded = {str(key).lower(): value for key, value in ids.items()}
+    for name in names:
+        num = _as_int(folded.get(name.lower()))
+        if num:
+            return num
+    return None
+
+
+def _empty_play_index(app: str, web: str) -> dict[str, Any]:
+    return {
+        "app": app,
+        "home": web,
+        "episodes": {},
+        "by_code": {},
+        "movies": {},
+        "movies_by_title": {},
+    }
+
+
+def _preferred_player(catalog: ApplicationCatalog, running: set[str]) -> str:
+    """Jellyfin when it is up, otherwise Plex. One media server is the playback connection."""
+    if (
+        "jellyfin" in running
+        and catalog.has("jellyfin")
+        and catalog.get("jellyfin").is_installed()
+        and get_application_api_key("jellyfin", catalog.get("jellyfin").config_dir)
+    ):
+        return "jellyfin"
+    if "plex" in running and catalog.has("plex") and catalog.get("plex").is_installed():
+        return "plex"
+    return ""
+
+
+def _remember_episode(
+    index: dict[str, Any],
+    *,
+    item_id: str,
+    series_id: str,
+    episode_tvdb: int | None,
+    title_key: str,
+    season: int | None,
+    episode: int | None,
+) -> None:
+    if not item_id:
+        return
+    pair = (item_id, series_id)
+    if episode_tvdb:
+        index["episodes"][episode_tvdb] = pair
+    if title_key and season is not None and episode is not None:
+        index["by_code"][(title_key, season, episode)] = pair
+
+
+def _jellyfin_play_index(
+    catalog: ApplicationCatalog,
+    host: str,
+    scheme: str,
+    start: date,
+    end: date,
+) -> dict[str, Any]:
+    plugin = catalog.get("jellyfin")
+    web = _web_url(plugin.name, plugin.port, host, scheme)
+    index = _empty_play_index("jellyfin", web)
+    key = get_application_api_key("jellyfin", plugin.config_dir)
+    start_at = 0
+    while start_at < 2000:
+        data, error = _fetch_json(
+            f"http://127.0.0.1:{plugin.port}/Items",
+            headers=jellyfin_auth_headers(key),
+            params={
+                "Recursive": "true",
+                "IncludeItemTypes": "Episode,Movie",
+                "Fields": "ProviderIds,ParentIndexNumber,IndexNumber,SeriesName,ProductionYear",
+                "MinPremiereDate": start.isoformat(),
+                "MaxPremiereDate": end.isoformat(),
+                "StartIndex": str(start_at),
+                "Limit": "200",
+            },
+            timeout=4,
+        )
+        rows = data.get("Items") if isinstance(data, dict) else None
+        if error or not isinstance(rows, list):
+            break
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            item_id = str(row.get("Id") or "")
+            kind = str(row.get("Type") or "")
+            ids = row.get("ProviderIds")
+            if kind == "Episode":
+                _remember_episode(
+                    index,
+                    item_id=item_id,
+                    series_id=str(row.get("SeriesId") or ""),
+                    episode_tvdb=_provider_int(ids, "Tvdb"),
+                    title_key=str(row.get("SeriesName") or "").strip().lower(),
+                    season=_as_int(row.get("ParentIndexNumber")),
+                    episode=_as_int(row.get("IndexNumber")),
+                )
+            elif kind == "Movie" and item_id:
+                tmdb = _provider_int(ids, "Tmdb")
+                if tmdb:
+                    index["movies"][tmdb] = item_id
+                title_key = str(row.get("Name") or "").strip().lower()
+                if title_key:
+                    index["movies_by_title"][(title_key, _as_int(row.get("ProductionYear")))] = item_id
+        if len(rows) < 200:
+            break
+        start_at += 200
+    return index
+
+
+def _plex_guid_ids(row: dict[str, Any]) -> dict[str, int]:
+    found: dict[str, int] = {}
+    guids: list[Any] = []
+    raw = row.get("Guid")
+    if isinstance(raw, list):
+        guids.extend(raw)
+    elif isinstance(raw, dict):
+        guids.append(raw)
+    if isinstance(row.get("guid"), str):
+        guids.append({"id": row["guid"]})
+    for entry in guids:
+        text = entry.get("id") if isinstance(entry, dict) else str(entry or "")
+        if "://" not in text:
+            continue
+        scheme, _, rest = text.partition("://")
+        if "/" in rest:
+            continue
+        kind = scheme.rsplit(".", 1)[-1].lower()
+        num = _as_int(rest)
+        if num and kind in {"tvdb", "tmdb"}:
+            found.setdefault(kind, num)
+    return found
+
+
+def _plex_rows(payload: Any) -> list[dict[str, Any]]:
+    container = payload.get("MediaContainer") if isinstance(payload, dict) else None
+    rows = container.get("Metadata") if isinstance(container, dict) else None
+    if isinstance(rows, dict):
+        return [rows]
+    if isinstance(rows, list):
+        return [row for row in rows if isinstance(row, dict)]
+    return []
+
+
+def _plex_play_index(
+    catalog: ApplicationCatalog,
+    host: str,
+    scheme: str,
+) -> dict[str, Any]:
+    plugin = catalog.get("plex")
+    web = _web_url(plugin.name, plugin.port, host, scheme)
+    index = _empty_play_index("plex", web)
+    client = PlexClient(port=plugin.port, config_dir=plugin.config_dir)
+    queries = (
+        {"type": "4", "includeGuids": "1", "sort": "originallyAvailableAt:desc"},
+        {"type": "1", "includeGuids": "1", "sort": "originallyAvailableAt:desc"},
+    )
+    for params in queries:
+        try:
+            resp = requests.get(
+                f"{client.base_url}/library/all",
+                headers=client._headers(),
+                params={**params, "X-Plex-Container-Start": "0", "X-Plex-Container-Size": "400"},
+                timeout=4,
+            )
+            payload = resp.json() if resp.status_code == 200 else None
+        except Exception as exc:
+            logger.debug("Plex library lookup failed: %s", exc)
+            continue
+        for row in _plex_rows(payload):
+            item_id = str(row.get("ratingKey") or "")
+            kind = str(row.get("type") or "")
+            guids = _plex_guid_ids(row)
+            if kind == "episode":
+                _remember_episode(
+                    index,
+                    item_id=item_id,
+                    series_id=str(row.get("grandparentRatingKey") or ""),
+                    episode_tvdb=guids.get("tvdb"),
+                    title_key=str(row.get("grandparentTitle") or "").strip().lower(),
+                    season=_as_int(row.get("parentIndex")),
+                    episode=_as_int(row.get("index")),
+                )
+            elif kind == "movie" and item_id:
+                if guids.get("tmdb"):
+                    index["movies"][guids["tmdb"]] = item_id
+                title_key = str(row.get("title") or "").strip().lower()
+                if title_key:
+                    index["movies_by_title"][(title_key, _as_int(row.get("year")))] = item_id
+    return index
+
+
+def _collect_play_index(
+    catalog: ApplicationCatalog,
+    running: set[str],
+    host: str,
+    scheme: str,
+    start: date,
+    end: date,
+) -> dict[str, Any]:
+    """Titles already in Jellyfin or Plex, so an available calendar item can open there."""
+    player = _preferred_player(catalog, running)
+    if player == "jellyfin":
+        return _jellyfin_play_index(catalog, host, scheme, start, end)
+    if player == "plex":
+        return _plex_play_index(catalog, host, scheme)
+    return {}
+
+
+def _match_play(item: dict[str, Any], index: dict[str, Any]) -> tuple[str, str]:
+    """(item url, series url). Empty when this title is not in the media server library."""
+    app = str(index.get("app") or "")
+    web = str(index.get("home") or "")
+
+    def link(item_id: str) -> str:
+        return _details_url(app, web, item_id)
+
+    if item.get("kind") == "movie":
+        tmdb = item.get("_tmdb")
+        item_id = index["movies"].get(tmdb) if tmdb else None
+        if not item_id:
+            item_id = index["movies_by_title"].get((item.get("_title_key"), item.get("_year")))
+        url = link(item_id or "")
+        return url, url
+    episode_tvdb = item.get("_episode_tvdb")
+    hit = index["episodes"].get(episode_tvdb) if episode_tvdb else None
+    if not hit:
+        season, episode = item.get("_season"), item.get("_episode")
+        if season is not None and episode is not None:
+            hit = index["by_code"].get((item.get("_title_key"), season, episode))
+    if not hit:
+        return "", ""
+    item_id, series_id = hit
+    episode_url = link(item_id)
+    series_url = link(series_id) if series_id else episode_url
+    return episode_url, series_url
+
+
+def _link_calendar(
+    items: list[dict[str, Any]],
+    catalog: ApplicationCatalog,
+    host: str,
+    scheme: str,
+    index: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Point each release at its *Arr page. A downloaded one also points at the media server."""
+    webs = {name: _app_web(catalog, name, host, scheme) for name in ("sonarr", "radarr")}
+    play_app = str(index.get("app") or "")
+    home = str(index.get("home") or "")
+    linked: list[dict[str, Any]] = []
+    for item in items:
+        source = str(item.get("source") or "")
+        row: dict[str, Any] = {
+            "source": source,
+            "kind": item.get("kind") or "",
+            "title": item.get("title") or "",
+            "detail": item.get("detail") or "",
+            "when": item.get("when") or "",
+            "has_file": bool(item.get("has_file")),
+            "url": _arr_item_url(source, str(item.get("_slug") or ""), webs.get(source, "")),
+        }
+        if row["has_file"] and play_app and home:
+            play_url, series_url = _match_play(item, index)
+            row["play_app"] = play_app
+            row["play_url"] = play_url or home
+            if series_url:
+                row["series_play_url"] = series_url
+        linked.append(row)
+    return linked
 
 
 def _collect_sabnzbd_queue(

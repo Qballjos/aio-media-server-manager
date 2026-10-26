@@ -7,8 +7,9 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from api.routers import applications as applications_router
@@ -32,6 +33,7 @@ from api.routers import wizard as wizard_router
 from api.routers import vpn as vpn_router
 from api.routers import cloudflare_hostnames as cloudflare_hostnames_router
 from api.routers import cloudflare_tunnel as cloudflare_tunnel_router
+from core import branding as branding_mod
 from core.settings import settings
 from core.version import app_version
 
@@ -202,6 +204,15 @@ def create_app() -> FastAPI:
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
         return response
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon_ico():
+        # Safari requests this before it trusts a <link rel="icon">, and it will not follow a redirect.
+        payload = branding_mod.favicon_ico()
+        if payload is None:
+            raise HTTPException(status_code=404, detail="Favicon is not available.")
+        body, media_type = payload
+        return Response(content=body, media_type=media_type, headers={"Cache-Control": "public, max-age=3600"})
 
     # Mount frontend dist if built
     frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"

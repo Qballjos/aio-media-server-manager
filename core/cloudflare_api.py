@@ -583,8 +583,8 @@ async def publish_hostnames(
         "dns": dns_results,
         "ingress_count": max(0, len(new_ingress) - 1),
         "warning": (
-            "Published hostnames are reachable from the internet unless you add Cloudflare Access "
-            "for the *Arr apps, download clients, and Seerr. "
+            "Published hostnames are reachable from the internet unless Cloudflare Access "
+            "is on the *Arr apps, download clients, Seerr, and NeutArr. "
             "DNS CNAMEs for disabled apps are left in place (published-application ingress hostname removed)."
             if enabled or cleared
             else ""

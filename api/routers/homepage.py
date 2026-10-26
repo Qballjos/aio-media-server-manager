@@ -19,6 +19,7 @@ from core.homepage import (
     homepage_request_options,
     homepage_search,
     homepage_snapshot,
+    homepage_title,
     homepage_trending,
 )
 from core.homepage_status import homepage_status
@@ -69,6 +70,21 @@ async def get_homepage_status(request: Request) -> dict[str, Any]:
     host = request.url.hostname or "127.0.0.1"
     scheme = request.url.scheme or "http"
     return await asyncio.to_thread(homepage_status, host, scheme)
+
+
+@router.get("/title", summary="Overview, ratings and trailer for one Seerr title")
+async def get_homepage_title(
+    request: Request,
+    mediaType: str = "",
+    mediaId: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    host = request.url.hostname or "127.0.0.1"
+    scheme = request.url.scheme or "http"
+    result = await asyncio.to_thread(homepage_title, host, scheme, mediaType, mediaId)
+    if not result.get("ok"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("detail"))
+    return result
 
 
 @router.get("/trending", summary="Another page of Seerr's trending titles")

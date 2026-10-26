@@ -16,7 +16,8 @@ def test_access_gate_includes_seerr_and_skips_media_servers():
     assert "seerr" in ACCESS_GATE_APPS
     assert "sonarr" in ACCESS_GATE_APPS
     assert "qbittorrent" in ACCESS_GATE_APPS
-    for name in ("jellyfin", "plex", "manager", "shelfmark", "grimmory", "neutarr"):
+    assert "neutarr" in ACCESS_GATE_APPS
+    for name in ("jellyfin", "plex", "manager", "shelfmark", "grimmory"):
         assert name not in ACCESS_GATE_APPS
 
 

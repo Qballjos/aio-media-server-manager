@@ -327,7 +327,16 @@ function resizeWidget(w, h) {
 }
 
 function onArrangeKey(event) {
-  if (event.key === 'Escape' && editing.value && !sheet.value && !event.defaultPrevented) editing.value = false
+  if (event.key !== 'Escape' || event.defaultPrevented) return
+  if (requestChoice.value) {
+    requestChoice.value = null
+    return
+  }
+  if (trendingDetail.value) {
+    trendingDetail.value = null
+    return
+  }
+  if (editing.value && !sheet.value) editing.value = false
 }
 
 const todayLabel = computed(() => new Date().toLocaleDateString(i18nLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))
@@ -532,6 +541,7 @@ const requestItems = computed(() =>
 )
 // Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
 const trendingMore = ref([])
+const trendingDetail = ref(null)
 const trendingItems = computed(() => {
   const seen = new Set()
   return [...(snapshot.value.trending || []), ...trendingMore.value]
@@ -785,6 +795,49 @@ const STATUS_LABELS = {
 function statusLabel(item) {
   return STATUS_LABELS[item?.status] || ''
 }
+
+function closeTrending() {
+  trendingDetail.value = null
+}
+
+async function openTrending(item) {
+  if (!item?.mediaId) return
+  trendingDetail.value = { item, loading: true, error: '', data: null }
+  try {
+    const res = await apiRequest(
+      `/api/homepage/title?mediaType=${encodeURIComponent(item.mediaType || '')}&mediaId=${encodeURIComponent(item.mediaId)}`,
+    )
+    const data = await readJson(res)
+    if (trendingDetail.value?.item !== item) return
+    if (!res.ok) {
+      trendingDetail.value = {
+        ...trendingDetail.value,
+        loading: false,
+        error: apiError(data, t('Could not load this title from Seerr.')),
+      }
+      return
+    }
+    trendingDetail.value = { ...trendingDetail.value, loading: false, data }
+  } catch (err) {
+    if (trendingDetail.value?.item !== item) return
+    trendingDetail.value = {
+      ...trendingDetail.value,
+      loading: false,
+      error: err.message || t('Could not load this title from Seerr.'),
+    }
+  }
+}
+
+const trendingRatings = computed(() => {
+  const data = trendingDetail.value?.data
+  if (!data) return []
+  const rows = []
+  if (data.voteAverage != null) rows.push({ label: 'TMDB', value: Number(data.voteAverage).toFixed(1) })
+  if (data.imdb != null) rows.push({ label: 'IMDb', value: Number(data.imdb).toFixed(1) })
+  if (data.rtCritics != null) rows.push({ label: t('Critics'), value: `${data.rtCritics}%` })
+  if (data.rtAudience != null) rows.push({ label: t('Audience'), value: `${data.rtAudience}%` })
+  return rows
+})
 
 function onQueryInput() {
   notice.value = ''
@@ -1110,6 +1163,29 @@ function eventKind(item) {
   return item?.kind || item?.source || ''
 }
 
+/** Downloaded titles open on Jellyfin or Plex. Everything else opens in Sonarr or Radarr. */
+function calendarTarget(item) {
+  if (item?.has_file && item.play_url && item.play_app) {
+    return { app: item.play_app, url: item.play_url }
+  }
+  if (item?.url && item.source) return { app: item.source, url: item.url }
+  return null
+}
+
+function calendarLinkTitle(item) {
+  const target = calendarTarget(item)
+  if (!target) return undefined
+  const app = SOURCE_NAMES[target.app] || target.app
+  return t('Open in {app}', { app })
+}
+
+function openCalendarItem(event, item) {
+  const target = calendarTarget(item)
+  if (!target) return
+  event.stopPropagation()
+  openApp(event, target.app, target.url)
+}
+
 const MEDIA_LABELS = { tv: 'Series', movie: 'Movie' }
 
 // Requests, trending and recent carry mediaType; calendar entries only kind and source.
@@ -1269,7 +1345,10 @@ function groupSameDay(rows) {
     const code = (r) => String(r.item.detail || '').split(' ')[0]
     const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
     // Downloaded only when every episode in the group is.
-    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have } }
+    const item = { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have }
+    // A run of episodes opens the series, not the first episode.
+    if (row.have && item.series_play_url) item.play_url = item.series_play_url
+    return { ...row, item }
   })
 }
 const calendarList = computed(() => calendarListInfo.value.rows)
@@ -1630,12 +1709,11 @@ onUnmounted(() => {
           </div>
           <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" @scroll.passive="loadMoreTrending">
             <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
-              <a
+              <button
+                type="button"
                 class="home-tile-link"
-                :href="item.url || seerrHomeUrl || undefined"
-                :target="item.url || seerrHomeUrl ? '_blank' : undefined"
-                rel="noopener noreferrer"
-                @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
+                :aria-haspopup="item.mediaId ? 'dialog' : undefined"
+                @click="openTrending(item)"
               >
                 <span class="home-tile-art">
                   <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
@@ -1645,7 +1723,7 @@ onUnmounted(() => {
                 <span class="home-tile-title">{{ item.title }}</span>
                 <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
                 <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
-              </a>
+              </button>
               <button
                 v-if="item.can_request"
                 type="button"
@@ -1720,14 +1798,24 @@ onUnmounted(() => {
             <p v-else-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
             <ul v-else>
               <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
-                <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
-                <span class="cal-row-body">
-                  <span class="cal-row-title">
-                    <strong>{{ row.item.title }}</strong>
-                    <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                <component
+                  :is="calendarTarget(row.item) ? 'a' : 'div'"
+                  class="cal-row-link"
+                  :href="calendarTarget(row.item)?.url"
+                  :target="calendarTarget(row.item) ? '_blank' : undefined"
+                  rel="noopener noreferrer"
+                  :title="calendarLinkTitle(row.item)"
+                  @click="openCalendarItem($event, row.item)"
+                >
+                  <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
+                  <span class="cal-row-body">
+                    <span class="cal-row-title">
+                      <strong>{{ row.item.title }}</strong>
+                      <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                    </span>
+                    <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
                   </span>
-                  <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
-                </span>
+                </component>
               </li>
             </ul>
           </div>
@@ -1754,28 +1842,29 @@ onUnmounted(() => {
                     'is-selected': day.key === selectedDayKey,
                     'is-outside': !day.inMonth,
                   }"
-                  role="button"
-                  tabindex="0"
-                  :aria-pressed="day.key === selectedDayKey"
                   @click="selectCalDay(day)"
-                  @keydown.enter.prevent="selectCalDay(day)"
-                  @keydown.space.prevent="selectCalDay(day)"
                 >
                   <span class="cal-num">{{ calView === 'week' ? day.weekday + ' ' + day.date : day.date }}</span>
                   <ul v-if="day.events.length" class="cal-events">
-                    <li
-                      v-for="(item, idx) in day.events"
-                      :key="idx"
-                      class="cal-event"
-                      :data-kind="eventKind(item)"
-                      :class="{ 'is-have': item.has_file }"
-                    >
-                      <span class="cal-event-top">
-                        <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
-                        <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
-                      </span>
-                      <strong>{{ item.title }}</strong>
-                      <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
+                    <li v-for="(item, idx) in day.events" :key="idx">
+                      <component
+                        :is="calendarTarget(item) ? 'a' : 'div'"
+                        class="cal-event"
+                        :data-kind="eventKind(item)"
+                        :class="{ 'is-have': item.has_file }"
+                        :href="calendarTarget(item)?.url"
+                        :target="calendarTarget(item) ? '_blank' : undefined"
+                        rel="noopener noreferrer"
+                        :title="calendarLinkTitle(item)"
+                        @click="openCalendarItem($event, item)"
+                      >
+                        <span class="cal-event-top">
+                          <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                          <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                        </span>
+                        <strong>{{ item.title }}</strong>
+                        <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
+                      </component>
                     </li>
                   </ul>
                 </div>
@@ -2082,6 +2171,58 @@ onUnmounted(() => {
       <p v-else class="home-muted">{{ $t('No widget sources reported yet. Reload Home.') }}</p>
     </article>
     <Teleport to="body">
+      <div v-if="trendingDetail" class="modal-backdrop" @click.self="closeTrending">
+        <div
+          class="modal-content home-title-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-title-heading"
+        >
+          <div class="home-title-head">
+            <h3 id="home-title-heading">{{ trendingDetail.data?.title || trendingDetail.item.title }}</h3>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="closeTrending">{{ $t('Close') }}</button>
+          </div>
+          <p v-if="trendingDetail.loading" class="home-muted">{{ $t('Loading title…') }}</p>
+          <p v-else-if="trendingDetail.error" class="home-notice home-notice-error">{{ trendingDetail.error }}</p>
+          <div v-else class="home-title-body">
+            <img v-if="trendingDetail.data?.poster || trendingDetail.item.poster" :src="trendingDetail.data?.poster || trendingDetail.item.poster" alt="" class="home-title-poster" />
+            <div>
+              <p class="home-title-meta">
+                <span v-if="mediaKind(trendingDetail.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(trendingDetail.item)] }}</span>
+                <span>{{ trendingDetail.data?.year || trendingDetail.item.detail }}</span>
+                <span v-if="statusLabel(trendingDetail.data || trendingDetail.item)">{{ statusLabel(trendingDetail.data || trendingDetail.item) }}</span>
+              </p>
+              <p class="home-title-overview">{{ trendingDetail.data?.overview || $t('No overview from Seerr.') }}</p>
+              <ul v-if="trendingRatings.length" class="home-title-ratings" :aria-label="$t('Ratings')">
+                <li v-for="row in trendingRatings" :key="row.label"><span>{{ row.label }}</span> {{ row.value }}</li>
+              </ul>
+              <p v-else class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
+              <div class="home-request-actions">
+                <a
+                  v-if="trendingDetail.data?.trailer"
+                  class="ui-btn ui-btn-primary"
+                  :href="trendingDetail.data.trailer"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >{{ $t('Trailer') }}</a>
+                <button
+                  v-if="trendingDetail.item.can_request"
+                  type="button"
+                  class="ui-btn"
+                  :disabled="requestBusy === resultKey(trendingDetail.item)"
+                  @click="requestTitle(trendingDetail.item)"
+                >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t('Request') }}</button>
+                <button
+                  v-if="trendingDetail.data?.url"
+                  type="button"
+                  class="ui-btn ui-btn-ghost"
+                  @click="openApp($event, 'seerr', trendingDetail.data.url)"
+                >{{ $t('Open in Seerr') }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div v-if="requestChoice && choiceServer" class="modal-backdrop" @click.self="requestChoice = null">
         <form class="modal-content home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
           <h3 id="home-request-title">{{ $t('Request') }} {{ requestChoice.item.title }}</h3>
@@ -2506,6 +2647,75 @@ onUnmounted(() => {
   padding: 1.15rem 1.25rem 1.2rem;
   gap: 0.75rem;
 }
+.home-title-dialog {
+  max-width: 40rem;
+  padding: 1.1rem 1.2rem 1.2rem;
+  gap: 0.85rem;
+  overflow: auto;
+}
+.home-title-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.home-title-head h3 {
+  margin: 0;
+}
+.home-title-body {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.home-title-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.home-title-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-body);
+}
+.home-title-overview {
+  margin: 0.55rem 0 0;
+  line-height: 1.45;
+}
+.home-title-ratings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-title-ratings li {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: var(--text-kicker);
+}
+.home-title-ratings span {
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+.home-title-dialog .home-request-actions {
+  margin-top: 0.9rem;
+}
+.home-title-dialog a.ui-btn {
+  text-decoration: none;
+}
+@media (max-width: 640px) {
+  .home-title-body {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+  }
+}
 .home-request-dialog h3 {
   margin: 0;
 }
@@ -2705,6 +2915,14 @@ onUnmounted(() => {
   text-decoration: none;
   min-width: 0;
   flex: 1 1 auto;
+}
+button.home-tile-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
 }
 .home-tile-request {
   width: 100%;
@@ -2952,6 +3170,16 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--bg-input) 78%, transparent);
   min-width: 0;
   border-left: 3px solid var(--color-warning, #f59e0b);
+  color: inherit;
+  text-decoration: none;
+}
+a.cal-event,
+a.cal-row-link {
+  cursor: pointer;
+}
+a.cal-event:hover,
+a.cal-row-link:hover {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 .cal-event.is-have {
   border-left-color: var(--color-success, #10b981);
@@ -3025,8 +3253,17 @@ onUnmounted(() => {
 .home-card li.cal-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   min-width: 0;
+}
+.cal-row-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 12px;
 }
 .cal-chip {
   flex: 0 0 2.75rem;
