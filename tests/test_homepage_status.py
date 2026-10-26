@@ -182,6 +182,11 @@ def test_server_summary_reads_cpu_memory_uptime_and_the_hottest_sensor():
     assert empty["network"] == {"rx_bytes": 0, "tx_bytes": 0}
 
 
+def test_boot_time_returns_zero_when_the_host_blocks_it(monkeypatch):
+    monkeypatch.setattr(status_mod.psutil, "boot_time", lambda: (_ for _ in ()).throw(PermissionError("sysctl")))
+    assert status_mod._boot_time() == 0.0
+
+
 def test_attention_lists_problems_first_then_full_disks_then_updates():
     snap = {
         "sick_apps": {"sonarr": "crash_loop", "bazarr": "failed"},
