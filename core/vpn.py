@@ -1119,9 +1119,23 @@ class VpnManager:
         if not ifaces:
             return "WireGuard came up but no wg interface was found."
         wg = ifaces[0]
-        result = self._ip(["route", "replace", "default", "dev", wg, "table", str(_VPN_TABLE)])
-        if result.returncode != 0:
-            return f"Could not install WireGuard default route: {(result.stderr or '')[:180]}"
+        # Pin the tunnel address as the source. Without it, wireguard-go on DSM
+        # sends uid 910 packets (DNS included) with the container's bridge address.
+        # The VPN peer drops those, so lookups time out and FlareSolverr exits.
+        src = self._tunnel_ipv4(wg)
+        plain = ["route", "replace", "default", "dev", wg, "table", str(_VPN_TABLE)]
+        pinned = False
+        result = None
+        if src:
+            result = self._ip(["route", "replace", "default", "dev", wg, "src", src, "table", str(_VPN_TABLE)])
+            pinned = result.returncode == 0
+        if not pinned:
+            result = self._ip(plain)
+        if result is None or result.returncode != 0:
+            detail = "" if result is None else (result.stderr or "")
+            return f"Could not install WireGuard default route: {detail[:180]}"
+        if pinned:
+            logger.info("VPN uid %s egress uses tunnel address %s", VPN_APP_UID, src)
         # Localhost / link-local always from main table for the VPN UID.
         self._ip(
             [
@@ -1188,6 +1202,37 @@ class VpnManager:
         self._apply_uid_output_kill_switch(wg)
         self._apply_uid_dns_redirect()
         return None
+
+    def _tunnel_ipv4(self, wg: str) -> str | None:
+        text = ""
+        path = self._active_wg_conf
+        if path is not None and path.is_file():
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = ""
+        addr = parse_wireguard_tunnel_address(text)
+        if addr:
+            return addr
+        result = self._ip(["-4", "-o", "addr", "show", "dev", wg])
+        for line in (result.stdout or "").splitlines():
+            parts = line.split()
+            if "inet" not in parts:
+                continue
+            host = parts[parts.index("inet") + 1].split("/", 1)[0]
+            if host.count(".") == 3:
+                return host
+        return None
+
+    def _warn_once(self, key: str, message: str, *args: object) -> None:
+        seen = getattr(self, "_warned_once", None)
+        if seen is None:
+            seen = set()
+            self._warned_once = seen
+        if key in seen:
+            return
+        seen.add(key)
+        logger.warning(message, *args)
 
     def _house_interface(self) -> str | None:
         """Interface of the main table's default route: where Docker and the LAN come in."""
@@ -1329,7 +1374,11 @@ class VpnManager:
                 for host, port in endpoints:
                     result = helper(["-A", _UID_KS_CHAIN, "-p", "udp", "-d", host, "--dport", port, "-j", "RETURN"])
                     if result.returncode != 0:
-                        logger.warning("Could not allow WireGuard endpoint through UID kill switch: %s", (result.stderr or "")[:160])
+                        self._warn_once(
+                            "uid-ks-endpoint",
+                            "Could not allow WireGuard endpoint through UID kill switch: %s",
+                            (result.stderr or "")[:160],
+                        )
             reject = helper(
                 ["-A", _UID_KS_CHAIN, "-j", "REJECT", "--reject-with", "icmp-net-unreachable"]
             )
@@ -1340,7 +1389,8 @@ class VpnManager:
             if helper(["-C", *jump]).returncode != 0:
                 result = helper(["-I", "OUTPUT", "1", *jump[1:]])
                 if result.returncode != 0:
-                    logger.warning(
+                    self._warn_once(
+                        "uid-ks",
                         "VPN UID OUTPUT kill switch unavailable (%s). "
                         "Install iptables owner match (xt_owner) for leak protection.",
                         (result.stderr or "")[:160],
@@ -1373,7 +1423,8 @@ class VpnManager:
                 ]
             )
             if result.returncode != 0:
-                logger.warning(
+                self._warn_once(
+                    "uid-dns",
                     "Could not redirect VPN uid DNS to %s: %s",
                     _VPN_UID_DNS,
                     (result.stderr or "")[:160],
@@ -1383,7 +1434,8 @@ class VpnManager:
         if helper(["-t", "nat", "-C", *jump]).returncode != 0:
             result = helper(["-t", "nat", "-I", "OUTPUT", "1", *jump[1:]])
             if result.returncode != 0:
-                logger.warning(
+                self._warn_once(
+                    "uid-dns-jump",
                     "VPN uid DNS redirect unavailable (%s). "
                     "Prowlarr keeps using the container resolver.",
                     (result.stderr or "")[:160],
