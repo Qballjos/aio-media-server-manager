@@ -21,10 +21,10 @@ from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager
 
 logger = logging.getLogger(__name__)
 
-# Sonarr, Radarr, and Prowlarr probe these as soon as their own process is up
-# and keep a "connection refused" health warning until the next check (~15 min).
-_LISTEN_BEFORE_ARR = frozenset({"flaresolverr", "qbittorrent", "sabnzbd", "nzbget"})
-_BOOT_ARR = frozenset({"sonarr", "radarr", "lidarr"})
+# After Cloudflare and the VPN. Sonarr, Radarr, and Prowlarr probe these as soon
+# as their own process is up and keep a connection-refused warning until the next check.
+_BOOT_FIRST = ("flaresolverr", "qbittorrent", "sabnzbd")
+_LISTEN_BEFORE_ARR = frozenset(_BOOT_FIRST)
 _LISTEN_WAIT_SECONDS = 40.0
 
 _wiring_lock = asyncio.Lock()
@@ -32,23 +32,15 @@ _pending_wiring = 0
 
 
 def boot_autostart_order(names: list[str]) -> list[str]:
-    """Start clients before the apps that health-check them on startup.
+    """FlareSolverr, qBittorrent, then SABnzbd, then everyone else in catalog order.
 
-    Catalog order starts Prowlarr, Sonarr, and Radarr first and qBittorrent
-    and FlareSolverr last. Those checks then run against a closed port.
+    Cloudflare and the VPN are started before this list. Catalog order would
+    bring Prowlarr and Sonarr up first and health-check a client that is not listening yet.
     """
-
-    def rank(name: str) -> int:
-        if name in _LISTEN_BEFORE_ARR:
-            return 0
-        if name == "prowlarr":
-            return 1
-        if name in _BOOT_ARR:
-            return 2
-        return 3
-
-    position = {name: index for index, name in enumerate(names)}
-    return sorted(names, key=lambda name: (rank(name), position[name]))
+    present = set(names)
+    first = [name for name in _BOOT_FIRST if name in present]
+    rest = [name for name in names if name not in _LISTEN_BEFORE_ARR]
+    return first + rest
 
 
 async def schedule_full_wiring(*, wait_for_apps: bool = False) -> dict[str, Any]:

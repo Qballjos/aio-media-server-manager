@@ -52,8 +52,20 @@ _UID_DNS_CHAIN = "AMM-UID-DNS"
 # address, used when 1.1.1.1 does not answer. Provider DNS from the profile
 # (Privado's 198.18.0.0/15, Surfshark, …) is not used: those resolvers are a
 # frequent cause of every indexer failing together while the handshake stays up.
-_VPN_UID_DNS_SERVERS = ("1.1.1.1", "1.0.0.1")
+_VPN_UID_DNS_SERVERS = ("1.1.1.1", "9.9.9.9", "1.0.0.1")
 _VPN_UID_DNS = _VPN_UID_DNS_SERVERS[0]
+# One reply per socket. WireGuard paths often answer only the first of the
+# parallel A/AAAA queries, and glibc then reports a temporary DNS failure.
+_VPN_UID_RESOLV_OPTIONS = "options single-request-reopen timeout:2 attempts:2 rotate\n"
+# Container and provider resolvers. Queries already aimed at a public resolver
+# are left alone so the backup nameserver in resolv.conf can be reached.
+_LOCAL_DNS_DESTINATIONS = (
+    "127.0.0.0/8",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "198.18.0.0/15",
+)
 _VPN_TABLE = 200
 # Tunnel default wins. The blackhole default stays when the kernel drops the
 # device route, so a failed table-200 lookup cannot fall through to the house WAN.
@@ -401,6 +413,18 @@ def wireguard_covers_default_route(text: str) -> bool:
     return False
 
 
+def wireguard_userspace_binary(*, kernel_module: bool, go_bin: str | None) -> str | None:
+    """Use wireguard-go only when the kernel has no WireGuard module.
+
+    Unraid and TrueNAS SCALE have the module. DSM does not, so it keeps
+    wireguard-go. Forcing userspace on Unraid drops indexer DNS.
+    """
+    if kernel_module:
+        return None
+    binary = (go_bin or "").strip()
+    return binary or None
+
+
 def parse_wireguard_tunnel_address(text: str) -> str | None:
     """First IPv4 Address= from a WireGuard profile (without prefix length)."""
     for raw in (text or "").splitlines():
@@ -658,7 +682,7 @@ class VpnManager:
         ]
 
     def _write_tunneled_resolv(self) -> Path | None:
-        content = "".join(f"nameserver {server}\n" for server in _VPN_UID_DNS_SERVERS)
+        content = "".join(f"nameserver {server}\n" for server in _VPN_UID_DNS_SERVERS) + _VPN_UID_RESOLV_OPTIONS
         script = "#!/bin/sh\nmount --bind \"$1\" /etc/resolv.conf || exit 1\nshift\nexec \"$@\"\n"
         for directory in (Path("/run/amm-vpn"), Path(self.settings.config_dir) / "vpn" / ".run"):
             try:
@@ -926,9 +950,16 @@ class VpnManager:
         self._wireguard_down_main(up_conf)
         env = os.environ.copy()
         env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        wg_go = shutil.which("wireguard-go")
-        if wg_go:
-            env["WG_QUICK_USERSPACE_IMPLEMENTATION"] = wg_go
+        env.pop("WG_QUICK_USERSPACE_IMPLEMENTATION", None)
+        go_bin = wireguard_userspace_binary(
+            kernel_module=self._kernel_wireguard_available(),
+            go_bin=shutil.which("wireguard-go"),
+        )
+        if go_bin:
+            env["WG_QUICK_USERSPACE_IMPLEMENTATION"] = go_bin
+            logger.info("WireGuard using wireguard-go; this kernel has no WireGuard module.")
+        else:
+            logger.info("WireGuard using the kernel module.")
         try:
             subprocess.run(
                 [exe, "up", str(up_conf)],
@@ -1483,21 +1514,23 @@ class VpnManager:
         helper(["-t", "nat", "-N", _UID_DNS_CHAIN])
         helper(["-t", "nat", "-F", _UID_DNS_CHAIN])
         for proto in ("udp", "tcp"):
-            result = helper(
-                [
-                    "-t", "nat", "-A", _UID_DNS_CHAIN,
-                    "-p", proto, "--dport", "53",
-                    "-j", "DNAT", "--to-destination", f"{_VPN_UID_DNS}:53",
-                ]
-            )
-            if result.returncode != 0:
-                self._warn_once(
-                    "uid-dns",
-                    "Could not redirect VPN uid DNS to %s: %s",
-                    _VPN_UID_DNS,
-                    (result.stderr or "")[:160],
+            for destination in _LOCAL_DNS_DESTINATIONS:
+                result = helper(
+                    [
+                        "-t", "nat", "-A", _UID_DNS_CHAIN,
+                        "-d", destination,
+                        "-p", proto, "--dport", "53",
+                        "-j", "DNAT", "--to-destination", f"{_VPN_UID_DNS}:53",
+                    ]
                 )
-                return
+                if result.returncode != 0:
+                    self._warn_once(
+                        "uid-dns",
+                        "Could not redirect VPN uid DNS to %s: %s",
+                        _VPN_UID_DNS,
+                        (result.stderr or "")[:160],
+                    )
+                    return
         jump = ["OUTPUT", "-m", "owner", "--uid-owner", str(VPN_APP_UID), "-j", _UID_DNS_CHAIN]
         if helper(["-t", "nat", "-C", *jump]).returncode != 0:
             result = helper(["-t", "nat", "-I", "OUTPUT", "1", *jump[1:]])
@@ -2594,6 +2627,36 @@ class VpnManager:
     @staticmethod
     def _is_linux() -> bool:
         return hasattr(os, "uname") and os.uname().sysname.lower() == "linux"
+
+    def _kernel_wireguard_available(self) -> bool:
+        """True when this kernel can create a WireGuard interface.
+
+        A missing module is not fatal: the caller falls back to wireguard-go,
+        which is what DSM requires. Unraid and TrueNAS load the module here
+        when the container is privileged.
+        """
+        if Path("/sys/module/wireguard").is_dir():
+            return True
+        modprobe = shutil.which("modprobe")
+        if not modprobe:
+            return False
+        try:
+            result = subprocess.run(
+                [modprobe, "wireguard"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            logger.info("WireGuard kernel module is not available: %s", exc)
+            return False
+        if result.returncode != 0 or not Path("/sys/module/wireguard").is_dir():
+            logger.info(
+                "WireGuard kernel module is not available (%s).",
+                (result.stderr or result.stdout or "modprobe failed").strip()[:160],
+            )
+            return False
+        return True
 
     @staticmethod
     def _ip(args: list[str]) -> subprocess.CompletedProcess[str]:

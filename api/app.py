@@ -65,6 +65,7 @@ def create_app() -> FastAPI:
             settings.api_host,
             settings.api_port,
         )
+        # Boot order: Cloudflare, then the VPN, then FlareSolverr, qBittorrent, SABnzbd, then the rest.
         if settings.cloudflare_tunnel_enabled:
             from core.cloudflare_tunnel import cloudflare_tunnel
 

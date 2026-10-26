@@ -42,18 +42,14 @@ def test_catalog_discovery():
     assert expected_mvp.issubset(app_names), f"Missing apps: {expected_mvp - app_names}"
 
 
-def test_boot_starts_download_clients_before_arr():
-    """Sonarr health-checks qBittorrent the moment it starts, so the client must already be up."""
+def test_boot_starts_flaresolverr_qbittorrent_then_sabnzbd():
+    """Cloudflare and the VPN start first; these three apps are next, in this order."""
     catalog = ApplicationCatalog()
     names = [plugin.name for plugin in catalog.all_plugins()]
     order = boot_autostart_order(names)
-    for client in ("qbittorrent", "sabnzbd", "flaresolverr"):
-        assert order.index(client) < order.index("sonarr")
-        assert order.index(client) < order.index("radarr")
-        assert order.index(client) < order.index("prowlarr")
+    assert order[:3] == ["flaresolverr", "qbittorrent", "sabnzbd"]
+    assert order[3:] == [name for name in names if name not in order[:3]]
     assert order.index("prowlarr") < order.index("sonarr")
-    assert order.index("jellyfin") > order.index("radarr")
-    # Catalog display order is unchanged; only the boot sequence is rearranged.
     assert names.index("prowlarr") < names.index("qbittorrent")
 
 

@@ -28,6 +28,7 @@ from core.vpn import (
     save_vpn_config_text,
     ensure_tun_device,
     vpn_start_failure_detail,
+    wireguard_userspace_binary,
 )
 
 
@@ -229,7 +230,11 @@ def test_vpn_wraps_wireguard_with_private_resolv(tmp_path: Path, monkeypatch):
     wrapped = mgr.wrap_torrent_command(["qbittorrent-nox"])
     assert wrapped[:6] == ["/usr/bin/unshare", "--mount", "--propagation", "private", "--", "sh"]
     resolv = tmp_path / "config" / "vpn" / ".run" / "resolv.tunneled.conf"
-    assert resolv.read_text(encoding="utf-8") == "nameserver 1.1.1.1\nnameserver 1.0.0.1\n"
+    text = resolv.read_text(encoding="utf-8")
+    assert "nameserver 1.1.1.1\n" in text
+    assert "nameserver 9.9.9.9\n" in text
+    assert "nameserver 1.0.0.1\n" in text
+    assert "single-request-reopen" in text
     assert str(resolv) in wrapped
     assert "qbittorrent-nox" in wrapped
     assert f"--reuid={VPN_APP_UID}" in wrapped
@@ -475,8 +480,20 @@ def test_uid_dns_redirect_only_targets_vpn_uid(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(mgr, "_host_iptables", firewall)
     mgr._apply_uid_dns_redirect()
     flat = [" ".join(args) for args in calls]
-    assert " ".join(["-t", "nat", "-A", "AMM-UID-DNS", "-p", "udp", "--dport", "53", "-j", "DNAT", "--to-destination", "1.1.1.1:53"]) in flat
-    assert " ".join(["-t", "nat", "-A", "AMM-UID-DNS", "-p", "tcp", "--dport", "53", "-j", "DNAT", "--to-destination", "1.1.1.1:53"]) in flat
+    local_udp = " ".join(
+        [
+            "-t", "nat", "-A", "AMM-UID-DNS",
+            "-d", "127.0.0.0/8",
+            "-p", "udp", "--dport", "53",
+            "-j", "DNAT", "--to-destination", "1.1.1.1:53",
+        ]
+    )
+    assert local_udp in flat
+    assert any("-d 198.18.0.0/15" in row and "--dport 53" in row for row in flat)
+    assert not any(
+        row.startswith("-t nat -A AMM-UID-DNS -p ") and "-d " not in row
+        for row in flat
+    )
     assert f"-t nat -I OUTPUT 1 -m owner --uid-owner {VPN_APP_UID} -j AMM-UID-DNS" in flat
     assert not any(row.startswith("-A ") or row.startswith("-I ") for row in flat)
 
@@ -896,6 +913,12 @@ def test_vpn_start_failure_explains_missing_wireguard_go():
     text = vpn_start_failure_detail(127, "", "")
     assert "wireguard-go" in text
     assert "OpenVPN" in text
+
+
+def test_kernel_wireguard_skips_userspace_binary():
+    assert wireguard_userspace_binary(kernel_module=True, go_bin="/usr/bin/wireguard-go") is None
+    assert wireguard_userspace_binary(kernel_module=False, go_bin="/usr/bin/wireguard-go") == "/usr/bin/wireguard-go"
+    assert wireguard_userspace_binary(kernel_module=False, go_bin=None) is None
 
 
 def test_vpn_start_failure_explains_missing_resolvconf():
