@@ -227,7 +227,7 @@ def test_vpn_wraps_wireguard_with_private_resolv(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(Path, "mkdir", mkdir)
     wrapped = mgr.wrap_torrent_command(["qbittorrent-nox"])
-    assert wrapped[:6] == ["unshare", "--mount", "--propagation", "private", "--", "sh"]
+    assert wrapped[:6] == ["/usr/bin/unshare", "--mount", "--propagation", "private", "--", "sh"]
     resolv = tmp_path / "config" / "vpn" / ".run" / "resolv.tunneled.conf"
     assert resolv.read_text(encoding="utf-8") == "nameserver 1.1.1.1\nnameserver 1.0.0.1\n"
     assert str(resolv) in wrapped
