@@ -90,6 +90,8 @@ Voir [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ### Transcodage matériel (Intel/AMD)
 
+L’image inclut **jellyfin-ffmpeg** (pilotes Intel iHD / VA-API). Montez le nœud de rendu hôte, recréez le conteneur après un pull qui l’embarque, puis activez **Intel Quick Sync** (ou VAAPI) dans Jellyfin sous Playback → Transcoding.
+
 ```bash
 docker compose -f docker-compose.yml -f compose.gpu.yml up -d
 ```

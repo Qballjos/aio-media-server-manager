@@ -556,6 +556,7 @@ class IntegrationEngine:
             set_wiring_progress("Configuring Jellyfin media libraries")
             jelly_client = JellyfinClient(port=jelly_port, api_key=jellyfin_key)
             jelly_ok = jelly_client.set_transcoding_temp_path(str(layout.transcode_jellyfin))
+            jelly_ok = jelly_client.ensure_jellyfin_ffmpeg() and jelly_ok
             for name, collection_type, path in jellyfin_libraries(layout):
                 jelly_ok = jelly_client.add_media_library(name, collection_type, str(path)) and jelly_ok
             steps.append(_step("jellyfin", "configure_libraries_and_transcode", jelly_ok, str(layout.transcode_jellyfin)))

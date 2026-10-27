@@ -8,7 +8,7 @@ Sonarr et le reste tournent toujours comme des processus sous AIO — vous ne cr
 - Python 3.11+
 - [Poetry](https://python-poetry.org/docs/#installation)
 - Node.js 22 (construire le tableau de bord une fois)
-- `ffmpeg` (pour le transcodage / certaines apps média)
+- `ffmpeg` (pour le transcodage / certaines apps média) ; pour le HW Jellyfin, préférez `jellyfin-ffmpeg7` depuis [repo.jellyfin.org](https://repo.jellyfin.org)
 - VPN facultatif : `wireguard` ou `openvpn`, plus `iproute2`  
   Sur LXC : activez `nesting=1` et `/dev/net/tun`
 
@@ -77,7 +77,7 @@ N’installez que ce que vous allez faire tourner. Sur ARM64, sautez Chromium �
 
 | Paquets | Applications |
 |----------|----------------|
-| `ffmpeg`, `libfontconfig1` | Jellyfin, Plex |
+| `jellyfin-ffmpeg7` (préféré) ou `ffmpeg`, `libfontconfig1` | Jellyfin, Plex |
 | `libicu*`, `libssl3`, `libsqlite3-0`, `sqlite3`, `libgssapi-krb5-2`, `zlib1g` | Sonarr, Radarr, Lidarr, Prowlarr, NeutArr |
 | `git` | Recyclarr (clone TRaSH Guides) |
 | `unrar` (RAR 5+), `p7zip-full`, [par2cmdline-turbo](https://sabnzbd.org/wiki/installation/par2cmdline-turbo) comme `par2` | SABnzbd, NZBGet |

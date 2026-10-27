@@ -8,7 +8,7 @@ Sonarr and the rest still run as processes under AIO — you do not create a sys
 - Python 3.11+
 - [Poetry](https://python-poetry.org/docs/#installation)
 - Node.js 22 (build the dashboard once)
-- `ffmpeg` (for transcoding / some media apps)
+- `ffmpeg` (for transcoding / some media apps); for Jellyfin HW use `jellyfin-ffmpeg7` from [repo.jellyfin.org](https://repo.jellyfin.org) when possible
 - Optional VPN: `wireguard` or `openvpn`, plus `iproute2`  
   On LXC: enable `nesting=1` and `/dev/net/tun`
 
@@ -77,7 +77,7 @@ Install only what you will run. On ARM64, skip Chromium — Flaresolverr is x86_
 
 | Packages | Applications |
 |----------|----------------|
-| `ffmpeg`, `libfontconfig1` | Jellyfin, Plex |
+| `jellyfin-ffmpeg7` (preferred) or `ffmpeg`, `libfontconfig1` | Jellyfin, Plex |
 | `libicu*`, `libssl3`, `libsqlite3-0`, `sqlite3`, `libgssapi-krb5-2`, `zlib1g` | Sonarr, Radarr, Lidarr, Prowlarr, NeutArr |
 | `git` | Recyclarr (clones TRaSH Guides) |
 | `unrar` (RAR 5+), `p7zip-full`, [par2cmdline-turbo](https://sabnzbd.org/wiki/installation/par2cmdline-turbo) as `par2` | SABnzbd, NZBGet |

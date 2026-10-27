@@ -8,7 +8,7 @@ Sonarr und der Rest laufen weiter als Prozesse unter AIO — Sie legen keine sys
 - Python 3.11+
 - [Poetry](https://python-poetry.org/docs/#installation)
 - Node.js 22 (Dashboard einmal bauen)
-- `ffmpeg` (für Transkodierung / manche Media-Apps)
+- `ffmpeg` (für Transkodierung / manche Media-Apps); für Jellyfin-HW möglichst `jellyfin-ffmpeg7` von [repo.jellyfin.org](https://repo.jellyfin.org)
 - Optionales VPN: `wireguard` oder `openvpn`, plus `iproute2`  
   Auf LXC: `nesting=1` und `/dev/net/tun` aktivieren
 
@@ -77,7 +77,7 @@ Installieren Sie nur, was Sie ausführen. Auf ARM64 überspringen Sie Chromium �
 
 | Pakete | Anwendungen |
 |----------|----------------|
-| `ffmpeg`, `libfontconfig1` | Jellyfin, Plex |
+| `jellyfin-ffmpeg7` (bevorzugt) oder `ffmpeg`, `libfontconfig1` | Jellyfin, Plex |
 | `libicu*`, `libssl3`, `libsqlite3-0`, `sqlite3`, `libgssapi-krb5-2`, `zlib1g` | Sonarr, Radarr, Lidarr, Prowlarr, NeutArr |
 | `git` | Recyclarr (klont TRaSH Guides) |
 | `unrar` (RAR 5+), `p7zip-full`, [par2cmdline-turbo](https://sabnzbd.org/wiki/installation/par2cmdline-turbo) als `par2` | SABnzbd, NZBGet |

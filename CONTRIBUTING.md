@@ -45,7 +45,7 @@ Do not use `poetry run python main.py` on macOS or Windows to exercise catalog i
 - One manager, many **managed processes**. Do not add per-application Docker Compose services.
 - No Debrid functionality or cloud remotes.
 - New catalog apps must be **well supported with an active community**. VueTorrent is a qBittorrent WebUI option, not a catalog app. Hide an entry from the catalog and wizard when the host architecture is unsupported; do not install a default “wrong-arch” build.
-- The appliance image must not install Flaresolverr’s Chromium/Xvfb stack on `linux/arm64`. Shared runtimes (Python 3.13, Node 22, JRE, MariaDB, ffmpeg) stay on both published architectures.
+- The appliance image must not install Flaresolverr’s Chromium/Xvfb stack on `linux/arm64`. Shared runtimes (Python 3.13, Node 22, JRE, MariaDB, jellyfin-ffmpeg, stock ffmpeg) stay on both published architectures.
 - Application-specific behaviour lives in `applications/` plugins, not in `core/`.
 - Do not log or return secrets in API responses.
 - Never delete media libraries in uninstall or backup paths.

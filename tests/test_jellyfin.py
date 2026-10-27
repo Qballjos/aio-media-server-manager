@@ -96,6 +96,51 @@ def test_jellyfin_start_passes_webdir(tmp_path: Path):
     assert "<InternalHttpPort>18096</InternalHttpPort>" in network.read_text(encoding="utf-8")
 
 
+def test_jellyfin_points_encoding_at_jellyfin_ffmpeg(tmp_path: Path, monkeypatch):
+    from core.settings import settings
+
+    ffmpeg = tmp_path / "jellyfin-ffmpeg" / "ffmpeg"
+    ffmpeg.parent.mkdir(parents=True)
+    ffmpeg.write_text("x", encoding="utf-8")
+    dri = tmp_path / "jellyfin-ffmpeg" / "lib" / "dri"
+    dri.mkdir(parents=True)
+    monkeypatch.setattr("applications.jellyfin.JELLYFIN_FFMPEG_PATH", ffmpeg)
+    monkeypatch.setattr("applications.jellyfin.JELLYFIN_FFMPEG_DRI", dri)
+    monkeypatch.setattr(settings, "cache_dir", tmp_path / "cache")
+    monkeypatch.setattr(settings, "config_dir", tmp_path / "config")
+
+    app = JellyfinApp(base_config_dir=tmp_path / "config", base_install_dir=tmp_path / "apps")
+    env = app.extra_env()
+    assert env["JELLYFIN_FFMPEG"] == str(ffmpeg)
+    assert env["LIBVA_DRIVERS_PATH"] == str(dri)
+
+    app._ensure_encoder_path()
+    encoding = app.config_dir / "encoding.xml"
+    text = encoding.read_text(encoding="utf-8")
+    assert f"<EncoderAppPath>{ffmpeg}</EncoderAppPath>" in text
+
+    encoding.write_text(
+        '<?xml version="1.0"?>\n'
+        "<EncodingOptions>\n"
+        "  <EncoderAppPath>/usr/bin/ffmpeg</EncoderAppPath>\n"
+        "  <EncoderAppPathDisplay>/usr/bin/ffmpeg</EncoderAppPathDisplay>\n"
+        "</EncodingOptions>\n",
+        encoding="utf-8",
+    )
+    app._ensure_encoder_path()
+    updated = encoding.read_text(encoding="utf-8")
+    assert f"<EncoderAppPath>{ffmpeg}</EncoderAppPath>" in updated
+    assert "/usr/bin/ffmpeg" not in updated
+
+
+def test_dockerfile_installs_jellyfin_ffmpeg():
+    dockerfile = Path(__file__).resolve().parents[1] / "Dockerfile"
+    text = dockerfile.read_text(encoding="utf-8")
+    assert "jellyfin-ffmpeg7" in text
+    assert "JELLYFIN_FFMPEG=/usr/lib/jellyfin-ffmpeg/ffmpeg" in text
+    assert "repo.jellyfin.org" in text
+
+
 def test_discover_jellyfin_api_key_from_login(tmp_path, monkeypatch):
     secret_store.save_secret("jellyfin_api_key", "")
     monkeypatch.setattr(

@@ -68,7 +68,8 @@ RUN printf '%s\n' \
 #   Bazarr / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,
 #     libncurses6, python3.13, python3-dev, build-essential
 #   Shelfmark: manager Python 3.14 (upstream requires >=3.14), python3-dev, build-essential
-#   Jellyfin / Plex: ffmpeg, libfontconfig1
+#   Jellyfin: jellyfin-ffmpeg7 (bundled iHD/VAAPI; see next RUN), libfontconfig1
+#   Plex / tools: stock Debian ffmpeg
 #   Seerr: Node 22 (copied from nodebin)
 #   Grimmory: JRE 25 (copied from jre), mariadb-server
 #   Flaresolverr (x86_64 / amd64 image only): chromium, xvfb, fonts-liberation
@@ -125,6 +126,33 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     && useradd -u 910 -g 910 -M -d /tmp/ammvpn -s /usr/sbin/nologin ammvpn \
     && mkdir -p /tmp/ammvpn \
     && chown 910:910 /tmp/ammvpn
+
+# jellyfin-ffmpeg ships its own libva + iHD/i965/radeonsi dri drivers (needed for Intel Arc QSV).
+# Stock Debian ffmpeg stays on PATH for Plex and diagnostics. Both amd64 and arm64.
+ENV JELLYFIN_FFMPEG=/usr/lib/jellyfin-ffmpeg/ffmpeg
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gnupg; \
+    mkdir -p /etc/apt/keyrings; \
+    curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
+      | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg; \
+    printf '%s\n' \
+      'Types: deb' \
+      'URIs: https://repo.jellyfin.org/debian' \
+      'Suites: bookworm' \
+      'Components: main' \
+      "Architectures: ${TARGETARCH:-amd64}" \
+      'Signed-By: /etc/apt/keyrings/jellyfin.gpg' \
+      > /etc/apt/sources.list.d/jellyfin.sources; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends jellyfin-ffmpeg7; \
+    test -x /usr/lib/jellyfin-ffmpeg/ffmpeg; \
+    if [ "${TARGETARCH:-amd64}" = "amd64" ]; then \
+      test -f /usr/lib/jellyfin-ffmpeg/lib/dri/iHD_drv_video.so; \
+    fi; \
+    apt-get purge -y gnupg; \
+    apt-get autoremove -y; \
+    rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
     case "${TARGETARCH:-amd64}" in \

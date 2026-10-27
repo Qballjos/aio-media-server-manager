@@ -445,6 +445,36 @@ class JellyfinClient:
             logger.debug("Jellyfin set_transcoding_temp_path error: %s", exc)
             return False
 
+    def ensure_jellyfin_ffmpeg(self, ffmpeg_path: str = "/usr/lib/jellyfin-ffmpeg/ffmpeg") -> bool:
+        """Point EncodingOptions at jellyfin-ffmpeg when the binary exists in the image."""
+        if not Path(ffmpeg_path).is_file():
+            return True
+        try:
+            resp = requests.get(
+                f"{self.base_url}/System/Configuration/encoding",
+                headers=self._headers(),
+                timeout=5.0,
+            )
+            if resp.status_code != 200:
+                return False
+            cfg = resp.json()
+            if not isinstance(cfg, dict):
+                return False
+            if cfg.get("EncoderAppPath") == ffmpeg_path and cfg.get("EncoderAppPathDisplay") == ffmpeg_path:
+                return True
+            cfg["EncoderAppPath"] = ffmpeg_path
+            cfg["EncoderAppPathDisplay"] = ffmpeg_path
+            put = requests.post(
+                f"{self.base_url}/System/Configuration/encoding",
+                headers=self._headers(),
+                json=cfg,
+                timeout=5.0,
+            )
+            return put.status_code in (200, 204)
+        except Exception as exc:
+            logger.debug("Jellyfin ensure_jellyfin_ffmpeg error: %s", exc)
+            return False
+
     def ensure_local_admin(self, username: str, password: str) -> bool:
         """Create or align a local Jellyfin user with the manager login."""
         self.complete_startup(username, password)
