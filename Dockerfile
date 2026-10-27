@@ -68,7 +68,8 @@ RUN printf '%s\n' \
 #   Bazarr / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,
 #     libncurses6, python3.13, python3-dev, build-essential
 #   Shelfmark: manager Python 3.14 (upstream requires >=3.14), python3-dev, build-essential
-#   Jellyfin: jellyfin-ffmpeg7 (bundled iHD/VAAPI; see next RUN), libfontconfig1
+#   Jellyfin: jellyfin-ffmpeg7 (bundled iHD/VAAPI; see next RUN), libfontconfig1,
+#     nginx-light (localhost CF origin: CF-Connecting-IP → X-Forwarded-For)
 #   Plex / tools: stock Debian ffmpeg
 #   Seerr: Node 22 (copied from nodebin)
 #   Grimmory: JRE 25 (copied from jre), mariadb-server
@@ -109,6 +110,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         libjpeg62-turbo \
         libncurses6 \
         libfontconfig1 \
+        nginx-light \
         mariadb-server \
         unrar \
         p7zip-full \
@@ -197,6 +199,7 @@ RUN pip install --no-cache-dir poetry \
 COPY core ./core
 COPY api ./api
 COPY applications ./applications
+COPY packaging/nginx/jellyfin-cf-origin.conf.template /etc/aio/nginx/jellyfin-cf-origin.conf.template
 COPY main.py ./
 COPY --from=frontend /ui/dist ./frontend/dist
 

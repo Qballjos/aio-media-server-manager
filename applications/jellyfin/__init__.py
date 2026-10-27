@@ -91,6 +91,7 @@ class JellyfinApp(BaseApplication):
     def post_install(self) -> None:
         self._write_http_port(self.port)
         self._ensure_encoder_path()
+        self._ensure_known_proxies()
         self.prepare_browser_login()
 
     def prepare_browser_login(self) -> bool:
@@ -188,9 +189,55 @@ class JellyfinApp(BaseApplication):
         if updated != text:
             path.write_text(updated, encoding="utf-8")
 
+    def _ensure_known_proxies(self) -> None:
+        """Trust localhost so X-Forwarded-For from the CF origin shim is honored."""
+        path = self.config_dir / "network.xml"
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        proxies = ("127.0.0.1", "::1")
+        if not path.is_file():
+            body = "\n".join(f"    <string>{ip}</string>" for ip in proxies)
+            path.write_text(
+                '<?xml version="1.0" encoding="utf-8"?>\n'
+                "<NetworkConfiguration>\n"
+                "  <KnownProxies>\n"
+                f"{body}\n"
+                "  </KnownProxies>\n"
+                "</NetworkConfiguration>\n",
+                encoding="utf-8",
+            )
+            return
+        text = path.read_text(encoding="utf-8")
+        if "<KnownProxies" not in text:
+            updated = re.sub(
+                r"</NetworkConfiguration>",
+                "  <KnownProxies>\n"
+                + "\n".join(f"    <string>{ip}</string>" for ip in proxies)
+                + "\n  </KnownProxies>\n</NetworkConfiguration>",
+                text,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+            if updated != text:
+                path.write_text(updated, encoding="utf-8")
+            return
+        updated = text
+        for ip in proxies:
+            if re.search(rf"<string>\s*{re.escape(ip)}\s*</string>", updated, flags=re.IGNORECASE):
+                continue
+            updated = re.sub(
+                r"(<KnownProxies>)",
+                rf"\1\n    <string>{ip}</string>",
+                updated,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        if updated != text:
+            path.write_text(updated, encoding="utf-8")
+
     def build_start_command(self, executable: Path) -> list[str]:
         self._write_http_port(self.port)
         self._ensure_encoder_path()
+        self._ensure_known_proxies()
         cmd = [
             str(executable),
             "--datadir",

@@ -359,12 +359,33 @@ async def start_cloudflare_tunnel_last(
 ) -> None:
     """Start cloudflared after the dashboard and autostarted apps answer, so it never hits a closed origin."""
     from core.cloudflare_tunnel import cloudflare_tunnel
+    from core.jellyfin_cf_origin import jellyfin_cf_origin
 
     if plugins:
         await asyncio.gather(
             *(_wait_healthy(plugin, timeout=timeout) for plugin in plugins),
             return_exceptions=True,
         )
+
+    jellyfin = next((plugin for plugin in plugins if getattr(plugin, "name", None) == "jellyfin"), None)
+    if jellyfin is not None:
+        ensure_proxies = getattr(jellyfin, "_ensure_known_proxies", None)
+        if callable(ensure_proxies):
+            try:
+                ensure_proxies()
+            except Exception as err:
+                logger.debug("Jellyfin KnownProxies ensure skipped: %s", err)
+        try:
+            origin = await jellyfin_cf_origin.start(upstream_port=int(jellyfin.port))
+            if origin.get("status") == "error":
+                logger.warning("Jellyfin Cloudflare origin did not start: %s", origin.get("detail"))
+        except Exception as err:
+            logger.warning("Jellyfin Cloudflare origin did not start: %s", err)
+        try:
+            await _ensure_jellyfin_tunnel_points_at_cf_origin(int(jellyfin.port))
+        except Exception as err:
+            logger.debug("Jellyfin tunnel origin sync skipped: %s", err)
+
     try:
         result = await cloudflare_tunnel.start()
     except Exception as err:
@@ -372,6 +393,23 @@ async def start_cloudflare_tunnel_last(
         return
     if result.get("status") == "error":
         logger.warning("Cloudflare Tunnel did not start: %s", result.get("detail"))
+
+
+async def _ensure_jellyfin_tunnel_points_at_cf_origin(jellyfin_port: int) -> None:
+    """Repoint a previously published Jellyfin hostname onto the CF origin shim."""
+    from core.cloudflare_api import api_token_configured, load_hostnames, sync_published_app_port
+    from core.jellyfin_cf_origin import jellyfin_tunnel_service_url
+
+    if not api_token_configured():
+        return
+    if not str((load_hostnames().get("jellyfin") or {}).get("last_published") or "").strip():
+        return
+    result = await sync_published_app_port("jellyfin", int(jellyfin_port), force=True)
+    if result.get("ok") and not result.get("skipped"):
+        logger.info(
+            "Jellyfin tunnel origin set to %s (X-Forwarded-For shim)",
+            jellyfin_tunnel_service_url(),
+        )
 
 
 async def _wait_wiring_prereqs(timeout: float = 90.0) -> None:

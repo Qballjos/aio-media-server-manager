@@ -70,6 +70,8 @@ Stuck on **Tunnel down**? Check cloudflared logs in Catalog/Diagnostics, outboun
 Cloudflare only serves **HTTPS on port 443**. You cannot open `https://media.example.com:8989`.  
 Each app needs its own **public hostname**, e.g. `https://sonarr.example.com`, mapped to `http://127.0.0.1:8989` **inside** the AIO container.
 
+**Jellyfin:** the tunnel points at a localhost nginx on **8097** that copies `CF-Connecting-IP` into `X-Forwarded-For` before Jellyfin. Without that, Jellyfin sees every tunnel client as `127.0.0.1` (local) and skips remote bitrate / Auto transcode. LAN still uses **8096** directly.
+
 In Cloudflare these are **[Published applications](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/#2a-publish-an-application)** (hostname → service) — not private-network Tunnel CIDR routes.
 
 ### Easiest: do it in AIO
@@ -99,7 +101,7 @@ Typical service targets (inside AIO):
 | `qbittorrent.example.com` | `http://127.0.0.1:8081` |
 | `shelfmark.example.com` | `http://127.0.0.1:8084` |
 | `sabnzbd.example.com` | `http://127.0.0.1:8085` |
-| `jellyfin.example.com` | `http://127.0.0.1:8096` |
+| `jellyfin.example.com` | `http://127.0.0.1:8097` (CF origin shim → Jellyfin `:8096`) |
 | `seerr.example.com` | `http://127.0.0.1:5055` |
 | `grimmory.example.com` | `http://127.0.0.1:6060` |
 | `bazarr.example.com` | `http://127.0.0.1:6767` |

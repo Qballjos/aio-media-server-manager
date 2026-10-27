@@ -262,7 +262,14 @@ async def resolve_zone_id(zone_name: str) -> str:
     return zone_id
 
 
-def _service_url(port: int) -> str:
+def _service_url(port: int, *, app_name: str = "") -> str:
+    # Jellyfin via the tunnel goes through a localhost nginx that sets X-Forwarded-For
+    # from CF-Connecting-IP (Jellyfin ignores CF-Connecting-IP and would otherwise treat
+    # every tunnel client as 127.0.0.1 / local, skipping remote bitrate limits).
+    if app_name == "jellyfin":
+        from core.jellyfin_cf_origin import jellyfin_tunnel_service_url
+
+        return jellyfin_tunnel_service_url()
     return f"http://127.0.0.1:{int(port)}"
 
 
@@ -296,7 +303,7 @@ def planned_routes(
                 "subdomain": sub,
                 "hostname": host,
                 "url": f"https://{host}" if host else "",
-                "service": _service_url(app["port"]),
+                "service": _service_url(app["port"], app_name=name),
                 "default_subdomain": app["default_subdomain"],
                 "access_gate": name in ACCESS_GATE_APPS,
             }
@@ -433,11 +440,16 @@ def _merge_ingress(
     return merged
 
 
-async def sync_published_app_port(app_name: str, port: int) -> dict[str, Any]:
+async def sync_published_app_port(
+    app_name: str, port: int, *, force: bool = False
+) -> dict[str, Any]:
     """Rewrite published-application ingress when an exposed app's listen port changes.
 
     DNS CNAMEs target ``<tunnel-id>.cfargotunnel.com`` only — they do not embed the
     origin port — so we update the tunnel ingress service URL and leave DNS alone.
+
+    ``force=True`` also rewrites when the listen port is unchanged but the service URL
+    must change (e.g. Jellyfin moving onto the CF-Connecting-IP → XFF origin shim).
     """
     name = (app_name or "").strip().lower()
     new_port = int(port)
@@ -461,14 +473,8 @@ async def sync_published_app_port(app_name: str, port: int) -> dict[str, Any]:
         prev_port_i = int(prev_port) if prev_port is not None else None
     except (TypeError, ValueError):
         prev_port_i = None
-    if prev_port_i == new_port:
-        return {
-            "ok": True,
-            "skipped": True,
-            "hostname": hostname,
-            "port": new_port,
-            "detail": "Tunnel already points at this port.",
-        }
+
+    service = _service_url(new_port, app_name=name)
 
     ids = decode_tunnel_token()
     account_id = ids["account_id"]
@@ -477,7 +483,32 @@ async def sync_published_app_port(app_name: str, port: int) -> dict[str, Any]:
     current = await get_tunnel_config(account_id, tunnel_id)
     config = current.get("config") if isinstance(current.get("config"), dict) else {}
     existing_ingress = list(config.get("ingress") or []) if isinstance(config, dict) else []
-    service = _service_url(new_port)
+    current_service = ""
+    for rule in existing_ingress:
+        if str(rule.get("hostname") or "").strip().lower() == hostname:
+            current_service = str(rule.get("service") or "").strip()
+            break
+
+    if current_service == service and prev_port_i == new_port:
+        return {
+            "ok": True,
+            "skipped": True,
+            "hostname": hostname,
+            "port": new_port,
+            "service": service,
+            "detail": "Tunnel already points at this origin.",
+        }
+    if not force and prev_port_i == new_port and current_service and current_service != service:
+        # Listen port unchanged but origin URL must move (Jellyfin CF shim).
+        force = True
+    if not force and prev_port_i == new_port:
+        return {
+            "ok": True,
+            "skipped": True,
+            "hostname": hostname,
+            "port": new_port,
+            "detail": "Tunnel already points at this port.",
+        }
 
     desired = [
         {
@@ -495,10 +526,10 @@ async def sync_published_app_port(app_name: str, port: int) -> dict[str, Any]:
 
     mark_published({name: hostname}, ports={name: new_port})
     logger.info(
-        "Synced Cloudflare published application for %s → %s (port %s)",
+        "Synced Cloudflare published application for %s → %s (%s)",
         name,
         hostname,
-        new_port,
+        service,
     )
     return {
         "ok": True,
