@@ -141,6 +141,15 @@ def test_dockerfile_installs_jellyfin_ffmpeg():
     assert "repo.jellyfin.org" in text
 
 
+def test_dockerfile_pins_cloudflared_version():
+    dockerfile = Path(__file__).resolve().parents[1] / "Dockerfile"
+    text = dockerfile.read_text(encoding="utf-8")
+    assert "ARG CLOUDFLARED_VERSION=" in text
+    assert "releases/latest/download/cloudflared" not in text
+    assert "releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-" in text
+    assert (Path(__file__).resolve().parents[1] / ".github/workflows/cloudflared-bump.yml").is_file()
+
+
 def test_discover_jellyfin_api_key_from_login(tmp_path, monkeypatch):
     secret_store.save_secret("jellyfin_api_key", "")
     monkeypatch.setattr(

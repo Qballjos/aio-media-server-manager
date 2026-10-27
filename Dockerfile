@@ -154,6 +154,9 @@ RUN set -eux; \
     apt-get autoremove -y; \
     rm -rf /var/lib/apt/lists/*
 
+# Pinned so Dependabot-style bumps (see cloudflared-bump.yml) change the Dockerfile
+# digest and trigger Nightly / Docker rebuilds. Do not switch back to floating :latest.
+ARG CLOUDFLARED_VERSION=2026.10.4
 RUN set -eux; \
     case "${TARGETARCH:-amd64}" in \
       amd64) cfarch=amd64 ;; \
@@ -161,10 +164,12 @@ RUN set -eux; \
       arm) cfarch=arm ;; \
       *) cfarch=amd64 ;; \
     esac; \
-    curl -fsSL --retry 5 --retry-delay 5 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfarch}" \
+    curl -fsSL --retry 5 --retry-delay 5 \
+      "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${cfarch}" \
       -o /usr/local/bin/cloudflared; \
     chmod +x /usr/local/bin/cloudflared; \
-    cloudflared --version
+    cloudflared --version; \
+    cloudflared --version | grep -F "${CLOUDFLARED_VERSION}"
 
 # Faster SABnzbd/NZBGet PAR2 verify+repair (drop-in replacement for Debian par2).
 # https://sabnzbd.org/wiki/installation/par2cmdline-turbo

@@ -67,6 +67,7 @@ Agents and Dependabot often treat “not on the newest version” as a bug. In t
 | Child Python | **3.13** | Bazarr / SABnzbd (`AMM_CHILD_PYTHON` / `/opt/python3.13`) |
 | Shelfmark Python | **3.14** | Upstream `requires-python >= 3.14`. Uses the manager interpreter so `gunicorn` is installed. |
 | JRE | **25** | Grimmory |
+| cloudflared | `ARG CLOUDFLARED_VERSION` | Pinned so bumps rebuild the image. `.github/workflows/cloudflared-bump.yml` updates the pin on `beta` and dispatches Nightly. Do not switch back to floating `releases/latest`. |
 
 **Frontend majors:** treat `vue-router` 5.x as a deliberate migration, not an auto-merge.
 
