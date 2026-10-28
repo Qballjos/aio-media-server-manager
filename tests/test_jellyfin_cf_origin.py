@@ -50,7 +50,8 @@ def test_render_nginx_config_substitutes_ports(tmp_path: Path, monkeypatch):
 
     template = tmp_path / "tmpl.conf"
     template.write_text(
-        "listen __LISTEN_PORT__; upstream __UPSTREAM_PORT__; log __ERROR_LOG__;\n",
+        "listen __LISTEN_PORT__; upstream __UPSTREAM_PORT__; "
+        "log __ERROR_LOG__; access __ACCESS_LOG__;\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(settings, "config_dir", tmp_path / "config")
@@ -60,6 +61,7 @@ def test_render_nginx_config_substitutes_ports(tmp_path: Path, monkeypatch):
     assert f"listen {CF_ORIGIN_PORT};" in text
     assert "upstream 18096;" in text
     assert "jellyfin-cf-origin.err.log" in text
+    assert "jellyfin-cf-origin.access.log" in text
 
 
 def test_jellyfin_ensures_known_proxies(tmp_path: Path, monkeypatch):
@@ -72,6 +74,8 @@ def test_jellyfin_ensures_known_proxies(tmp_path: Path, monkeypatch):
     text = (app.config_dir / "network.xml").read_text(encoding="utf-8")
     assert "<string>127.0.0.1</string>" in text
     assert "<string>::1</string>" in text
+    assert "<string>::ffff:127.0.0.1</string>" in text
+    assert "<string>127.0.0.0/8</string>" in text
 
 
 def test_dockerfile_ships_nginx_cf_origin_template():

@@ -59,6 +59,7 @@ class JellyfinCfOrigin:
             text.replace("__LISTEN_PORT__", str(CF_ORIGIN_PORT))
             .replace("__UPSTREAM_PORT__", str(int(upstream_port)))
             .replace("__ERROR_LOG__", str(log_dir / "jellyfin-cf-origin.err.log"))
+            .replace("__ACCESS_LOG__", str(log_dir / "jellyfin-cf-origin.access.log"))
         )
         path = self.runtime_config_path()
         path.parent.mkdir(parents=True, exist_ok=True)

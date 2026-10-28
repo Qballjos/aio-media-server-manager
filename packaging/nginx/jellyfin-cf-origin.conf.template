@@ -1,9 +1,8 @@
 # Local-only origin for Cloudflare Tunnel → Jellyfin.
-# cloudflared often sends CF-Connecting-IP but Jellyfin only trusts X-Forwarded-For
-# from KnownProxies (127.0.0.1). This shim copies CF-Connecting-IP into XFF so
-# RemoteClientBitrateLimit and IsInLocalNetwork see the real client, not loopback.
+# cloudflared may send CF-Connecting-IP; Jellyfin only honors X-Forwarded-For from
+# KnownProxies. Use real_ip so $remote_addr becomes the client, then pass that as XFF.
 #
-# Placeholders filled at start: __LISTEN_PORT__ __UPSTREAM_PORT__ __ERROR_LOG__
+# Placeholders: __LISTEN_PORT__ __UPSTREAM_PORT__ __ERROR_LOG__ __ACCESS_LOG__
 # LAN clients keep using Jellyfin on the upstream port directly. Do not publish the listen port.
 
 worker_processes 1;
@@ -28,21 +27,31 @@ http {
         ''      close;
     }
 
-    # Prefer Cloudflare's client IP; fall back to any XFF cloudflared already set.
-    map $http_cf_connecting_ip $jellyfin_client_ip {
-        ~.      $http_cf_connecting_ip;
-        default $http_x_forwarded_for;
-    }
+    # cloudflared is the only peer (loopback). Trust it for CF-Connecting-IP → $remote_addr.
+    set_real_ip_from 127.0.0.0/8;
+    set_real_ip_from ::1;
+    real_ip_header CF-Connecting-IP;
+    real_ip_recursive on;
+
+    log_format cf_debug '$remote_addr cf=$http_cf_connecting_ip '
+                        'xff_in=$http_x_forwarded_for host=$host';
+    access_log __ACCESS_LOG__ cf_debug;
 
     server {
         listen 127.0.0.1:__LISTEN_PORT__;
-        listen [::1]:__LISTEN_PORT__;
+
+        # Open https://media.example.com/aio-xff-debug to see what the shim receives.
+        location = /aio-xff-debug {
+            default_type text/plain;
+            return 200 "remote_addr=$remote_addr\ncf_connecting_ip=$http_cf_connecting_ip\ntrue_client_ip=$http_true_client_ip\nxff_in=$http_x_forwarded_for\n";
+        }
 
         location / {
             proxy_pass http://127.0.0.1:__UPSTREAM_PORT__;
             proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $jellyfin_client_ip;
-            proxy_set_header X-Forwarded-For $jellyfin_client_ip;
+            # After real_ip, $remote_addr is the browser IP when CF-Connecting-IP was set.
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
             proxy_set_header X-Forwarded-Proto https;
             proxy_set_header X-Forwarded-Host $host;
             proxy_set_header Upgrade $http_upgrade;
