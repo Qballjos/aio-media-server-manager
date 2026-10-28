@@ -64,7 +64,7 @@ docker compose pull
 docker compose up -d --force-recreate
 ```
 
-Le conteneur ne peut pas remplacer sa propre image. Réglages → Mises à jour peut vous *signaler* quand `:latest` a bougé ; vous tirez toujours sur l’hôte. Les apps installées (Sonarr, Seerr et le reste) se mettent à jour depuis **Réglages → Mises à jour**, une par une ou toutes à la fois. Ces planifications sont désactivées par défaut. Recréer le conteneur ne les fait pas avancer.
+Le conteneur ne peut pas remplacer sa propre image. Réglages → Mises à jour signale une installation `:nightly` seulement quand `:nightly` a bougé, et une installation `:latest` seulement quand `:latest` a bougé. Vous tirez toujours ce tag sur l’hôte. Les apps installées (Sonarr, Seerr et le reste) se mettent à jour depuis **Réglages → Mises à jour**, une par une ou toutes à la fois. Ces planifications sont désactivées par défaut. Recréer le conteneur ne les fait pas avancer.
 
 **Ancien Compose qui ne publiait que le port 8080 ?** Copiez la liste `ports:` actuelle de ce dépôt et recréez, sinon les liens **Ouvrir l’interface** des apps enfants échouent sur le LAN.
 

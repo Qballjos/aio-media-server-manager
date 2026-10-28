@@ -64,7 +64,7 @@ docker compose pull
 docker compose up -d --force-recreate
 ```
 
-Der Container kann sein eigenes Image nicht ersetzen. Einstellungen → Updates kann *melden*, wenn `:latest` sich verschoben hat; holen tun Sie weiter auf dem Host. Installierte Apps (Sonarr, Seerr und der Rest) aktualisieren Sie unter **Einstellungen → Updates**, einzeln oder alle auf einmal. Diese Zeitpläne sind standardmäßig aus. Den Container neu zu erstellen hebt sie nicht an.
+Der Container kann sein eigenes Image nicht ersetzen. Einstellungen → Updates meldet eine `:nightly`-Installation nur, wenn `:nightly` sich verschoben hat, und eine `:latest`-Installation nur, wenn `:latest` sich verschoben hat. Holen tun Sie weiter diesen Tag auf dem Host. Installierte Apps (Sonarr, Seerr und der Rest) aktualisieren Sie unter **Einstellungen → Updates**, einzeln oder alle auf einmal. Diese Zeitpläne sind standardmäßig aus. Den Container neu zu erstellen hebt sie nicht an.
 
 **Ältere Compose-Datei, die nur Port 8080 veröffentlicht hat?** Kopieren Sie die aktuelle `ports:`-Liste aus diesem Repo und erstellen Sie neu, sonst scheitern die **Oberfläche öffnen**-Links der Kind-Apps im LAN.
 

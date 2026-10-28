@@ -64,7 +64,7 @@ docker compose pull
 docker compose up -d --force-recreate
 ```
 
-De container kan zijn eigen image niet vervangen. Instellingen → Updates kan je *melden* wanneer `:latest` is verschoven; ophalen doe je nog steeds op de host. Geïnstalleerde apps (Sonarr, Seerr en de rest) werk je bij via **Instellingen → Updates**, één voor één of allemaal tegelijk. Die schema’s staan standaard uit. De container opnieuw aanmaken werkt ze niet bij.
+De container kan zijn eigen image niet vervangen. Instellingen → Updates meldt een `:nightly`-installatie alleen wanneer `:nightly` is verschoven, en een `:latest`-installatie alleen wanneer `:latest` is verschoven. Ophalen doe je nog steeds die tag op de host. Geïnstalleerde apps (Sonarr, Seerr en de rest) werk je bij via **Instellingen → Updates**, één voor één of allemaal tegelijk. Die schema’s staan standaard uit. De container opnieuw aanmaken werkt ze niet bij.
 
 **Ouder compose-bestand dat alleen poort 8080 publiceerde?** Kopieer de huidige `ports:`-lijst uit deze repo en maak opnieuw aan, anders falen de **Interface openen**-links van kind-apps op het LAN.
 

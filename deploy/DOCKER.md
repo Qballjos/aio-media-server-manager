@@ -64,7 +64,7 @@ docker compose pull
 docker compose up -d --force-recreate
 ```
 
-The container cannot replace its own image. Settings → Updates can *notify* you when `:latest` moved; you still pull on the host. Installed apps (Sonarr, Seerr, and the rest) update from **Settings → Updates**, one at a time or all at once. Those schedules default to off. Recreating the container does not bump them.
+The container cannot replace its own image. Settings → Updates notifies a `:nightly` install only when `:nightly` moves, and a `:latest` install only when `:latest` moves. You still pull that tag on the host. Installed apps (Sonarr, Seerr, and the rest) update from **Settings → Updates**, one at a time or all at once. Those schedules default to off. Recreating the container does not bump them.
 
 **Older compose that only published port 8080?** Copy the current `ports:` list from this repo and recreate, or child **Open UI** links will fail on the LAN.
 
