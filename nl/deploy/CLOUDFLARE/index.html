@@ -1,0 +1,1695 @@
+
+<!doctype html>
+<html lang="nl" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Eén installatie voor je hele media-stack thuis — downloads, automatisering en afspelen.">
+      
+      
+      
+        <link rel="canonical" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE/">
+      
+      
+        <link rel="prev" href="../TRUENAS/">
+      
+      
+        <link rel="next" href="../CLOUDFLARE_ACCESS/">
+      
+      
+        
+          <link rel="alternate" href="../../../deploy/CLOUDFLARE/" hreflang="en">
+        
+          <link rel="alternate" href="./" hreflang="nl">
+        
+          <link rel="alternate" href="../../../de/deploy/CLOUDFLARE/" hreflang="de">
+        
+          <link rel="alternate" href="../../../fr/deploy/CLOUDFLARE/" hreflang="fr">
+        
+      
+      
+      <link rel="icon" href="../../../assets/logo-aio-media-manager.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Cloudflare Tunnel - AIO Media Server Manager</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cloudflare-tunnel" class="md-skip">
+          Ga naar inhoud
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../" title="AIO Media Server Manager" class="md-header__button md-logo" aria-label="AIO Media Server Manager" data-md-component="logo">
+      
+  <img src="../../../assets/logo-aio-media-manager.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AIO Media Server Manager
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Cloudflare Tunnel
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Naar lichte modus"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Naar lichte modus" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Naar donkere modus"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Naar donkere modus" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Systeemvoorkeur volgen"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Systeemvoorkeur volgen" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Selecteer taal">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="../../../deploy/CLOUDFLARE/" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="nl" class="md-select__link">
+              Nederlands
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../../de/deploy/CLOUDFLARE/" hreflang="de" class="md-select__link">
+              Deutsch
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../../fr/deploy/CLOUDFLARE/" hreflang="fr" class="md-select__link">
+              Français
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Zoeken" placeholder="Zoeken" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Zoeken">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Leegmaken" aria-label="Leegmaken" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Zoeken initialiseren
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Qballjos/aio-media-server-manager" title="Ga naar repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Qballjos/aio-media-server-manager
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Start
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Aan de slag
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Platforms
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Toegang van buitenaf
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigatie" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../" title="AIO Media Server Manager" class="md-nav__button md-logo" aria-label="AIO Media Server Manager" data-md-component="logo">
+      
+  <img src="../../../assets/logo-aio-media-manager.png" alt="logo">
+
+    </a>
+    AIO Media Server Manager
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Qballjos/aio-media-server-manager" title="Ga naar repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Qballjos/aio-media-server-manager
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aan de slag
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Aan de slag
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installeren
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Het dashboard gebruiken
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Platforms
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Platforms
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overzicht
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DOCKER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LINUX/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Linux / LXC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../UNRAID/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unraid
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SYNOLOGY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Synology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TRUENAS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TrueNAS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Toegang van buitenaf
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Toegang van buitenaf
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloudflare Tunnel
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloudflare Tunnel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Inhoudsopgave">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Inhoudsopgave
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#wat-je-nodig-hebt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wat je nodig hebt
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stap-1-maak-de-tunnel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stap 1 — Maak de tunnel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stap-2-kopieer-alleen-de-token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stap 2 — Kopieer alleen de token
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stap-3-plak-de-connectortoken-in-aio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stap 3 — Plak de connectortoken in AIO
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stap-4-apps-publiceren-zodat-interface-openen-op-afstand-werkt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stap 4 — Apps publiceren (zodat Interface openen op afstand werkt)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stap 4 — Apps publiceren (zodat Interface openen op afstand werkt)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#het-makkelijkst-doe-het-in-aio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Het makkelijkst: doe het in AIO
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#of-zelf-publiceren-in-cloudflare" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Of: zelf publiceren in Cloudflare
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optioneel-tokenbestand-op-schijf-ssh-compose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optioneel: tokenbestand op schijf (SSH / Compose)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#native-linux-geen-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native Linux (geen Docker)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#controleren-of-het-werkt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Controleren of het werkt
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vertrouwde-reverse-proxy-ips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vertrouwde reverse-proxy-IP’s
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#problemen-oplossen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problemen oplossen
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#korte-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Korte checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLOUDFLARE_ACCESS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloudflare Access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Inhoudsopgave">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Inhoudsopgave
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#wat-je-nodig-hebt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wat je nodig hebt
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stap-1-maak-de-tunnel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stap 1 — Maak de tunnel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stap-2-kopieer-alleen-de-token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stap 2 — Kopieer alleen de token
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stap-3-plak-de-connectortoken-in-aio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stap 3 — Plak de connectortoken in AIO
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stap-4-apps-publiceren-zodat-interface-openen-op-afstand-werkt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stap 4 — Apps publiceren (zodat Interface openen op afstand werkt)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stap 4 — Apps publiceren (zodat Interface openen op afstand werkt)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#het-makkelijkst-doe-het-in-aio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Het makkelijkst: doe het in AIO
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#of-zelf-publiceren-in-cloudflare" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Of: zelf publiceren in Cloudflare
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optioneel-tokenbestand-op-schijf-ssh-compose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optioneel: tokenbestand op schijf (SSH / Compose)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#native-linux-geen-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native Linux (geen Docker)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#controleren-of-het-werkt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Controleren of het werkt
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vertrouwde-reverse-proxy-ips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vertrouwde reverse-proxy-IP’s
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#problemen-oplossen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problemen oplossen
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#korte-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Korte checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="cloudflare-tunnel">Cloudflare Tunnel<a class="headerlink" href="#cloudflare-tunnel" title="Permanent link">&para;</a></h1>
+<p>Bereik AIO (en optionele apps zoals Sonarr of Jellyfin) vanaf internet <strong>zonder poorten open te zetten</strong> op je router.</p>
+<p>In gewone woorden: een klein programma (<code>cloudflared</code>) draait <strong>in AIO</strong>, belt naar buiten naar Cloudflare, en Cloudflare serveert <code>https://your-name.yourdomain.com</code>. Je thuisfirewall blijft dicht voor inkomend verkeer.</p>
+<p>Installeer <strong>geen</strong> tweede Cloudflare-Docker-container of <code>cloudflared</code>-service op dezelfde host voor dezelfde tunnel — AIO draait die al.</p>
+<p>Officiële hulp van Cloudflare: <a href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/">Create a tunnel</a> · <a href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/remote-tunnel-permissions/#get-the-tunnel-token">Tunnel token</a>.</p>
+<p>Je LAN-interface op <code>http://YOUR-SERVER-IP:8080</code> werkt nog steeds als de tunnel uit staat.</p>
+<hr />
+<h2 id="wat-je-nodig-hebt">Wat je nodig hebt<a class="headerlink" href="#wat-je-nodig-hebt" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Een domein waarvan de DNS bij Cloudflare staat</li>
+<li>Rechten om tunnels te maken (<strong>Networking → Tunnels</strong>)</li>
+<li>AIO al geïnstalleerd en door de eerste start heen</li>
+</ul>
+<hr />
+<h2 id="stap-1-maak-de-tunnel">Stap 1 — Maak de tunnel<a class="headerlink" href="#stap-1-maak-de-tunnel" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Meld je aan op <a href="https://dash.cloudflare.com/">dash.cloudflare.com</a>.</li>
+<li>Open <strong>Networking → Tunnels</strong><br />
+   (sommige accounts tonen nog <strong>Zero Trust → Networks → Tunnels</strong> — dezelfde plek).</li>
+<li><strong>Create a tunnel</strong> → connectortype <strong>Cloudflared</strong>.</li>
+<li>Geef een duidelijke naam, bijvoorbeeld <code>aio-media-manager</code>.</li>
+<li><strong>Create Tunnel</strong>.</li>
+</ol>
+<hr />
+<h2 id="stap-2-kopieer-alleen-de-token">Stap 2 — Kopieer alleen de token<a class="headerlink" href="#stap-2-kopieer-alleen-de-token" title="Permanent link">&para;</a></h2>
+<p>Cloudflare toont installatiecommando’s voor Docker, Windows, enzovoort. <strong>Draai die niet op je NAS.</strong> Je hebt alleen de tokenreeks nodig.</p>
+<ol>
+<li>Blijf op de setup- / <strong>Overview</strong>-pagina van de tunnel.</li>
+<li>Kies een willekeurig besturingssysteem zodat er een commando verschijnt (of later: tunnel → <strong>Overview</strong> → <strong>Add a replica</strong>).</li>
+<li>Je ziet iets als:</li>
+</ol>
+<div class="highlight"><pre><span></span><code>cloudflared<span class="w"> </span>service<span class="w"> </span>install<span class="w"> </span>eyJhIjoiNWFiNGU5Z...very-long...
+</code></pre></div>
+<ol>
+<li>Kopieer <strong>alleen</strong> het deel dat met <code>eyJ</code> begint (lange JWT-achtige reeks).<br />
+   Behandel die als een wachtwoord — wie hem heeft, kan je tunnel draaien.</li>
+</ol>
+<p><strong>Token kwijt?</strong> Tunnel → <strong>Overview</strong> → <strong>Add a replica</strong> → kopieer <code>eyJ…</code> opnieuw.<br />
+<strong>Gelekt?</strong> Gebruik <strong>Refresh token</strong>, plak de nieuwe in AIO en sla op.</p>
+<hr />
+<h2 id="stap-3-plak-de-connectortoken-in-aio">Stap 3 — Plak de connectortoken in AIO<a class="headerlink" href="#stap-3-plak-de-connectortoken-in-aio" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Open <code>http://YOUR-SERVER-IP:8080</code>.</li>
+<li><strong>Instellingen → Netwerk → Cloudflare Tunnel</strong></li>
+<li>Zet <strong>Tunnel inschakelen</strong> aan, plak de <code>eyJ…</code>-token en sla op.</li>
+<li>De status hoort <strong>Enabled</strong>, <strong>Token saved</strong>, <strong>Tunnel up</strong> en <strong>cloudflared ready</strong> te tonen.<br />
+   De <strong>CF</strong>-pil in de kop wordt groen/blauw als alles gezond is.</li>
+</ol>
+<p>Bij containerboot brengt AIO eerst de VPN (als die aan staat) en de catalogus-apps omhoog, en start <code>cloudflared</code> als laatste zodat die geen origins raakt die nog starten. Het dashboard is bereikbaar terwijl dat nog loopt. Na de wizard van de eerste start start de tunnel nog steeds meteen als je klaar bent (vóór of samen met de VPN), zodat je hostnamen meteen kunt publiceren.</p>
+<p>Blijft het op <strong>Tunnel down</strong> hangen? Kijk in de cloudflared-logs bij Catalogus/Diagnose, of uitgaand verkeer naar Cloudflare (poort <strong>7844</strong>) mag, en of niets anders dezelfde token gebruikt.</p>
+<hr />
+<h2 id="stap-4-apps-publiceren-zodat-interface-openen-op-afstand-werkt">Stap 4 — Apps publiceren (zodat Interface openen op afstand werkt)<a class="headerlink" href="#stap-4-apps-publiceren-zodat-interface-openen-op-afstand-werkt" title="Permanent link">&para;</a></h2>
+<p>Cloudflare serveert alleen <strong>HTTPS op poort 443</strong>. Je kunt <code>https://media.example.com:8989</code> niet openen.<br />
+Elke app heeft een eigen <strong>publieke hostnaam</strong> nodig, bijvoorbeeld <code>https://sonarr.example.com</code>, gemapt naar <code>http://127.0.0.1:8989</code> <strong>in</strong> de AIO-container.</p>
+<p><strong>Jellyfin:</strong> de tunnel wijst naar een localhost-nginx op <strong>8097</strong> die <code>CF-Connecting-IP</code> naar <code>X-Forwarded-For</code> kopieert. Zonder dat ziet Jellyfin elke tunnelclient als <code>127.0.0.1</code> (lokaal) en slaat remote bitratelimiet / Auto-transcode over. LAN blijft <strong>8096</strong> gebruiken.</p>
+<p>In Cloudflare heten dat <strong><a href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/#2a-publish-an-application">Published applications</a></strong> (hostnaam → service) — geen private-network Tunnel-CIDR-routes.</p>
+<h3 id="het-makkelijkst-doe-het-in-aio">Het makkelijkst: doe het in AIO<a class="headerlink" href="#het-makkelijkst-doe-het-in-aio" title="Permanent link">&para;</a></h3>
+<p>Nadat de connectortoken is opgeslagen (stap 3):</p>
+<ol>
+<li><strong>Instellingen → Netwerk → Publieke subdomeinen</strong></li>
+<li>Zet <strong>Publiek app-domein</strong> op je zone (bijvoorbeeld <code>example.com</code> of <code>example.co.uk</code>).</li>
+<li>Maak een API-token zoals Cloudflare het beschrijft (<a href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/">Create API token</a>):</li>
+<li><strong>My Profile → API Tokens</strong> (gebruiker) of <strong>Manage Account → Account API Tokens</strong></li>
+<li><strong>Create Token</strong> → begin bij het sjabloon <strong>Edit zone DNS</strong></li>
+<li>Houd <strong>Zone → DNS → Edit</strong>, beperkt tot je zone</li>
+<li>Voeg <strong>Account → Cloudflare Tunnel → Edit</strong> toe (en bij voorkeur <strong>Zone → Zone → Read</strong>)</li>
+<li>Ga door naar de samenvatting → Create Token (kopieer het geheim één keer)</li>
+<li>Plak die API-token onder <strong>Publieke subdomeinen</strong><br />
+   (dit is <strong>niet</strong> de <code>eyJ…</code>-connectortoken uit stap 3, en <strong>niet</strong> de Global API Key).
+   Als Cloudflare <strong>Invalid access token</strong> teruggeeft, wis de opgeslagen token en plak een verse <strong>API Token</strong> uit Create Token.</li>
+<li>Zet <strong>Vrijgeven</strong> per app aan, pas subdomeinlabels aan als je wilt, <strong>opslaan</strong>, en daarna <strong>Publiceren naar Cloudflare</strong>.</li>
+</ol>
+<p><strong>Opslaan</strong> werkt de links voor Interface openen en de Start-widgets bij. <strong>Publiceren</strong> schrijft published applications in de tunnel en maakt geproxiede DNS-CNAME’s (<code>&lt;subdomain&gt;.yourzone</code> → <code>&lt;tunnel-id&gt;.cfargotunnel.com</code>).</p>
+<p>Gebruikelijke servicedoelen (in AIO):</p>
+<table>
+<thead>
+<tr>
+<th>Hostnaam</th>
+<th>Wijst naar (in AIO)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>media.example.com</code> (AIO)</td>
+<td><code>http://127.0.0.1:8080</code></td>
+</tr>
+<tr>
+<td><code>qbittorrent.example.com</code></td>
+<td><code>http://127.0.0.1:8081</code></td>
+</tr>
+<tr>
+<td><code>shelfmark.example.com</code></td>
+<td><code>http://127.0.0.1:8084</code></td>
+</tr>
+<tr>
+<td><code>sabnzbd.example.com</code></td>
+<td><code>http://127.0.0.1:8085</code></td>
+</tr>
+<tr>
+<td><code>jellyfin.example.com</code></td>
+<td><code>http://127.0.0.1:8097</code> (CF-origin-shim → Jellyfin <code>:8096</code>)</td>
+</tr>
+<tr>
+<td><code>seerr.example.com</code></td>
+<td><code>http://127.0.0.1:5055</code></td>
+</tr>
+<tr>
+<td><code>grimmory.example.com</code></td>
+<td><code>http://127.0.0.1:6060</code></td>
+</tr>
+<tr>
+<td><code>bazarr.example.com</code></td>
+<td><code>http://127.0.0.1:6767</code></td>
+</tr>
+<tr>
+<td><code>nzbget.example.com</code></td>
+<td><code>http://127.0.0.1:6789</code></td>
+</tr>
+<tr>
+<td><code>radarr.example.com</code></td>
+<td><code>http://127.0.0.1:7878</code></td>
+</tr>
+<tr>
+<td><code>lidarr.example.com</code></td>
+<td><code>http://127.0.0.1:8686</code></td>
+</tr>
+<tr>
+<td><code>sonarr.example.com</code></td>
+<td><code>http://127.0.0.1:8989</code></td>
+</tr>
+<tr>
+<td><code>prowlarr.example.com</code></td>
+<td><code>http://127.0.0.1:9696</code></td>
+</tr>
+<tr>
+<td><code>neutarr.example.com</code></td>
+<td><code>http://127.0.0.1:9705</code></td>
+</tr>
+<tr>
+<td><code>plex.example.com</code></td>
+<td><code>http://127.0.0.1:32400</code></td>
+</tr>
+</tbody>
+</table>
+<p>Flaresolverr en Recyclarr worden niet als publieke hostnamen aangeboden. Recyclarr is een opdrachtregel-sync. Flaresolverr wordt in het apparaat door Prowlarr gebruikt. Meer poorten: <a href="../../INSTALL/#ports">Installeren → Poorten</a>.</p>
+<h3 id="of-zelf-publiceren-in-cloudflare">Of: zelf publiceren in Cloudflare<a class="headerlink" href="#of-zelf-publiceren-in-cloudflare" title="Permanent link">&para;</a></h3>
+<p><strong>Networking → Tunnels</strong> → jouw tunnel → <strong>Routes</strong> → <strong>Published application</strong>.<br />
+De service-URL moet <code>http://127.0.0.1:PORT</code> in AIO zijn. Zet daarna dezelfde labels onder AIO <strong>Publieke subdomeinen</strong> → <strong>opslaan</strong>, zodat Interface openen en Start hetzelfde zeggen.</p>
+<p><strong>Gedrag van publiceren</strong></p>
+<ul>
+<li>AIO wijzigt alleen hostnamen die het zelf heeft gepubliceerd (of die je nu aanzet). Hostnamen die je met de hand in het dashboard hebt gemaakt en nooit vanuit AIO hebt gepubliceerd, blijven staan.</li>
+<li>Een app uitzetten en opnieuw publiceren verwijdert de ingress-hostnaam; de DNS-naam kan blijven (dan krijg je een tunnel-404).</li>
+<li>De luisterpoort van een app wijzigen werkt de tunnelservice bij als er een API-token is opgeslagen.</li>
+<li>Thuis opent <code>http://nas-ip:8080</code> apps nog steeds als <code>http://nas-ip:port</code>, ook als er een publiek domein is ingesteld.</li>
+</ul>
+<p><strong>Belangrijk:</strong> gepubliceerde hostnamen staan op het publieke internet tot je <a href="../CLOUDFLARE_ACCESS/">Cloudflare Access</a> toevoegt. Zet Access vóór de *Arr-apps, de downloadclients en Seerr. Laat het AIO-dashboard, Jellyfin en Plex op hun eigen aanmelding. AIO kan die Access-applicaties maken nadat je een aanmeldmethode in Zero Trust hebt toegevoegd.</p>
+<p>SABnzbd blokkeert onbekende publieke Hosts standaard (<code>External internet access denied</code>). AIO zet <code>inet_exposure</code> en voegt je gepubliceerde SABnzbd-hostnaam toe aan <code>host_whitelist</code> bij start / Auto-koppelen / Publiceren. Nadat je <code>sabnzbd</code> onder Publieke subdomeinen hebt aangezet, herstart SABnzbd of draai Auto-koppelen één keer als de pagina toegang nog weigert.</p>
+<hr />
+<h2 id="optioneel-tokenbestand-op-schijf-ssh-compose">Optioneel: tokenbestand op schijf (SSH / Compose)<a class="headerlink" href="#optioneel-tokenbestand-op-schijf-ssh-compose" title="Permanent link">&para;</a></h2>
+<p>Handig voor installs die via de omgeving lopen. De paden zijn aan de <strong>host</strong>-kant van <code>/config</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>Map voor <code>tunnel.token</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gewone Linux</td>
+<td><code>/opt/aio-media-manager/config/cloudflare/</code></td>
+</tr>
+<tr>
+<td>Unraid</td>
+<td><code>/mnt/user/appdata/aio-media-manager/cloudflare/</code></td>
+</tr>
+<tr>
+<td>Synology</td>
+<td><code>/volume1/docker/aio-media-manager/config/cloudflare/</code></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>ssh<span class="w"> </span>user@host
+<span class="nv">CONFIG</span><span class="o">=</span>/opt/aio-media-manager/config
+sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="nv">$CONFIG</span><span class="s2">/cloudflare"</span>
+sudo<span class="w"> </span>tee<span class="w"> </span><span class="s2">"</span><span class="nv">$CONFIG</span><span class="s2">/cloudflare/tunnel.token"</span><span class="w"> </span>&gt;/dev/null<span class="w"> </span><span class="s">&lt;&lt;'EOF'</span>
+<span class="s">eyJ...paste-token...</span>
+<span class="s">EOF</span>
+sudo<span class="w"> </span>chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span><span class="s2">"</span><span class="nv">$CONFIG</span><span class="s2">/cloudflare/tunnel.token"</span>
+sudo<span class="w"> </span>chown<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">PUID</span><span class="k">:-</span><span class="nv">1000</span><span class="si">}</span><span class="s2">:</span><span class="si">${</span><span class="nv">PGID</span><span class="k">:-</span><span class="nv">1000</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="s2">"</span><span class="nv">$CONFIG</span><span class="s2">/cloudflare/tunnel.token"</span>
+</code></pre></div>
+<p>Zet hem daarna aan bij <strong>Instellingen → Netwerk</strong> (voorkeur — hij wordt in <code>amm_config.json</code> bewaard en overleeft containerherstarts, ook als compose nog <code>AMM_CLOUDFLARE_TUNNEL_ENABLED=false</code> heeft), of zet dit en maak opnieuw aan:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">AMM_CLOUDFLARE_TUNNEL_ENABLED</span><span class="o">=</span><span class="nb">true</span>
+<span class="nv">AMM_CLOUDFLARE_TUNNEL_TOKEN_FILE</span><span class="o">=</span>/config/cloudflare/tunnel.token
+</code></pre></div>
+<p>Houd <strong>één</strong> AIO-service in Compose — geen aparte <code>cloudflare/cloudflared</code>-container.</p>
+<hr />
+<h2 id="native-linux-geen-docker">Native Linux (geen Docker)<a class="headerlink" href="#native-linux-geen-docker" title="Permanent link">&para;</a></h2>
+<p>Installeer het <code>cloudflared</code>-binary als je niet op de GHCR-image zit, maar draai <strong>niet</strong> <code>cloudflared service install</code> — AIO start het proces:</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>--mode<span class="o">=</span><span class="m">0755</span><span class="w"> </span>/usr/share/keyrings
+curl<span class="w"> </span>-fsSL<span class="w"> </span>https://pkg.cloudflare.com/cloudflare-main.gpg<span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>tee<span class="w"> </span>/usr/share/keyrings/cloudflare-main.gpg<span class="w"> </span>&gt;/dev/null
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>tee<span class="w"> </span>/etc/apt/sources.list.d/cloudflared.list
+sudo<span class="w"> </span>apt-get<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>cloudflared
+</code></pre></div>
+<p>Zet de tunnel aan in Instellingen (of via de omgeving) en start <code>aio-media-manager.service</code>.</p>
+<hr />
+<h2 id="controleren-of-het-werkt">Controleren of het werkt<a class="headerlink" href="#controleren-of-het-werkt" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Cloudflare: tunnelstatus <strong>Healthy</strong></li>
+<li>AIO: Instellingen → Netwerk → tunnel <strong>verbonden</strong></li>
+<li>Vanaf mobiele data (of een ander netwerk): open <code>https://media.example.com</code> (jouw hostnaam)</li>
+<li>Optionele API-check (geeft de token niet terug): <code>GET /api/cloudflare/tunnel/status</code></li>
+</ol>
+<hr />
+<h2 id="vertrouwde-reverse-proxy-ips">Vertrouwde reverse-proxy-IP’s<a class="headerlink" href="#vertrouwde-reverse-proxy-ips" title="Permanent link">&para;</a></h2>
+<p><strong>Instellingen → Netwerk → Vertrouwde reverse-proxy-IP’s</strong> (<code>AMM_TRUSTED_PROXIES</code>).</p>
+<p>Dit vertelt AIO welke nabije proxy’s <code>X-Forwarded-*</code>-headers mogen sturen (echt client-IP en https tegenover http).</p>
+<table>
+<thead>
+<tr>
+<th>Jouw opstelling</th>
+<th>Wat je invult</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Alleen LAN</td>
+<td><strong>Leeg laten</strong></td>
+</tr>
+<tr>
+<td>Alleen Cloudflare Tunnel (token in AIO)</td>
+<td><strong>Leeg laten</strong> — AIO vertrouwt lokale <code>cloudflared</code> al</td>
+</tr>
+<tr>
+<td>nginx / Caddy / Traefik vóór AIO</td>
+<td>Het IP van die proxy (zoals AIO het ziet), bijvoorbeeld <code>172.17.0.1</code></td>
+</tr>
+</tbody>
+</table>
+<p>Dit is <strong>geen</strong> lijst van de publieke edge-IP’s van Cloudflare. Met een tunnel komt verkeer van lokale <code>cloudflared</code>.<br />
+Zet geen <code>*</code> tenzij je het spoofingrisico begrijpt. Herstart de container nadat je dit veld wijzigt.</p>
+<p>Aanmeldpoort van Access: <a href="../CLOUDFLARE_ACCESS/">CLOUDFLARE_ACCESS.md</a> — vertrouwde proxy’s vervangen Access niet.</p>
+<hr />
+<h2 id="problemen-oplossen">Problemen oplossen<a class="headerlink" href="#problemen-oplossen" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Verschijnsel</th>
+<th>Wat je controleert</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Niet verbonden</td>
+<td>Volledige <code>eyJ…</code> geplakt; maar één <code>cloudflared</code> gebruikt die token</td>
+</tr>
+<tr>
+<td>502 op de hostnaam</td>
+<td>De service moet <code>http://127.0.0.1:PORT</code> in AIO zijn, geen LAN-IP. Direct na boot: wacht tot Catalogus de app als <strong>actief</strong> toont — cloudflared start na de apps, maar een trage app kan kort een 502 geven</td>
+</tr>
+<tr>
+<td>Interface openen faalt via de tunnel</td>
+<td>Voeg een Published application toe voor <code>https://app.your.domain</code>; zet <strong>Publiek app-domein</strong> in AIO; verwacht geen <code>:8989</code> op de hostnaam van de manager</td>
+</tr>
+<tr>
+<td>Werkt op het LAN, niet op afstand</td>
+<td>Uitgaande firewall / poort <strong>7844</strong>; DNS-CNAME naar <code>&lt;tunnel-id&gt;.cfargotunnel.com</code> en ingress van de published application</td>
+</tr>
+<tr>
+<td>Vreemde aanmelding/cookies</td>
+<td>Laat vertrouwde proxy’s leeg bij alleen een tunnel</td>
+</tr>
+<tr>
+<td>Tokenveld leeg na opslaan</td>
+<td>Normaal — op schijf bewaard, nooit opnieuw getoond</td>
+</tr>
+<tr>
+<td>Connection refused in de cloudflared-logs bij elke boot</td>
+<td>Haal een actuele image en <strong>maak de container opnieuw aan</strong>. Oudere builds startten de tunnel vóór de apps; huidige builds starten hem als laatste</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="korte-checklist">Korte checklist<a class="headerlink" href="#korte-checklist" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Maak de tunnel in Cloudflare.</li>
+<li>Kopieer <code>eyJ…</code> — draai het installatieprogramma van Cloudflare <strong>niet</strong> op de NAS.</li>
+<li>Plak de token in AIO → tunnel inschakelen → opslaan.</li>
+<li>Publiceer hostnamen vanuit AIO (<strong>Publieke subdomeinen</strong> → opslaan → Publiceren naar Cloudflare), of voeg Published applications toe in het Cloudflare-dashboard en sla dezelfde labels op in AIO.</li>
+<li>Laat vertrouwde proxy’s leeg, tenzij je ook nginx/Caddy ervoor draait.</li>
+<li>Bevestig Healthy / verbonden en open daarna de HTTPS-URL.</li>
+<li>Zet *Arr, de downloadclients en Seerr achter <a href="../CLOUDFLARE_ACCESS/">Cloudflare Access</a>. Laat AIO, Jellyfin en Plex op hun eigen aanmelding.</li>
+</ol>
+<section class="aio-donate">
+  <h2>Doneren</h2>
+  <p>🤖 AI schrijft wat code. Ik breek het. We lossen het samen op.</p>
+  <p>Geen paar euro over? Geef dan een ster op GitHub. Dat voedt het ego, en dat is bijna net zo goed.</p>
+  <p class="aio-donate__actions">
+    <a class="md-button" href="https://www.paypal.com/donate/?business=P8CTXW8ER3PBY&no_recurring=0&item_name=Sponsor+My+Next+Bug&currency_code=EUR" target="_blank" rel="noopener noreferrer">PayPal</a>
+    <a class="md-button" href="https://ko-fi.com/qballjos" target="_blank" rel="noopener noreferrer">Ko-fi</a>
+  </p>
+</section>
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Terug naar boven
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../TRUENAS/" class="md-footer__link md-footer__link--prev" aria-label="Vorige: TrueNAS">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Vorige
+              </span>
+              <div class="md-ellipsis">
+                TrueNAS
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../CLOUDFLARE_ACCESS/" class="md-footer__link md-footer__link--next" aria-label="Volgende: Cloudflare Access">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Volgende
+              </span>
+              <div class="md-ellipsis">
+                Cloudflare Access
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Qballjos/aio-media-server-manager" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "toc.follow"], "search": "../../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Gekopieerd naar klembord", "clipboard.copy": "Kopi\u00ebren naar klembord", "search.result.more.one": "1 extra overeenkomst op deze pagina", "search.result.more.other": "# extra overeenkomsten op deze pagina", "search.result.none": "Geen overeenkomende documenten", "search.result.one": "1 overeenkomende document", "search.result.other": "# overeenkomende documenten", "search.result.placeholder": "Typ om te beginnen met zoeken", "search.result.term.missing": "Ontbreekt", "select.version": "Selecteer versie"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

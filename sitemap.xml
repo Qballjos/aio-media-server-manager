@@ -1,0 +1,399 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/INSTALL/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/INSTALL/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/USAGE/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/USAGE/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/deploy/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE_ACCESS/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE_ACCESS/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/deploy/DOCKER/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/DOCKER/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/deploy/LINUX/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/LINUX/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/deploy/SYNOLOGY/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/SYNOLOGY/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/deploy/TRUENAS/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/TRUENAS/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/deploy/UNRAID/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/UNRAID/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/INSTALL/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/INSTALL/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/USAGE/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/USAGE/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/deploy/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE_ACCESS/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE_ACCESS/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/deploy/DOCKER/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/DOCKER/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/deploy/LINUX/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/LINUX/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/deploy/SYNOLOGY/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/SYNOLOGY/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/deploy/TRUENAS/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/TRUENAS/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/nl/deploy/UNRAID/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/UNRAID/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/INSTALL/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/INSTALL/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/USAGE/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/USAGE/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/deploy/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE_ACCESS/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE_ACCESS/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/deploy/DOCKER/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/DOCKER/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/deploy/LINUX/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/LINUX/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/deploy/SYNOLOGY/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/SYNOLOGY/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/deploy/TRUENAS/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/TRUENAS/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/de/deploy/UNRAID/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/UNRAID/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/INSTALL/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/INSTALL/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/INSTALL/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/USAGE/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/USAGE/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/USAGE/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/deploy/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE_ACCESS/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/CLOUDFLARE_ACCESS/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/CLOUDFLARE_ACCESS/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/deploy/DOCKER/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/DOCKER/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/DOCKER/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/deploy/LINUX/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/LINUX/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/LINUX/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/deploy/SYNOLOGY/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/SYNOLOGY/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/SYNOLOGY/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/deploy/TRUENAS/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/TRUENAS/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/TRUENAS/"/>
+    </url>
+    <url>
+        <loc>https://qballjos.github.io/aio-media-server-manager/fr/deploy/UNRAID/</loc>
+        <lastmod>2026-10-28</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://qballjos.github.io/aio-media-server-manager/fr/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="de" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://qballjos.github.io/aio-media-server-manager/deploy/UNRAID/"/>
+        <xhtml:link rel="alternate" hreflang="nl" href="https://qballjos.github.io/aio-media-server-manager/nl/deploy/UNRAID/"/>
+    </url>
+</urlset>
