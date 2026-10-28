@@ -1,4 +1,4 @@
-"""Create Cloudflare Access applications for exposed *Arr, download, and Seerr hostnames.
+"""Create Cloudflare Access applications for exposed *Arr, download, Seerr, and NeutArr hostnames.
 
 The operator adds the login method in Zero Trust. AIO only reads it and attaches
 an Allow policy to the hostnames that should sit behind Access. Jellyfin, Plex,

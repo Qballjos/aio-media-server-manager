@@ -25,6 +25,7 @@ import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepage
 const props = defineProps({
   systemInfo: { type: Object, default: null },
   username: { type: String, default: '' },
+  firstName: { type: String, default: '' },
 })
 const emit = defineEmits(['manage'])
 const route = useRoute()
@@ -328,14 +329,32 @@ function resizeWidget(w, h) {
 }
 
 function onArrangeKey(event) {
-  if (event.key === 'Escape' && editing.value && !sheet.value && !event.defaultPrevented) editing.value = false
+  if (event.key !== 'Escape' || event.defaultPrevented) return
+  if (requestChoice.value) {
+    requestChoice.value = null
+    return
+  }
+  if (trailerPlayer.value) {
+    closeTrailer()
+    return
+  }
+  if (trendingDetail.value) {
+    trendingDetail.value = null
+    return
+  }
+  if (searchOpen.value) {
+    closeSearch()
+    return
+  }
+  if (editing.value && !sheet.value) editing.value = false
 }
 
 const todayLabel = computed(() => new Date().toLocaleDateString(i18nLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))
 const greeting = computed(() => {
   const hour = new Date().getHours()
   const part = t(hour < 6 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening')
-  return props.username ? `${part}, ${props.username}.` : `${part}.`
+  const who = props.firstName.trim() || props.username
+  return who ? `${part}, ${who}.` : `${part}.`
 })
 /** One line under the greeting: what is moving and what needs a look. */
 const heroSummary = computed(() => {
@@ -569,6 +588,8 @@ const requestItems = computed(() =>
 )
 // Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
 const trendingMore = ref([])
+const trendingDetail = ref(null)
+const trailerPlayer = ref(null)
 const trendingItems = computed(() => {
   const seen = new Set()
   return [...(snapshot.value.trending || []), ...trendingMore.value]
@@ -802,13 +823,31 @@ const searchAnchor = computed(() => {
   return item.x + item.w / 2 > cols / 2 ? 'is-right' : 'is-left'
 })
 const searchOpen = computed(() => !!(notice.value || searchError.value || searching.value || searchedFor.value))
+const searchRoot = ref(null)
 
 function closeSearch() {
   clearTimeout(searchTimer)
+  searchGen += 1
+  searching.value = false
   results.value = []
   searchedFor.value = ''
   searchError.value = ''
   notice.value = ''
+}
+
+function clearSearchQuery() {
+  query.value = ''
+  closeSearch()
+}
+
+/** Results float over Home; a click outside the bar (and its provider menu) dismisses them. */
+function onSearchPointerDown(event) {
+  if (!searchOpen.value) return
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (searchRoot.value?.contains(target)) return
+  if (target.closest('.ui-select-menu, .modal-backdrop, .modal-content')) return
+  closeSearch()
 }
 
 const STATUS_LABELS = {
@@ -822,6 +861,111 @@ const STATUS_LABELS = {
 function statusLabel(item) {
   return STATUS_LABELS[item?.status] || ''
 }
+
+function closeTrending() {
+  closeTrailer()
+  trendingDetail.value = null
+}
+
+function closeTrailer() {
+  trailerPlayer.value = null
+}
+
+/** Pull a YouTube id from a watch/share/embed URL so the Trailer button can open an in-app player. */
+function youtubeIdFromUrl(url) {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase()
+    let ident = ''
+    if (host === 'youtu.be') {
+      ident = parsed.pathname.replace(/^\/+/, '').split('/')[0] || ''
+    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+      ident = parsed.searchParams.get('v') || ''
+      if (!ident && parsed.pathname.startsWith('/embed/')) {
+        ident = parsed.pathname.split('/').filter(Boolean)[1] || ''
+      }
+    }
+    return /^[A-Za-z0-9_-]{6,32}$/.test(ident) ? ident : ''
+  } catch {
+    return ''
+  }
+}
+
+function openTrailer(item) {
+  const ident = youtubeIdFromUrl(item?.trailer || trendingDetail.value?.data?.trailer)
+  if (!ident) return
+  trailerPlayer.value = {
+    title: item?.title || trendingDetail.value?.data?.title || trendingDetail.value?.item?.title || t('Trailer'),
+    embedUrl: `https://www.youtube-nocookie.com/embed/${ident}?autoplay=1&rel=0`,
+  }
+}
+
+function trendingSeed(item) {
+  return {
+    title: item.title,
+    overview: item.overview || '',
+    year: item.detail || '',
+    poster: item.poster || '',
+    voteAverage: item.voteAverage ?? null,
+    imdb: null,
+    rtCritics: null,
+    rtAudience: null,
+    trailer: '',
+    url: item.url || '',
+    status: item.status,
+    can_request: item.can_request,
+  }
+}
+
+async function openTrending(item) {
+  if (!item?.mediaId) return
+  const key = `${item.mediaType}:${item.mediaId}`
+  trendingDetail.value = { key, item, loading: !item.overview, pending: true, error: '', data: trendingSeed(item) }
+  try {
+    const res = await apiRequest(
+      `/api/homepage/title?mediaType=${encodeURIComponent(item.mediaType || '')}&mediaId=${encodeURIComponent(item.mediaId)}`,
+      { signal: AbortSignal.timeout(12000) },
+    )
+    const data = await readJson(res)
+    if (trendingDetail.value?.key !== key) return
+    if (!res.ok) {
+      trendingDetail.value = {
+        ...trendingDetail.value,
+        loading: false,
+        pending: false,
+        error: trendingDetail.value.data?.overview ? '' : apiError(data, t('Could not load this title from Seerr.')),
+      }
+      return
+    }
+    const next = { ...trendingDetail.value.data }
+    for (const [field, value] of Object.entries(data || {})) {
+      if (value == null || value === '') continue
+      next[field] = value
+    }
+    trendingDetail.value = { ...trendingDetail.value, loading: false, pending: false, error: '', data: next }
+  } catch (err) {
+    if (trendingDetail.value?.key !== key) return
+    trendingDetail.value = {
+      ...trendingDetail.value,
+      loading: false,
+      pending: false,
+      error: trendingDetail.value.data?.overview ? '' : (err.message || t('Could not load this title from Seerr.')),
+    }
+  }
+}
+
+const trendingRatings = computed(() => {
+  const data = trendingDetail.value?.data
+  if (!data) return []
+  const rows = []
+  if (data.voteAverage != null) rows.push({ label: 'TMDB', value: Number(data.voteAverage).toFixed(1) })
+  if (data.imdb != null) rows.push({ label: 'IMDb', value: Number(data.imdb).toFixed(1) })
+  if (data.rtCritics != null) rows.push({ label: t('Critics'), value: `${data.rtCritics}%` })
+  if (data.rtAudience != null) rows.push({ label: t('Audience'), value: `${data.rtAudience}%` })
+  return rows
+})
 
 function onQueryInput() {
   notice.value = ''
@@ -1150,6 +1294,29 @@ function eventKind(item) {
   return item?.kind || item?.source || ''
 }
 
+/** Downloaded titles open on Jellyfin or Plex. Everything else opens in Sonarr or Radarr. */
+function calendarTarget(item) {
+  if (item?.has_file && item.play_url && item.play_app) {
+    return { app: item.play_app, url: item.play_url }
+  }
+  if (item?.url && item.source) return { app: item.source, url: item.url }
+  return null
+}
+
+function calendarLinkTitle(item) {
+  const target = calendarTarget(item)
+  if (!target) return undefined
+  const app = SOURCE_NAMES[target.app] || target.app
+  return t('Open in {app}', { app })
+}
+
+function openCalendarItem(event, item) {
+  const target = calendarTarget(item)
+  if (!target) return
+  event.stopPropagation()
+  openApp(event, target.app, target.url)
+}
+
 const MEDIA_LABELS = { tv: 'Series', movie: 'Movie' }
 
 // Requests, trending and recent carry mediaType; calendar entries only kind and source.
@@ -1309,7 +1476,10 @@ function groupSameDay(rows) {
     const code = (r) => String(r.item.detail || '').split(' ')[0]
     const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
     // Downloaded only when every episode in the group is.
-    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have } }
+    const item = { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have }
+    // A run of episodes opens the series, not the first episode.
+    if (row.have && item.series_play_url) item.play_url = item.series_play_url
+    return { ...row, item }
   })
 }
 const calendarList = computed(() => calendarListInfo.value.rows)
@@ -1368,6 +1538,7 @@ onMounted(() => {
   window.addEventListener('resize', syncCalViewToViewport)
   window.addEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.addEventListener('keydown', onArrangeKey)
+  document.addEventListener('pointerdown', onSearchPointerDown)
   loadSnapshot()
   // Defer live queues so first paint is the launcher snapshot.
   setTimeout(() => loadDownloads(), 750)
@@ -1402,6 +1573,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', syncCalViewToViewport)
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.removeEventListener('keydown', onArrangeKey)
+  document.removeEventListener('pointerdown', onSearchPointerDown)
   clearTimeout(toastTimer)
   if (poll) poll()
   if (downloadsPoll) downloadsPoll()
@@ -1484,7 +1656,7 @@ onUnmounted(() => {
       </template>
 
       <template #searchbar>
-      <section class="home-search">
+      <section ref="searchRoot" class="home-search">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
           <label class="home-sr" for="home-search-provider">{{ $t('Search in') }}</label>
           <UiSelect
@@ -1512,6 +1684,16 @@ onUnmounted(() => {
             @input="onQueryInput"
             @keydown.esc="closeSearch"
           />
+          <button
+            v-if="query.trim()"
+            type="button"
+            class="home-search-clear"
+            :aria-label="$t('Clear search')"
+            :title="$t('Clear search')"
+            @click="clearSearchQuery"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
           <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :aria-label="$t('Search')" :disabled="searching">
             <svg class="home-search-go" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
             <span>{{ $t('Search') }}</span>
@@ -1519,9 +1701,6 @@ onUnmounted(() => {
         </form>
         <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
           <div class="home-results-scroll">
-            <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" :aria-label="$t('Close search results')" :title="$t('Close')" @click="closeSearch">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-            </button>
             <p v-if="notice" class="home-notice">{{ notice }}</p>
             <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
             <p v-else-if="searchProvider === 'seerr' && !snapshot.seerr.available && !notice" class="home-muted">
@@ -1673,12 +1852,11 @@ onUnmounted(() => {
           </div>
           <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" @scroll.passive="loadMoreTrending">
             <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
-              <a
+              <button
+                type="button"
                 class="home-tile-link"
-                :href="item.url || seerrHomeUrl || undefined"
-                :target="item.url || seerrHomeUrl ? '_blank' : undefined"
-                rel="noopener noreferrer"
-                @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
+                :aria-haspopup="item.mediaId ? 'dialog' : undefined"
+                @click="openTrending(item)"
               >
                 <span class="home-tile-art">
                   <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
@@ -1688,7 +1866,7 @@ onUnmounted(() => {
                 <span class="home-tile-title">{{ item.title }}</span>
                 <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
                 <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
-              </a>
+              </button>
               <button
                 v-if="item.can_request"
                 type="button"
@@ -1763,14 +1941,24 @@ onUnmounted(() => {
             <p v-else-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
             <ul v-else>
               <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
-                <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
-                <span class="cal-row-body">
-                  <span class="cal-row-title">
-                    <strong>{{ row.item.title }}</strong>
-                    <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                <component
+                  :is="calendarTarget(row.item) ? 'a' : 'div'"
+                  class="cal-row-link"
+                  :href="calendarTarget(row.item)?.url"
+                  :target="calendarTarget(row.item) ? '_blank' : undefined"
+                  rel="noopener noreferrer"
+                  :title="calendarLinkTitle(row.item)"
+                  @click="openCalendarItem($event, row.item)"
+                >
+                  <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
+                  <span class="cal-row-body">
+                    <span class="cal-row-title">
+                      <strong>{{ row.item.title }}</strong>
+                      <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                    </span>
+                    <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
                   </span>
-                  <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
-                </span>
+                </component>
               </li>
             </ul>
           </div>
@@ -1797,28 +1985,29 @@ onUnmounted(() => {
                     'is-selected': day.key === selectedDayKey,
                     'is-outside': !day.inMonth,
                   }"
-                  role="button"
-                  tabindex="0"
-                  :aria-pressed="day.key === selectedDayKey"
                   @click="selectCalDay(day)"
-                  @keydown.enter.prevent="selectCalDay(day)"
-                  @keydown.space.prevent="selectCalDay(day)"
                 >
                   <span class="cal-num">{{ calView === 'week' ? day.weekday + ' ' + day.date : day.date }}</span>
                   <ul v-if="day.events.length" class="cal-events">
-                    <li
-                      v-for="(item, idx) in day.events"
-                      :key="idx"
-                      class="cal-event"
-                      :data-kind="eventKind(item)"
-                      :class="{ 'is-have': item.has_file }"
-                    >
-                      <span class="cal-event-top">
-                        <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
-                        <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
-                      </span>
-                      <strong>{{ item.title }}</strong>
-                      <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
+                    <li v-for="(item, idx) in day.events" :key="idx">
+                      <component
+                        :is="calendarTarget(item) ? 'a' : 'div'"
+                        class="cal-event"
+                        :data-kind="eventKind(item)"
+                        :class="{ 'is-have': item.has_file }"
+                        :href="calendarTarget(item)?.url"
+                        :target="calendarTarget(item) ? '_blank' : undefined"
+                        rel="noopener noreferrer"
+                        :title="calendarLinkTitle(item)"
+                        @click="openCalendarItem($event, item)"
+                      >
+                        <span class="cal-event-top">
+                          <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                          <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                        </span>
+                        <strong>{{ item.title }}</strong>
+                        <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
+                      </component>
                     </li>
                   </ul>
                 </div>
@@ -2151,6 +2340,80 @@ onUnmounted(() => {
       <p v-else class="home-muted">{{ $t('No widget sources reported yet. Reload Home.') }}</p>
     </article>
     <Teleport to="body">
+      <div v-if="trendingDetail" class="modal-backdrop" @click.self="closeTrending">
+        <div
+          class="modal-content home-title-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-title-heading"
+        >
+          <div class="home-title-head">
+            <h3 id="home-title-heading">{{ trendingDetail.data?.title || trendingDetail.item.title }}</h3>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="closeTrending">{{ $t('Close') }}</button>
+          </div>
+          <p v-if="trendingDetail.error" class="home-notice home-notice-error">{{ trendingDetail.error }}</p>
+          <div v-else class="home-title-body">
+            <img v-if="trendingDetail.data?.poster || trendingDetail.item.poster" :src="trendingDetail.data?.poster || trendingDetail.item.poster" alt="" class="home-title-poster" />
+            <div>
+              <p class="home-title-meta">
+                <span v-if="mediaKind(trendingDetail.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(trendingDetail.item)] }}</span>
+                <span>{{ trendingDetail.data?.year || trendingDetail.item.detail }}</span>
+                <span v-if="statusLabel(trendingDetail.data || trendingDetail.item)">{{ statusLabel(trendingDetail.data || trendingDetail.item) }}</span>
+              </p>
+              <p v-if="trendingDetail.data?.overview" class="home-title-overview">{{ trendingDetail.data.overview }}</p>
+              <p v-else-if="trendingDetail.loading" class="home-muted">{{ $t('Loading title…') }}</p>
+              <p v-else class="home-title-overview home-muted">{{ $t('No overview from Seerr.') }}</p>
+              <ul v-if="trendingRatings.length" class="home-title-ratings" :aria-label="$t('Ratings')">
+                <li v-for="row in trendingRatings" :key="row.label"><span>{{ row.label }}</span> {{ row.value }}</li>
+              </ul>
+              <p v-else-if="!trendingDetail.pending" class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
+              <div class="home-request-actions">
+                <button
+                  v-if="trendingDetail.data?.trailer && youtubeIdFromUrl(trendingDetail.data.trailer)"
+                  type="button"
+                  class="ui-btn ui-btn-primary"
+                  @click="openTrailer(trendingDetail.data)"
+                >{{ $t('Trailer') }}</button>
+                <button
+                  v-if="trendingDetail.item.can_request"
+                  type="button"
+                  class="ui-btn"
+                  :disabled="requestBusy === resultKey(trendingDetail.item)"
+                  @click="requestTitle(trendingDetail.item)"
+                >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t('Request') }}</button>
+                <button
+                  v-if="trendingDetail.data?.url"
+                  type="button"
+                  class="ui-btn ui-btn-ghost"
+                  @click="openApp($event, 'seerr', trendingDetail.data.url)"
+                >{{ $t('Open in Seerr') }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="trailerPlayer" class="modal-backdrop home-trailer-backdrop" @click.self="closeTrailer">
+        <div
+          class="modal-content home-trailer-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-trailer-heading"
+        >
+          <div class="home-title-head">
+            <h3 id="home-trailer-heading">{{ trailerPlayer.title }}</h3>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="closeTrailer">{{ $t('Close') }}</button>
+          </div>
+          <div class="home-trailer-frame">
+            <iframe
+              :src="trailerPlayer.embedUrl"
+              :title="trailerPlayer.title"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+              referrerpolicy="strict-origin-when-cross-origin"
+            ></iframe>
+          </div>
+        </div>
+      </div>
       <div v-if="requestChoice && choiceServer" class="modal-backdrop" @click.self="requestChoice = null">
         <form class="modal-content home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
           <h3 id="home-request-title">{{ $t('Request') }} {{ requestChoice.item.title }}</h3>
@@ -2250,7 +2513,7 @@ onUnmounted(() => {
 }
 .home-muted {
   color: var(--text-muted);
-  font-size: 0.92rem;
+  font-size: var(--text-body);
 }
 .home-empty {
   padding: 1.5rem;
@@ -2365,7 +2628,7 @@ onUnmounted(() => {
 .home-dock-notes {
   margin: 0;
   padding: 0 0.6rem 0.2rem;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   text-align: center;
 }
@@ -2386,7 +2649,7 @@ onUnmounted(() => {
   container-type: size;
 }
 .home-hero-date {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2404,7 +2667,7 @@ onUnmounted(() => {
 }
 .home-hero-sub {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-ui);
   color: var(--text-main);
   text-shadow: var(--wallpaper-text-shadow);
 }
@@ -2455,7 +2718,7 @@ onUnmounted(() => {
   color: inherit;
   font: inherit;
   /* 16px keeps iOS from zooming the page when the field is focused. */
-  font-size: 16px;
+  font-size: var(--text-ui);
   -webkit-appearance: none;
   appearance: none;
   border-radius: 0;
@@ -2469,9 +2732,44 @@ onUnmounted(() => {
 .home-search-input::placeholder {
   color: var(--text-dim);
 }
+.home-search-clear {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.home-search-clear:hover,
+.home-search-clear:focus-visible {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--text-main) 10%, transparent);
+  outline: none;
+}
+.home-search-clear svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
 .home-search-btn {
-  min-height: 2.6rem;
+  flex: 0 0 auto;
+  max-height: calc(100% - 0.35rem);
+  min-height: 0;
+  height: min(2.6rem, calc(100% - 0.35rem));
   padding: 0 1.1rem;
+}
+/* Clear takes a slot in the pill; give the field room before the worded Search button collapses. */
+.home-search-pill:has(.home-search-clear) {
+  gap: 0.45rem;
+}
+.home-search-pill:has(.home-search-clear) .home-search-provider {
+  flex-basis: 11rem;
+  max-width: min(11rem, 42%);
 }
 .home-hero-results {
   position: absolute;
@@ -2479,10 +2777,12 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
+  /* Prefer the search widget’s width; grow toward 28rem only while it still fits the window. */
   width: min(720px, max(100%, min(28rem, calc(100vw - 2rem))));
-  max-width: calc(100vw - 1.5rem);
+  max-width: min(720px, calc(100vw - 1.5rem));
   padding: 0;
   text-align: left;
+  box-sizing: border-box;
 }
 .home-results-scroll {
   max-height: min(60vh, 34rem);
@@ -2491,14 +2791,6 @@ onUnmounted(() => {
   padding: 1rem 1.1rem;
   display: grid;
   gap: 0.5rem;
-}
-.home-results-close {
-  justify-self: end;
-  margin: -0.4rem -0.5rem -0.6rem 0;
-}
-.home-results-close svg {
-  width: 16px;
-  height: 16px;
 }
 .home-hero-results.is-left {
   left: 0;
@@ -2514,8 +2806,9 @@ onUnmounted(() => {
     display: none;
   }
 }
-/* A phone-width bar keeps the field typeable. The worded button becomes an icon; Enter still submits. */
-@container (max-width: 560px) {
+/* A phone-width bar keeps the field typeable. The worded button becomes an icon; Enter still submits.
+   640px covers half-width search widgets once the clear control is visible. */
+@container (max-width: 640px) {
   .home-search-pill {
     gap: 0.4rem;
     padding-right: 0.3rem;
@@ -2527,19 +2820,29 @@ onUnmounted(() => {
     --ui-select-font: 0.92rem;
     --ui-select-pad: 0.7rem;
   }
+  .home-search-pill:has(.home-search-clear) .home-search-provider {
+    flex-basis: 8.6rem;
+    max-width: min(8.6rem, 36%);
+  }
   .home-search-mark {
     display: none;
+  }
+  .home-search-clear {
+    width: 1.55rem;
+    height: 1.55rem;
+  }
+  .home-search-clear svg {
+    width: 0.85rem;
+    height: 0.85rem;
   }
   .home-search-go {
     display: block;
     flex: 0 0 auto;
   }
   .home-search-btn {
-    flex: 0 0 auto;
     width: min(2.55rem, calc(100% - 0.35rem));
     min-width: 0;
     height: min(2.55rem, calc(100% - 0.35rem));
-    min-height: 0;
     aspect-ratio: 1;
     padding: 0;
   }
@@ -2564,10 +2867,26 @@ onUnmounted(() => {
     transform: none;
   }
 }
+@container (max-width: 360px) {
+  .home-search-provider {
+    max-width: min(7.2rem, 40%);
+    --ui-select-pad: 0.55rem;
+  }
+  .home-search-pill:has(.home-search-clear) .home-search-provider {
+    max-width: min(6.2rem, 32%);
+  }
+  .home-search-clear {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+}
 @container (max-width: 280px) {
   .home-search-provider {
-    max-width: min(6.4rem, 46%);
-    --ui-select-pad: 0.55rem;
+    max-width: min(5.6rem, 38%);
+    --ui-select-pad: 0.45rem;
+  }
+  .home-search-pill:has(.home-search-clear) .home-search-provider {
+    max-width: min(5rem, 30%);
   }
 }
 .home-request-dialog {
@@ -2575,13 +2894,104 @@ onUnmounted(() => {
   padding: 1.15rem 1.25rem 1.2rem;
   gap: 0.75rem;
 }
+.home-title-dialog {
+  max-width: 40rem;
+  padding: 1.1rem 1.2rem 1.2rem;
+  gap: 0.85rem;
+  overflow: auto;
+}
+.home-title-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.home-title-head h3 {
+  margin: 0;
+}
+.home-title-body {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.home-title-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.home-title-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-body);
+}
+.home-title-overview {
+  margin: 0.55rem 0 0;
+  line-height: 1.45;
+}
+.home-title-ratings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-title-ratings li {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: var(--text-kicker);
+}
+.home-title-ratings span {
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+.home-title-dialog .home-request-actions {
+  margin-top: 0.9rem;
+}
+.home-trailer-backdrop {
+  z-index: 110;
+}
+.home-trailer-dialog {
+  width: min(56rem, calc(100vw - 1.5rem));
+  max-width: none;
+  padding: 1rem 1.1rem 1.15rem;
+  gap: 0.75rem;
+}
+.home-trailer-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--border-subtle);
+}
+.home-trailer-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+@media (max-width: 640px) {
+  .home-title-body {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+  }
+}
 .home-request-dialog h3 {
   margin: 0;
 }
 .home-request-field {
   display: grid;
   gap: 0.3rem;
-  font-size: 0.92rem;
+  font-size: var(--text-body);
 }
 .home-request-actions {
   display: flex;
@@ -2597,7 +3007,7 @@ onUnmounted(() => {
 }
 .home-notice {
   color: var(--color-info);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
 }
 .home-notice-error {
   color: var(--color-danger, #f87171);
@@ -2627,14 +3037,14 @@ onUnmounted(() => {
 }
 .home-result-body span {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--text-body);
 }
 .home-result-body .home-status {
   justify-self: start;
   margin-top: 0.2rem;
   padding: 0.05rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   border: 1px solid currentColor;
 }
@@ -2680,10 +3090,15 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.5rem 0.75rem;
   flex-wrap: wrap;
+  min-width: 0;
+}
+.home-rail-head h3,
+.home-widget-head h3 {
+  min-width: 0;
 }
 .home-card h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
   font-weight: 800;
   letter-spacing: -0.01em;
 }
@@ -2730,7 +3145,7 @@ onUnmounted(() => {
   min-width: var(--btn-h);
   padding: 0;
   border-radius: 50%;
-  font-size: 1.15rem;
+  font-size: var(--text-strong);
 }
 .home-rail {
   flex: 1 1 auto;
@@ -2774,6 +3189,14 @@ onUnmounted(() => {
   text-decoration: none;
   min-width: 0;
   flex: 1 1 auto;
+}
+button.home-tile-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
 }
 .home-tile-request {
   width: 100%;
@@ -2827,12 +3250,12 @@ onUnmounted(() => {
 .home-tile-fallback {
   display: grid;
   place-items: center;
-  font-size: 1.4rem;
+  font-size: var(--text-title);
   font-weight: 700;
   color: var(--text-muted);
 }
 .home-tile-title {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   font-weight: 700;
   line-height: 1.2;
   height: calc(1.2em * 2);
@@ -2844,7 +3267,7 @@ onUnmounted(() => {
   word-break: break-word;
 }
 .home-tile-meta {
-  font-size: 0.74rem;
+  font-size: var(--text-kicker);
   line-height: 1.25;
   height: 1.25em;
   color: var(--text-muted);
@@ -2876,7 +3299,8 @@ onUnmounted(() => {
 }
 .cal-head h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-ui);
+  min-width: 0;
 }
 .cal-nav,
 .cal-tools,
@@ -2893,6 +3317,26 @@ onUnmounted(() => {
 .cal-select {
   width: auto;
   min-width: 9rem;
+  max-width: 100%;
+}
+@container (max-width: 520px) {
+  .home-card-calendar .cal-head h3 {
+    flex: 1 1 100%;
+  }
+  .home-card-calendar .cal-tools {
+    width: 100%;
+  }
+  .home-card-calendar .cal-select {
+    flex: 1 1 calc(50% - 0.4rem);
+    min-width: 0;
+  }
+  .cal-day {
+    min-height: 4.75rem;
+    padding: 0.28rem 0.28rem 0.35rem;
+  }
+  .cal-event {
+    padding: 0.2rem 0.28rem;
+  }
 }
 .cal-views .ui-btn.is-active {
   border-color: rgba(var(--color-primary-rgb), 0.45);
@@ -2912,6 +3356,7 @@ onUnmounted(() => {
 }
 .cal-mode-week {
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -2920,30 +3365,32 @@ onUnmounted(() => {
   width: 0;
   height: 0;
 }
+/* Wide calendar cards fill the widget; narrow ones scroll sideways instead of crushing the seven days.
+   Tied to the card (container), not the browser window — a small calendar on a big screen still scrolls. */
 .cal-mode-week .cal-weekdays,
-.cal-mode-week .cal-week {
-  min-width: min(56rem, 100%);
+.cal-mode-week .cal-week,
+.cal-weeks.is-week .cal-week {
+  min-width: 0;
+  width: 100%;
+}
+@container (max-width: 860px) {
+  .cal-mode-week .cal-weekdays,
+  .cal-mode-week .cal-week,
+  .cal-weeks.is-week .cal-week {
+    width: auto;
+    min-width: 56rem;
+  }
 }
 .cal-weeks.is-week .cal-week,
 .cal-weeks.is-day .cal-week {
   overflow-x: visible;
-}
-.cal-weeks.is-week .cal-week {
-  min-width: min(56rem, 100%);
-}
-@media (min-width: 1280px) {
-  .cal-mode-week .cal-weekdays,
-  .cal-mode-week .cal-week,
-  .cal-weeks.is-week .cal-week {
-    min-width: 0;
-  }
 }
 .cal-weeks.is-day .cal-week {
   grid-template-columns: 1fr;
   min-width: 0;
 }
 .cal-weekdays span {
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -2995,7 +3442,7 @@ onUnmounted(() => {
   background: color-mix(in srgb, rgba(var(--color-primary-rgb), 0.16) 55%, var(--bg-surface-elevated, var(--bg-card)));
 }
 .cal-num {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -3021,12 +3468,22 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--bg-input) 78%, transparent);
   min-width: 0;
   border-left: 3px solid var(--color-warning, #f59e0b);
+  color: inherit;
+  text-decoration: none;
+}
+a.cal-event,
+a.cal-row-link {
+  cursor: pointer;
+}
+a.cal-event:hover,
+a.cal-row-link:hover {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 .cal-event.is-have {
   border-left-color: var(--color-success, #10b981);
 }
 .cal-event-time {
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-family: var(--font-mono);
   color: var(--color-warning, #f59e0b);
 }
@@ -3034,11 +3491,11 @@ onUnmounted(() => {
   color: var(--color-success, #10b981);
 }
 .cal-event strong {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   line-height: 1.2;
 }
 .cal-event-detail {
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
@@ -3094,8 +3551,17 @@ onUnmounted(() => {
 .home-card li.cal-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   min-width: 0;
+}
+.cal-row-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 12px;
 }
 .cal-chip {
   flex: 0 0 2.75rem;
@@ -3105,13 +3571,13 @@ onUnmounted(() => {
   border-radius: 12px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  font-size: 0.64rem;
+  font-size: var(--text-kicker);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: 0.04em;
 }
 .cal-chip strong {
-  font-size: 0.9rem;
+  font-size: var(--text-body);
 }
 .cal-row.is-today .cal-chip {
   background: var(--color-primary-button);
@@ -3123,14 +3589,14 @@ onUnmounted(() => {
   min-width: 0;
 }
 .cal-row-body strong {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cal-row-meta {
-  font-size: 0.74rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -3150,6 +3616,22 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+/* Phone layouts are full-width cards; trim chrome so more of the widget stays on screen.
+   (Padding is on the container itself, so this has to follow the viewport — not @container.) */
+@media (max-width: 719px) {
+  .home-card {
+    padding: 1rem 0.95rem 0.95rem;
+    gap: 0.65rem;
+  }
+}
+@container (max-width: 320px) {
+  .home-card h3 {
+    font-size: var(--text-ui);
+  }
+  .home-type-filter .ui-btn {
+    padding: 0 0.55rem;
+  }
 }
 .home-card > :is(.home-rail-head, .home-widget-head, .cal-head) {
   flex: 0 0 auto;
@@ -3172,7 +3654,7 @@ onUnmounted(() => {
   gap: 0.4rem 0.6rem;
 }
 .home-card .cal-head h3 {
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
 }
 .home-card .ui-input {
   width: auto;
@@ -3181,7 +3663,7 @@ onUnmounted(() => {
   min-width: 0;
 }
 .home-card-stat {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   color: var(--color-success-fg);
 }
@@ -3232,7 +3714,7 @@ onUnmounted(() => {
 }
 .home-dl-count small {
   margin-left: 0.4rem;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 600;
   letter-spacing: 0;
   color: var(--text-muted);
@@ -3253,7 +3735,7 @@ onUnmounted(() => {
   gap: 0.6rem;
 }
 .home-dl-row strong {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 700;
   min-width: 0;
   white-space: nowrap;
@@ -3262,14 +3744,14 @@ onUnmounted(() => {
 }
 .home-dl-pct {
   flex: 0 0 auto;
-  font-size: 0.76rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
 }
 .home-dl-meta {
-  font-size: 0.74rem;
+  font-size: var(--text-kicker);
 }
 .home-when {
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--color-info);
   font-family: var(--font-mono);
 }
@@ -3295,7 +3777,7 @@ onUnmounted(() => {
 }
 .home-stuck summary {
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -3306,7 +3788,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.5rem 0.75rem;
   margin: 0.6rem 0;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
 }
 .home-card .home-stuck-item {
   display: flex;
@@ -3318,7 +3800,7 @@ onUnmounted(() => {
   display: grid;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
 }
 .home-stuck-remove {
   flex: 0 0 auto;
@@ -3355,13 +3837,13 @@ onUnmounted(() => {
   display: flex;
   gap: 0.5rem;
   align-items: flex-start;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .home-debug-state {
   flex: 0 0 auto;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 0.1rem 0.35rem;
@@ -3387,7 +3869,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.86rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .gh-status::before {
@@ -3414,6 +3896,9 @@ onUnmounted(() => {
   color: var(--text-heading);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .gh-big small {
   margin-left: 0.2em;
@@ -3424,7 +3909,7 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 .gh-label {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -3446,7 +3931,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -3531,7 +4016,7 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 .np-sub {
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -3561,7 +4046,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
 }
@@ -3778,7 +4263,7 @@ onUnmounted(() => {
   gap: 0.1rem;
 }
 .at-text strong {
-  font-size: 0.95rem;
+  font-size: var(--text-body);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -3786,7 +4271,7 @@ onUnmounted(() => {
 }
 .at-kind {
   flex: 0 0 auto;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .gh-empty {

@@ -12,6 +12,7 @@ from applications.catalog import ApplicationCatalog
 from applications.manifest import AppCategory, AppTier
 from core.port_manager import PortManager
 from core.settings import Settings
+from core.integrations.lifecycle import boot_autostart_order
 
 
 @pytest.fixture
@@ -39,6 +40,17 @@ def test_catalog_discovery():
         "seerr",
     }
     assert expected_mvp.issubset(app_names), f"Missing apps: {expected_mvp - app_names}"
+
+
+def test_boot_starts_flaresolverr_qbittorrent_then_sabnzbd():
+    """The VPN starts first; these three apps are next, in this order."""
+    catalog = ApplicationCatalog()
+    names = [plugin.name for plugin in catalog.all_plugins()]
+    order = boot_autostart_order(names)
+    assert order[:3] == ["flaresolverr", "qbittorrent", "sabnzbd"]
+    assert order[3:] == [name for name in names if name not in order[:3]]
+    assert order.index("prowlarr") < order.index("sonarr")
+    assert names.index("prowlarr") < names.index("qbittorrent")
 
 
 def test_catalog_manifest_metadata():
@@ -297,8 +309,9 @@ def test_pwa_public_assets():
     assert "/apple-touch-icon.png" in manifest
     assert "/pwa-192.png" in manifest
     index_html = (root.parent / "index.html").read_text(encoding="utf-8")
-    assert 'href="/api/branding/icon/favicon"' in index_html
-    assert 'href="/api/branding/icon/apple-touch-icon"' in index_html
+    assert 'href="/favicon.ico"' in index_html
+    assert 'href="/api/branding/icon/favicon.png"' in index_html
+    assert 'href="/api/branding/icon/apple-touch-icon.png"' in index_html
     assert 'href="/api/branding/manifest.webmanifest"' in index_html
     assert 'rel="icon"' in index_html
     assert 'rel="apple-touch-icon"' in index_html

@@ -45,7 +45,7 @@ Do not use `poetry run python main.py` on macOS or Windows to exercise catalog i
 - One manager, many **managed processes**. Do not add per-application Docker Compose services.
 - No Debrid functionality or cloud remotes.
 - New catalog apps must be **well supported with an active community**. VueTorrent is a qBittorrent WebUI option, not a catalog app. Hide an entry from the catalog and wizard when the host architecture is unsupported; do not install a default “wrong-arch” build.
-- The appliance image must not install Flaresolverr’s Chromium/Xvfb stack on `linux/arm64`. Shared runtimes (Python 3.13, Node 22, JRE, MariaDB, ffmpeg) stay on both published architectures.
+- The appliance image must not install Flaresolverr’s Chromium/Xvfb stack on `linux/arm64`. Shared runtimes (Python 3.13, Node 22, JRE, MariaDB, jellyfin-ffmpeg, stock ffmpeg) stay on both published architectures.
 - Application-specific behaviour lives in `applications/` plugins, not in `core/`.
 - Do not log or return secrets in API responses.
 - Never delete media libraries in uninstall or backup paths.
@@ -67,6 +67,7 @@ Agents and Dependabot often treat “not on the newest version” as a bug. In t
 | Child Python | **3.13** | Bazarr / SABnzbd (`AMM_CHILD_PYTHON` / `/opt/python3.13`) |
 | Shelfmark Python | **3.14** | Upstream `requires-python >= 3.14`. Uses the manager interpreter so `gunicorn` is installed. |
 | JRE | **25** | Grimmory |
+| cloudflared | `ARG CLOUDFLARED_VERSION` | Pinned so bumps rebuild the image. `.github/workflows/cloudflared-bump.yml` updates the pin on `beta` and dispatches Nightly. Do not switch back to floating `releases/latest`. |
 
 **Frontend majors:** treat `vue-router` 5.x as a deliberate migration, not an auto-merge.
 

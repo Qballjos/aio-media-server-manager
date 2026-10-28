@@ -68,7 +68,9 @@ RUN printf '%s\n' \
 #   Bazarr / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,
 #     libncurses6, python3.13, python3-dev, build-essential
 #   Shelfmark: manager Python 3.14 (upstream requires >=3.14), python3-dev, build-essential
-#   Jellyfin / Plex: ffmpeg, libfontconfig1
+#   Jellyfin: jellyfin-ffmpeg7 (bundled iHD/VAAPI; see next RUN), libfontconfig1,
+#     nginx-light (localhost CF origin: CF-Connecting-IP → X-Forwarded-For)
+#   Plex / tools: stock Debian ffmpeg
 #   Seerr: Node 22 (copied from nodebin)
 #   Grimmory: JRE 25 (copied from jre), mariadb-server
 #   Flaresolverr (x86_64 / amd64 image only): chromium, xvfb, fonts-liberation
@@ -108,6 +110,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         libjpeg62-turbo \
         libncurses6 \
         libfontconfig1 \
+        nginx-light \
         mariadb-server \
         unrar \
         p7zip-full \
@@ -126,6 +129,36 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     && mkdir -p /tmp/ammvpn \
     && chown 910:910 /tmp/ammvpn
 
+# jellyfin-ffmpeg ships its own libva + iHD/i965/radeonsi dri drivers (needed for Intel Arc QSV).
+# Stock Debian ffmpeg stays on PATH for Plex and diagnostics. Both amd64 and arm64.
+ENV JELLYFIN_FFMPEG=/usr/lib/jellyfin-ffmpeg/ffmpeg
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gnupg; \
+    mkdir -p /etc/apt/keyrings; \
+    curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
+      | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg; \
+    printf '%s\n' \
+      'Types: deb' \
+      'URIs: https://repo.jellyfin.org/debian' \
+      'Suites: bookworm' \
+      'Components: main' \
+      "Architectures: ${TARGETARCH:-amd64}" \
+      'Signed-By: /etc/apt/keyrings/jellyfin.gpg' \
+      > /etc/apt/sources.list.d/jellyfin.sources; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends jellyfin-ffmpeg7; \
+    test -x /usr/lib/jellyfin-ffmpeg/ffmpeg; \
+    if [ "${TARGETARCH:-amd64}" = "amd64" ]; then \
+      test -f /usr/lib/jellyfin-ffmpeg/lib/dri/iHD_drv_video.so; \
+    fi; \
+    apt-get purge -y gnupg; \
+    apt-get autoremove -y; \
+    rm -rf /var/lib/apt/lists/*
+
+# Pinned so Dependabot-style bumps (see cloudflared-bump.yml) change the Dockerfile
+# digest and trigger Nightly / Docker rebuilds. Do not switch back to floating :latest.
+ARG CLOUDFLARED_VERSION=2026.10.4
 RUN set -eux; \
     case "${TARGETARCH:-amd64}" in \
       amd64) cfarch=amd64 ;; \
@@ -133,10 +166,12 @@ RUN set -eux; \
       arm) cfarch=arm ;; \
       *) cfarch=amd64 ;; \
     esac; \
-    curl -fsSL --retry 5 --retry-delay 5 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfarch}" \
+    curl -fsSL --retry 5 --retry-delay 5 \
+      "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${cfarch}" \
       -o /usr/local/bin/cloudflared; \
     chmod +x /usr/local/bin/cloudflared; \
-    cloudflared --version
+    cloudflared --version; \
+    cloudflared --version | grep -F "${CLOUDFLARED_VERSION}"
 
 # Faster SABnzbd/NZBGet PAR2 verify+repair (drop-in replacement for Debian par2).
 # https://sabnzbd.org/wiki/installation/par2cmdline-turbo
@@ -164,6 +199,7 @@ RUN pip install --no-cache-dir poetry \
 COPY core ./core
 COPY api ./api
 COPY applications ./applications
+COPY packaging/nginx/jellyfin-cf-origin.conf.template /etc/aio/nginx/jellyfin-cf-origin.conf.template
 COPY main.py ./
 COPY --from=frontend /ui/dist ./frontend/dist
 

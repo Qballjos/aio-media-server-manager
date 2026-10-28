@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { apiError, apiJson, applySession } from './api.js'
 import { brandLogoUrl, brandLoginMessage, brandTitle } from './branding.js'
 import { useToasts } from './useToasts.js'
@@ -25,6 +25,42 @@ const authForm = ref({
 })
 const authError = ref('')
 const authLoading = ref(false)
+const cardRef = ref(null)
+const tiltOn = ref(false)
+const tilt = ref('1 0 0 0deg')
+const glare = ref({ x: 50, y: 50, on: false })
+const tiltStyle = computed(() => (tiltOn.value ? { rotate: tilt.value } : undefined))
+const glareStyle = computed(() => ({
+  '--glare-x': `${glare.value.x}%`,
+  '--glare-y': `${glare.value.y}%`,
+  opacity: glare.value.on ? 1 : 0,
+}))
+
+function clampUnit(value) {
+  return Math.max(-1, Math.min(1, value))
+}
+
+function onPointerMove(event) {
+  const card = cardRef.value
+  if (!card) return
+  const box = card.getBoundingClientRect()
+  const nx = clampUnit((event.clientX - (box.left + box.width / 2)) / (window.innerWidth / 2))
+  const ny = clampUnit((event.clientY - (box.top + box.height / 2)) / (window.innerHeight / 2))
+  const x = -ny * 8
+  const y = nx * 8
+  const angle = Math.hypot(x, y)
+  tilt.value = angle > 0 ? `${x} ${y} 0 ${angle}deg` : '1 0 0 0deg'
+  glare.value = {
+    x: ((event.clientX - box.left) / box.width) * 100,
+    y: ((event.clientY - box.top) / box.height) * 100,
+    on: true,
+  }
+}
+
+function restCard() {
+  tilt.value = '1 0 0 0deg'
+  glare.value = { ...glare.value, on: false }
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -129,18 +165,28 @@ async function handleLogin() {
 
 onMounted(() => {
   checkAuthStatus()
+  const fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (!fine || reduce) return
+  tiltOn.value = true
+  window.addEventListener('pointermove', onPointerMove)
+  document.documentElement.addEventListener('mouseleave', restCard)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pointermove', onPointerMove)
+  document.documentElement.removeEventListener('mouseleave', restCard)
 })
 </script>
 
 <template>
-      <div v-if="authReady" class="auth-language">
-        <LanguageSelect />
-      </div>
+      <LanguageSelect v-if="authReady" codes />
       <section v-if="!authReady" class="auth-card-wrapper animate-fade">
         <AppLoader label="Connecting to the manager" />
       </section>
       <section v-else-if="authStatusError" class="auth-card-wrapper animate-fade">
-        <div class="glass-card auth-card">
+        <div ref="cardRef" class="glass-card auth-card" :style="tiltStyle">
+          <div class="auth-glare" :style="glareStyle"></div>
           <div class="card-header-accent">
             <h2>{{ $t('Manager unreachable') }}</h2>
             <p>{{ authStatusError }}</p>
@@ -152,7 +198,8 @@ onMounted(() => {
       </section>
       <!-- 1. First-run Admin Setup View -->
       <section v-else-if="authStatus.setup_required" class="auth-card-wrapper animate-fade">
-        <div class="glass-card auth-card">
+        <div ref="cardRef" class="glass-card auth-card" :style="tiltStyle">
+          <div class="auth-glare" :style="glareStyle"></div>
           <div class="card-glow"></div>
           <div class="card-header-accent">
             <img
@@ -230,7 +277,8 @@ onMounted(() => {
 
       <!-- 2. Login View (when not authenticated & setup done) -->
       <section v-else-if="!authStatus.authenticated" class="auth-card-wrapper animate-fade">
-        <div class="glass-card auth-card">
+        <div ref="cardRef" class="glass-card auth-card" :style="tiltStyle">
+          <div class="auth-glare" :style="glareStyle"></div>
           <div class="card-glow"></div>
           <div class="card-header-accent">
             <img
@@ -239,7 +287,6 @@ onMounted(() => {
               class="auth-logo"
             />
             <h2>{{ $t('Sign in') }}</h2>
-            <p>{{ $t('Use the administrator username and password.') }}</p>
             <p v-if="brandLoginMessage" class="auth-personal-message">{{ brandLoginMessage }}</p>
           </div>
 

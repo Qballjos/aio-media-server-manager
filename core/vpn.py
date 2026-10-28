@@ -4,7 +4,7 @@ core/vpn.py — Optional VPN isolation for BitTorrent, Prowlarr, and Flaresolver
 Usenet (SABnzbd/NZBGet) always stays on the host network. WireGuard runs in the
 container's main network namespace (the pattern that works on Synology). Only
 qBittorrent / Prowlarr / Flaresolverr are forced through wg0 via UID policy
-routing — no nested netns and no iptables NAT.
+routing — no nested netns. The only NAT is a DNS redirect for that uid.
 """
 
 from __future__ import annotations
@@ -17,12 +17,14 @@ import shutil
 import stat
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from core.settings import Settings, settings
 from core.supervisor import ProcessSupervisor
+from core.vpn_dns import LISTEN_HOST as _VPN_DNS_CACHE, vpn_dns_forwarder
 from core.vpn_proxy import vpn_webui_proxy
 from core.vpn_relay import vpn_endpoint_relay
 
@@ -45,7 +47,34 @@ _DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191}
 _FALLBACK_DNS = ("1.1.1.1", "9.9.9.9")
 _KS_CHAIN = "AMM-KS"
 _UID_KS_CHAIN = "AMM-UID-KS"
+_UID_DNS_CHAIN = "AMM-UID-DNS"
+# Public resolvers for the VPN uid only. They ride wg0 because that uid's
+# default route is the tunnel. The container resolver (the NAS) stays in place
+# for Sonarr, Radarr, Usenet and the manager. 1.0.0.1 is the second Cloudflare
+# address, used when 1.1.1.1 does not answer. Provider DNS from the profile
+# (Privado's 198.18.0.0/15, Surfshark, …) is not used: those resolvers are a
+# frequent cause of every indexer failing together while the handshake stays up.
+_VPN_UID_DNS_SERVERS = ("1.1.1.1", "9.9.9.9")
+_VPN_UID_DNS = _VPN_UID_DNS_SERVERS[0]
+# The local cache answers first. If it is not listening the kernel refuses the
+# query at once and glibc moves to the public resolvers. single-request-reopen:
+# WireGuard paths often answer only one of the parallel A/AAAA queries.
+_VPN_UID_RESOLV_OPTIONS = "options single-request-reopen timeout:5 attempts:2\n"
+_PREPARE_REUSE_SECONDS = 120.0
+# Container and provider resolvers. Queries already aimed at a public resolver
+# are left alone so the backup nameserver in resolv.conf can be reached.
+_LOCAL_DNS_DESTINATIONS = (
+    "127.0.0.0/8",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "198.18.0.0/15",
+)
 _VPN_TABLE = 200
+# Tunnel default wins. The blackhole default stays when the kernel drops the
+# device route, so a failed table-200 lookup cannot fall through to the house WAN.
+_VPN_ROUTE_METRIC = 1
+_VPN_BLACKHOLE_METRIC = 32766
 _VPN_UID_RULE_PRIORITY = 100
 _VPN_RULE_PRIORITY = 100
 _VPN_LOCAL_RULE_PRIORITY = 99
@@ -57,8 +86,17 @@ _UID_REPLY_RULE_PRIORITY = 97
 
 
 def unwrap_isolation_command(cmd: list[str] | None) -> list[str]:
-    """Strip setpriv / netns / env wrappers so reclaim can match the real binary."""
+    """Strip setpriv / netns / resolv-mount / env wrappers so reclaim can match the real binary."""
     out = list(cmd or [])
+    if out and Path(out[0]).name == "unshare":
+        if "--" in out:
+            out = out[out.index("--") + 1 :]
+        if out and Path(out[0]).name == "sh":
+            out = out[1:]
+        if out and Path(out[0]).name == "enter-tunnel.sh":
+            out = out[1:]
+        if out and Path(out[0]).name == "resolv.tunneled.conf":
+            out = out[1:]
     if len(out) >= 4 and out[0] == "ip" and out[1] == "netns" and out[2] == "exec":
         out = out[4:]
     if out and Path(out[0]).name == "setpriv":
@@ -379,6 +417,18 @@ def wireguard_covers_default_route(text: str) -> bool:
     return False
 
 
+def wireguard_userspace_binary(*, kernel_module: bool, go_bin: str | None) -> str | None:
+    """Use wireguard-go only when the kernel has no WireGuard module.
+
+    Unraid and TrueNAS SCALE have the module. DSM does not, so it keeps
+    wireguard-go. Forcing userspace on Unraid drops indexer DNS.
+    """
+    if kernel_module:
+        return None
+    binary = (go_bin or "").strip()
+    return binary or None
+
+
 def parse_wireguard_tunnel_address(text: str) -> str | None:
     """First IPv4 Address= from a WireGuard profile (without prefix length)."""
     for raw in (text or "").splitlines():
@@ -487,8 +537,12 @@ class VpnManager:
         self._cached_underlay_ips: list[str] | None = None
         self._handshake_cache: bool | None = None
         self._handshake_cache_at = 0.0
+        self._start_lock = threading.Lock()
+        self._prepared_at: dict[str, tuple[float, int]] = {}
+        self._prepared_downloads: set[str] = set()
         self._wg_ifaces_cache: list[str] | None = None
         self._wg_ifaces_cache_at = 0.0
+        self._wireguard_impl = ""
 
     def _invalidate_runtime_cache(self) -> None:
         self._handshake_cache = None
@@ -539,6 +593,8 @@ class VpnManager:
             "flaresolverr_unprotected": "flaresolverr" in unprotected,
             "tunneled_apps": sorted(VPN_TUNNELED_APPS),
             "unprotected_apps": unprotected,
+            "dns_cache": vpn_dns_forwarder.status(),
+            "wireguard_impl": self._wireguard_impl,
             "supported_providers": list(PROVIDERS),
             "usenet_bypasses_vpn": True,
             "last_error": self._last_error or "",
@@ -591,7 +647,7 @@ class VpnManager:
             self._ensure_vpn_app_user()
             home = f"/tmp/{VPN_APP_USER}"
             gid = self._vpn_app_gid()
-            return [
+            isolated = [
                 "setpriv",
                 f"--reuid={VPN_APP_UID}",
                 f"--regid={gid}",
@@ -603,11 +659,61 @@ class VpnManager:
                 f"LOGNAME={VPN_APP_USER}",
                 *cmd,
             ]
+            return self._wrap_tunneled_resolv(isolated)
         if shutil.which("ip") is None:
             raise VpnIsolationError(
                 "iproute2 (`ip`) is required for OpenVPN network-namespace isolation."
             )
         return ["ip", "netns", "exec", TORRENT_NETNS, *cmd]
+
+    def _wrap_tunneled_resolv(self, cmd: list[str]) -> list[str]:
+        """Show VPN apps a resolver of their own. Everyone else keeps the container file.
+
+        Hotio points the whole container at one resolver. AIO cannot: Usenet and
+        the Arr apps stay on the house network. A private mount of resolv.conf
+        does the split without iptables NAT, which DSM often rejects.
+        """
+        unshare = shutil.which("unshare")
+        resolv = self._write_tunneled_resolv() if unshare else None
+        if not unshare or resolv is None:
+            return cmd
+        script = resolv.parent / "enter-tunnel.sh"
+        # `sh script` still runs when the config volume is mounted noexec.
+        return [
+            unshare,
+            "--mount",
+            "--propagation",
+            "private",
+            "--",
+            "sh",
+            str(script),
+            str(resolv),
+            *cmd,
+        ]
+
+    def _write_tunneled_resolv(self) -> Path | None:
+        servers = (_VPN_DNS_CACHE, *_VPN_UID_DNS_SERVERS)
+        content = "".join(f"nameserver {server}\n" for server in servers) + _VPN_UID_RESOLV_OPTIONS
+        script = "#!/bin/sh\nmount --bind \"$1\" /etc/resolv.conf || exit 1\nshift\nexec \"$@\"\n"
+        for directory in (Path("/run/amm-vpn"), Path(self.settings.config_dir) / "vpn" / ".run"):
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+                path = directory / "resolv.tunneled.conf"
+                if not path.is_file() or path.read_text(encoding="utf-8") != content:
+                    path.write_text(content, encoding="utf-8")
+                    logger.info(
+                        "VPN apps resolve via %s. Other apps keep the container resolver.",
+                        ", ".join(_VPN_UID_DNS_SERVERS),
+                    )
+                launcher = directory / "enter-tunnel.sh"
+                if not launcher.is_file() or launcher.read_text(encoding="utf-8") != script:
+                    launcher.write_text(script, encoding="utf-8")
+                    launcher.chmod(0o755)
+                return path
+            except OSError:
+                continue
+        logger.warning("Could not write the VPN uid resolver. Tunneled apps keep the container DNS.")
+        return None
 
     def assert_can_start_tunneled_app(self, name: str) -> None:
         """Kill switch only applies while the VPN switch is on."""
@@ -639,14 +745,28 @@ class VpnManager:
         """Ensure config/data paths are writable by the VPN app UID."""
         if not self.uses_uid_isolation():
             return
+        from applications.catalog import ApplicationCatalog
+
+        try:
+            catalog = ApplicationCatalog(app_settings=self.settings)
+            config_dir = Path(catalog.get(name).config_dir) if catalog.has(name) else None
+        except Exception:
+            logger.debug("Could not resolve config dir for %s", name, exc_info=True)
+            config_dir = None
+        # VPN start, the boot check, and the supervisor all prepare the same app within seconds.
+        # An install in between touches the config dir, which changes its mtime and forces a redo.
+        try:
+            stamp = config_dir.stat().st_mtime_ns if config_dir else 0
+        except OSError:
+            stamp = -1
+        now = time.monotonic()
+        last = self._prepared_at.get(name)
+        if last and last[1] == stamp and now - last[0] < _PREPARE_REUSE_SECONDS:
+            return
         self._ensure_vpn_app_user()
         gid = self._vpn_app_gid()
         try:
-            from applications.catalog import ApplicationCatalog
-
-            if ApplicationCatalog(app_settings=self.settings).has(name):
-                app = ApplicationCatalog(app_settings=self.settings).get(name)
-                config_dir = Path(app.config_dir)
+            if config_dir is not None:
                 self._chown_tree(config_dir, uid=VPN_APP_UID, gid=gid)
                 self._strip_posix_acls(config_dir)
                 self._chmod_tree(config_dir, dir_mode=0o755, file_mode=0o644)
@@ -673,6 +793,11 @@ class VpnManager:
             logger.debug("Could not resolve config dir for %s", name, exc_info=True)
         # Downloads stay owned by PUID:PGID so Arr can import; VPN uid shares PGID.
         self._prepare_shared_download_tree(Path(self.settings.download_dir), gid=gid)
+        try:
+            stamp = config_dir.stat().st_mtime_ns if config_dir else 0
+        except OSError:
+            stamp = -1
+        self._prepared_at[name] = (time.monotonic(), stamp)
 
     def _vpn_uid_can_write(self, path: Path, *, gid: int) -> bool:
         if not path.is_dir():
@@ -729,16 +854,14 @@ class VpnManager:
         except OSError as exc:
             logger.debug("chmod %s failed: %s", path, exc)
         for root, dirs, files in os.walk(path):
-            for name in dirs:
-                try:
-                    os.chmod(Path(root) / name, dir_mode)
-                except OSError:
-                    pass
-            for name in files:
-                try:
-                    os.chmod(Path(root) / name, file_mode)
-                except OSError:
-                    pass
+            for names, want in ((dirs, dir_mode), (files, file_mode)):
+                for name in names:
+                    target = os.path.join(root, name)
+                    try:
+                        if stat.S_IMODE(os.stat(target).st_mode) != want:
+                            os.chmod(target, want)
+                    except OSError:
+                        pass
 
     def _prepare_shared_download_tree(self, path: Path, *, gid: int) -> None:
         try:
@@ -746,14 +869,20 @@ class VpnManager:
         except OSError as exc:
             logger.warning("Could not create download dir %s: %s", path, exc)
             return
+        # A full walk of the downloads share is slow on Unraid /mnt/user; once per boot is enough
+        # because setgid directories keep new files in the shared group.
+        key = f"{path}:{gid}"
+        if key in self._prepared_downloads:
+            return
+        self._prepared_downloads.add(key)
         try:
             puid = int(self.settings.puid)
         except (TypeError, ValueError):
             puid = VPN_APP_UID
         # Owner stays PUID; group PGID with setgid so new files stay group-accessible.
-        self._chown_tree(path, uid=puid, gid=gid, mode=0o2775)
-        # VPN uid must be able to write into the tree even when some files are 644/755.
-        self._ensure_group_writable(path)
+        if not self._chown_tree(path, uid=puid, gid=gid, mode=0o2775):
+            # VPN uid must be able to write into the tree even when some files are 644/755.
+            self._ensure_group_writable(path)
 
     def _ensure_group_writable(self, path: Path) -> None:
         if not path.is_dir():
@@ -763,18 +892,25 @@ class VpnManager:
                 target = Path(root) / name
                 try:
                     mode = target.stat().st_mode
-                    os.chmod(target, mode | 0o2770)
+                    if mode | 0o2770 != mode:
+                        os.chmod(target, mode | 0o2770)
                 except OSError:
                     pass
             for name in files:
                 target = Path(root) / name
                 try:
                     mode = target.stat().st_mode
-                    os.chmod(target, mode | 0o660)
+                    if mode | 0o660 != mode:
+                        os.chmod(target, mode | 0o660)
                 except OSError:
                     pass
 
     def start(self) -> dict[str, Any]:
+        # The watchdog retry and Settings can both start the VPN; one build at a time.
+        with self._start_lock:
+            return self._start_unlocked()
+
+    def _start_unlocked(self) -> dict[str, Any]:
         if not self.config_path.is_file():
             return self._fail(f"VPN config missing: {self.config_path}")
         self._cached_underlay_ips = None
@@ -855,9 +991,18 @@ class VpnManager:
         self._wireguard_down_main(up_conf)
         env = os.environ.copy()
         env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        wg_go = shutil.which("wireguard-go")
-        if wg_go:
-            env["WG_QUICK_USERSPACE_IMPLEMENTATION"] = wg_go
+        env.pop("WG_QUICK_USERSPACE_IMPLEMENTATION", None)
+        go_bin = wireguard_userspace_binary(
+            kernel_module=self._kernel_wireguard_available(),
+            go_bin=shutil.which("wireguard-go"),
+        )
+        if go_bin:
+            env["WG_QUICK_USERSPACE_IMPLEMENTATION"] = go_bin
+            self._wireguard_impl = "wireguard-go"
+            logger.info("WireGuard using wireguard-go; this kernel has no WireGuard module.")
+        else:
+            self._wireguard_impl = "kernel"
+            logger.info("WireGuard using the kernel module.")
         try:
             subprocess.run(
                 [exe, "up", str(up_conf)],
@@ -890,6 +1035,7 @@ class VpnManager:
                 "and that outbound UDP is not blocked."
             )
         self._last_error = ""
+        vpn_dns_forwarder.ensure(self.tunnel_interface_name)
         for name in sorted(VPN_TUNNELED_APPS):
             self.prepare_tunneled_app(name)
         logger.info(
@@ -909,6 +1055,7 @@ class VpnManager:
     def stop(self) -> dict[str, Any]:
         vpn_webui_proxy.stop_all()
         vpn_endpoint_relay.stop()
+        vpn_dns_forwarder.stop()
         proto = self.settings.vpn_protocol
         if proto == "wireguard" and shutil.which("wg-quick"):
             down_conf = (
@@ -994,13 +1141,14 @@ class VpnManager:
         uid: int = VPN_APP_UID,
         gid: int = VPN_APP_GID,
         mode: int | None = 0o755,
-    ) -> None:
+    ) -> bool:
+        """Own and mode the tree; False when the top-level chown failed and chown -R was tried."""
         if not path.exists():
             try:
                 path.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
                 logger.warning("Could not create %s for VPN apps: %s", path, exc)
-                return
+                return False
         try:
             os.chown(path, uid, gid)
             if mode is not None:
@@ -1009,20 +1157,31 @@ class VpnManager:
             logger.warning("chown/chmod %s -> %s:%s failed: %s", path, uid, gid, exc)
             # Fall back to recursive chown(1) which sometimes succeeds when os.chown fails.
             self._chown_cli(path, uid, gid)
-            return
+            return False
         if not path.is_dir():
-            return
+            return True
+        file_mode = None if mode is None else (0o644 if mode == 0o755 else (mode & 0o666))
+        # Stat first and only write what differs: chown/chmod on every file is what makes a
+        # large downloads share slow, and most entries are already right after the first boot.
         for root, dirs, files in os.walk(path):
             for name in dirs + files:
-                target = Path(root) / name
+                target = os.path.join(root, name)
                 try:
-                    os.chown(target, uid, gid)
-                    if mode is not None and target.is_dir():
-                        os.chmod(target, mode)
-                    elif mode is not None and target.is_file():
-                        os.chmod(target, 0o644 if mode == 0o755 else (mode & 0o666))
+                    st = os.stat(target)
+                    changed = st.st_uid != uid or st.st_gid != gid
+                    if changed:
+                        os.chown(target, uid, gid)
+                    if stat.S_ISDIR(st.st_mode):
+                        want = mode
+                    elif stat.S_ISREG(st.st_mode):
+                        want = file_mode
+                    else:
+                        want = None
+                    if want is not None and (changed or stat.S_IMODE(st.st_mode) != want):
+                        os.chmod(target, want)
                 except OSError:
                     pass
+        return True
 
     def _chown_cli(self, path: Path, uid: int, gid: int) -> None:
         chown = shutil.which("chown")
@@ -1052,9 +1211,77 @@ class VpnManager:
         if not ifaces:
             return "WireGuard came up but no wg interface was found."
         wg = ifaces[0]
-        result = self._ip(["route", "replace", "default", "dev", wg, "table", str(_VPN_TABLE)])
-        if result.returncode != 0:
-            return f"Could not install WireGuard default route: {(result.stderr or '')[:180]}"
+        # Install the blackhole before the tunnel route. iptables owner match is
+        # missing on DSM, so this route is what stops uid 910 from using the house
+        # default when wg0 disappears. A rejected blackhole is logged once; the
+        # tunnel still comes up and the iptables reject covers kernels that have it.
+        hole = self._ip(
+            [
+                "route",
+                "replace",
+                "blackhole",
+                "default",
+                "metric",
+                str(_VPN_BLACKHOLE_METRIC),
+                "table",
+                str(_VPN_TABLE),
+            ]
+        )
+        if hole.returncode != 0:
+            self._warn_once(
+                "uid-blackhole",
+                "VPN uid %s has no routing blackhole (%s). "
+                "Clear-net fallback stays possible where iptables owner match is missing.",
+                VPN_APP_UID,
+                (hole.stderr or "")[:160],
+            )
+        else:
+            self._log_once(
+                "uid-blackhole",
+                "VPN uid %s drops clear-net traffic when the tunnel route is gone",
+                VPN_APP_UID,
+            )
+        # Pin the tunnel address as the source. Without it, wireguard-go on DSM
+        # sends uid 910 packets (DNS included) with the container's bridge address.
+        # The VPN peer drops those, so lookups time out and FlareSolverr exits.
+        src = self._tunnel_ipv4(wg)
+        plain = [
+            "route",
+            "replace",
+            "default",
+            "dev",
+            wg,
+            "metric",
+            str(_VPN_ROUTE_METRIC),
+            "table",
+            str(_VPN_TABLE),
+        ]
+        pinned = False
+        result = None
+        if src:
+            result = self._ip(
+                [
+                    "route",
+                    "replace",
+                    "default",
+                    "dev",
+                    wg,
+                    "src",
+                    src,
+                    "metric",
+                    str(_VPN_ROUTE_METRIC),
+                    "table",
+                    str(_VPN_TABLE),
+                ]
+            )
+            pinned = result.returncode == 0
+        if not pinned:
+            result = self._ip(plain)
+        if result is None or result.returncode != 0:
+            detail = "" if result is None else (result.stderr or "")
+            return f"Could not install WireGuard default route: {detail[:180]}"
+        if pinned:
+            self._log_once("uid-src", "VPN uid %s egress uses tunnel address %s", VPN_APP_UID, src)
         # Localhost / link-local always from main table for the VPN UID.
         self._ip(
             [
@@ -1119,7 +1346,49 @@ class VpnManager:
         self._apply_uid_ipv6_blackhole()
         self._apply_uid_reply_routing()
         self._apply_uid_output_kill_switch(wg)
+        self._apply_uid_dns_redirect()
         return None
+
+    def _tunnel_ipv4(self, wg: str) -> str | None:
+        text = ""
+        path = self._active_wg_conf
+        if path is not None and path.is_file():
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = ""
+        addr = parse_wireguard_tunnel_address(text)
+        if addr:
+            return addr
+        result = self._ip(["-4", "-o", "addr", "show", "dev", wg])
+        for line in (result.stdout or "").splitlines():
+            parts = line.split()
+            if "inet" not in parts:
+                continue
+            host = parts[parts.index("inet") + 1].split("/", 1)[0]
+            if host.count(".") == 3:
+                return host
+        return None
+
+    def _warn_once(self, key: str, message: str, *args: object) -> None:
+        seen = getattr(self, "_warned_once", None)
+        if seen is None:
+            seen = set()
+            self._warned_once = seen
+        if key in seen:
+            return
+        seen.add(key)
+        logger.warning(message, *args)
+
+    def _log_once(self, key: str, message: str, *args: object) -> None:
+        seen = getattr(self, "_warned_once", None)
+        if seen is None:
+            seen = set()
+            self._warned_once = seen
+        if key in seen:
+            return
+        seen.add(key)
+        logger.info(message, *args)
 
     def _house_interface(self) -> str | None:
         """Interface of the main table's default route: where Docker and the LAN come in."""
@@ -1261,7 +1530,11 @@ class VpnManager:
                 for host, port in endpoints:
                     result = helper(["-A", _UID_KS_CHAIN, "-p", "udp", "-d", host, "--dport", port, "-j", "RETURN"])
                     if result.returncode != 0:
-                        logger.warning("Could not allow WireGuard endpoint through UID kill switch: %s", (result.stderr or "")[:160])
+                        self._warn_once(
+                            "uid-ks-endpoint",
+                            "Could not allow WireGuard endpoint through UID kill switch: %s",
+                            (result.stderr or "")[:160],
+                        )
             reject = helper(
                 ["-A", _UID_KS_CHAIN, "-j", "REJECT", "--reject-with", "icmp-net-unreachable"]
             )
@@ -1272,7 +1545,8 @@ class VpnManager:
             if helper(["-C", *jump]).returncode != 0:
                 result = helper(["-I", "OUTPUT", "1", *jump[1:]])
                 if result.returncode != 0:
-                    logger.warning(
+                    self._warn_once(
+                        "uid-ks",
                         "VPN UID OUTPUT kill switch unavailable (%s). "
                         "Install iptables owner match (xt_owner) for leak protection.",
                         (result.stderr or "")[:160],
@@ -1285,7 +1559,58 @@ class VpnManager:
             helper(["-F", _UID_KS_CHAIN])
             helper(["-X", _UID_KS_CHAIN])
 
+    def _apply_uid_dns_redirect(self) -> None:
+        """Fallback when a tunneled app still queries the container resolver.
+
+        The primary path is a private resolv.conf (see ``_wrap_tunneled_resolv``).
+        This DNAT covers the same uid if that mount is unavailable and the
+        kernel has the owner match. A missing nat table or owner match logs a
+        warning and leaves the tunnel up.
+        """
+        helper = self._host_iptables
+        helper(["-t", "nat", "-N", _UID_DNS_CHAIN])
+        helper(["-t", "nat", "-F", _UID_DNS_CHAIN])
+        helper(["-t", "nat", "-A", _UID_DNS_CHAIN, "-d", f"{_VPN_DNS_CACHE}/32", "-j", "RETURN"])
+        for proto in ("udp", "tcp"):
+            for destination in _LOCAL_DNS_DESTINATIONS:
+                result = helper(
+                    [
+                        "-t", "nat", "-A", _UID_DNS_CHAIN,
+                        "-d", destination,
+                        "-p", proto, "--dport", "53",
+                        "-j", "DNAT", "--to-destination", f"{_VPN_UID_DNS}:53",
+                    ]
+                )
+                if result.returncode != 0:
+                    self._warn_once(
+                        "uid-dns",
+                        "Could not redirect VPN uid DNS to %s: %s",
+                        _VPN_UID_DNS,
+                        (result.stderr or "")[:160],
+                    )
+                    return
+        jump = ["OUTPUT", "-m", "owner", "--uid-owner", str(VPN_APP_UID), "-j", _UID_DNS_CHAIN]
+        if helper(["-t", "nat", "-C", *jump]).returncode != 0:
+            result = helper(["-t", "nat", "-I", "OUTPUT", "1", *jump[1:]])
+            if result.returncode != 0:
+                self._warn_once(
+                    "uid-dns-jump",
+                    "VPN uid DNS redirect unavailable (%s). "
+                    "Prowlarr keeps using the container resolver.",
+                    (result.stderr or "")[:160],
+                )
+                return
+        logger.info("VPN uid %s DNS redirected to %s; other apps keep the container resolver.", VPN_APP_UID, _VPN_UID_DNS)
+
+    def _clear_uid_dns_redirect(self) -> None:
+        helper = self._host_iptables
+        jump = ["OUTPUT", "-m", "owner", "--uid-owner", str(VPN_APP_UID), "-j", _UID_DNS_CHAIN]
+        helper(["-t", "nat", "-D", *jump])
+        helper(["-t", "nat", "-F", _UID_DNS_CHAIN])
+        helper(["-t", "nat", "-X", _UID_DNS_CHAIN])
+
     def _clear_uid_wireguard_routing(self) -> None:
+        self._clear_uid_dns_redirect()
         self._clear_uid_output_kill_switch()
         self._clear_uid_reply_routing()
         self._ip(
@@ -2224,6 +2549,7 @@ class VpnManager:
             vpn_webui_proxy.stop_all()
             vpn_endpoint_relay.stop()
             self._apply_uid_wireguard_routing()
+            vpn_dns_forwarder.ensure(self.tunnel_interface_name)
             return
         self._forward_local_ports()
         self._write_netns_resolv(self._dns_for_netns())
@@ -2360,6 +2686,36 @@ class VpnManager:
     @staticmethod
     def _is_linux() -> bool:
         return hasattr(os, "uname") and os.uname().sysname.lower() == "linux"
+
+    def _kernel_wireguard_available(self) -> bool:
+        """True when this kernel can create a WireGuard interface.
+
+        A missing module is not fatal: the caller falls back to wireguard-go,
+        which is what DSM requires. Unraid and TrueNAS load the module here
+        when the container is privileged.
+        """
+        if Path("/sys/module/wireguard").is_dir():
+            return True
+        modprobe = shutil.which("modprobe")
+        if not modprobe:
+            return False
+        try:
+            result = subprocess.run(
+                [modprobe, "wireguard"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            logger.info("WireGuard kernel module is not available: %s", exc)
+            return False
+        if result.returncode != 0 or not Path("/sys/module/wireguard").is_dir():
+            logger.info(
+                "WireGuard kernel module is not available (%s).",
+                (result.stderr or result.stdout or "modprobe failed").strip()[:160],
+            )
+            return False
+        return True
 
     @staticmethod
     def _ip(args: list[str]) -> subprocess.CompletedProcess[str]:

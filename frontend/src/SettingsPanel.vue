@@ -10,6 +10,7 @@ import { formatUptime } from './format.js'
 import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 import UiSelect from './UiSelect.vue'
+import { timezoneChoices } from './timezones.js'
 import LanguageSelect from './LanguageSelect.vue'
 import {
   canPromptInstall,
@@ -81,6 +82,8 @@ const uploading = ref(false)
 let stopJobPollFn = null
 const form = ref({
   username: '',
+  first_name: '',
+  last_name: '',
   email: '',
   current_password: '',
   new_password: '',
@@ -115,6 +118,7 @@ const form = ref({
   accent_color: DEFAULT_ACCENT,
   login_message: '',
 })
+const timezoneOptions = computed(() => timezoneChoices(form.value.timezone))
 const branding = ref({
   title: 'AIO Media Server Manager',
   accent_color: DEFAULT_ACCENT,
@@ -731,7 +735,7 @@ async function publishHostnames() {
 async function addCloudflareAccess() {
   const gated = (hostnameRoutes.value || []).filter((row) => row.enabled && row.access_gate)
   if (!gated.length) {
-    error.value = 'Turn on Expose for at least one *Arr app, download client, or Seerr.'
+    error.value = 'Turn on Expose for at least one *Arr app, download client, Seerr, or NeutArr.'
     notice.value = ''
     return
   }
@@ -934,6 +938,8 @@ async function loadAll() {
     if (meRes.ok) {
       const me = await readJson(meRes)
       form.value.username = me.username || 'admin'
+      form.value.first_name = me.first_name || ''
+      form.value.last_name = me.last_name || ''
       form.value.email = me.email || ''
       applyProfileAvatar(me)
       applyVisualsFromProfile(me)
@@ -1243,6 +1249,8 @@ async function saveAccount() {
     const body = {
       current_password: form.value.current_password,
       username: form.value.username,
+      first_name: form.value.first_name,
+      last_name: form.value.last_name,
       email: form.value.email
     }
     if (form.value.new_password) body.new_password = form.value.new_password
@@ -1875,7 +1883,7 @@ onBeforeUnmount(() => {
             :key="key"
             class="brand-asset-row"
           >
-            <img :src="slot.url" :alt="slot.label" class="brand-asset-preview" />
+            <img :src="slot.url" :alt="slot.label" class="brand-asset-preview" :class="{ 'is-logo': key === 'logo' }" />
             <div class="brand-asset-copy">
               <strong>{{ slot.label }}</strong>
               <span>{{ slot.help }}</span>
@@ -1915,7 +1923,7 @@ onBeforeUnmount(() => {
         <div class="settings-card-head">
           <span class="accent-badge">{{ $t('ACCOUNT') }}</span>
           <h3>{{ $t('Administrator') }}</h3>
-          <p>{{ $t('Current password is required for any change. Email is used for Seerr wiring.') }}</p>
+          <p>{{ $t('Current password is required for any change. The welcome line uses your first name when it is filled in. Email is used for Seerr wiring.') }}</p>
         </div>
         <div class="brand-asset-list account-avatar-block">
           <div class="brand-asset-row">
@@ -1960,6 +1968,12 @@ onBeforeUnmount(() => {
         <form class="form-stack" @submit.prevent="saveAccount">
           <label class="ui-field">{{ $t('Username') }}
             <input v-model="form.username" class="ui-input" required />
+          </label>
+          <label class="ui-field">{{ $t('First name') }}
+            <input v-model="form.first_name" class="ui-input" maxlength="80" autocomplete="given-name" />
+          </label>
+          <label class="ui-field">{{ $t('Last name') }}
+            <input v-model="form.last_name" class="ui-input" maxlength="80" autocomplete="family-name" />
           </label>
           <label class="ui-field">{{ $t('Email') }}
             <input v-model="form.email" type="email" class="ui-input" required />
@@ -2029,17 +2043,11 @@ onBeforeUnmount(() => {
           <label class="ui-field">{{ $t('Timezone') }}
             <UiSelect
               v-model="form.timezone"
-              :options="[
-                { value: 'UTC', label: 'UTC' },
-                { value: 'Europe/Amsterdam', label: 'Europe/Amsterdam' },
-                { value: 'Europe/London', label: 'Europe/London' },
-                { value: 'America/New_York', label: 'America/New_York' },
-                { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
-                { value: 'Australia/Sydney', label: 'Australia/Sydney' },
-                ...(form.timezone && !['UTC','Europe/Amsterdam','Europe/London','America/New_York','America/Los_Angeles','Australia/Sydney'].includes(form.timezone)
-                  ? [{ value: form.timezone, label: form.timezone }]
-                  : []),
-              ]"
+              searchable
+              :search-placeholder="$t('Search')"
+              :empty-label="$t('No matches')"
+              :aria-label="$t('Timezone')"
+              :options="timezoneOptions"
             />
           </label>
           <label class="ui-field">{{ $t('Log level') }}
@@ -2647,7 +2655,7 @@ onBeforeUnmount(() => {
           <label class="ui-field">
             {{ $t('Cloudflare Access emails') }}
             <span class="ui-field-hint">
-              {{ $t('Add Cloudflare Access puts a login gate on the exposed *Arr apps, download clients, and Seerr, using a login method you already created in Zero Trust. Jellyfin, Plex, and this dashboard keep their own login. List the email addresses that may enter, separated by commas or new lines. Leave this empty only when the only login method is Cloudflare with Restrict to account members.') }}
+              {{ $t('Add Cloudflare Access puts a login gate on the exposed *Arr apps, download clients, Seerr, and NeutArr, using a login method you already created in Zero Trust. Jellyfin, Plex, and this dashboard keep their own login. List the email addresses that may enter, separated by commas or new lines. Leave this empty only when the only login method is Cloudflare with Restrict to account members.') }}
               <span v-if="accessIdps.length">
                 {{ $t('Login methods found:') }}
                 {{ accessIdps.map((row) => row.name || row.type).join(', ') }}.
@@ -3060,13 +3068,13 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
 }
 .section-title {
-  font-size: 1.25rem;
+  font-size: var(--text-title);
   font-weight: 700;
   margin: 0;
   color: var(--text-heading);
 }
 .section-subtitle {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--text-dim);
   margin: 0.2rem 0 0;
 }
@@ -3081,7 +3089,7 @@ onBeforeUnmount(() => {
 }
 .settings-card-head h3 {
   margin: 0.4rem 0 0.35rem;
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
   color: var(--text-heading);
 }
 .settings-card-head p {
@@ -3091,7 +3099,7 @@ onBeforeUnmount(() => {
 }
 .accent-badge {
   display: inline-block;
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 0.2rem 0.5rem;
@@ -3135,7 +3143,7 @@ onBeforeUnmount(() => {
 }
 .info-grid dt {
   color: var(--text-dim);
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3143,7 +3151,7 @@ onBeforeUnmount(() => {
 .info-grid dd {
   margin: 0.3rem 0 0;
   color: var(--text-main);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   overflow-wrap: anywhere;
 }
 .storage-table-wrap {
@@ -3153,12 +3161,12 @@ onBeforeUnmount(() => {
 .storage-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
 }
 .storage-table th {
   text-align: left;
   color: var(--text-dim);
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0.4rem 0.6rem 0.65rem;
@@ -3179,7 +3187,7 @@ onBeforeUnmount(() => {
 .path-line {
   display: block;
   color: var(--text-dim);
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   overflow-wrap: anywhere;
 }
 .hostname-table-wrap {
@@ -3195,7 +3203,7 @@ onBeforeUnmount(() => {
   max-width: 12rem;
 }
 .hostname-preview {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
@@ -3211,7 +3219,7 @@ onBeforeUnmount(() => {
 .share-meta,
 .share-idle {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   margin-top: 0.55rem;
 }
 .setting-status {
@@ -3223,7 +3231,7 @@ onBeforeUnmount(() => {
 .setting-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3349,7 +3357,7 @@ onBeforeUnmount(() => {
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   text-transform: capitalize;
 }
 .error-log {
@@ -3360,7 +3368,7 @@ onBeforeUnmount(() => {
   max-height: 360px;
   overflow: auto;
   white-space: pre-wrap;
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   color: var(--text-main);
 }
 .brand-asset-list {
@@ -3380,13 +3388,19 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-subtle);
 }
 .brand-asset-preview {
-  width: 56px;
-  height: 56px;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: 12px;
   object-fit: cover;
-  background: transparent;
+  background: var(--bg-input);
   border: none;
   flex-shrink: 0;
+}
+.brand-asset-preview.is-logo {
+  width: 10.5rem;
+  height: 3.5rem;
+  object-fit: contain;
+  object-position: center;
 }
 .brand-asset-copy {
   display: flex;
@@ -3397,11 +3411,11 @@ onBeforeUnmount(() => {
 }
 .brand-asset-copy strong {
   color: var(--text-heading);
-  font-size: 0.92rem;
+  font-size: var(--text-body);
 }
 .brand-asset-copy span {
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   line-height: 1.4;
 }
 .brand-asset-size {
@@ -3435,7 +3449,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 1.5rem;
+  font-size: var(--text-display);
   line-height: 1;
 }
 .account-avatar-preview img {
@@ -3467,10 +3481,10 @@ onBeforeUnmount(() => {
   gap: 0.15rem;
 }
 .theme-accent-copy strong {
-  font-size: 0.95rem;
+  font-size: var(--text-body);
 }
 .theme-accent-copy span {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .accent-picker {

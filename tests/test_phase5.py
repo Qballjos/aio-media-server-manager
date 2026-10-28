@@ -28,6 +28,7 @@ from core.vpn import (
     save_vpn_config_text,
     ensure_tun_device,
     vpn_start_failure_detail,
+    wireguard_userspace_binary,
 )
 
 
@@ -202,6 +203,44 @@ def test_vpn_wraps_wireguard_with_setpriv_uid(tmp_path: Path, monkeypatch):
     assert "qbittorrent-nox" in wrapped
 
 
+def test_vpn_wraps_wireguard_with_private_resolv(tmp_path: Path, monkeypatch):
+    cfg = Settings(
+        config_dir=tmp_path / "config",
+        download_dir=tmp_path / "dl",
+        media_dir=tmp_path / "media",
+        vpn_enabled=True,
+        vpn_protocol="wireguard",
+    )
+    mgr = VpnManager(cfg)
+    monkeypatch.setattr(mgr, "_is_linux", lambda: True)
+    monkeypatch.setattr(mgr, "_ensure_vpn_app_user", lambda: None)
+    monkeypatch.setattr(
+        "core.vpn.shutil.which",
+        lambda name: "/usr/bin/" + name if name in {"setpriv", "unshare"} else None,
+    )
+    # /run is not the test's to write; the config-dir fallback must be used.
+    original_mkdir = Path.mkdir
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        if str(self) == "/run/amm-vpn":
+            raise OSError("no /run")
+        return original_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    wrapped = mgr.wrap_torrent_command(["qbittorrent-nox"])
+    assert wrapped[:6] == ["/usr/bin/unshare", "--mount", "--propagation", "private", "--", "sh"]
+    resolv = tmp_path / "config" / "vpn" / ".run" / "resolv.tunneled.conf"
+    text = resolv.read_text(encoding="utf-8")
+    assert text.startswith("nameserver 127.0.0.153\nnameserver 1.1.1.1\nnameserver 9.9.9.9\n")
+    assert "single-request-reopen" in text
+    assert str(resolv) in wrapped
+    assert "qbittorrent-nox" in wrapped
+    assert f"--reuid={VPN_APP_UID}" in wrapped
+    from core.vpn import unwrap_isolation_command
+
+    assert unwrap_isolation_command(wrapped) == ["qbittorrent-nox"]
+
+
 def test_vpn_wrap_fails_closed_without_setpriv(tmp_path: Path, monkeypatch):
     from core.vpn import unwrap_isolation_command
 
@@ -271,6 +310,8 @@ def test_uid_routing_applies_ipv6_blackhole_and_output_ks(tmp_path: Path, monkey
     monkeypatch.setattr(mgr, "_host_ip6tables", fake_iptables)
     assert mgr._apply_uid_wireguard_routing() is None
     flat = [" ".join(c) for c in calls]
+    assert "route replace blackhole default metric 32766 table 200" in flat
+    assert "route replace default dev wg0 metric 1 table 200" in flat
     assert any("uidrange" in row and "blackhole" in row and "-6" in row for row in flat)
     assert any("AMM-UID-KS" in row and "owner" in row for row in flat)
     assert any("REJECT" in row for row in flat)
@@ -287,6 +328,71 @@ def test_uid_routing_applies_ipv6_blackhole_and_output_ks(tmp_path: Path, monkey
     # owner, so the kill switch must let the VPN UID reach the endpoint itself.
     endpoint_ok = next(i for i, row in enumerate(ks_rows) if "-p udp -d 203.0.113.5 --dport 51820 -j RETURN" in row)
     assert endpoint_ok < reject
+
+
+def test_uid_route_pins_tunnel_source_address(tmp_path: Path, monkeypatch):
+    mgr = VpnManager(Settings(config_dir=tmp_path / "config"))
+    calls: list[list[str]] = []
+
+    def fake_ip(args):
+        calls.append(list(args))
+        from subprocess import CompletedProcess
+
+        return CompletedProcess(["ip", *args], 0, "", "")
+
+    monkeypatch.setattr(mgr, "_main_tunnel_interface_names", lambda: ["wg0"])
+    monkeypatch.setattr(mgr, "_house_interface", lambda: "eth0")
+    monkeypatch.setattr(mgr, "_ip", fake_ip)
+    monkeypatch.setattr(mgr, "_host_iptables", fake_ip)
+    monkeypatch.setattr(mgr, "_host_ip6tables", fake_ip)
+    monkeypatch.setattr(mgr, "_apply_uid_ipv6_blackhole", lambda: None)
+    monkeypatch.setattr(mgr, "_apply_uid_reply_routing", lambda: None)
+    monkeypatch.setattr(mgr, "_apply_uid_output_kill_switch", lambda iface: None)
+    monkeypatch.setattr(mgr, "_apply_uid_dns_redirect", lambda: None)
+    mgr._active_wg_conf = tmp_path / "wg0.conf"
+    mgr._active_wg_conf.write_text("[Interface]\nAddress = 10.64.0.8/32\n")
+    assert mgr._apply_uid_wireguard_routing() is None
+    assert calls[0] == ["route", "replace", "blackhole", "default", "metric", "32766", "table", "200"]
+    assert calls[1] == [
+        "route",
+        "replace",
+        "default",
+        "dev",
+        "wg0",
+        "src",
+        "10.64.0.8",
+        "metric",
+        "1",
+        "table",
+        "200",
+    ]
+
+
+def test_uid_route_stays_up_when_blackhole_is_rejected(tmp_path: Path, monkeypatch):
+    mgr = VpnManager(Settings(config_dir=tmp_path / "config"))
+    calls: list[list[str]] = []
+
+    def fake_ip(args):
+        calls.append(list(args))
+        from subprocess import CompletedProcess
+
+        code = 2 if args[:3] == ["route", "replace", "blackhole"] else 0
+        return CompletedProcess(["ip", *args], code, "", "Operation not supported")
+
+    monkeypatch.setattr(mgr, "_main_tunnel_interface_names", lambda: ["wg0"])
+    monkeypatch.setattr(mgr, "_house_interface", lambda: "eth0")
+    monkeypatch.setattr(mgr, "_ip", fake_ip)
+    monkeypatch.setattr(mgr, "_host_iptables", fake_ip)
+    monkeypatch.setattr(mgr, "_host_ip6tables", fake_ip)
+    monkeypatch.setattr(mgr, "_apply_uid_ipv6_blackhole", lambda: None)
+    monkeypatch.setattr(mgr, "_apply_uid_reply_routing", lambda: None)
+    monkeypatch.setattr(mgr, "_apply_uid_output_kill_switch", lambda iface: None)
+    monkeypatch.setattr(mgr, "_apply_uid_dns_redirect", lambda: None)
+    mgr._active_wg_conf = tmp_path / "wg0.conf"
+    mgr._active_wg_conf.write_text("[Interface]\nPrivateKey = aa\n")
+    assert mgr._apply_uid_wireguard_routing() is None
+    flat = [" ".join(c) for c in calls]
+    assert "route replace default dev wg0 metric 1 table 200" in flat
 
 
 @pytest.mark.parametrize(
@@ -358,6 +464,44 @@ def test_uid_kill_switch_without_readable_runtime_config(tmp_path: Path, monkeyp
     mgr._apply_uid_output_kill_switch("wg0")
     assert not any("--dport" in args for args in calls)
     assert sum("REJECT" in args for args in calls) == 2
+
+
+def test_uid_dns_redirect_only_targets_vpn_uid(tmp_path: Path, monkeypatch):
+    mgr = VpnManager(Settings(config_dir=tmp_path / "config"))
+    calls: list[list[str]] = []
+
+    def firewall(args):
+        calls.append(args)
+        code = 1 if "-C" in args else 0
+        return subprocess.CompletedProcess(args, code, "", "")
+
+    monkeypatch.setattr(mgr, "_host_iptables", firewall)
+    mgr._apply_uid_dns_redirect()
+    flat = [" ".join(args) for args in calls]
+    local_udp = " ".join(
+        [
+            "-t", "nat", "-A", "AMM-UID-DNS",
+            "-d", "127.0.0.0/8",
+            "-p", "udp", "--dport", "53",
+            "-j", "DNAT", "--to-destination", "1.1.1.1:53",
+        ]
+    )
+    assert local_udp in flat
+    cache_return = "-t nat -A AMM-UID-DNS -d 127.0.0.153/32 -j RETURN"
+    assert cache_return in flat
+    assert flat.index(cache_return) < flat.index(local_udp)
+    assert any("-d 198.18.0.0/15" in row and "--dport 53" in row for row in flat)
+    assert not any(
+        row.startswith("-t nat -A AMM-UID-DNS -p ") and "-d " not in row
+        for row in flat
+    )
+    assert f"-t nat -I OUTPUT 1 -m owner --uid-owner {VPN_APP_UID} -j AMM-UID-DNS" in flat
+    assert not any(row.startswith("-A ") or row.startswith("-I ") for row in flat)
+
+    mgr._clear_uid_dns_redirect()
+    cleared = [" ".join(args) for args in calls]
+    assert f"-t nat -D OUTPUT -m owner --uid-owner {VPN_APP_UID} -j AMM-UID-DNS" in cleared
+    assert "-t nat -X AMM-UID-DNS" in cleared
 
 
 @pytest.mark.parametrize(
@@ -770,6 +914,12 @@ def test_vpn_start_failure_explains_missing_wireguard_go():
     text = vpn_start_failure_detail(127, "", "")
     assert "wireguard-go" in text
     assert "OpenVPN" in text
+
+
+def test_kernel_wireguard_skips_userspace_binary():
+    assert wireguard_userspace_binary(kernel_module=True, go_bin="/usr/bin/wireguard-go") is None
+    assert wireguard_userspace_binary(kernel_module=False, go_bin="/usr/bin/wireguard-go") == "/usr/bin/wireguard-go"
+    assert wireguard_userspace_binary(kernel_module=False, go_bin=None) is None
 
 
 def test_vpn_start_failure_explains_missing_resolvconf():

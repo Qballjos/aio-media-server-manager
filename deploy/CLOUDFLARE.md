@@ -59,6 +59,8 @@ Cloudflare shows install commands for Docker, Windows, etc. **Do not run those o
 4. Status should show **Enabled**, **Token saved**, **Tunnel up**, **cloudflared ready**.  
    The header **CF** pill turns green/blue when healthy.
 
+On container boot, AIO brings up the VPN (if enabled) and the catalog apps first, then starts `cloudflared` last so it does not probe origins that are still starting. The dashboard is reachable while that is still happening. After the first-run wizard, the tunnel still starts as soon as you finish the wizard (before or with the VPN), so you can publish hostnames right away.
+
 Stuck on **Tunnel down**? Check cloudflared logs in Catalog/Diagnostics, outbound access to Cloudflare (port **7844**), and that nothing else is using the same token.
 
 ---
@@ -67,6 +69,8 @@ Stuck on **Tunnel down**? Check cloudflared logs in Catalog/Diagnostics, outboun
 
 Cloudflare only serves **HTTPS on port 443**. You cannot open `https://media.example.com:8989`.  
 Each app needs its own **public hostname**, e.g. `https://sonarr.example.com`, mapped to `http://127.0.0.1:8989` **inside** the AIO container.
+
+**Jellyfin:** the tunnel points at a localhost nginx on **8097** that copies `CF-Connecting-IP` into `X-Forwarded-For` before Jellyfin. Without that, Jellyfin sees every tunnel client as `127.0.0.1` (local) and skips remote bitrate / Auto transcode. LAN still uses **8096** directly.
 
 In Cloudflare these are **[Published applications](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/#2a-publish-an-application)** (hostname → service) — not private-network Tunnel CIDR routes.
 
@@ -97,7 +101,7 @@ Typical service targets (inside AIO):
 | `qbittorrent.example.com` | `http://127.0.0.1:8081` |
 | `shelfmark.example.com` | `http://127.0.0.1:8084` |
 | `sabnzbd.example.com` | `http://127.0.0.1:8085` |
-| `jellyfin.example.com` | `http://127.0.0.1:8096` |
+| `jellyfin.example.com` | `http://127.0.0.1:8097` (CF origin shim → Jellyfin `:8096`) |
 | `seerr.example.com` | `http://127.0.0.1:5055` |
 | `grimmory.example.com` | `http://127.0.0.1:6060` |
 | `bazarr.example.com` | `http://127.0.0.1:6767` |
@@ -209,11 +213,12 @@ Access login gate: [CLOUDFLARE_ACCESS.md](CLOUDFLARE_ACCESS.md) — trusted prox
 | Symptom | What to check |
 |---------|----------------|
 | Not connected | Full `eyJ…` pasted; only one `cloudflared` using that token |
-| 502 on hostname | Service must be `http://127.0.0.1:PORT` inside AIO, not a LAN IP |
+| 502 on hostname | Service must be `http://127.0.0.1:PORT` inside AIO, not a LAN IP. Right after boot, wait until Catalog shows the app **running** — cloudflared starts after apps, but a very slow app can still 502 briefly |
 | Open UI fails over tunnel | Add a Published application for `https://app.your.domain`; set **Public app domain** in AIO; do not expect `:8989` on the manager hostname |
 | Works on LAN, not remotely | Outbound firewall / port **7844**; DNS CNAME to `<tunnel-id>.cfargotunnel.com` and published application ingress |
 | Odd login/cookies | Leave trusted proxies empty for tunnel-only |
 | Token field empty after save | Normal — stored on disk, never shown again |
+| Connection refused in cloudflared logs at every boot | Pull a current image and **recreate** the container. Older builds started the tunnel before apps; current builds start it last |
 
 ---
 

@@ -49,9 +49,15 @@ async def vpn_start(request: Request) -> dict[str, Any]:
 async def vpn_stop(request: Request) -> dict[str, Any]:
     """Bring the tunnel down. Kill switch stays on while VPN remains enabled."""
     _ensure_authenticated(request)
-    from core.integrations.lifecycle import enforce_vpn_isolation, start_tunneled_apps, stop_tunneled_apps
+    from core.integrations.lifecycle import (
+        cancel_vpn_retry,
+        enforce_vpn_isolation,
+        start_tunneled_apps,
+        stop_tunneled_apps,
+    )
     from core.settings import settings
 
+    cancel_vpn_retry()
     stopped = await stop_tunneled_apps()
     result = await asyncio.to_thread(vpn_manager.stop)
     if settings.vpn_enabled:
@@ -66,7 +72,12 @@ async def vpn_stop(request: Request) -> dict[str, Any]:
 async def vpn_restart(request: Request) -> dict[str, Any]:
     """Bounce the tunnel while keeping VPN enabled (kill switch stays on)."""
     _ensure_authenticated(request)
-    from core.integrations.lifecycle import enforce_vpn_isolation, start_tunneled_apps, stop_tunneled_apps
+    from core.integrations.lifecycle import (
+        enforce_vpn_isolation,
+        hold_for_tunnel,
+        start_tunneled_apps,
+        stop_tunneled_apps,
+    )
 
     _persist_vpn_policy(enabled=True)
     stopped = await stop_tunneled_apps()
@@ -76,6 +87,7 @@ async def vpn_restart(request: Request) -> dict[str, Any]:
         result["started_apps"] = await start_tunneled_apps(stopped or None)
     else:
         await enforce_vpn_isolation()
+        hold_for_tunnel(stopped)
         result["started_apps"] = []
     result["status"] = "restarted" if result.get("tunnel_up") else result.get("status") or "error"
     return result

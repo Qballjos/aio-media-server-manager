@@ -50,6 +50,28 @@ def test_create_admin_and_verify(auth_mgr: AuthManager):
     assert exc_info.value.status_code == 409
 
 
+def test_update_account_stores_names(auth_mgr: AuthManager):
+    auth_mgr.create_admin("admin", "AdminPassword123!", email="admin@example.com")
+    updated = auth_mgr.update_account(
+        "admin",
+        current_password="AdminPassword123!",
+        first_name="  Jozef  ",
+        last_name="Ball",
+    )
+    assert updated["first_name"] == "Jozef"
+    assert updated["last_name"] == "Ball"
+    assert auth_mgr.first_name() == "Jozef"
+    assert auth_mgr.last_name() == "Ball"
+    cleared = auth_mgr.update_account(
+        "admin",
+        current_password="AdminPassword123!",
+        first_name="   ",
+        last_name="",
+    )
+    assert cleared["first_name"] == ""
+    assert cleared["last_name"] == ""
+
+
 def test_password_min_length_validation(auth_mgr: AuthManager):
     """Password must meet minimum length requirement."""
     with pytest.raises(HTTPException) as exc_info:

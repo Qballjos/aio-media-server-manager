@@ -65,6 +65,9 @@ def test_public_branding_defaults(tmp_path: Path, monkeypatch):
     assert data["accent_color"] == "#0a6cff"
     assert data["header_url"].endswith("logo-aio-media-manager.png")
     assert data["slots"]["favicon"]["recommended"]
+    assert "wide" in data["slots"]["logo"]["recommended"]
+    assert "square" not in data["slots"]["logo"]["recommended"]
+    assert "square" in data["slots"]["header"]["recommended"]
 
 
 def test_brand_title_and_image_upload(tmp_path: Path, monkeypatch):
@@ -138,9 +141,16 @@ def test_app_icons_and_manifest_follow_the_favicon(tmp_path: Path, monkeypatch):
     client, _cfg = _client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
 
-    # Default: the built-in icons, served without auth, revalidated on every load.
-    icon = client.get("/api/branding/icon/apple-touch-icon", follow_redirects=False)
-    assert icon.status_code in (200, 307)
+    # Default: the built-in icons, served without auth. Safari will not show a redirect or an uncacheable icon.
+    icon = client.get("/api/branding/icon/apple-touch-icon.png", follow_redirects=False)
+    assert icon.status_code == 200
+    assert icon.headers["content-type"].startswith("image/png")
+    assert icon.headers["cache-control"] == "public, max-age=3600"
+    assert client.get("/api/branding/icon/favicon.png").status_code == 200
+    ico = client.get("/favicon.ico", follow_redirects=False)
+    assert ico.status_code == 200
+    assert ico.headers["content-type"].startswith("image/x-icon")
+    assert ico.content[:4] == b"\x00\x00\x01\x00"
     assert client.get("/api/branding/icon/nope").status_code == 404
     manifest = client.get("/api/branding/manifest.webmanifest")
     assert manifest.status_code == 200
@@ -154,10 +164,12 @@ def test_app_icons_and_manifest_follow_the_favicon(tmp_path: Path, monkeypatch):
     # A custom favicon becomes the tab, home-screen and installed-app icon, and the title names the app.
     assert client.put("/api/branding/favicon", content=_MIN_PNG, headers=headers).status_code == 200
     assert client.patch("/api/branding", json={"title": "Ramon TV"}, headers=headers).status_code == 200
-    for kind in ("favicon", "apple-touch-icon"):
+    for kind in ("favicon", "favicon.png", "apple-touch-icon", "apple-touch-icon.png"):
         res = client.get(f"/api/branding/icon/{kind}")
         assert res.status_code == 200 and res.content == _MIN_PNG
-        assert res.headers["cache-control"] == "no-cache"
+        assert res.headers["cache-control"] == "public, max-age=3600"
+    ico = client.get("/favicon.ico")
+    assert ico.status_code == 200 and _MIN_PNG in ico.content
     body = client.get("/api/branding/manifest.webmanifest").json()
     assert body["name"] == "Ramon TV" and body["short_name"] == "Ramon TV"
     assert len(body["icons"]) == 1

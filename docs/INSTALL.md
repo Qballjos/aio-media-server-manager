@@ -98,8 +98,8 @@ Copy [`.env.example`](../.env.example) for native installs. Many of these can al
 | `TZ` / `AMM_TIMEZONE` | Timezone for logs and schedules |
 | `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Paths inside the container (change host mounts in compose) |
 | `GITHUB_TOKEN` | Optional; higher GitHub API limits for updates |
-| `AMM_CLOUDFLARE_TUNNEL_*` | Optional remote tunnel |
-| `AMM_VPN_*` | Optional VPN for torrent-related apps |
+| `AMM_CLOUDFLARE_TUNNEL_*` | Optional remote tunnel (`cloudflared` starts after apps on boot) |
+| `AMM_VPN_*` | Optional VPN for qBittorrent, Prowlarr, and Flaresolverr (they wait for the tunnel; local DNS cache for those apps) |
 
 ## If something goes wrong
 

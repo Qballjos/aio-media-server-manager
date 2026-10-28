@@ -70,7 +70,7 @@ Then bind `/data` to `/mnt/cache/aio-media-manager` (same share, disk path) inst
 1. Docker → Add Container → advanced view.
 2. Repository: `ghcr.io/qballjos/aio-media-server-manager:latest`
 3. Network: `bridge` (or `host` if you want every app WebUI on the Unraid IP).
-4. Privileged: **On** (needed for qBittorrent VPN isolation).
+4. Privileged: **On** (needed for qBittorrent / Prowlarr / Flaresolverr VPN isolation). With VPN on, those apps wait for a live WireGuard handshake; AIO caches their DNS through the tunnel so short hiccups do not knock Prowlarr indexers offline. Details: [DOCKER.md](DOCKER.md#optional-vpn).
 5. Extra parameters: `--cap-add=NET_ADMIN --cap-add=SYS_MODULE`
 6. Optional device: `/dev/dri` for Intel/AMD transcoding (skip if missing).
 7. Ports (TCP): publish **8080** for the manager and the child WebUIs you installed (Sonarr **8989**, Radarr **7878**, qBittorrent **8081**, SABnzbd **8085**, Jellyfin **8096**, Prowlarr **9696**, Seerr **5055**, Plex **32400**, …). Full list: [INSTALL.md](../docs/INSTALL.md#ports). Or use Network `host`.

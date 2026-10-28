@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
-from core.cloudflare_access import access_status, apply_access
+from core.cloudflare_access import access_status, apply_access, load_access_state
 from core.cloudflare_api import (
     CloudflareApiError,
     api_token_configured,
@@ -19,7 +19,7 @@ from core.cloudflare_api import (
 )
 from core.cloudflare_api import planned_routes
 from core.homepage import clear_homepage_snapshot_cache
-from core.public_hostnames import PublicHostnameError, load_hostnames, save_hostnames
+from core.public_hostnames import ACCESS_GATE_APPS, PublicHostnameError, load_hostnames, save_hostnames
 from core.cloudflare_tunnel import cloudflare_tunnel
 from core.settings import settings
 
@@ -40,6 +40,35 @@ def _sync_after_hostname_change() -> None:
         ensure_sabnzbd_public_access(settings.config_dir / "sabnzbd")
     except Exception:
         pass
+
+
+async def _apply_access_for_published(result: dict[str, Any], host_map: dict[str, Any] | None) -> dict[str, Any]:
+    """Put Cloudflare Access on every exposed gated app, including NeutArr.
+
+    Publishing the subdomain is what makes the hostname public. Access follows
+    that same step when a login method already exists in Zero Trust. A missing
+    login method leaves the tunnel publish in place and says why Access did not.
+    """
+    published = {str(row.get("name") or "") for row in result.get("published") or []}
+    removed = {str(name) for name in result.get("removed") or []}
+    stored_apps = load_access_state().get("apps") or {}
+    touched = published | removed | {str(name) for name in stored_apps}
+    if not touched & set(ACCESS_GATE_APPS):
+        return result
+    try:
+        access = await apply_access(hostnames=host_map)
+    except CloudflareApiError as exc:
+        result["access_error"] = str(exc)
+        result["warning"] = "Published hostnames are reachable from the internet. Cloudflare Access was not updated: " + str(exc)
+        return result
+    applied = access.get("applied") or []
+    result["access"] = {"applied": applied, "removed": access.get("removed") or []}
+    if applied:
+        result["warning"] = (
+            "Cloudflare Access covers the exposed *Arr apps, download clients, Seerr, and NeutArr. "
+            "DNS CNAMEs for disabled apps are left in place."
+        )
+    return result
 
 
 def _ensure_authenticated(request: Request) -> None:
@@ -155,6 +184,7 @@ async def publish(request: Request, body: PublishBody | None = None) -> dict[str
         result = await publish_hostnames(hostnames=host_map)
     except CloudflareApiError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    result = await _apply_access_for_published(result, host_map)
     clear_homepage_snapshot_cache()
     _sync_after_hostname_change()
     return result

@@ -19,8 +19,9 @@ Ersetzen Sie die IP (und den Port, wenn Sie ihn geändert haben).
 
 1. Legen Sie das **Administrator**konto an, wenn Sie dazu aufgefordert werden (Benutzername, **E-Mail**, Passwort).
 2. Schließen Sie den Assistenten der Ersteinrichtung ab: die gewünschten Apps, einen Usenet-Server, falls Sie einen nutzen, optional VPN und einen optionalen Cloudflare Tunnel. Der Assistent installiert diese Auswahl. Tunnel und VPN starten, sobald der Assistent fertig ist, wenn Sie sie eingeschaltet haben.
-3. Warten Sie, bis **Katalog** diese Apps als **aktiv** zeigt. Nutzen Sie **Oberfläche öffnen** für alles, das noch ein eigenes Konto hat (Plex, Jellyfin, NZBGet).
-4. Später fügen Sie mehr über **Katalog** hinzu. Sie brauchen nicht jede App.
+3. Nach dem Neuanlegen des Containers antwortet das Dashboard, während Apps noch starten. Mit VPN an warten qBittorrent, Prowlarr und Flaresolverr auf den WireGuard-Handshake (AIO versucht das VPN erneut, wenn der erste Versuch scheitert). Cloudflare Tunnel startet zuletzt, nachdem die Apps antworten, damit cloudflared kein connection refused gegen Origins loggt, die noch nicht lauschen.
+4. Warten Sie, bis **Katalog** diese Apps als **aktiv** zeigt. Nutzen Sie **Oberfläche öffnen** für alles, das noch ein eigenes Konto hat (Plex, Jellyfin, NZBGet).
+5. Später fügen Sie mehr über **Katalog** hinzu. Sie brauchen nicht jede App.
 
 Fangen Sie klein an (zum Beispiel Radarr + ein Download-Client + Jellyfin) und ergänzen Sie den Rest danach.
 
@@ -106,7 +107,7 @@ Namen in der Oberfläche können kurz sein; das ist, was sie in der Praxis bedeu
 | **System** | Zeitzone, Protokollstufe, PUID/PGID und die AIO-Version. Speicherpfade stehen hier; Mounts ändern Sie in Compose, nicht in diesem Bildschirm. Der Lauschport des Managers ist nur Compose/Umgebung |
 | **Updates** | Updates installierter Apps prüfen und anwenden, einzeln oder alle. Zeitpläne sind standardmäßig **aus**. Ein neueres AIO-Image ist nur ein Hinweis — auf dem Host holen und neu erstellen |
 | **Sicherungen** | Config-Sicherung, prüfen, je App wiederherstellen und ein Zeitplan |
-| **Netzwerk** | VPN für qBittorrent, Prowlarr und Flaresolverr (Usenet bleibt draußen), Cloudflare Tunnel, öffentliche Subdomains und vertrauenswürdige Proxys |
+| **Netzwerk** | VPN für qBittorrent, Prowlarr und Flaresolverr (Usenet bleibt draußen), mit lokalem DNS-Cache für diese Apps, damit kurze Tunnel-Aussetzer Prowlarr-Indexer nicht offline schalten; Cloudflare Tunnel (startet nach den Apps beim Boot); öffentliche Subdomains; und vertrauenswürdige Proxys |
 | **Benachrichtigungen** | Discord-Webhook und E-Mail, wenn eine App weiter abstürzt, VPN oder Tunnel ausfällt, ein Update da ist oder eine Platte über 90 % voll ist |
 | **Usenet** | Newsserver (Host, Port, SSL, Anmeldung, Verbindungen), an SABnzbd und NZBGet geschickt. NZB-Indexer fügen Sie in Prowlarr hinzu |
 | **Startseite** | Anmeldetext, App-Leiste und Jellyfin- / Seerr-API-Schlüssel, wenn Start sie nicht lesen kann |
@@ -218,6 +219,9 @@ Das Image aktualisiert diese Apps nicht von allein. Lesen Sie die Release-Hinwei
 | Die Server-Grafik zählt nur diesen Container | Hängen Sie Host-`/sys` nur lesend unter `/host/sys` ein und erstellen Sie neu ([Docker](deploy/DOCKER.md)) |
 | Zuletzt hinzugefügt von Jellyfin wirkt kurz | Scrollen Sie die Zeile — weitere Seiten werden geladen. Bleibt die Zeile leer, setzen Sie einen Jellyfin-API-Schlüssel unter **Einstellungen → Startseite** |
 | Zuletzt hinzugefügt von Plex stoppt bei 20 | Diese Liste sind die letzten 20 von Plex |
+| qBittorrent / Prowlarr / Flaresolverr bleiben nach dem Boot gestoppt | VPN ist an ohne Live-Handshake. Prüfen Sie **Einstellungen → Netzwerk**; AIO versucht den Tunnel erneut und startet diese Apps, sobald er wieder da ist. Ein manuelles VPN-**Stop** bricht den Retry ab |
+| Prowlarr-Indexer nicht verfügbar / RSS-Fehler | Oft ein DNS-Timeout durch den VPN. Nach einem AIO-Update den Container neu anlegen, dann in Prowlarr **Test All** (und in Sonarr/Radarr erneut testen), damit der alte Fehler-Backoff weg ist. Ein Debug-Share zeigt Treffer des VPN-DNS-Caches und Fehler je Resolver |
+| cloudflared loggt connection refused beim Boot | Erwartet bei älteren Images, als der Tunnel vor den Apps startete. Aktuelle Images starten Cloudflare zuletzt; neu anlegen von aktuellem `nightly` / `latest` |
 
 ---
 

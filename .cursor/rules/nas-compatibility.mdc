@@ -1,0 +1,39 @@
+---
+description: Check every change against Unraid, Synology DSM, and TrueNAS SCALE
+alwaysApply: true
+---
+
+# NAS compatibility
+
+AIO runs as **one** container on stock NAS kernels. Before finishing a change that touches networking, processes, privileges, paths, packages, or Docker, check it against all three. Guides: `deploy/UNRAID.md`, `deploy/SYNOLOGY.md`, `deploy/TRUENAS.md`.
+
+| Target | Assume |
+|---|---|
+| **Unraid** | Docker. PUID/PGID often `99:100`. Paths under `/mnt/user`. Privileged for VPN. |
+| **Synology DSM** | Container Manager. No WireGuard kernel module: **wireguard-go** and `/dev/net/tun`. `privileged: true`. ACLs can block uid 910 after chown. |
+| **TrueNAS SCALE** | Linux custom app, not CORE/FreeBSD. Apps user often uid `568`. Privileged or `NET_ADMIN` for VPN. Downloads and media on the **same** dataset (hardlinks). |
+
+Other NAS Docker hosts (QNAP, Asustor, UGOS) follow the same bar: one container, no extra kernel modules.
+
+## Do not assume
+
+- A full Debian kernel, systemd on the host, or kernel WireGuard.
+- `iptables` matches DSM lacks: `addrtype`, `comment`, and often `owner` (`xt_owner`). wg-quick's own NAT step already fails here; keep `Table = off`.
+- Nested netns or NAT/MASQUERADE as the way traffic reaches the tunnel.
+- One PUID or one path (`99:100`, `/mnt/user`, `/volume1`) for every install.
+- TrueNAS CORE. SCALE only.
+
+## When a kernel feature is required
+
+Fail open. Log a warning and keep the tunnel up. Split DNS for the VPN uid with a private `resolv.conf` mount (`unshare --mount`), which does not need iptables. Preferred path: the manager’s caching forwarder on `127.0.0.153` (bound to the tunnel with `SO_BINDTODEVICE`), with `1.1.1.1` / `9.9.9.9` listed after it in that private resolv.conf. DNAT to `1.1.1.1` is only a fallback for queries that still leave the private resolver, and if `owner` or the nat table is missing, Prowlarr keeps the container resolver (or the local cache if it bound).
+
+```text
+# Bad: dies on DSM, or changes DNS for Sonarr and Radarr too
+iptables -t nat -A OUTPUT -m addrtype --dst-type LOCAL -j DNAT --to-destination 1.1.1.1
+# Good: only the VPN uid, and the caller warns and returns if the rule is rejected
+iptables -t nat -A AMM-UID-DNS -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53
+# Also good: leave 127.0.0.153 alone so the local cache is not rewritten
+iptables -t nat -A AMM-UID-DNS -d 127.0.0.153/32 -j RETURN
+```
+
+If a change cannot work on one of the three, say so in the reply and do not present it as done for every NAS.

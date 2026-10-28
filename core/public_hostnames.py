@@ -32,6 +32,7 @@ ACCESS_GATE_APPS = frozenset(
         "sabnzbd",
         "nzbget",
         "seerr",
+        "neutarr",
     }
 )
 

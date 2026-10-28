@@ -33,11 +33,20 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+def _person_fields() -> dict[str, Optional[str]]:
+    return {
+        "first_name": auth_manager.first_name() or None,
+        "last_name": auth_manager.last_name() or None,
+    }
+
+
 class AuthStatusResponse(BaseModel):
     setup_required: bool
     authenticated: bool
     username: Optional[str] = None
     email: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     csrf_token: Optional[str] = None
     avatar_url: Optional[str] = None
     theme: Optional[str] = None
@@ -70,6 +79,8 @@ def _empty_auth(*, setup_required: bool) -> dict:
         "authenticated": False,
         "username": None,
         "email": None,
+        "first_name": None,
+        "last_name": None,
         "csrf_token": None,
         "avatar_url": None,
         "theme": None,
@@ -107,6 +118,7 @@ async def auth_status(request: Request) -> dict:
             "authenticated": True,
             "username": username,
             "email": auth_manager.email() or None,
+            **_person_fields(),
             "csrf_token": request.cookies.get(COOKIE_CSRF),
             "avatar_url": _avatar_url(),
             **visuals,
@@ -130,6 +142,8 @@ async def setup_admin(req: SetupRequest, response: Response) -> dict:
         "status": "ok",
         "username": req.username,
         "email": email,
+        "first_name": None,
+        "last_name": None,
         "csrf_token": csrf,
         "access_token": token,
         "avatar_url": _avatar_url(),
@@ -164,6 +178,7 @@ async def login(req: LoginRequest, request: Request, response: Response) -> dict
     return {
         "status": "ok",
         "username": req.username,
+        **_person_fields(),
         "csrf_token": csrf,
         "access_token": token,
         "avatar_url": _avatar_url(),
@@ -186,6 +201,7 @@ async def get_current_user(request: Request) -> dict:
     return {
         "username": username,
         "email": auth_manager.email() or None,
+        **_person_fields(),
         **profile,
     }
 
@@ -317,10 +333,12 @@ class AccountPatch(BaseModel):
     current_password: str = Field(min_length=1)
     username: Optional[str] = None
     email: Optional[str] = None
+    first_name: Optional[str] = Field(default=None, max_length=80)
+    last_name: Optional[str] = Field(default=None, max_length=80)
     new_password: Optional[str] = Field(default=None, min_length=8)
 
 
-@router.patch("/account", summary="Update admin username, email, or password")
+@router.patch("/account", summary="Update admin username, email, name, or password")
 async def update_account(req: AccountPatch, request: Request, response: Response) -> dict:
     username = auth_manager.authenticate_request(request)
     updated = auth_manager.update_account(
@@ -329,6 +347,8 @@ async def update_account(req: AccountPatch, request: Request, response: Response
         email=req.email,
         new_username=req.username,
         new_password=req.new_password,
+        first_name=req.first_name,
+        last_name=req.last_name,
     )
     password_for_share = req.new_password or req.current_password
     save_shared_admin_credentials(updated["username"], password_for_share, email=updated.get("email") or "")
@@ -338,6 +358,8 @@ async def update_account(req: AccountPatch, request: Request, response: Response
         "status": "ok",
         "username": updated["username"],
         "email": updated.get("email") or None,
+        "first_name": updated.get("first_name") or None,
+        "last_name": updated.get("last_name") or None,
         "csrf_token": csrf,
         "access_token": token,
         "avatar_url": _avatar_url(),

@@ -167,7 +167,7 @@
 .nav-account-status {
   display: grid;
   gap: 0.35rem;
-  font-size: 0.65rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   line-height: 1.1;
 }
@@ -238,12 +238,15 @@
 }
 
 .auth-logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
-  object-fit: cover;
+  width: auto;
+  height: auto;
+  max-width: min(18rem, 100%);
+  max-height: 5rem;
+  border-radius: 12px;
+  object-fit: contain;
+  object-position: center;
   display: block;
-  margin-bottom: 0.85rem;
+  margin: 0 auto 0.85rem;
   border: none;
   box-shadow: none;
 }
@@ -251,7 +254,7 @@
 .auth-personal-message {
   margin: 0.65rem 0 0;
   color: var(--text-main);
-  font-size: 0.95rem;
+  font-size: var(--text-body);
   line-height: 1.45;
   white-space: pre-wrap;
 }
@@ -264,7 +267,7 @@
 }
 
 .brand-name {
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.2;
@@ -424,7 +427,7 @@ a.status-pill {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   line-height: 1;
   flex-shrink: 0;
   overflow: hidden;
@@ -570,6 +573,7 @@ a.status-pill {
   min-height: 60vh;
   padding: 0 0.25rem;
   min-width: 0;
+  perspective: 1400px;
 }
 
 .auth-card {
@@ -577,6 +581,31 @@ a.status-pill {
   max-width: min(440px, 100%);
   padding: clamp(1.15rem, 4vw, 2.25rem);
   box-shadow: var(--glass-shadow, var(--shadow-card));
+  transition:
+    border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s ease,
+    rotate 0.35s ease-out;
+}
+
+.glass-card > .auth-glare {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at var(--glare-x, 50%) var(--glare-y, 50%),
+    rgb(255 255 255 / 0.18),
+    transparent 55%
+  );
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-card {
+    transition: border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+  }
 }
 
 .card-glow {
@@ -595,7 +624,7 @@ a.status-pill {
 
 .accent-badge {
   display: inline-block;
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 0.2rem 0.5rem;
@@ -606,7 +635,7 @@ a.status-pill {
 }
 
 .card-header-accent h2 {
-  font-size: 1.5rem;
+  font-size: var(--text-display);
   font-weight: 700;
   margin: 0.25rem 0 0.5rem;
   color: var(--text-heading);
@@ -614,7 +643,7 @@ a.status-pill {
 
 .card-header-accent p {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   margin: 0;
   line-height: 1.4;
 }
@@ -656,7 +685,7 @@ a.status-pill {
 }
 
 .stat-value {
-  font-size: 1.35rem;
+  font-size: var(--text-title);
   font-weight: 700;
   color: var(--text-heading);
   overflow-wrap: anywhere;
@@ -710,14 +739,14 @@ a.status-pill {
 }
 
 .stat-label {
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   font-weight: 600;
   letter-spacing: 0.05em;
 }
 
 .stat-sub {
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
   font-weight: 400;
 }
@@ -742,7 +771,7 @@ a.status-pill {
 }
 
 .status-indicator-tag {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   color: var(--color-warning-fg);
   letter-spacing: 0.02em;
 }
@@ -760,14 +789,14 @@ a.status-pill {
 }
 
 .section-title {
-  font-size: 1.25rem;
+  font-size: var(--text-title);
   font-weight: 700;
   margin: 0;
   color: var(--text-heading);
 }
 
 .section-subtitle {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
   margin: 0.2rem 0 0;
 }
@@ -801,7 +830,7 @@ a.status-pill {
 }
 
 .catalog-filter-label {
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -825,7 +854,7 @@ a.status-pill {
   width: 1.05rem;
   height: 1.05rem;
   border-radius: 999px;
-  font-size: 0.95rem;
+  font-size: var(--text-body);
   line-height: 1;
   color: var(--text-main);
   background: var(--bg-input);
@@ -843,12 +872,13 @@ a.status-pill {
 
 .catalog-count {
   margin-left: auto;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--text-dim);
   align-self: center;
 }
 
-@media (max-width: 720px) {
+/* iPhone landscape and iPad portrait: stack the bar instead of squeezing the desktop row. */
+@media (max-width: 900px) {
   .catalog-count {
     margin-left: 0;
     width: 100%;
@@ -865,7 +895,7 @@ a.status-pill {
 .catalog-empty {
   grid-column: 1 / -1;
   color: var(--text-dim);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   margin: 0.5rem 0 0;
 }
 
@@ -915,7 +945,7 @@ a.status-pill {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   border: 1px solid var(--border-subtle);
   overflow: hidden;
   flex-shrink: 0;
@@ -959,7 +989,7 @@ a.status-pill {
 }
 
 .service-name {
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
   font-weight: 600;
   margin: 0;
   color: var(--text-heading);
@@ -967,7 +997,7 @@ a.status-pill {
 }
 
 .update-pill {
-  font-size: 0.65rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -986,7 +1016,7 @@ a.status-pill {
   display: inline-grid;
   place-items: center;
   flex-shrink: 0;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   color: var(--color-info-fg);
   border: 1px solid color-mix(in srgb, var(--color-info) 40%, transparent);
@@ -1004,7 +1034,7 @@ a.status-pill {
 }
 
 .category-pill {
-  font-size: 0.65rem;
+  font-size: var(--text-kicker);
   text-transform: uppercase;
   color: var(--text-muted);
   background: var(--pill-bg);
@@ -1014,7 +1044,7 @@ a.status-pill {
 }
 
 .service-port {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   display: flex;
   align-items: center;
   gap: 0.3rem;
@@ -1023,7 +1053,7 @@ a.status-pill {
 
 .port-label {
   color: var(--text-dim);
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
 }
 
 .port-link {
@@ -1046,7 +1076,7 @@ a.status-pill {
   gap: 0.35rem;
   padding: 0.25rem 0.6rem;
   border-radius: 6px;
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.03em;
 }
@@ -1083,7 +1113,7 @@ a.status-pill {
 }
 
 .service-desc {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
   margin: 0 0 0.85rem 0;
   line-height: 1.45;
@@ -1098,7 +1128,7 @@ a.status-pill {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.75rem;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--text-dim);
   padding-top: 0.5rem;
   border-top: 1px solid var(--border-subtle);
@@ -1124,25 +1154,33 @@ a.status-pill {
   min-width: 0;
 }
 
+/* Size to the label and wrap to the next line. Shrinking the pill lets a long
+   translation ("Interface openen") paint outside the border. */
+.service-actions > .btn-action,
+.service-actions > .card-menu-wrap {
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+}
+
 .btn-action {
-  flex: 1 1 5.5rem;
-  min-width: 0;
-  padding-inline: 0.6rem;
+  padding-inline: 0.85rem;
+  white-space: nowrap;
 }
 
 .btn-install {
-  flex: 2;
+  flex: 2 0 max-content;
 }
 
 .btn-more {
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
+  min-height: var(--btn-h);
+  white-space: nowrap;
 }
 
 .card-menu-wrap {
   position: relative;
-  flex: 1 1 5.5rem;
-  min-width: 0;
   display: flex;
 }
 
@@ -1171,7 +1209,7 @@ a.status-pill {
   text-align: left;
   padding: 0.45rem 0.65rem;
   border-radius: 6px;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   cursor: pointer;
 }
 
@@ -1242,7 +1280,7 @@ a.status-pill {
   min-height: 8rem;
   max-height: min(28vh, 18rem);
   overflow: auto;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   line-height: 1.45;
   resize: vertical;
 }
@@ -1293,7 +1331,7 @@ a.status-pill {
   justify-content: space-between;
   align-items: baseline;
   gap: 0.5rem;
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1301,7 +1339,7 @@ a.status-pill {
 }
 
 .health-chart-head strong {
-  font-size: 1.15rem;
+  font-size: var(--text-strong);
   letter-spacing: 0;
   text-transform: none;
   color: var(--text-heading);
@@ -1309,7 +1347,7 @@ a.status-pill {
 
 .health-chart-meta {
   margin: 0.2rem 0 0.55rem;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--text-dim);
 }
 
@@ -1361,7 +1399,7 @@ a.status-pill {
 .health-apps-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
 }
 
 .health-apps-table th,
@@ -1375,7 +1413,7 @@ a.status-pill {
 .health-apps-table th {
   color: var(--text-dim);
   font-weight: 600;
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1392,7 +1430,7 @@ a.status-pill {
 .health-app-state {
   display: block;
   color: var(--text-dim);
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   text-transform: lowercase;
 }
 
@@ -1401,7 +1439,7 @@ a.status-pill {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
 }
 
@@ -1425,7 +1463,7 @@ a.status-pill {
   margin: 0;
   padding-left: 1.1rem;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   line-height: 1.45;
 }
 
@@ -1440,7 +1478,7 @@ a.status-pill {
 
 .settings-hint {
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -1509,15 +1547,12 @@ a.status-pill {
 }
 
 .log-search {
-  padding: 4px 8px;
-  font-size: 11px;
-  width: min(140px, 100%);
-  height: 28px;
+  width: min(12rem, 100%);
 }
 
 .modal-title-group h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--text-strong);
   font-weight: 600;
 }
 
@@ -1532,7 +1567,7 @@ a.status-pill {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   cursor: pointer;
 }
@@ -1544,7 +1579,7 @@ a.status-pill {
   background: #0b1220;
   padding: 0.85rem 1rem;
   overflow: auto;
-  font-size: 0.8125rem;
+  font-size: var(--text-body);
   line-height: 1.55;
   color: #e2e8f0;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
@@ -1615,7 +1650,7 @@ a.status-pill {
 .toast-pill {
   padding: 0.65rem 1.1rem;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   backdrop-filter: blur(12px);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
 }
@@ -1688,7 +1723,7 @@ a.status-pill {
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .top-nav {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1782,9 +1817,11 @@ a.status-pill {
     padding: 1.1rem;
   }
 
-  .service-actions .btn-action,
-  .service-actions .card-menu-wrap {
-    flex: 1 1 calc(50% - 0.4rem);
+  .service-actions > .btn-action,
+  .service-actions > .card-menu-wrap {
+    flex: 0 0 auto;
+    width: max-content;
+    max-width: 100%;
   }
 
   .card-menu {
@@ -1808,7 +1845,7 @@ a.status-pill {
 
 @media (max-width: 480px) {
   .brand-name {
-    font-size: 0.95rem;
+    font-size: var(--text-strong);
   }
 
   .logo-orb {
@@ -1828,10 +1865,29 @@ a.status-pill {
     grid-template-columns: 1fr;
   }
 
-  .service-actions .btn-action,
-  .service-actions .btn-install,
-  .service-actions .card-menu-wrap {
+  .service-actions > .btn-action,
+  .service-actions > .btn-install,
+  .service-actions > .card-menu-wrap {
     flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .card-menu-wrap > .btn-more {
+    width: 100%;
+  }
+
+  .card-menu {
+    left: 0;
+    right: 0;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .service-actions > .btn-action {
+    white-space: normal;
   }
 
   .toast-container {

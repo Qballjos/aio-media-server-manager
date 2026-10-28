@@ -105,6 +105,37 @@ def test_account_email_update(tmp_path: Path, monkeypatch):
     assert me.json()["email"] == "ops@example.com"
 
 
+def test_account_name_is_used_on_the_session(tmp_path: Path, monkeypatch):
+    client, _cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    res = client.patch(
+        "/api/auth/account",
+        json={
+            "current_password": "StrongPassword123!",
+            "first_name": "Jozef",
+            "last_name": "Ball",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["first_name"] == "Jozef"
+    assert body["last_name"] == "Ball"
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {body['access_token']}"})
+    assert me.json()["first_name"] == "Jozef"
+    assert me.json()["last_name"] == "Ball"
+    status = client.get("/api/auth/status")
+    assert status.json()["first_name"] == "Jozef"
+    cleared = client.patch(
+        "/api/auth/account",
+        json={"current_password": "StrongPassword123!", "first_name": "", "last_name": ""},
+        headers=headers,
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["first_name"] is None
+    assert client.get("/api/auth/status").json()["first_name"] is None
+
+
 def test_settings_rejects_anonymous(tmp_path: Path, monkeypatch):
     client, _cfg = _client(tmp_path, monkeypatch)
     assert client.get("/api/settings").status_code == 400

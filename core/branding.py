@@ -37,10 +37,10 @@ SLOTS: dict[str, dict[str, str]] = {
         "label": "Logo",
         "help": (
             "Shown on the login and first-run setup screens. "
-            "Starts as the built-in placeholder; upload a square PNG or WebP to replace it. "
-            "Recommended size: 512 × 512 px (minimum 128 × 128). Displayed at about 72 × 72."
+            "Starts as the built-in placeholder; upload a wide PNG or WebP to replace it. "
+            "Recommended size: 720 × 240 px (minimum 240 × 80). Displayed up to about 256 × 80."
         ),
-        "recommended": "512 × 512 px (square)",
+        "recommended": "720 × 240 px (wide)",
         "basename": "logo",
     },
     "favicon": {
@@ -233,6 +233,7 @@ def public_branding() -> dict[str, Any]:
         "favicon_url": slots_out["favicon"]["url"],
         "login_message": normalize_login_message(meta.get("login_message")),
         "slots": slots_out,
+        **icon_links(),
     }
 
 
@@ -299,15 +300,83 @@ _DEFAULT_MANIFEST_ICONS = [
 ]
 
 
+_ICON_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico"}
+
+
+def icon_kind(kind: str) -> str:
+    """`favicon.png` and `favicon` are the same icon. Safari only loads a URL that ends in an image extension."""
+    text = str(kind or "").strip().lower()
+    if "." in text:
+        base, ext = text.rsplit(".", 1)
+        if f".{ext}" in _ICON_EXTENSIONS and base in _DEFAULT_ICONS:
+            return base
+    if text in _DEFAULT_ICONS:
+        return text
+    raise ValueError(f"Unknown icon: {kind}")
+
+
 def app_icon(kind: str) -> tuple[Path | None, str, str]:
     """(custom file or None, its mime, default static path) for the tab or home-screen icon."""
-    if kind not in _DEFAULT_ICONS:
-        raise ValueError(f"Unknown icon: {kind}")
+    name = icon_kind(kind)
     custom = file_for_slot("favicon")
-    default = "/" + _DEFAULT_ICONS[kind]
+    default = "/" + _DEFAULT_ICONS[name]
     if custom is None:
         return None, "image/png", default
     return custom[0], custom[1], default
+
+
+def _static_roots() -> list[Path]:
+    root = Path(__file__).resolve().parents[1] / "frontend"
+    return [root / "dist", root / "public"]
+
+
+def resolve_app_icon(kind: str) -> tuple[Path, str]:
+    """The file Safari and the tab should load, and its real media type."""
+    custom, mime, default = app_icon(kind)
+    if custom is not None:
+        return custom, mime
+    name = default.lstrip("/")
+    for root in _static_roots():
+        path = root / name
+        if path.is_file():
+            return path, "image/png"
+    raise FileNotFoundError(default)
+
+
+def _png_as_ico(png: bytes) -> bytes:
+    """One-image ICO whose payload is the PNG. Safari's /favicon.ico fetch decodes this, not a bare PNG."""
+    size = _png_size(png) or (0, 0)
+    width = size[0] if 0 < size[0] < 256 else 0
+    height = size[1] if 0 < size[1] < 256 else 0
+    header = struct.pack("<HHH", 0, 1, 1)
+    entry = struct.pack("<BBBBHHII", width, height, 0, 0, 1, 32, len(png), 22)
+    return header + entry + png
+
+
+def favicon_ico() -> tuple[bytes, str] | None:
+    """Bytes for GET /favicon.ico. PNG icons are wrapped so Safari will show them."""
+    try:
+        path, mime = resolve_app_icon("favicon")
+    except (ValueError, FileNotFoundError):
+        return None
+    data = path.read_bytes()
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return _png_as_ico(data), "image/x-icon"
+    return data, mime
+
+
+def icon_links() -> dict[str, str]:
+    """Tab and home-screen URLs that end in the real image extension."""
+    try:
+        _path, mime = resolve_app_icon("favicon")
+    except (ValueError, FileNotFoundError):
+        mime = "image/png"
+    ext = next((item for item, kind in _MIME_BY_EXT.items() if kind == mime), ".png")
+    return {
+        "icon_url": f"/api/branding/icon/favicon{ext}",
+        "apple_touch_url": f"/api/branding/icon/apple-touch-icon{ext}",
+        "icon_type": mime,
+    }
 
 
 def web_manifest() -> dict[str, Any]:

@@ -55,7 +55,7 @@ Si le home utilisateur n’est pas activé, créez-le sous Credentials → Users
    - `/mnt/tank/backups/aio-media-manager` → `/backups`
    - `/sys` → `/host/sys` (lecture seule), pour que la carte Serveur de l’accueil montre le trafic réseau du serveur. Sans ce montage, le graphique n’est que le trafic de ce conteneur.
 5. Environnement : `PUID` / `PGID` = l’UID/GID utilisé avec `chown`, plus `TZ`, `AMM_DOWNLOAD_DIR=/data/downloads` et `AMM_MEDIA_DIR=/data/media`. `GITHUB_TOKEN` facultatif pour la limite GitHub (ou Réglages → Mises à jour après la première exécution).
-6. Privileged / `NET_ADMIN` si vous activez le VPN qBittorrent.
+6. Privileged / `NET_ADMIN` si vous activez le VPN pour qBittorrent, Prowlarr et Flaresolverr. Ces apps attendent un tunnel live ; leur DNS est mis en cache via le tunnel (Usenet reste dehors). Détails : [DOCKER.md](DOCKER.md#vpn-facultatif).
 7. GPU : passez `/dev/dri` (Intel/AMD) ou le runtime NVIDIA pour le transcodage.
 
 L’interface du gestionnaire est `http://<truenas-ip>:8080`. Recréez la custom app après une mise à jour d’image pour que les ports nouvellement publiés s’appliquent.

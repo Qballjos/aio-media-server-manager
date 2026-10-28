@@ -151,12 +151,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--text-strong);
   font-weight: 800;
 }
 .home-sheet-dim {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -166,7 +166,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
   gap: 0.5rem;
 }
 .home-sheet-label {
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -188,13 +188,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
   background: var(--bg-surface);
   color: var(--text-main);
   font: inherit;
-  font-size: 0.88rem;
+  font-size: var(--text-body);
   font-weight: 700;
   cursor: pointer;
 }
 .home-sheet-option small {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -230,12 +230,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
   display: grid;
 }
 .home-sheet-row-text span {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .home-sheet-note {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .home-sheet-remove {

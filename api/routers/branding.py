@@ -5,9 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
-from pathlib import Path
-
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
@@ -48,23 +46,20 @@ async def get_branding_file(slot: str):
     )
 
 
-_STATIC_ROOTS = [Path(__file__).resolve().parents[2] / "frontend" / sub for sub in ("dist", "public")]
+# Safari stores a favicon only when the response is cacheable, and it ignores a redirect.
+# A new upload changes the `?v=` on the link, so this hour-long cache still updates immediately.
+_ICON_CACHE = "public, max-age=3600"
 
 
 @router.get("/icon/{kind}", summary="The tab or home-screen icon: the custom favicon, else the default")
 async def get_app_icon(kind: str):
     try:
-        custom, mime, default = branding_mod.app_icon(kind)
+        path, mime = branding_mod.resolve_app_icon(kind)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    # no-cache: browsers keep icons for a long time; revalidating (ETag) lets a new upload show up.
-    headers = {"Cache-Control": "no-cache"}
-    if custom is not None:
-        return FileResponse(custom, media_type=mime, headers=headers)
-    for root in _STATIC_ROOTS:
-        if (root / default.lstrip("/")).is_file():
-            return FileResponse(root / default.lstrip("/"), media_type="image/png", headers=headers)
-    return RedirectResponse(default)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path, media_type=mime, headers={"Cache-Control": _ICON_CACHE})
 
 
 @router.get("/manifest.webmanifest", summary="PWA manifest with the configured title and favicon")

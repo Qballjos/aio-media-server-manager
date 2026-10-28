@@ -85,12 +85,12 @@ function onFile(event) {
 }
 .vpn-file {
   color: var(--text-main);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
 }
 .vpn-hint {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   line-height: 1.4;
 }
 </style>
