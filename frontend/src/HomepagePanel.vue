@@ -332,6 +332,10 @@ function onArrangeKey(event) {
     requestChoice.value = null
     return
   }
+  if (trailerPlayer.value) {
+    closeTrailer()
+    return
+  }
   if (trendingDetail.value) {
     trendingDetail.value = null
     return
@@ -542,6 +546,7 @@ const requestItems = computed(() =>
 // Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
 const trendingMore = ref([])
 const trendingDetail = ref(null)
+const trailerPlayer = ref(null)
 const trendingItems = computed(() => {
   const seen = new Set()
   return [...(snapshot.value.trending || []), ...trendingMore.value]
@@ -797,7 +802,43 @@ function statusLabel(item) {
 }
 
 function closeTrending() {
+  closeTrailer()
   trendingDetail.value = null
+}
+
+function closeTrailer() {
+  trailerPlayer.value = null
+}
+
+/** Pull a YouTube id from a watch/share/embed URL so the Trailer button can open an in-app player. */
+function youtubeIdFromUrl(url) {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase()
+    let ident = ''
+    if (host === 'youtu.be') {
+      ident = parsed.pathname.replace(/^\/+/, '').split('/')[0] || ''
+    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+      ident = parsed.searchParams.get('v') || ''
+      if (!ident && parsed.pathname.startsWith('/embed/')) {
+        ident = parsed.pathname.split('/').filter(Boolean)[1] || ''
+      }
+    }
+    return /^[A-Za-z0-9_-]{6,32}$/.test(ident) ? ident : ''
+  } catch {
+    return ''
+  }
+}
+
+function openTrailer(item) {
+  const ident = youtubeIdFromUrl(item?.trailer || trendingDetail.value?.data?.trailer)
+  if (!ident) return
+  trailerPlayer.value = {
+    title: item?.title || trendingDetail.value?.data?.title || trendingDetail.value?.item?.title || t('Trailer'),
+    embedUrl: `https://www.youtube-nocookie.com/embed/${ident}?autoplay=1&rel=0`,
+  }
 }
 
 function trendingSeed(item) {
@@ -2225,13 +2266,12 @@ onUnmounted(() => {
               </ul>
               <p v-else-if="!trendingDetail.pending" class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
               <div class="home-request-actions">
-                <a
-                  v-if="trendingDetail.data?.trailer"
+                <button
+                  v-if="trendingDetail.data?.trailer && youtubeIdFromUrl(trendingDetail.data.trailer)"
+                  type="button"
                   class="ui-btn ui-btn-primary"
-                  :href="trendingDetail.data.trailer"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >{{ $t('Trailer') }}</a>
+                  @click="openTrailer(trendingDetail.data)"
+                >{{ $t('Trailer') }}</button>
                 <button
                   v-if="trendingDetail.item.can_request"
                   type="button"
@@ -2247,6 +2287,28 @@ onUnmounted(() => {
                 >{{ $t('Open in Seerr') }}</button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="trailerPlayer" class="modal-backdrop home-trailer-backdrop" @click.self="closeTrailer">
+        <div
+          class="modal-content home-trailer-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-trailer-heading"
+        >
+          <div class="home-title-head">
+            <h3 id="home-trailer-heading">{{ trailerPlayer.title }}</h3>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="closeTrailer">{{ $t('Close') }}</button>
+          </div>
+          <div class="home-trailer-frame">
+            <iframe
+              :src="trailerPlayer.embedUrl"
+              :title="trailerPlayer.title"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+              referrerpolicy="strict-origin-when-cross-origin"
+            ></iframe>
           </div>
         </div>
       </div>
@@ -2735,8 +2797,30 @@ onUnmounted(() => {
 .home-title-dialog .home-request-actions {
   margin-top: 0.9rem;
 }
-.home-title-dialog a.ui-btn {
-  text-decoration: none;
+.home-trailer-backdrop {
+  z-index: 110;
+}
+.home-trailer-dialog {
+  width: min(56rem, calc(100vw - 1.5rem));
+  max-width: none;
+  padding: 1rem 1.1rem 1.15rem;
+  gap: 0.75rem;
+}
+.home-trailer-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--border-subtle);
+}
+.home-trailer-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 @media (max-width: 640px) {
   .home-title-body {
