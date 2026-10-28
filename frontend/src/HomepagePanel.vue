@@ -187,6 +187,7 @@ const trendingFilter = ref('all')
 let poll = null
 let downloadsPoll = null
 let statusPoll = null
+let otherPoll = null
 let installPoll = null
 let searchTimer = null
 
@@ -246,6 +247,7 @@ const widgetHasContent = computed(() => {
     storage: true,
     server: true,
     attention: true,
+    other: true,
   }
 })
 // Empty widgets leave Home outside edit mode, and the rows they had to themselves close up.
@@ -422,6 +424,43 @@ function onNetHover(event) {
     if (Math.abs(point.at - at) < Math.abs(points[best].at - at)) best = i
   })
   netHoverIdx.value = best
+}
+
+/** Other downloads: what the download clients got besides films and series, asked for only while the widget is on Home. */
+const otherDownloads = ref([])
+const otherLoaded = ref(false)
+const otherWanted = computed(() => gridLayout.value.some((item) => item.id === 'other'))
+/** Per kind of download: its name and the outline icon it gets (24 × 24, stroked). */
+const OTHER_KINDS = {
+  music: ['Music', 'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0a3 3 0 0 1 6 0M21 16a3 3 0 1 1-6 0a3 3 0 0 1 6 0'],
+  book: ['Book', 'M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z'],
+  game: ['Game', 'M6 11h4M8 9v4M15 12h.01M18 10h.01M17.32 5H6.68a4 4 0 0 0-3.98 3.59l-.7 6.98A3 3 0 0 0 5 19c1 0 1.6-.5 2.1-1.1L8.5 16h7l1.4 1.9c.5.6 1.1 1.1 2.1 1.1a3 3 0 0 0 3-3.43l-.7-6.98A4 4 0 0 0 17.32 5z'],
+  disc: ['Disc image', 'M22 12a10 10 0 1 1-20 0a10 10 0 0 1 20 0M14 12a2 2 0 1 1-4 0a2 2 0 0 1 4 0'],
+  app: ['Software', 'M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8'],
+  archive: ['Archive', 'M3 4h18v4H3zM5 8v12h14V8M10 12h4'],
+  video: ['Video', 'M3 5h18v14H3zM7 5v14M17 5v14M3 9.5h4M3 14.5h4M17 9.5h4M17 14.5h4'],
+  file: ['File', 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6'],
+}
+
+function otherKind(item) {
+  return OTHER_KINDS[item.kind] || OTHER_KINDS.file
+}
+
+function otherMeta(item) {
+  const when = item.done && item.when ? new Date(item.when * 1000).toLocaleDateString(i18nLocale(), { day: 'numeric', month: 'short' }) : ''
+  return [item.size ? formatBytes(item.size) : '', item.source, item.done ? when : item.status].filter(Boolean).join(' · ')
+}
+
+async function loadOther() {
+  if (!otherWanted.value) return
+  try {
+    const res = await apiRequest('/api/homepage/other-downloads')
+    if (!res.ok) return
+    otherDownloads.value = (await readJson(res)).items || []
+    otherLoaded.value = true
+  } catch (_) {
+    /* keep the last list */
+  }
 }
 
 async function loadStatus() {
@@ -987,6 +1026,9 @@ watch(
 watch(statusWanted, (wanted) => {
   if (wanted) loadStatus()
 })
+watch(otherWanted, (wanted) => {
+  if (wanted) loadOther()
+})
 // A smaller screen's preview that no longer fits the window gives way to the window's own layout.
 watch(viewportBp, () => {
   if (previewBp.value && !previewOptions.value.includes(previewBp.value)) previewBp.value = ''
@@ -1333,6 +1375,8 @@ onMounted(() => {
   downloadsPoll = startGuardedInterval(loadDownloads, 8000)
   installPoll = startGuardedInterval(loadInstallJobs, 3000, { immediate: true })
   statusPoll = startGuardedInterval(loadStatus, 10000, { immediate: true })
+  // History changes slowly, and NZBGet sends all of it.
+  otherPoll = startGuardedInterval(loadOther, 60000, { immediate: true })
 })
 watch(
   () => route.query.debug,
@@ -1363,6 +1407,7 @@ onUnmounted(() => {
   if (downloadsPoll) downloadsPoll()
   if (installPoll) installPoll()
   if (statusPoll) statusPoll()
+  if (otherPoll) otherPoll()
   if (partialTimer) clearTimeout(partialTimer)
   clearTimeout(searchTimer)
 })
@@ -2030,6 +2075,32 @@ onUnmounted(() => {
               <span class="gh-big">{{ $t('All clear') }}</span>
               <span class="gh-label">{{ $t('Apps, VPN, tunnel, updates and disks look fine.') }}</span>
             </div>
+          </div>
+        </article>
+      </template>
+      <template #other>
+        <article class="home-card glass-card home-card-other">
+          <div class="home-widget-head">
+            <h3>{{ $t('Other downloads') }}</h3>
+            <span v-if="otherDownloads.length" class="home-card-stat">{{ otherDownloads.length }}</span>
+          </div>
+          <div class="home-card-body">
+            <ul v-if="otherDownloads.length" class="od-list">
+              <li v-for="item in otherDownloads" :key="`${item.source}:${item.id}`" class="od-item">
+                <span class="od-icon" :title="$t(otherKind(item)[0])">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" :aria-label="$t(otherKind(item)[0])">
+                    <path :d="otherKind(item)[1]" />
+                  </svg>
+                </span>
+                <span class="od-text">
+                  <strong :title="item.title">{{ item.title }}</strong>
+                  <span class="home-muted home-dl-meta">{{ otherMeta(item) }}</span>
+                </span>
+                <span v-if="!item.done" class="home-dl-pct font-mono">{{ item.progress }}%</span>
+              </li>
+            </ul>
+            <p v-else-if="otherLoaded" class="home-muted">{{ $t('Nothing besides films and series.') }}</p>
+            <p v-else class="home-muted">{{ $t('Checking the download clients…') }}</p>
           </div>
         </article>
       </template>
@@ -3614,6 +3685,43 @@ onUnmounted(() => {
     gap: 0.5rem;
   }
 }
+/* Other downloads: one row each, an icon for what kind of file it is. */
+.home-card-other .od-item {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.65rem;
+}
+.od-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.6rem;
+  background: rgba(var(--color-primary-rgb), 0.14);
+  color: var(--color-primary);
+}
+.od-icon svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.od-text {
+  display: grid;
+  min-width: 0;
+}
+.od-text strong {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@container (min-width: 760px) {
+  .home-card-other .od-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+  }
+}
+
 /* Needs attention: a timeline; each row opens where to fix it. */
 .at-timeline {
   position: relative;
