@@ -340,6 +340,10 @@ function onArrangeKey(event) {
     trendingDetail.value = null
     return
   }
+  if (searchOpen.value) {
+    closeSearch()
+    return
+  }
   if (editing.value && !sheet.value) editing.value = false
 }
 
@@ -780,13 +784,31 @@ const searchAnchor = computed(() => {
   return item.x + item.w / 2 > cols / 2 ? 'is-right' : 'is-left'
 })
 const searchOpen = computed(() => !!(notice.value || searchError.value || searching.value || searchedFor.value))
+const searchRoot = ref(null)
 
 function closeSearch() {
   clearTimeout(searchTimer)
+  searchGen += 1
+  searching.value = false
   results.value = []
   searchedFor.value = ''
   searchError.value = ''
   notice.value = ''
+}
+
+function clearSearchQuery() {
+  query.value = ''
+  closeSearch()
+}
+
+/** Results float over Home; a click outside the bar (and its provider menu) dismisses them. */
+function onSearchPointerDown(event) {
+  if (!searchOpen.value) return
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (searchRoot.value?.contains(target)) return
+  if (target.closest('.ui-select-menu, .modal-backdrop, .modal-content')) return
+  closeSearch()
 }
 
 const STATUS_LABELS = {
@@ -1474,6 +1496,7 @@ onMounted(() => {
   window.addEventListener('resize', syncCalViewToViewport)
   window.addEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.addEventListener('keydown', onArrangeKey)
+  document.addEventListener('pointerdown', onSearchPointerDown)
   loadSnapshot()
   // Defer live queues so first paint is the launcher snapshot.
   setTimeout(() => loadDownloads(), 750)
@@ -1506,6 +1529,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', syncCalViewToViewport)
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.removeEventListener('keydown', onArrangeKey)
+  document.removeEventListener('pointerdown', onSearchPointerDown)
   clearTimeout(toastTimer)
   if (poll) poll()
   if (downloadsPoll) downloadsPoll()
@@ -1587,7 +1611,7 @@ onUnmounted(() => {
       </template>
 
       <template #searchbar>
-      <section class="home-search">
+      <section ref="searchRoot" class="home-search">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
           <label class="home-sr" for="home-search-provider">{{ $t('Search in') }}</label>
           <UiSelect
@@ -1615,6 +1639,16 @@ onUnmounted(() => {
             @input="onQueryInput"
             @keydown.esc="closeSearch"
           />
+          <button
+            v-if="query.trim()"
+            type="button"
+            class="home-search-clear"
+            :aria-label="$t('Clear search')"
+            :title="$t('Clear search')"
+            @click="clearSearchQuery"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
           <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :aria-label="$t('Search')" :disabled="searching">
             <svg class="home-search-go" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
             <span>{{ $t('Search') }}</span>
@@ -1622,9 +1656,6 @@ onUnmounted(() => {
         </form>
         <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
           <div class="home-results-scroll">
-            <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" :aria-label="$t('Close search results')" :title="$t('Close')" @click="closeSearch">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-            </button>
             <p v-if="notice" class="home-notice">{{ notice }}</p>
             <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
             <p v-else-if="searchProvider === 'seerr' && !snapshot.seerr.available && !notice" class="home-muted">
@@ -2630,6 +2661,30 @@ onUnmounted(() => {
 .home-search-input::placeholder {
   color: var(--text-dim);
 }
+.home-search-clear {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.home-search-clear:hover,
+.home-search-clear:focus-visible {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--text-main) 10%, transparent);
+  outline: none;
+}
+.home-search-clear svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
 .home-search-btn {
   min-height: 2.6rem;
   padding: 0 1.1rem;
@@ -2652,14 +2707,6 @@ onUnmounted(() => {
   padding: 1rem 1.1rem;
   display: grid;
   gap: 0.5rem;
-}
-.home-results-close {
-  justify-self: end;
-  margin: -0.4rem -0.5rem -0.6rem 0;
-}
-.home-results-close svg {
-  width: 16px;
-  height: 16px;
 }
 .home-hero-results.is-left {
   left: 0;

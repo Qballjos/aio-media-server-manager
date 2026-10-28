@@ -75,6 +75,7 @@ export const TABLE = {
   'Download': ['Downloaden', 'Herunterladen', 'Télécharger'],
   'Sending…': ['Versturen…', 'Senden…', 'Envoi…'],
   'Close search results': ['Zoekresultaten sluiten', 'Suchergebnisse schließen', 'Fermer les résultats'],
+  'Clear search': ['Zoekopdracht wissen', 'Suche löschen', 'Effacer la recherche'],
   'Nothing to launch yet': ['Nog niets om te openen', 'Noch nichts zu starten', 'Rien à lancer pour l’instant'],
   'Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.': ['Kalender, downloads, recent toegevoegd, trending en aanvragen verschijnen als Sonarr, Radarr, downloadclients, Jellyfin, Plex of Seerr draaien.', 'Kalender, Downloads, kürzlich hinzugefügt, Trends und Anfragen erscheinen, wenn Sonarr, Radarr, Download-Clients, Jellyfin, Plex oder Seerr laufen.', 'Le calendrier, les téléchargements, les ajouts récents, les tendances et les demandes apparaissent quand Sonarr, Radarr, les clients de téléchargement, Jellyfin, Plex ou Seerr tournent.'],
   'Turn on Widget debug in Settings → Diagnostics to see why a source is skipped or failing.': ['Zet widget-debug aan bij Instellingen → Diagnose om te zien waarom een bron wordt overgeslagen of faalt.', 'Aktivieren Sie Widget-Debug unter Einstellungen → Diagnose, um zu sehen, warum eine Quelle übersprungen wird oder fehlschlägt.', 'Activez le débogage des widgets dans Réglages → Diagnostic pour voir pourquoi une source est ignorée ou échoue.'],
