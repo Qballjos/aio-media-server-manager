@@ -44,6 +44,7 @@ Start ist ein Raster. Telefon, Tablet und Desktop behalten jeweils ihr eigenes L
 | Speicher | Plattennutzung von Config, Downloads und Medien |
 | Server | CPU, Arbeitsspeicher und Netzwerk. Mit Host-`/sys` unter `/host/sys` sind das die Netzwerkkarten des Servers. Ohne diesen Mount nur der Verkehr dieses Containers |
 | Braucht Aufmerksamkeit | Dieselben Prüfungen wie Einstellungen → Benachrichtigungen, mit einem Link, jeden Punkt zu beheben |
+| Andere Downloads | Standardmäßig aus; über die Layout-Steuerung hinzufügen. Was SABnzbd, NZBGet und qBittorrent heruntergeladen haben, das kein Film und keine Serie ist (Musik, Bücher, Spiele, Software, Archive), jeweils mit einem Symbol für die Art |
 
 Installieren, starten, stoppen und **Oberfläche öffnen** liegen im **Katalog**. Die Leiste unten auf Start öffnet Apps, die schon installiert sind.
 

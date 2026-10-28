@@ -22,6 +22,7 @@ from core.homepage import (
     homepage_title,
     homepage_trending,
 )
+from core.homepage_other import homepage_other_downloads
 from core.homepage_status import homepage_status
 from core.integrations.seerr import sync_seerr_external_links
 
@@ -61,6 +62,12 @@ async def get_homepage(request: Request, refresh: bool = False) -> dict[str, Any
 async def get_homepage_downloads(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
     return await asyncio.to_thread(homepage_downloads)
+
+
+@router.get("/other-downloads", summary="Downloads that are not films or series")
+async def get_homepage_other_downloads(request: Request) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    return await asyncio.to_thread(homepage_other_downloads)
 
 
 @router.get("/status", summary="Now playing, storage, server and attention for Home")
