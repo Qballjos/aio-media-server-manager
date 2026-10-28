@@ -44,6 +44,7 @@ Start is een raster. Telefoon, tablet en desktop houden elk hun eigen indeling (
 | Opslag | Schijfgebruik van config, downloads en media |
 | Server | CPU, geheugen en netwerk. Met host-`/sys` gemount op `/host/sys` zijn dit de netwerkkaarten van de server. Zonder die mount is het alleen het verkeer van deze container |
 | Aandacht nodig | Dezelfde controles als Instellingen → Meldingen, met een link om elk punt op te lossen |
+| Overige downloads | Standaard uit; voeg het toe via de indelingsknop. Wat SABnzbd, NZBGet en qBittorrent hebben gedownload dat geen film of serie is (muziek, boeken, games, software, archieven), elk met een icoon voor de soort |
 
 Installeren, starten, stoppen en **Interface openen** staan in **Catalogus**. De balk onderaan Start opent apps die al geïnstalleerd zijn.
 

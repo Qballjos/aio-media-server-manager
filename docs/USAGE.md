@@ -44,6 +44,7 @@ Home is a grid. Phone, tablet, and desktop each keep their own layout (4, 8, and
 | Storage | Disk use for config, downloads, and media |
 | Server | CPU, memory, and network. With host `/sys` mounted at `/host/sys`, this is the server's network cards. Without that mount it is only this container's traffic |
 | Needs attention | The same checks as Settings → Notifications, with a link to fix each one |
+| Other downloads | Off by default; add it from the layout control. What SABnzbd, NZBGet, and qBittorrent downloaded that is not a film or series (music, books, games, software, archives), each with an icon for its kind |
 
 Install, start, stop, and **Open UI** live on **Catalog**. The dock at the bottom of Home opens apps that are already installed.
 
