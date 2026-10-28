@@ -43,6 +43,7 @@ Accueil est une grille. Téléphone, tablette et bureau gardent chacun leur disp
 | Stockage | Utilisation disque de la config, des téléchargements et des médias |
 | Serveur | CPU, mémoire et réseau. Avec `/sys` de l’hôte monté sur `/host/sys`, ce sont les cartes réseau du serveur. Sans ce montage, seulement le trafic de ce conteneur |
 | À surveiller | Les mêmes contrôles que Réglages → Notifications, avec un lien pour régler chaque point |
+| Autres téléchargements | Désactivé par défaut ; ajoutez-le via le contrôle de disposition. Ce que SABnzbd, NZBGet et qBittorrent ont téléchargé et qui n’est ni un film ni une série (musique, livres, jeux, logiciels, archives), chacun avec une icône pour son type |
 
 Installer, démarrer, arrêter et **Ouvrir l’interface** se trouvent dans **Catalogue**. La barre en bas d’Accueil ouvre les apps déjà installées.
 

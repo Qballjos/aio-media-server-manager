@@ -447,7 +447,7 @@ function otherKind(item) {
 }
 
 function otherMeta(item) {
-  const when = item.done && item.when ? new Date(item.when * 1000).toLocaleDateString([], { day: 'numeric', month: 'short' }) : ''
+  const when = item.done && item.when ? new Date(item.when * 1000).toLocaleDateString(i18nLocale(), { day: 'numeric', month: 'short' }) : ''
   return [item.size ? formatBytes(item.size) : '', item.source, item.done ? when : item.status].filter(Boolean).join(' · ')
 }
 
@@ -2081,14 +2081,14 @@ onUnmounted(() => {
       <template #other>
         <article class="home-card glass-card home-card-other">
           <div class="home-widget-head">
-            <h3>Other downloads</h3>
+            <h3>{{ $t('Other downloads') }}</h3>
             <span v-if="otherDownloads.length" class="home-card-stat">{{ otherDownloads.length }}</span>
           </div>
           <div class="home-card-body">
             <ul v-if="otherDownloads.length" class="od-list">
               <li v-for="item in otherDownloads" :key="`${item.source}:${item.id}`" class="od-item">
-                <span class="od-icon" :title="otherKind(item)[0]">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" :aria-label="otherKind(item)[0]">
+                <span class="od-icon" :title="$t(otherKind(item)[0])">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" :aria-label="$t(otherKind(item)[0])">
                     <path :d="otherKind(item)[1]" />
                   </svg>
                 </span>
@@ -2099,8 +2099,8 @@ onUnmounted(() => {
                 <span v-if="!item.done" class="home-dl-pct font-mono">{{ item.progress }}%</span>
               </li>
             </ul>
-            <p v-else-if="otherLoaded" class="home-muted">Nothing besides films and series.</p>
-            <p v-else class="home-muted">Checking the download clients…</p>
+            <p v-else-if="otherLoaded" class="home-muted">{{ $t('Nothing besides films and series.') }}</p>
+            <p v-else class="home-muted">{{ $t('Checking the download clients…') }}</p>
           </div>
         </article>
       </template>
