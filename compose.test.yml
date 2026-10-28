@@ -15,7 +15,7 @@ services:
       context: .
       args:
         AMM_GIT_SHA: ${AMM_GIT_SHA:-}
-        AMM_VERSION: ${AMM_VERSION:-0.2.0}
+        AMM_VERSION: ${AMM_VERSION:-0.3.0}
     container_name: aio-media-manager-test
     restart: "no"
     volumes:

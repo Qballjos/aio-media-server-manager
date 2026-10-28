@@ -62,4 +62,4 @@ L’interface du gestionnaire est `http://<truenas-ip>:8080`. Recréez la custom
 
 ## Mises à jour
 
-TrueNAS tire un `:latest` plus récent quand vous mettez l’app à jour. Épinglez un tag semver (`:0.2.0`) si vous voulez des mises à jour plus lentes une fois que des tags git existent. Cela met AIO à jour. Les apps installées se mettent à jour depuis **Réglages → Mises à jour** (planifications désactivées par défaut).
+TrueNAS tire un `:latest` plus récent quand vous mettez l’app à jour. Épinglez un tag semver (`:0.3.0`) si vous voulez des mises à jour plus lentes une fois que des tags git existent. Cela met AIO à jour. Les apps installées se mettent à jour depuis **Réglages → Mises à jour** (planifications désactivées par défaut).

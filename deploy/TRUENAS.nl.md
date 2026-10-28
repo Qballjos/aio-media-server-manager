@@ -62,4 +62,4 @@ De interface van de manager is `http://<truenas-ip>:8080`. Maak de custom app op
 
 ## Updates
 
-TrueNAS haalt een nieuwere `:latest` op als je de app bijwerkt. Pin een semver-tag (`:0.2.0`) als je langzamer wilt upgraden zodra er git-tags zijn. Dat werkt AIO bij. Geïnstalleerde apps werk je bij via **Instellingen → Updates** (schema’s staan standaard uit).
+TrueNAS haalt een nieuwere `:latest` op als je de app bijwerkt. Pin een semver-tag (`:0.3.0`) als je langzamer wilt upgraden zodra er git-tags zijn. Dat werkt AIO bij. Geïnstalleerde apps werk je bij via **Instellingen → Updates** (schema’s staan standaard uit).

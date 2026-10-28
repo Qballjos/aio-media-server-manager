@@ -19,7 +19,7 @@ case "$cmd" in
   up)
     mkdir -p .docker-test/config .docker-test/data/downloads .docker-test/data/media .docker-test/backups
     export AMM_GIT_SHA="${AMM_GIT_SHA:-$(git rev-parse HEAD 2>/dev/null || true)}"
-    export AMM_VERSION="${AMM_VERSION:-0.2.0}"
+    export AMM_VERSION="${AMM_VERSION:-0.3.0}"
     echo "Building and starting the test appliance (Linux image, data in .docker-test/)…"
     "${COMPOSE[@]}" up -d --build
     echo "Manager UI: http://127.0.0.1:8080"

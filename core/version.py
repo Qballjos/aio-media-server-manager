@@ -13,7 +13,7 @@ def app_version() -> str:
     try:
         return pkg_version("aio-media-manager")
     except PackageNotFoundError:
-        return "0.2.0"
+        return "0.3.0"
 
 
 def git_sha() -> str:

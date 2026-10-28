@@ -30,7 +30,7 @@ RUN git -c advice.detachedHead=false clone --depth 1 --branch 0.0.20250522 https
 
 FROM python:3.14-slim-bookworm
 ARG TARGETARCH
-ARG AMM_VERSION=0.2.0
+ARG AMM_VERSION=0.3.0
 ARG AMM_GIT_SHA=
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
