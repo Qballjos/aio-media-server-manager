@@ -2665,8 +2665,8 @@ onUnmounted(() => {
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 1.7rem;
+  height: 1.7rem;
   margin: 0;
   padding: 0;
   border: 0;
@@ -2682,12 +2682,23 @@ onUnmounted(() => {
   outline: none;
 }
 .home-search-clear svg {
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 0.9rem;
+  height: 0.9rem;
 }
 .home-search-btn {
-  min-height: 2.6rem;
+  flex: 0 0 auto;
+  max-height: calc(100% - 0.35rem);
+  min-height: 0;
+  height: min(2.6rem, calc(100% - 0.35rem));
   padding: 0 1.1rem;
+}
+/* Clear takes a slot in the pill; give the field room before the worded Search button collapses. */
+.home-search-pill:has(.home-search-clear) {
+  gap: 0.45rem;
+}
+.home-search-pill:has(.home-search-clear) .home-search-provider {
+  flex-basis: 11rem;
+  max-width: min(11rem, 42%);
 }
 .home-hero-results {
   position: absolute;
@@ -2695,10 +2706,12 @@ onUnmounted(() => {
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
+  /* Prefer the search widget’s width; grow toward 28rem only while it still fits the window. */
   width: min(720px, max(100%, min(28rem, calc(100vw - 2rem))));
-  max-width: calc(100vw - 1.5rem);
+  max-width: min(720px, calc(100vw - 1.5rem));
   padding: 0;
   text-align: left;
+  box-sizing: border-box;
 }
 .home-results-scroll {
   max-height: min(60vh, 34rem);
@@ -2722,8 +2735,9 @@ onUnmounted(() => {
     display: none;
   }
 }
-/* A phone-width bar keeps the field typeable. The worded button becomes an icon; Enter still submits. */
-@container (max-width: 560px) {
+/* A phone-width bar keeps the field typeable. The worded button becomes an icon; Enter still submits.
+   640px covers half-width search widgets once the clear control is visible. */
+@container (max-width: 640px) {
   .home-search-pill {
     gap: 0.4rem;
     padding-right: 0.3rem;
@@ -2735,19 +2749,29 @@ onUnmounted(() => {
     --ui-select-font: 0.92rem;
     --ui-select-pad: 0.7rem;
   }
+  .home-search-pill:has(.home-search-clear) .home-search-provider {
+    flex-basis: 8.6rem;
+    max-width: min(8.6rem, 36%);
+  }
   .home-search-mark {
     display: none;
+  }
+  .home-search-clear {
+    width: 1.55rem;
+    height: 1.55rem;
+  }
+  .home-search-clear svg {
+    width: 0.85rem;
+    height: 0.85rem;
   }
   .home-search-go {
     display: block;
     flex: 0 0 auto;
   }
   .home-search-btn {
-    flex: 0 0 auto;
     width: min(2.55rem, calc(100% - 0.35rem));
     min-width: 0;
     height: min(2.55rem, calc(100% - 0.35rem));
-    min-height: 0;
     aspect-ratio: 1;
     padding: 0;
   }
@@ -2772,10 +2796,26 @@ onUnmounted(() => {
     transform: none;
   }
 }
+@container (max-width: 360px) {
+  .home-search-provider {
+    max-width: min(7.2rem, 40%);
+    --ui-select-pad: 0.55rem;
+  }
+  .home-search-pill:has(.home-search-clear) .home-search-provider {
+    max-width: min(6.2rem, 32%);
+  }
+  .home-search-clear {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+}
 @container (max-width: 280px) {
   .home-search-provider {
-    max-width: min(6.4rem, 46%);
-    --ui-select-pad: 0.55rem;
+    max-width: min(5.6rem, 38%);
+    --ui-select-pad: 0.45rem;
+  }
+  .home-search-pill:has(.home-search-clear) .home-search-provider {
+    max-width: min(5rem, 30%);
   }
 }
 .home-request-dialog {
@@ -2979,6 +3019,11 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.5rem 0.75rem;
   flex-wrap: wrap;
+  min-width: 0;
+}
+.home-rail-head h3,
+.home-widget-head h3 {
+  min-width: 0;
 }
 .home-card h3 {
   margin: 0;
@@ -3184,6 +3229,7 @@ button.home-tile-link {
 .cal-head h3 {
   margin: 0;
   font-size: var(--text-ui);
+  min-width: 0;
 }
 .cal-nav,
 .cal-tools,
@@ -3200,6 +3246,26 @@ button.home-tile-link {
 .cal-select {
   width: auto;
   min-width: 9rem;
+  max-width: 100%;
+}
+@container (max-width: 520px) {
+  .home-card-calendar .cal-head h3 {
+    flex: 1 1 100%;
+  }
+  .home-card-calendar .cal-tools {
+    width: 100%;
+  }
+  .home-card-calendar .cal-select {
+    flex: 1 1 calc(50% - 0.4rem);
+    min-width: 0;
+  }
+  .cal-day {
+    min-height: 4.75rem;
+    padding: 0.28rem 0.28rem 0.35rem;
+  }
+  .cal-event {
+    padding: 0.2rem 0.28rem;
+  }
 }
 .cal-views .ui-btn.is-active {
   border-color: rgba(var(--color-primary-rgb), 0.45);
@@ -3219,6 +3285,7 @@ button.home-tile-link {
 }
 .cal-mode-week {
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -3227,23 +3294,25 @@ button.home-tile-link {
   width: 0;
   height: 0;
 }
+/* Wide calendar cards fill the widget; narrow ones scroll sideways instead of crushing the seven days.
+   Tied to the card (container), not the browser window — a small calendar on a big screen still scrolls. */
 .cal-mode-week .cal-weekdays,
-.cal-mode-week .cal-week {
-  min-width: min(56rem, 100%);
+.cal-mode-week .cal-week,
+.cal-weeks.is-week .cal-week {
+  min-width: 0;
+  width: 100%;
+}
+@container (max-width: 860px) {
+  .cal-mode-week .cal-weekdays,
+  .cal-mode-week .cal-week,
+  .cal-weeks.is-week .cal-week {
+    width: auto;
+    min-width: 56rem;
+  }
 }
 .cal-weeks.is-week .cal-week,
 .cal-weeks.is-day .cal-week {
   overflow-x: visible;
-}
-.cal-weeks.is-week .cal-week {
-  min-width: min(56rem, 100%);
-}
-@media (min-width: 1280px) {
-  .cal-mode-week .cal-weekdays,
-  .cal-mode-week .cal-week,
-  .cal-weeks.is-week .cal-week {
-    min-width: 0;
-  }
 }
 .cal-weeks.is-day .cal-week {
   grid-template-columns: 1fr;
@@ -3476,6 +3545,22 @@ a.cal-row-link:hover {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+/* Phone layouts are full-width cards; trim chrome so more of the widget stays on screen.
+   (Padding is on the container itself, so this has to follow the viewport — not @container.) */
+@media (max-width: 719px) {
+  .home-card {
+    padding: 1rem 0.95rem 0.95rem;
+    gap: 0.65rem;
+  }
+}
+@container (max-width: 320px) {
+  .home-card h3 {
+    font-size: var(--text-ui);
+  }
+  .home-type-filter .ui-btn {
+    padding: 0 0.55rem;
+  }
 }
 .home-card > :is(.home-rail-head, .home-widget-head, .cal-head) {
   flex: 0 0 auto;
@@ -3740,6 +3825,9 @@ a.cal-row-link:hover {
   color: var(--text-heading);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .gh-big small {
   margin-left: 0.2em;
