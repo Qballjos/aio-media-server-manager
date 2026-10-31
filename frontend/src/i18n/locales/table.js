@@ -1,5 +1,18 @@
 /** English source text → [Nederlands, Deutsch, Français]. */
 export const TABLE = {
+  'TV connections': ['Tv-koppelingen', 'TV-Verbindungen', 'Connexions TV'],
+  'Connect TV Thuis using your phone, without typing passwords on your TV.': ['Koppel TV Thuis via je telefoon, zonder wachtwoorden op je tv in te typen.', 'Verbinde TV Thuis über dein Handy, ohne Passwörter am Fernseher einzutippen.', 'Associez TV Thuis avec votre téléphone, sans saisir de mots de passe sur le téléviseur.'],
+  'On your TV, open AIO Media → Connect with AIO and scan the QR code.': ['Open op je tv AIO Media → Koppelen met AIO en scan de QR-code.', 'Öffne am Fernseher AIO Media → Mit AIO verbinden und scanne den QR-Code.', 'Sur le téléviseur, ouvrez AIO Media → Associer à AIO et scannez le QR code.'],
+  'Create a link here, then paste it on the phone page.': ['Maak hier een link en plak die op de telefoonpagina.', 'Erstelle hier einen Link und füge ihn auf der Handyseite ein.', 'Créez un lien ici, puis collez-le sur la page du téléphone.'],
+  'Create pairing link': ['Koppellink maken', 'Kopplungslink erstellen', 'Créer un lien d’association'],
+  'Valid for 5 minutes and one use. A new link cancels the previous one.': ['5 minuten geldig en één keer te gebruiken. Een nieuwe link vervangt de vorige.', '5 Minuten gültig und einmal verwendbar. Ein neuer Link ersetzt den vorherigen.', 'Valable 5 minutes et utilisable une seule fois. Un nouveau lien remplace le précédent.'],
+  'The TV can browse media and send requests. Server settings stay private.': ['De tv kan media bekijken en aanvragen versturen. Serverinstellingen blijven privé.', 'Der Fernseher kann Medien durchsuchen und Anfragen senden. Servereinstellungen bleiben privat.', 'Le téléviseur peut parcourir les médias et envoyer des demandes. Les réglages du serveur restent privés.'],
+  'Connected TVs': ['Gekoppelde tv’s', 'Verbundene Fernseher', 'Téléviseurs associés'],
+  'No TVs connected yet.': ['Er zijn nog geen tv’s gekoppeld.', 'Noch keine Fernseher verbunden.', 'Aucun téléviseur associé pour le moment.'],
+  'Pairing link': ['Koppellink', 'Kopplungslink', 'Lien d’association'],
+  'Copy link': ['Link kopiëren', 'Link kopieren', 'Copier le lien'],
+  'Copied': ['Gekopieerd', 'Kopiert', 'Copié'],
+  'Disconnect': ['Ontkoppelen', 'Trennen', 'Déconnecter'],
   'Home': ['Start', 'Start', 'Accueil'],
   'Catalog': ['Catalogus', 'Katalog', 'Catalogue'],
   'Settings': ['Instellingen', 'Einstellungen', 'Réglages'],
