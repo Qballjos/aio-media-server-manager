@@ -1,0 +1,1501 @@
+
+<!doctype html>
+<html lang="de" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Eine Installation für den ganzen Medien-Stapel zu Hause — Downloads, Automatisierung und Wiedergabe.">
+      
+      
+      
+        <link rel="canonical" href="https://qballjos.github.io/aio-media-server-manager/de/deploy/UNRAID/">
+      
+      
+        <link rel="prev" href="../LINUX/">
+      
+      
+        <link rel="next" href="../SYNOLOGY/">
+      
+      
+        
+          <link rel="alternate" href="../../../deploy/UNRAID/" hreflang="en">
+        
+          <link rel="alternate" href="../../../nl/deploy/UNRAID/" hreflang="nl">
+        
+          <link rel="alternate" href="./" hreflang="de">
+        
+          <link rel="alternate" href="../../../fr/deploy/UNRAID/" hreflang="fr">
+        
+      
+      
+      <link rel="icon" href="../../../assets/logo-aio-media-manager.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Unraid - AIO Media Server Manager</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#unraid" class="md-skip">
+          Zum Inhalt
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Kopfzeile">
+    <a href="../../" title="AIO Media Server Manager" class="md-header__button md-logo" aria-label="AIO Media Server Manager" data-md-component="logo">
+      
+  <img src="../../../assets/logo-aio-media-manager.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AIO Media Server Manager
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Unraid
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Zum hellen Modus"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Zum hellen Modus" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Zum dunklen Modus"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Zum dunklen Modus" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Systemeinstellung folgen"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Systemeinstellung folgen" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Sprache wechseln">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="../../../deploy/UNRAID/" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../../nl/deploy/UNRAID/" hreflang="nl" class="md-select__link">
+              Nederlands
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="de" class="md-select__link">
+              Deutsch
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../../fr/deploy/UNRAID/" hreflang="fr" class="md-select__link">
+              Français
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Suche" placeholder="Suche" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Suche">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Zurücksetzen" aria-label="Zurücksetzen" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Suche wird initialisiert
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Qballjos/aio-media-server-manager" title="Zum Repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Qballjos/aio-media-server-manager
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Hauptnavigation" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Start
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../INSTALL/" class="md-tabs__link">
+          
+  
+  
+  Erste Schritte
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Bereitstellen
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../CLOUDFLARE/" class="md-tabs__link">
+          
+  
+  
+  Fernzugriff
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../" title="AIO Media Server Manager" class="md-nav__button md-logo" aria-label="AIO Media Server Manager" data-md-component="logo">
+      
+  <img src="../../../assets/logo-aio-media-manager.png" alt="logo">
+
+    </a>
+    AIO Media Server Manager
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Qballjos/aio-media-server-manager" title="Zum Repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Qballjos/aio-media-server-manager
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Erste Schritte
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Erste Schritte
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../INSTALL/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installieren
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Das Dashboard nutzen
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bereitstellen
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Bereitstellen
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Überblick
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DOCKER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LINUX/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Linux / LXC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unraid
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unraid
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Inhaltsverzeichnis">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Inhaltsverzeichnis
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ordner-uber-ssh-anlegen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ordner über SSH anlegen
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aus-der-vorlage-installieren-ihr-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Aus der Vorlage installieren (Ihr Server)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Aus der Vorlage installieren (Ihr Server)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-a-lokale-benutzervorlage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option A — lokale Benutzervorlage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-b-add-container-von-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option B — Add Container von Hand
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-community-applications-veroffentlichen-offentlicher-katalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Community Applications veröffentlichen (öffentlicher Katalog)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="In Community Applications veröffentlichen (öffentlicher Katalog)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-ein-vorlagen-repository-vorbereiten" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Ein Vorlagen-Repository vorbereiten
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-einreichen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Einreichen
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-nach-der-aufnahme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Nach der Aufnahme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#privat-nur-fur-sich-nicht-der-offentliche-katalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Privat / nur für sich (nicht der öffentliche Katalog)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fuse-hardlinks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FUSE / Hardlinks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updates
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SYNOLOGY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Synology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TRUENAS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TrueNAS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fernzugriff
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Fernzugriff
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLOUDFLARE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloudflare Tunnel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLOUDFLARE_ACCESS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloudflare Access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Inhaltsverzeichnis">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Inhaltsverzeichnis
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ordner-uber-ssh-anlegen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ordner über SSH anlegen
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aus-der-vorlage-installieren-ihr-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Aus der Vorlage installieren (Ihr Server)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Aus der Vorlage installieren (Ihr Server)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-a-lokale-benutzervorlage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option A — lokale Benutzervorlage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-b-add-container-von-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option B — Add Container von Hand
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-community-applications-veroffentlichen-offentlicher-katalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Community Applications veröffentlichen (öffentlicher Katalog)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="In Community Applications veröffentlichen (öffentlicher Katalog)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-ein-vorlagen-repository-vorbereiten" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Ein Vorlagen-Repository vorbereiten
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-einreichen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Einreichen
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-nach-der-aufnahme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Nach der Aufnahme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#privat-nur-fur-sich-nicht-der-offentliche-katalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Privat / nur für sich (nicht der öffentliche Katalog)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fuse-hardlinks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FUSE / Hardlinks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updates
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="unraid">Unraid<a class="headerlink" href="#unraid" title="Permanent link">&para;</a></h1>
+<p>Installieren Sie <strong>einen</strong> AIO-Container. Fügen Sie keine Community-Applications-Vorlagen für Sonarr, Radarr oder Download-Clients hinzu — AIO führt die selbst aus.</p>
+<p><strong>Vorlagen in diesem Repo</strong></p>
+<table>
+<thead>
+<tr>
+<th>Datei</th>
+<th>Zweck</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/Qballjos/aio-media-server-manager/blob/main/deploy/unraid/templates/aio-media-manager.xml"><code>unraid/templates/aio-media-manager.xml</code></a></td>
+<td>Docker-Vorlage (Ports, Pfade, Umgebung)</td>
+</tr>
+<tr>
+<td><a href="https://github.com/Qballjos/aio-media-server-manager/blob/main/deploy/unraid/ca_profile.xml"><code>unraid/ca_profile.xml</code></a></td>
+<td>Profil des Community-Applications-Betreuers</td>
+</tr>
+<tr>
+<td><a href="https://github.com/Qballjos/aio-media-server-manager/blob/main/deploy/unraid.xml"><code>unraid.xml</code></a></td>
+<td>Älterer Pfad für dieselbe Vorlage (Kompatibilität)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ordner-uber-ssh-anlegen">Ordner über SSH anlegen<a class="headerlink" href="#ordner-uber-ssh-anlegen" title="Permanent link">&para;</a></h2>
+<p>Aktivieren Sie SSH (<strong>Settings → Management Access</strong>), dann:</p>
+<div class="highlight"><pre><span></span><code>ssh<span class="w"> </span>root@&lt;unraid-ip&gt;
+</code></pre></div>
+<p>Downloads und Medien liegen auf der <strong>User Share</strong> <code>aio-media-manager</code> (sichtbar in Shares / im Dateibrowser). Die Config bleibt in appdata.</p>
+<div class="highlight"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/mnt/user/appdata/aio-media-manager/vpn<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/mnt/user/backups/aio-media-manager<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/mnt/user/aio-media-manager/downloads<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/mnt/user/aio-media-manager/media
+
+chown<span class="w"> </span>-R<span class="w"> </span><span class="m">99</span>:100<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/mnt/user/appdata/aio-media-manager<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/mnt/user/backups/aio-media-manager<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/mnt/user/aio-media-manager
+</code></pre></div>
+<p><code>/mnt/user/backups/aio-media-manager</code> nimmt die Konfigurationssicherungen auf. Nutzen Sie eine Share, die auf dem Array liegt (nicht nur auf dem Cache-Pool), damit ein Cache-Ausfall die Sicherungen nicht mitnimmt.</p>
+<p>Serien, Filme, Anime, Musik, Bücher, Comics, vollständige/unvollständige Downloads, Torrent-Kategorien und Transcode-Caches werden beim ersten Start in diesen Mounts angelegt.</p>
+<p><code>99:100</code> ist Unraid <code>nobody</code>/<code>users</code> (PUID 99, PGID 100). Wenn Sie einen eigenen Share-Benutzer nutzen, führen Sie <code>id thatuser</code> aus und <code>chown</code> auf diese UID:GID.</p>
+<p>Für Hardlinks lassen Sie Downloads und Medien als Unterordner <strong>eines</strong> Cache- oder Plattenpfads (nicht zwei <code>/mnt/user</code>-FUSE-Shares), zum Beispiel eine nur-Cache-Share namens <code>aio-media-manager</code>:</p>
+<div class="highlight"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>/mnt/cache/aio-media-manager/downloads<span class="w"> </span>/mnt/cache/aio-media-manager/media
+chown<span class="w"> </span>-R<span class="w"> </span><span class="m">99</span>:100<span class="w"> </span>/mnt/cache/aio-media-manager
+</code></pre></div>
+<p>Binden Sie <code>/data</code> dann an <code>/mnt/cache/aio-media-manager</code> (dieselbe Share, Plattenpfad) statt an <code>/mnt/user/aio-media-manager</code>.</p>
+<h2 id="aus-der-vorlage-installieren-ihr-server">Aus der Vorlage installieren (Ihr Server)<a class="headerlink" href="#aus-der-vorlage-installieren-ihr-server" title="Permanent link">&para;</a></h2>
+<h3 id="option-a-lokale-benutzervorlage">Option A — lokale Benutzervorlage<a class="headerlink" href="#option-a-lokale-benutzervorlage" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Kopieren Sie die XML auf den Flash-Stick:</li>
+</ol>
+<div class="highlight"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>/boot/config/plugins/dockerMan/templates-user
+curl<span class="w"> </span>-fsSL<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-o<span class="w"> </span>/boot/config/plugins/dockerMan/templates-user/my-aio-media-manager.xml<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/unraid/templates/aio-media-manager.xml
+</code></pre></div>
+<ol>
+<li>Docker → <strong>Add Container</strong> → wählen Sie <strong>aio-media-manager</strong> (oder <code>my-aio-media-manager</code>) in der Liste Template.</li>
+<li>Bestätigen Sie Pfade, <code>PUID</code>/<code>PGID</code> und <code>TZ</code>, dann Apply.</li>
+<li>Öffnen Sie <code>http://&lt;unraid-ip&gt;:8080</code> und durchlaufen Sie den Assistenten.</li>
+</ol>
+<h3 id="option-b-add-container-von-hand">Option B — Add Container von Hand<a class="headerlink" href="#option-b-add-container-von-hand" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Docker → Add Container → erweiterte Ansicht.</li>
+<li>Repository: <code>ghcr.io/qballjos/aio-media-server-manager:latest</code></li>
+<li>Network: <code>bridge</code> (oder <code>host</code>, wenn jede App-WebUI auf der Unraid-IP liegen soll).</li>
+<li>Privileged: <strong>On</strong> (nötig für die VPN-Isolation von qBittorrent / Prowlarr / Flaresolverr). Mit VPN an warten diese Apps auf einen Live-WireGuard-Handshake; AIO cached ihre DNS über den Tunnel, damit kurze Aussetzer Prowlarr-Indexer nicht offline schalten. Details: <a href="../DOCKER/#optionales-vpn">DOCKER.md</a>.</li>
+<li>Extra parameters: <code>--cap-add=NET_ADMIN --cap-add=SYS_MODULE</code></li>
+<li>Optionales Gerät: <code>/dev/dri</code> für Intel/AMD-Transkodierung (weglassen, wenn es fehlt).</li>
+<li>Ports (TCP): veröffentlichen Sie <strong>8080</strong> für den Manager und die installierten Kind-WebUIs (Sonarr <strong>8989</strong>, Radarr <strong>7878</strong>, qBittorrent <strong>8081</strong>, SABnzbd <strong>8085</strong>, Jellyfin <strong>8096</strong>, Prowlarr <strong>9696</strong>, Seerr <strong>5055</strong>, Plex <strong>32400</strong>, …). Vollständige Liste: <a href="../../INSTALL/#ports">INSTALL.md</a>. Oder Network <code>host</code>.</li>
+<li>Pfade:</li>
+<li><code>/config</code> → <code>/mnt/user/appdata/aio-media-manager</code></li>
+<li><code>/data</code> → <code>/mnt/user/aio-media-manager</code></li>
+<li><code>/backups</code> → <code>/mnt/user/backups/aio-media-manager</code></li>
+<li><code>/host/sys</code> → <code>/sys</code> (nur lesend). Die Server-Karte auf Start zeigt dann den Netzwerkverkehr des Servers. Die Vorlage nennt das <strong>Host sys</strong> (erweitert). Ohne diese Zeile ist die Grafik nur der Verkehr dieses Containers.</li>
+<li>Variablen: <code>PUID=99</code>, <code>PGID=100</code>, <code>TZ=&lt;IANA timezone&gt;</code>, <code>AMM_DOWNLOAD_DIR=/data/downloads</code>, <code>AMM_MEDIA_DIR=/data/media</code>. Optional: <code>GITHUB_TOKEN</code>.</li>
+</ol>
+<p>Nach dem Aktualisieren des Images erstellen Sie den Container neu, damit hinzugefügte WebUI-Portzuordnungen gelten.</p>
+<h2 id="in-community-applications-veroffentlichen-offentlicher-katalog">In Community Applications veröffentlichen (öffentlicher Katalog)<a class="headerlink" href="#in-community-applications-veroffentlichen-offentlicher-katalog" title="Permanent link">&para;</a></h2>
+<p>Community Apps hostet <strong>Ihre</strong> Dateien nicht. Sie halten ein öffentliches GitHub-Repo mit Vorlagen; der CA-Scanner von Lime Technology indexiert es, nachdem Sie es einreichen.</p>
+<h3 id="1-ein-vorlagen-repository-vorbereiten">1. Ein Vorlagen-Repository vorbereiten<a class="headerlink" href="#1-ein-vorlagen-repository-vorbereiten" title="Permanent link">&para;</a></h3>
+<p>Empfohlen: ein <strong>eigenes öffentliches Repo</strong> (zum Beispiel <code>Qballjos/unraid-templates</code>), dessen Wurzel so aussieht:</p>
+<div class="highlight"><pre><span></span><code>ca_profile.xml
+templates/aio-media-manager.xml
+</code></pre></div>
+<p>Aus diesem Projekt kopieren:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># from a clone of aio-media-server-manager</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>../unraid-templates/templates
+cp<span class="w"> </span>deploy/unraid/ca_profile.xml<span class="w"> </span>../unraid-templates/
+cp<span class="w"> </span>deploy/unraid/templates/aio-media-manager.xml<span class="w"> </span>../unraid-templates/templates/
+</code></pre></div>
+<p>Dann:</p>
+<ol>
+<li>Legen Sie das öffentliche GitHub-Repo an und pushen Sie <code>main</code>.</li>
+<li>Bearbeiten Sie <code>templates/aio-media-manager.xml</code> und setzen Sie <code>&lt;TemplateURL&gt;</code> auf die <strong>raw</strong>-URL dieser Datei im neuen Repo (muss zum echten Pfad auf <code>main</code> passen).</li>
+<li>Lassen Sie <code>&lt;Repository&gt;</code> bei <code>ghcr.io/qballjos/aio-media-server-manager:latest</code> (das Image bleibt auf GHCR; nur die Vorlagen-XML liegt im Vorlagen-Repo).</li>
+<li>Optional: öffnen Sie einen Support-Thread im Unraid-Forum und tragen Sie die URL in <code>ca_profile.xml</code> bei <code>&lt;Forum&gt;</code> und in den <code>&lt;Support&gt;</code>-Tags der Vorlage ein (GitHub Issues reicht zum Start).</li>
+</ol>
+<p>Sie <em>können</em> stattdessen das Haupt-Repo der App einreichen, wenn die XML auffindbar ist und jede App ein <code>&lt;Repository&gt;</code>-Tag hat, aber ein kleines eigenes Vorlagen-Repo ist, was CA-Betreuer meist erwarten.</p>
+<h3 id="2-einreichen">2. Einreichen<a class="headerlink" href="#2-einreichen" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Melden Sie sich unter <strong><a href="https://ca.unraid.net/submit">https://ca.unraid.net/submit</a></strong> mit Ihrem Unraid- / Forenkonto an.</li>
+<li>Registrieren Sie die <strong>GitHub-Repository-URL</strong> (das Vorlagen-Repo).</li>
+<li>Führen Sie <strong>Validate</strong> und danach <strong>Scan</strong> aus. Beheben Sie gemeldete XML-Probleme.</li>
+<li>Warten Sie auf die Moderation. Nach der Freigabe erscheint die App für alle unter dem Reiter Apps.</li>
+</ol>
+<p>Hilfreiche Docs:</p>
+<ul>
+<li><a href="https://ca.unraid.net/submit/help">Submission help</a></li>
+<li><a href="https://ca.unraid.net/submit/help/repository-xml">Repository XML format</a></li>
+<li><a href="https://ca.unraid.net/submit/help/xml-field-reference">XML field reference</a></li>
+<li><a href="https://ca.unraid.net/apps">Browse catalog</a> (prüfen Sie zuerst Namenskollisionen)</li>
+</ul>
+<p>Nutzen Sie <strong>nicht</strong> den eingestellten Anfrageweg <code>selfhosters/unRAID-CA-templates</code>.</p>
+<h3 id="3-nach-der-aufnahme">3. Nach der Aufnahme<a class="headerlink" href="#3-nach-der-aufnahme" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Liefern Sie Updates, indem Sie ein neues Container-Image veröffentlichen (<code>:latest</code> oder Semver-Tags). Nutzer aktualisieren über das Docker-Update von Unraid — die Vorlage müssen Sie in der Regel <strong>nicht</strong> bei jeder Veröffentlichung anheben.</li>
+<li>Ändern Sie die Vorlagen-XML nur, wenn sich Ports, Pfade oder Umgebungsvariablen ändern; CA liest <code>&lt;TemplateURL&gt;</code> beim Aktualisieren neu.</li>
+</ul>
+<h3 id="privat-nur-fur-sich-nicht-der-offentliche-katalog">Privat / nur für sich (nicht der öffentliche Katalog)<a class="headerlink" href="#privat-nur-fur-sich-nicht-der-offentliche-katalog" title="Permanent link">&para;</a></h3>
+<p>Um eigene GitHub-Vorlagen ohne CA-Freigabe zu nutzen, hängen Sie die Repo-URL an:</p>
+<div class="highlight"><pre><span></span><code>/boot/config/plugins/dockerMan/template-repos
+</code></pre></div>
+<p>(eine URL pro Zeile). Die Vorlagen erscheinen dann unter Docker → Add Container. Das listet die App <strong>nicht</strong> im öffentlichen Community-Applications-Katalog.</p>
+<h2 id="fuse-hardlinks">FUSE / Hardlinks<a class="headerlink" href="#fuse-hardlinks" title="Permanent link">&para;</a></h2>
+<p>Bevorzugen Sie <code>/mnt/cache/aio-media-manager</code> oder einen einzelnen Plattenpfad für Downloads und Medien, wenn Hardlinks zählen. <code>/mnt/user</code> (FUSE) mit einer Plattenshare zu mischen kann atomare Verschiebungen brechen.</p>
+<h2 id="updates">Updates<a class="headerlink" href="#updates" title="Permanent link">&para;</a></h2>
+<p>Ändern Sie das Repository-Tag oder nutzen Sie das Container-Update von Unraid und erstellen Sie danach neu, damit neue Ports und der Host-sys-Mount gelten. Images werden von <code>main</code> als <code>:latest</code> und von Git-Tags als Semver veröffentlicht. Das aktualisiert AIO. Installierte Apps aktualisieren Sie unter <strong>Einstellungen → Updates</strong> (Zeitpläne standardmäßig aus).</p>
+<section class="aio-donate">
+  <h2>Spenden</h2>
+  <p>🤖 KI schreibt etwas Code. Ich mache ihn kaputt. Wir reparieren ihn zusammen.</p>
+  <p>Kein Kleingeld übrig? Geben Sie stattdessen einen Stern auf GitHub. Das füttert das Ego, und das ist fast genauso gut.</p>
+  <p class="aio-donate__actions">
+    <a class="md-button" href="https://www.paypal.com/donate/?business=P8CTXW8ER3PBY&no_recurring=0&item_name=Sponsor+My+Next+Bug&currency_code=EUR" target="_blank" rel="noopener noreferrer">PayPal</a>
+    <a class="md-button" href="https://ko-fi.com/qballjos" target="_blank" rel="noopener noreferrer">Ko-fi</a>
+  </p>
+</section>
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Zurück zum Seitenanfang
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Fußzeile" >
+        
+          
+          <a href="../LINUX/" class="md-footer__link md-footer__link--prev" aria-label="Zurück: Linux / LXC">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Zurück
+              </span>
+              <div class="md-ellipsis">
+                Linux / LXC
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../SYNOLOGY/" class="md-footer__link md-footer__link--next" aria-label="Weiter: Synology">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Weiter
+              </span>
+              <div class="md-ellipsis">
+                Synology
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Qballjos/aio-media-server-manager" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "toc.follow"], "search": "../../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "In Zwischenablage kopiert", "clipboard.copy": "In Zwischenablage kopieren", "search.result.more.one": "1 weiteres Suchergebnis auf dieser Seite", "search.result.more.other": "# weitere Suchergebnisse auf dieser Seite", "search.result.none": "Keine Suchergebnisse", "search.result.one": "1 Suchergebnis", "search.result.other": "# Suchergebnisse", "search.result.placeholder": "Suchbegriff eingeben", "search.result.term.missing": "Es fehlt", "select.version": "Version ausw\u00e4hlen"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

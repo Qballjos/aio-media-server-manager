@@ -1,0 +1,1505 @@
+
+<!doctype html>
+<html lang="fr" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Une installation pour toute la pile média à la maison — téléchargements, automatisation et lecture.">
+      
+      
+      
+        <link rel="canonical" href="https://qballjos.github.io/aio-media-server-manager/fr/INSTALL/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../USAGE/">
+      
+      
+        
+          <link rel="alternate" href="../../INSTALL/" hreflang="en">
+        
+          <link rel="alternate" href="../../nl/INSTALL/" hreflang="nl">
+        
+          <link rel="alternate" href="../../de/INSTALL/" hreflang="de">
+        
+          <link rel="alternate" href="./" hreflang="fr">
+        
+      
+      
+      <link rel="icon" href="../../assets/logo-aio-media-manager.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Installer - AIO Media Server Manager</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#installer" class="md-skip">
+          Aller au contenu
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="En-tête">
+    <a href="../" title="AIO Media Server Manager" class="md-header__button md-logo" aria-label="AIO Media Server Manager" data-md-component="logo">
+      
+  <img src="../../assets/logo-aio-media-manager.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AIO Media Server Manager
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Installer
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Passer au mode clair"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Passer au mode clair" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Passer au mode sombre"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Passer au mode sombre" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Suivre le système"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Suivre le système" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Sélectionner la langue">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="../../INSTALL/" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../nl/INSTALL/" hreflang="nl" class="md-select__link">
+              Nederlands
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../de/INSTALL/" hreflang="de" class="md-select__link">
+              Deutsch
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="fr" class="md-select__link">
+              Français
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Rechercher" placeholder="Rechercher" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Recherche">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Effacer" aria-label="Effacer" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initialisation de la recherche
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Qballjos/aio-media-server-manager" title="Aller au dépôt" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Qballjos/aio-media-server-manager
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Onglets" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Accueil
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Pour commencer
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../deploy/" class="md-tabs__link">
+          
+  
+  
+  Déployer
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../deploy/CLOUDFLARE/" class="md-tabs__link">
+          
+  
+  
+  Accès distant
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../" title="AIO Media Server Manager" class="md-nav__button md-logo" aria-label="AIO Media Server Manager" data-md-component="logo">
+      
+  <img src="../../assets/logo-aio-media-manager.png" alt="logo">
+
+    </a>
+    AIO Media Server Manager
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Qballjos/aio-media-server-manager" title="Aller au dépôt" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Qballjos/aio-media-server-manager
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accueil
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pour commencer
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pour commencer
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installer
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table des matières">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table des matières
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#avant-de-commencer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Avant de commencer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choisissez-votre-plateforme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choisissez votre plateforme
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dossiers-sur-lhote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dossiers sur l’hôte
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#apres-le-demarrage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Après le démarrage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#facultatif-atteindre-les-apps-hors-de-la-maison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Facultatif : atteindre les apps hors de la maison
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ports
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#variables-denvironnement-courantes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Variables d’environnement courantes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#si-quelque-chose-ne-va-pas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Si quelque chose ne va pas
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#developpement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Développement
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Utiliser le tableau de bord
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Déployer
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Déployer
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aperçu
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/DOCKER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/LINUX/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Linux / LXC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/UNRAID/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unraid
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/SYNOLOGY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Synology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/TRUENAS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TrueNAS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accès distant
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Accès distant
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/CLOUDFLARE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloudflare Tunnel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/CLOUDFLARE_ACCESS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloudflare Access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table des matières">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table des matières
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#avant-de-commencer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Avant de commencer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choisissez-votre-plateforme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choisissez votre plateforme
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dossiers-sur-lhote" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dossiers sur l’hôte
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#apres-le-demarrage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Après le démarrage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#facultatif-atteindre-les-apps-hors-de-la-maison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Facultatif : atteindre les apps hors de la maison
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ports
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#variables-denvironnement-courantes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Variables d’environnement courantes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#si-quelque-chose-ne-va-pas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Si quelque chose ne va pas
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#developpement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Développement
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="installer">Installer<a class="headerlink" href="#installer" title="Permanent link">&para;</a></h1>
+<p>Mettez AIO en route en trois étapes : créer les dossiers, démarrer l’app, ouvrir le tableau de bord.</p>
+<div class="admonition tip">
+<p class="admonition-title">Vous préférez un chemin court ?</p>
+<p>La plupart des gens commencent par <strong><a href="../deploy/DOCKER/">Docker</a></strong> ou le guide de leur NAS (<strong><a href="../deploy/UNRAID/">Unraid</a></strong> · <strong><a href="../deploy/SYNOLOGY/">Synology</a></strong> · <strong><a href="../deploy/TRUENAS/">TrueNAS</a></strong>), puis reviennent ici pour les ports et les mises à jour.</p>
+</div>
+<h2 id="avant-de-commencer">Avant de commencer<a class="headerlink" href="#avant-de-commencer" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Choisissez où ça tourne</strong> — Unraid, Synology, TrueNAS, Docker simple ou Linux natif.</li>
+<li><strong>Prévoyez deux sortes de stockage :</strong></li>
+<li><strong>Config</strong> — réglages et bases de données (petit, à sauvegarder)</li>
+<li><strong>Téléchargements + médias</strong> — les gros fichiers (gardez-les sur le <strong>même</strong> disque ou partage pour que les liens physiques fonctionnent)</li>
+<li><strong>Connaissez votre identifiant utilisateur</strong> — sous Linux/NAS, les apps tournent souvent sous un utilisateur précis (<code>PUID</code> / <code>PGID</code>). Faites-le correspondre au propriétaire des dossiers, sinon vous aurez des erreurs de droits.</li>
+</ol>
+<p>Il ne vous faut <strong>qu’un</strong> conteneur AIO. N’installez pas Sonarr, Radarr ou les clients de téléchargement comme apps séparées à côté.</p>
+<p><strong>Image :</strong> <code>ghcr.io/qballjos/aio-media-server-manager:latest</code><br />
+<strong>Architectures :</strong> <code>linux/amd64</code>, <code>linux/arm64</code> (Flaresolverr est réservé à x86_64 et masqué sur ARM)</p>
+<h2 id="choisissez-votre-plateforme">Choisissez votre plateforme<a class="headerlink" href="#choisissez-votre-plateforme" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Où ça tourne</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Docker (n’importe quel hôte)</td>
+<td><a href="../deploy/DOCKER/">Docker</a></td>
+</tr>
+<tr>
+<td>Unraid</td>
+<td><a href="../deploy/UNRAID/">Unraid</a></td>
+</tr>
+<tr>
+<td>Synology</td>
+<td><a href="../deploy/SYNOLOGY/">Synology</a></td>
+</tr>
+<tr>
+<td>TrueNAS SCALE</td>
+<td><a href="../deploy/TRUENAS/">TrueNAS</a></td>
+</tr>
+<tr>
+<td>Debian / Ubuntu / Proxmox LXC (sans Docker)</td>
+<td><a href="../deploy/LINUX/">Linux</a></td>
+</tr>
+<tr>
+<td>Toutes les options</td>
+<td><a href="../deploy/">Aperçu</a></td>
+</tr>
+</tbody>
+</table>
+<p>Chaque guide de plateforme commence par : ouvrir SSH → créer les dossiers → démarrer AIO.</p>
+<h2 id="dossiers-sur-lhote">Dossiers sur l’hôte<a class="headerlink" href="#dossiers-sur-lhote" title="Permanent link">&para;</a></h2>
+<p>Connectez-vous en SSH, puis créez quelque chose comme ceci (les chemins varient selon la plateforme — suivez votre guide) :</p>
+<div class="highlight"><pre><span></span><code>ssh<span class="w"> </span>user@host
+
+mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/aio-media-manager/downloads"</span><span class="w"> </span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/aio-media-manager/media"</span>
+sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/path/to/config<span class="w"> </span>/path/to/config/vpn<span class="w"> </span>/path/to/backups
+id<span class="w">   </span><span class="c1"># note uid= (PUID) and gid= (PGID)</span>
+sudo<span class="w"> </span>chown<span class="w"> </span>-R<span class="w"> </span><span class="s2">"</span><span class="nv">$PUID</span><span class="s2">:</span><span class="nv">$PGID</span><span class="s2">"</span><span class="w"> </span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/aio-media-manager"</span><span class="w"> </span>/path/to/config<span class="w"> </span>/path/to/backups
+</code></pre></div>
+<p>Gardez <strong>downloads</strong> et <strong>media</strong> comme voisins sous un même dossier pour que *Arr puisse faire des liens physiques. Montez un dossier <strong>backups</strong> séparé sur <code>/backups</code> si vous pouvez (idéalement un autre disque que la config).</p>
+<p>Dans ces montages, AIO dispose des bibliothèques comme <code>media/tv</code>, <code>media/movies</code> et <code>downloads/complete</code>.</p>
+<h2 id="apres-le-demarrage">Après le démarrage<a class="headerlink" href="#apres-le-demarrage" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Ouvrez le tableau de bord : <code>http://YOUR-SERVER-IP:8080</code><br />
+   (Utilisez un autre port si vous en avez mappé un.)</li>
+<li>Créez le compte administrateur (nom, <strong>e-mail</strong>, mot de passe).</li>
+<li>Terminez l’assistant de première exécution, puis suivez <a href="../USAGE/">Utiliser le tableau de bord</a>.</li>
+</ol>
+<p>Après <code>docker compose pull</code>, <strong>recréez</strong> le conteneur (pas seulement un redémarrage) pour que les nouveaux ports et runtimes s’appliquent. Cela met AIO à jour. Les apps installées se mettent à jour depuis <strong>Réglages → Mises à jour</strong> dans le tableau de bord. Ces planifications sont désactivées par défaut.</p>
+<p>Le fichier Compose du dépôt monte <code>/sys</code> de l’hôte en lecture seule sur <code>/host/sys</code>, pour que la carte Serveur de l’accueil compte les cartes réseau du serveur. Un ancien Compose sans cette ligne ne montre que le trafic du conteneur, jusqu’à ce que vous l’ajoutiez et recréiez. Voir <a href="../deploy/DOCKER/">Docker</a>.</p>
+<h2 id="facultatif-atteindre-les-apps-hors-de-la-maison">Facultatif : atteindre les apps hors de la maison<a class="headerlink" href="#facultatif-atteindre-les-apps-hors-de-la-maison" title="Permanent link">&para;</a></h2>
+<ol>
+<li><a href="../deploy/CLOUDFLARE/">Cloudflare Tunnel</a> — HTTPS sans ouvrir de ports sur le routeur  </li>
+<li><a href="../deploy/CLOUDFLARE_ACCESS/">Cloudflare Access</a> — une porte de connexion pour que des inconnus n’ouvrent pas les apps d’administration</li>
+</ol>
+<h2 id="ports">Ports<a class="headerlink" href="#ports" title="Permanent link">&para;</a></h2>
+<p>L’interface du gestionnaire utilise <strong>8080</strong>. Les apps enfants écoutent dans le même conteneur. Compose et les modèles NAS publient ces ports sur l’hôte pour que <strong>Ouvrir l’interface</strong> fonctionne (<code>http://YOUR-IP:8989</code> pour Sonarr, et ainsi de suite). Le réseau hôte est une alternative si vous ne voulez pas mapper chaque port.</p>
+<table>
+<thead>
+<tr>
+<th>Application</th>
+<th>Port par défaut</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="../assets/logo-aio-media-manager.png" alt="" class="aio-app-icon" /> Interface du gestionnaire</td>
+<td>8080</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/qbittorrent.svg" alt="" class="aio-app-icon" /> qBittorrent</td>
+<td>8081</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/shelfmark.png" alt="" class="aio-app-icon" /> Shelfmark</td>
+<td>8084</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/sabnzbd.svg" alt="" class="aio-app-icon" /> SABnzbd</td>
+<td>8085</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/jellyfin.svg" alt="" class="aio-app-icon" /> Jellyfin</td>
+<td>8096</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/flaresolverr.png" alt="" class="aio-app-icon" /> Flaresolverr</td>
+<td>8191 (x86_64 seulement)</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/bazarr.svg" alt="" class="aio-app-icon" /> Bazarr</td>
+<td>6767</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/nzbget.svg" alt="" class="aio-app-icon" /> NZBGet</td>
+<td>6789</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/lidarr.svg" alt="" class="aio-app-icon" /> Lidarr</td>
+<td>8686</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/sonarr.svg" alt="" class="aio-app-icon" /> Sonarr</td>
+<td>8989</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/radarr.svg" alt="" class="aio-app-icon" /> Radarr</td>
+<td>7878</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/prowlarr.svg" alt="" class="aio-app-icon" /> Prowlarr</td>
+<td>9696</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/seerr.svg" alt="" class="aio-app-icon" /> Seerr</td>
+<td>5055</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/grimmory.svg" alt="" class="aio-app-icon" /> Grimmory</td>
+<td>6060</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/neutarr.svg" alt="" class="aio-app-icon" /> NeutArr</td>
+<td>9705</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/recyclarr.svg" alt="" class="aio-app-icon" /> Recyclarr</td>
+<td>aucun (CLI seulement)</td>
+</tr>
+<tr>
+<td><img src="../assets/app-icons/plex.svg" alt="" class="aio-app-icon" /> Plex</td>
+<td>32400</td>
+</tr>
+</tbody>
+</table>
+<h2 id="variables-denvironnement-courantes">Variables d’environnement courantes<a class="headerlink" href="#variables-denvironnement-courantes" title="Permanent link">&para;</a></h2>
+<p>Copiez <a href="https://github.com/Qballjos/aio-media-server-manager/blob/main/.env.example"><code>.env.example</code></a> pour une installation native. Beaucoup peuvent aussi se régler plus tard dans <strong>Réglages</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Rôle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PUID</code> / <code>PGID</code></td>
+<td>Utilisateur sous lequel tournent les apps (identique au propriétaire des dossiers)</td>
+</tr>
+<tr>
+<td><code>TZ</code> / <code>AMM_TIMEZONE</code></td>
+<td>Fuseau pour les journaux et les planifications</td>
+</tr>
+<tr>
+<td><code>AMM_DOWNLOAD_DIR</code> / <code>AMM_MEDIA_DIR</code></td>
+<td>Chemins dans le conteneur (les montages hôte se changent dans Compose)</td>
+</tr>
+<tr>
+<td><code>GITHUB_TOKEN</code></td>
+<td>Facultatif ; limite d’API GitHub plus haute pour les mises à jour</td>
+</tr>
+<tr>
+<td><code>AMM_CLOUDFLARE_TUNNEL_*</code></td>
+<td>Tunnel distant facultatif (<code>cloudflared</code> démarre après les apps au boot)</td>
+</tr>
+<tr>
+<td><code>AMM_VPN_*</code></td>
+<td>VPN facultatif pour qBittorrent, Prowlarr et Flaresolverr (ils attendent le tunnel ; cache DNS local pour ces apps)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="si-quelque-chose-ne-va-pas">Si quelque chose ne va pas<a class="headerlink" href="#si-quelque-chose-ne-va-pas" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>L’interface ne s’ouvre pas</strong> — le conteneur tourne-t-il ? Le port hôte est-il le bon ?</li>
+<li><strong>Permission refusée</strong> — le propriétaire du dossier doit correspondre à <code>PUID</code>/<code>PGID</code>.</li>
+<li><strong>Ouvrir l’interface d’une app enfant échoue sur le LAN</strong> — publiez le port de cette app (tableau ci-dessus) ou utilisez le réseau hôte ; les anciens fichiers Compose qui ne mappaient que <code>8080</code> doivent être mis à jour.</li>
+<li><strong>Apps en double</strong> — retirez les conteneurs Sonarr/Radarr séparés ; seul AIO doit les faire tourner.</li>
+</ul>
+<h2 id="developpement">Développement<a class="headerlink" href="#developpement" title="Permanent link">&para;</a></h2>
+<p>Pour travailler sur le code, lancez la copie <strong>dans Docker</strong> (binaires Linux). Voir <a href="https://github.com/Qballjos/aio-media-server-manager/blob/main/CONTRIBUTING.md">Contributing</a> et <code>./scripts/test-env.sh up</code>.</p>
+<section class="aio-donate">
+  <h2>Faire un don</h2>
+  <p>🤖 L’IA écrit du code. Je le casse. On le répare ensemble.</p>
+  <p>Pas quelques euros de côté ? Laissez une étoile sur GitHub. Ça nourrit l’ego, et c’est presque aussi bien.</p>
+  <p class="aio-donate__actions">
+    <a class="md-button" href="https://www.paypal.com/donate/?business=P8CTXW8ER3PBY&no_recurring=0&item_name=Sponsor+My+Next+Bug&currency_code=EUR" target="_blank" rel="noopener noreferrer">PayPal</a>
+    <a class="md-button" href="https://ko-fi.com/qballjos" target="_blank" rel="noopener noreferrer">Ko-fi</a>
+  </p>
+</section>
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Retour en haut de la page
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Pied de page" >
+        
+          
+          <a href="../" class="md-footer__link md-footer__link--prev" aria-label="Précédent: Accueil">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Précédent
+              </span>
+              <div class="md-ellipsis">
+                Accueil
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../USAGE/" class="md-footer__link md-footer__link--next" aria-label="Suivant: Utiliser le tableau de bord">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Suivant
+              </span>
+              <div class="md-ellipsis">
+                Utiliser le tableau de bord
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Qballjos/aio-media-server-manager" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copi\u00e9 dans le presse-papier", "clipboard.copy": "Copier dans le presse-papier", "search.result.more.one": "1 de plus sur cette page", "search.result.more.other": "# de plus sur cette page", "search.result.none": "Aucun document trouv\u00e9", "search.result.one": "1 document trouv\u00e9", "search.result.other": "# documents trouv\u00e9s", "search.result.placeholder": "Taper pour d\u00e9marrer la recherche", "search.result.term.missing": "Non trouv\u00e9", "select.version": "S\u00e9lectionner la version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>
