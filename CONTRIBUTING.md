@@ -77,6 +77,7 @@ Report vulnerabilities through [GitHub private advisories](https://github.com/Qb
 
 ## Pull requests
 
+- For a nightly build, target `beta`, never `main`. Pushes to `beta` run Nightly and publish `:nightly`; `main` publishes the stable `:latest` image. Promote to `main` only when a stable release is explicitly requested.
 - Keep the change focused and explain *why* in the PR body.
 - Add or update tests when behaviour changes.
 - Squash merge is preferred.
