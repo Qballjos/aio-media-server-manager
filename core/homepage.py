@@ -540,10 +540,10 @@ def homepage_trending(host: str, page: int, scheme: str = "http") -> dict[str, A
     return {"page": page, "items": items, "error": error}
 
 
-def homepage_recent(host: str, page: int, scheme: str = "http") -> dict[str, Any]:
+def homepage_recent(host: str, page: int, scheme: str = "http", media_type: str = "") -> dict[str, Any]:
     """Every Jellyfin show and movie, newest first, a page at a time; Home's rail loads these as it scrolls."""
     notes: list[dict[str, Any]] = []
-    items = _collect_jellyfin_titles(ApplicationCatalog(), _running_names(), notes, host, scheme, page)
+    items = _collect_jellyfin_titles(ApplicationCatalog(), _running_names(), notes, host, scheme, page, media_type)
     error = next((note["detail"] for note in notes if note["state"] == "error"), None)
     return {"page": page, "items": items, "error": error}
 
@@ -925,8 +925,10 @@ def _fetch_bytes(
         return None, "", str(exc)[:180]
 
 
-def homepage_art(source: str, item_id: str) -> tuple[bytes | None, str]:
-    """Artwork for Home poster rails. Authenticated via the manager session."""
+def homepage_art(
+    source: str, item_id: str, image: str = "Primary", fill_width: int = 240, fill_height: int = 360
+) -> tuple[bytes | None, str]:
+    """Artwork for poster rails and TV cards; callers select a bounded shape through the API."""
     catalog = ApplicationCatalog()
     running = _running_names()
     ident = (item_id or "").strip()
@@ -935,19 +937,27 @@ def homepage_art(source: str, item_id: str) -> tuple[bytes | None, str]:
     if source == "jellyfin" and catalog.has("jellyfin") and "jellyfin" in running:
         plugin = catalog.get("jellyfin")
         key = get_application_api_key("jellyfin", plugin.config_dir)
-        body, ctype, _err = _fetch_bytes(
-            f"http://127.0.0.1:{plugin.port}/Items/{quote(ident, safe='')}/Images/Primary",
+        base = f"http://127.0.0.1:{plugin.port}/Items/{quote(ident, safe='')}/Images/"
+        body, ctype, error = _fetch_bytes(
+            base + image,
             headers=jellyfin_auth_headers(key),
-            params={"fillWidth": "240", "fillHeight": "360", "quality": "80"},
+            params={"fillWidth": str(fill_width), "fillHeight": str(fill_height), "quality": "90"},
         )
+        if error == "HTTP 404" and image != "Primary":
+            # Keep a full-resolution poster when this title has no landscape art.
+            body, ctype, _error = _fetch_bytes(
+                base + "Primary",
+                headers=jellyfin_auth_headers(key),
+                params={"maxWidth": str(fill_width), "quality": "90"},
+            )
         return body, ctype
     if source == "plex" and catalog.has("plex") and "plex" in running:
         plugin = catalog.get("plex")
         client = PlexClient(port=plugin.port, config_dir=plugin.config_dir)
         body, ctype, _err = _fetch_bytes(
-            f"{client.base_url}/library/metadata/{quote(ident, safe='')}/thumb",
+            f"{client.base_url}/library/metadata/{quote(ident, safe='')}/{'art' if image == 'Backdrop' else 'thumb'}",
             headers=client._headers(),
-            params={"width": "240", "height": "360"},
+            params={"width": str(fill_width), "height": str(fill_height)},
         )
         return body, ctype
     return None, ""
@@ -1800,6 +1810,7 @@ def _collect_jellyfin_titles(
     host: str,
     scheme: str = "http",
     page: int = 1,
+    media_type: str = "",
 ) -> list[dict[str, Any]]:
     """One tile per show or movie, by when it entered the library (a show's episodes don't count)."""
     if not _source_ready(catalog, running, "jellyfin", "recent", notes, need_key=True):
@@ -1813,7 +1824,7 @@ def _collect_jellyfin_titles(
             # DateLastContentAdded would follow a show's newest episode, but movies lack it and sort by name.
             "SortBy": "DateCreated,SortName",
             "SortOrder": "Descending",
-            "IncludeItemTypes": "Series,Movie",
+            "IncludeItemTypes": "Movie" if media_type == "movie" else "Series" if media_type == "tv" else "Series,Movie",
             "StartIndex": str((page - 1) * _JELLYFIN_TITLES_PAGE),
             "Limit": str(_JELLYFIN_TITLES_PAGE),
             "Fields": "DateCreated,ProductionYear",

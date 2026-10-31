@@ -36,3 +36,13 @@ configuratieback-up; publiceer het niet. Er zijn geen nieuwe poorten of omgeving
 Verder kijken leest de al opgeslagen Jellyfin-sleutel op de server. Ontbreekt die, dan blijft de rij leeg;
 het openen van de tv start geen installatie, sleutelontdekking of herstart van Jellyfin.
 Oudere TV Thuis-versies blijven de bestaande handmatige integratie gebruiken.
+
+## Bibliotheek en afbeeldingen
+
+De tv kan `/api/homepage/recent?mediaType=movie&page=1` en `mediaType=tv` gebruiken om de eigen bibliotheek
+per 20 titels op te halen. Zonder typefilter blijft de bestaande gemengde lijst beschikbaar.
+
+`/api/homepage/art` accepteert `image=Primary`, `Backdrop` of `Thumb`, met `fillWidth` (1–3840) en
+`fillHeight` (1–2160). Zonder deze parameters blijft de poster van 240 × 360 beschikbaar voor het dashboard.
+De tv vraagt een brede achtergrond of een scherpe staande poster van dezelfde bibliotheektitel; bij een ontbrekende
+achtergrond gebruikt AIO de volledige poster. Aanmeldgegevens blijven op de server.
