@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.routers import applications as applications_router
 from api.routers import auth as auth_router
+from api.routers import tv as tv_router
 from api.routers import backups as backups_router
 from api.routers import branding as branding_router
 from api.routers import catalog as catalog_router
@@ -224,6 +225,7 @@ def create_app() -> FastAPI:
     app.include_router(homepage_router.router)
     app.include_router(downloads_router.router)
     app.include_router(auth_router.router)
+    app.include_router(tv_router.router)
     app.include_router(catalog_router.router)
     app.include_router(applications_router.router)
     app.include_router(recyclarr_router.router)
