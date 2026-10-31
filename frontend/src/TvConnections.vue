@@ -48,25 +48,113 @@ onMounted(() => load().catch(e => { error.value = e.message }))
 </script>
 
 <template>
-  <div class="glass-card settings-card">
-    <div class="settings-card-head">
+  <div class="glass-card settings-card tv-connections">
+    <header class="tv-connections-head">
       <h3>{{ $t('TV connections') }}</h3>
-      <p>{{ $t('Connect TV Thuis without entering passwords or API keys on your TV.') }}</p>
-    </div>
-    <p>{{ $t('On the TV, choose AIO Media → Connect with AIO and scan the QR code. Create a link here and paste it on that phone page.') }}</p>
-    <button class="ui-btn ui-btn-primary" :disabled="busy" @click="invite">{{ $t('Create pairing link') }}</button>
-    <div v-if="link" class="form-stack">
-      <p>{{ $t('This link works once for five minutes. A new link replaces the previous one. It allows media browsing and requests, not server administration.') }}</p>
-      <label class="ui-field">{{ $t('Pairing link') }}<textarea class="ui-input" :value="link" readonly rows="3" autocomplete="off" spellcheck="false" /></label>
-      <button class="ui-btn" @click="copy">{{ copied ? $t('Copied') : $t('Copy link') }}</button>
-      <button class="ui-btn ui-btn-ghost" :disabled="busy" @click="load().catch(e => { error = e.message })">{{ $t('Refresh') }}</button>
+      <p>{{ $t('Connect TV Thuis using your phone, without typing passwords on your TV.') }}</p>
+    </header>
+    <div class="tv-pairing">
+      <ol class="tv-pairing-steps">
+        <li>{{ $t('On your TV, open AIO Media → Connect with AIO and scan the QR code.') }}</li>
+        <li>{{ $t('Create a link here, then paste it on the phone page.') }}</li>
+      </ol>
+      <div class="tv-connection-actions">
+        <button class="ui-btn ui-btn-primary" :disabled="busy" @click="invite">{{ $t('Create pairing link') }}</button>
+      </div>
+      <div v-if="link" class="tv-pairing-link">
+        <label class="ui-field">
+          {{ $t('Pairing link') }}
+          <input class="ui-input" :value="link" readonly autocomplete="off" spellcheck="false" />
+        </label>
+        <p class="ui-field-hint">{{ $t('Valid for 5 minutes and one use. A new link cancels the previous one.') }}</p>
+        <div class="tv-connection-actions">
+          <button class="ui-btn" @click="copy">{{ copied ? $t('Copied') : $t('Copy link') }}</button>
+        </div>
+      </div>
+      <p class="ui-field-hint">{{ $t('The TV can browse media and send requests. Server settings stay private.') }}</p>
     </div>
     <p v-if="error" role="alert">{{ error }}</p>
-    <ul v-if="devices.length">
-      <li v-for="device in devices" :key="device.id">
-        {{ device.name }}
-        <button class="ui-btn ui-btn-ghost" :disabled="busy" @click="revoke(device.id)">{{ $t('Disconnect') }}</button>
-      </li>
-    </ul>
+    <section class="tv-devices">
+      <div class="tv-devices-head">
+        <h4>{{ $t('Connected TVs') }}</h4>
+        <button class="ui-btn ui-btn-ghost" :disabled="busy" @click="load().catch(e => { error = e.message })">{{ $t('Refresh') }}</button>
+      </div>
+      <ul v-if="devices.length" class="tv-device-list">
+        <li v-for="device in devices" :key="device.id">
+          <span>{{ device.name }}</span>
+          <button class="ui-btn ui-btn-ghost" :disabled="busy" @click="revoke(device.id)">{{ $t('Disconnect') }}</button>
+        </li>
+      </ul>
+      <p v-else class="ui-field-hint">{{ $t('No TVs connected yet.') }}</p>
+    </section>
   </div>
 </template>
+
+<style scoped>
+.tv-connections,
+.tv-pairing,
+.tv-pairing-link,
+.tv-devices {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+.tv-connections {
+  gap: 1.75rem;
+}
+.tv-connections p,
+.tv-connections h4 {
+  margin: 0;
+}
+.tv-connections-head h3 {
+  margin: 0.4rem 0 0.5rem;
+  font-size: var(--text-strong);
+  color: var(--text-heading);
+}
+.tv-connections-head p,
+.tv-pairing-steps {
+  max-width: 62ch;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.tv-pairing,
+.tv-devices {
+  max-width: 42rem;
+}
+.tv-pairing-steps {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding-left: 1.4rem;
+}
+.tv-pairing-link,
+.tv-devices {
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.tv-pairing-link {
+  gap: 0.85rem;
+}
+.tv-connection-actions,
+.tv-devices-head,
+.tv-device-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.tv-devices-head,
+.tv-device-list li {
+  justify-content: space-between;
+}
+.tv-device-list {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tv-device-list span {
+  overflow-wrap: anywhere;
+}
+</style>
