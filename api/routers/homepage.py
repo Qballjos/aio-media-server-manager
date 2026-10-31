@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
@@ -112,17 +112,28 @@ async def get_homepage_trending(request: Request, page: int = Query(2, ge=1, le=
 
 
 @router.get("/recent", summary="Another page of Jellyfin's shows and movies, newest first")
-async def get_homepage_recent(request: Request, page: int = Query(1, ge=1, le=500)) -> dict[str, Any]:
+async def get_homepage_recent(
+    request: Request,
+    page: int = Query(1, ge=1, le=500),
+    mediaType: Literal["", "movie", "tv"] = "",
+) -> dict[str, Any]:
     _ensure_authenticated(request)
     host = request.url.hostname or "127.0.0.1"
     scheme = request.url.scheme or "http"
-    return await asyncio.to_thread(homepage_recent, host, page, scheme)
+    return await asyncio.to_thread(homepage_recent, host, page, scheme, mediaType)
 
 
-@router.get("/art", summary="Poster image for Home rails")
-async def homepage_artwork(request: Request, source: str = "", item_id: str = "") -> Response:
+@router.get("/art", summary="Poster or backdrop image for Home rails")
+async def homepage_artwork(
+    request: Request,
+    source: str = "",
+    item_id: str = "",
+    image: Literal["Primary", "Backdrop", "Thumb"] = "Primary",
+    fillWidth: int = Query(240, ge=1, le=3840),
+    fillHeight: int = Query(360, ge=1, le=2160),
+) -> Response:
     _ensure_authenticated(request)
-    body, content_type = await asyncio.to_thread(homepage_art, source, item_id)
+    body, content_type = await asyncio.to_thread(homepage_art, source, item_id, image, fillWidth, fillHeight)
     if not body:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artwork not found")
     return Response(content=body, media_type=content_type or "image/jpeg")
