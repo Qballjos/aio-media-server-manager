@@ -18,7 +18,6 @@ import jwt
 from fastapi import HTTPException, Request, Response, status
 
 from core.settings import Settings, settings
-from core.tv_devices import TvDevices
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +86,6 @@ class AuthManager:
     def __init__(self, app_settings: Settings = settings) -> None:
         self._settings = app_settings
         self._rate = RateLimiter()
-        self.tv_devices = TvDevices(app_settings.config_dir)
 
     @property
     def _secret_path(self) -> Path:
@@ -285,8 +283,6 @@ class AuthManager:
                 detail="Authentication required.",
             )
 
-        if using_bearer and token.startswith("tv_"):
-            return self.tv_devices.authenticate(request, token)
         payload = self.decode_token(token)
         username = str(payload.get("sub") or "")
         if not username:

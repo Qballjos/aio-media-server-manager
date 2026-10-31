@@ -11,7 +11,6 @@ import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
 import UiSelect from './UiSelect.vue'
 import { timezoneChoices } from './timezones.js'
-import TvConnections from './TvConnections.vue'
 import LanguageSelect from './LanguageSelect.vue'
 import {
   canPromptInstall,
@@ -1920,7 +1919,6 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else-if="section === 'account'">
-      <TvConnections />
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">{{ $t('ACCOUNT') }}</span>
