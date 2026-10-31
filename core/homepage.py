@@ -20,7 +20,6 @@ from applications.catalog import ApplicationCatalog
 from core.app_web_url import app_web_ui_url
 from core.integrations.credentials import get_application_api_key
 from core.integrations.jellyfin import jellyfin_auth_headers
-from core.crypto import secret_store
 from core.integrations.nzbget import NZBGetClient
 from core.integrations.plex import PlexClient
 from core.integrations.qbittorrent import QBittorrentClient
@@ -1696,48 +1695,6 @@ def _jellyfin_recent_row(row: dict[str, Any], web: str) -> dict[str, Any]:
         "_kind": "show" if kind == "Series" else "movie",
         "_id": item_id,
     }
-
-
-def homepage_resume() -> dict[str, Any]:
-    """Jellyfin resume/next-up through AIO; only display metadata leaves the manager."""
-    catalog = ApplicationCatalog()
-    key = secret_store.get_secret("jellyfin_api_key")
-    if not key or not catalog.has("jellyfin") or "jellyfin" not in _running_names():
-        return {"items": []}
-    plugin = catalog.get("jellyfin")
-    base = f"http://127.0.0.1:{plugin.port}"
-    headers = jellyfin_auth_headers(key)
-    users, error = _fetch_json(base + "/Users", headers=headers)
-    if error or not isinstance(users, list):
-        return {"items": []}
-    buckets = []
-    fields = {"Id", "Name", "Type", "SeriesName", "SeriesId", "ParentIndexNumber", "IndexNumber", "ProductionYear"}
-    for user in users[:16]:
-        user_id = str(user.get("Id", "")) if isinstance(user, dict) else ""
-        if not re.fullmatch(r"[a-fA-F0-9-]{32,36}", user_id):
-            continue
-        rows = []
-        for path in (f"/Users/{user_id}/Items/Resume", "/Shows/NextUp"):
-            data, error = _fetch_json(base + path, headers=headers, params={"userId": user_id, "Limit": 24, "Fields": "ProductionYear,SeriesName"})
-            if error:
-                break
-            for row in (data.get("Items", []) if isinstance(data, dict) else []):
-                if isinstance(row, dict):
-                    rows.append({name: row[name] for name in fields if name in row})
-        if rows:
-            buckets.append(rows)
-        if error:
-            break
-    seen, result = set(), []
-    for rows in sorted(buckets, key=len, reverse=True):
-        for row in rows:
-            item_id = row.get("Id")
-            if isinstance(item_id, str) and item_id not in seen:
-                seen.add(item_id)
-                result.append(row)
-                if len(result) == 40:
-                    return {"items": result}
-    return {"items": result}
 
 
 def _collect_jellyfin_recent(

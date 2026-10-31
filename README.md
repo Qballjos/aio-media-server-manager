@@ -1,8 +1,5 @@
 # AIO Media Server Manager
 
-**TV Thuis:** connect your Android / Google TV launcher with a one-use pairing link from
-**Settings → Account → TV connections**. See [pairing and API details](docs/tv-thuis.md).
-
 <p align="center">
   <img src="logo-aio-media-manager.png" alt="AIO Media Server Manager" width="128" />
 </p>
