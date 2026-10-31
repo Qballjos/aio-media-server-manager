@@ -1,5 +1,14 @@
 /** English source text → [Nederlands, Deutsch, Français]. */
 export const TABLE = {
+  'TV connections': ['Tv-koppelingen', 'TV-Verbindungen', 'Connexions TV'],
+  'Connect TV Thuis without entering passwords or API keys on your TV.': ['Koppel TV Thuis zonder wachtwoorden of API-sleutels op je tv in te voeren.', 'Verbinde TV Thuis, ohne Passwörter oder API-Schlüssel am Fernseher einzugeben.', 'Associez TV Thuis sans saisir de mots de passe ni de clés API sur le téléviseur.'],
+  'On the TV, choose AIO Media → Connect with AIO and scan the QR code. Create a link here and paste it on that phone page.': ['Kies op de tv AIO Media → Koppelen met AIO en scan de QR-code. Maak hier een link en plak die op de telefoonpagina.', 'Wähle am Fernseher AIO Media → Mit AIO verbinden und scanne den QR-Code. Erstelle hier einen Link und füge ihn auf der Handyseite ein.', 'Sur le téléviseur, choisissez AIO Media → Associer à AIO et scannez le QR code. Créez un lien ici et collez-le sur la page du téléphone.'],
+  'Create pairing link': ['Koppellink maken', 'Kopplungslink erstellen', 'Créer un lien d’association'],
+  'This link works once for five minutes. A new link replaces the previous one. It allows media browsing and requests, not server administration.': ['Deze link werkt één keer gedurende vijf minuten. Een nieuwe link vervangt de vorige. De tv krijgt toegang tot media, verder kijken en aanvragen, zonder serverbeheer.', 'Dieser Link funktioniert einmal für fünf Minuten. Ein neuer Link ersetzt den vorherigen. Er erlaubt Medien, Weiterschauen und Anfragen, keine Serververwaltung.', 'Ce lien fonctionne une fois pendant cinq minutes. Un nouveau lien remplace le précédent. Il permet les médias, la reprise de lecture et les demandes, sans administration du serveur.'],
+  'Pairing link': ['Koppellink', 'Kopplungslink', 'Lien d’association'],
+  'Copy link': ['Link kopiëren', 'Link kopieren', 'Copier le lien'],
+  'Copied': ['Gekopieerd', 'Kopiert', 'Copié'],
+  'Disconnect': ['Ontkoppelen', 'Trennen', 'Déconnecter'],
   'Home': ['Start', 'Start', 'Accueil'],
   'Catalog': ['Catalogus', 'Katalog', 'Catalogue'],
   'Settings': ['Instellingen', 'Einstellungen', 'Réglages'],

@@ -9,12 +9,14 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
+from core.tv_devices import is_tv_request
 from core.debug_access import require_local_or_session
 from core.homepage import (
     homepage_art,
     homepage_downloads,
     homepage_prowlarr_grab,
     homepage_recent,
+    homepage_resume,
     homepage_request,
     homepage_request_options,
     homepage_search,
@@ -54,7 +56,8 @@ async def get_homepage(request: Request, refresh: bool = False) -> dict[str, Any
     host = request.url.hostname or "127.0.0.1"
     scheme = request.url.scheme or "http"
     # Seerr's links to Radarr/Sonarr/Jellyfin need the address the browser uses; fire and forget.
-    asyncio.get_running_loop().run_in_executor(None, sync_seerr_external_links, host)
+    if not is_tv_request(request):
+        asyncio.get_running_loop().run_in_executor(None, sync_seerr_external_links, host)
     return await asyncio.to_thread(homepage_snapshot, host, force=refresh, scheme=scheme)
 
 
@@ -62,6 +65,12 @@ async def get_homepage(request: Request, refresh: bool = False) -> dict[str, Any
 async def get_homepage_downloads(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
     return await asyncio.to_thread(homepage_downloads)
+
+
+@router.get("/resume", summary="Continue watching without exporting Jellyfin credentials")
+async def get_homepage_resume(request: Request) -> dict[str, Any]:
+    auth_manager.authenticate_request(request)
+    return await asyncio.to_thread(homepage_resume)
 
 
 @router.get("/other-downloads", summary="Downloads that are not films or series")
@@ -135,7 +144,10 @@ async def request_options(request: Request, mediaType: str = "movie") -> dict[st
 @router.post("/request", summary="Submit a Seerr request")
 async def request_media(request: Request, body: HomepageRequestBody) -> dict[str, Any]:
     _ensure_authenticated(request)
-    result = await asyncio.to_thread(homepage_request, body.model_dump())
+    payload = body.model_dump()
+    if is_tv_request(request):
+        payload = {key: payload[key] for key in ("mediaType", "mediaId", "seasons")}
+    result = await asyncio.to_thread(homepage_request, payload)
     if not result.get("ok"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("detail"))
     return result
