@@ -19,6 +19,7 @@ from fastapi import HTTPException, Request, Response, status
 
 from core.settings import Settings, settings
 from core.tv_devices import TvDevices
+from core.homey_connections import HomeyConnections
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ class AuthManager:
         self._settings = app_settings
         self._rate = RateLimiter()
         self.tv_devices = TvDevices(app_settings.config_dir)
+        self.homey_connections = HomeyConnections(app_settings.config_dir)
 
     @property
     def _secret_path(self) -> Path:
@@ -287,6 +289,8 @@ class AuthManager:
 
         if using_bearer and token.startswith("tv_"):
             return self.tv_devices.authenticate(request, token)
+        if using_bearer and token.startswith("homey_"):
+            return self.homey_connections.authenticate(request, token)
         payload = self.decode_token(token)
         username = str(payload.get("sub") or "")
         if not username:

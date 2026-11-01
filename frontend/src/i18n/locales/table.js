@@ -1,5 +1,16 @@
 /** English source text → [Nederlands, Deutsch, Français]. */
 export const TABLE = {
+  "Homey connections": ["Homey-koppelingen", "Homey-Verbindungen", "Connexions Homey"],
+  "Connect Homey with a one-use code. Homey can only read dashboard data.": ["Koppel Homey met een eenmalige code. Homey kan alleen dashboardgegevens lezen.", "Verbinde Homey mit einem einmaligen Code. Homey kann nur Dashboard-Daten lesen.", "Associez Homey avec un code à usage unique. Homey peut uniquement lire les données du tableau de bord."],
+  "In Homey, add AIO Media Server Manager and enter this server address.": ["Voeg in Homey AIO Media Server Manager toe en vul dit serveradres in.", "Füge in Homey AIO Media Server Manager hinzu und gib diese Serveradresse ein.", "Dans Homey, ajoutez AIO Media Server Manager et saisissez cette adresse de serveur."],
+  "Create a code here and paste it in the Homey pairing screen.": ["Maak hier een code en plak die in het koppelscherm van Homey.", "Erstelle hier einen Code und füge ihn im Homey-Kopplungsfenster ein.", "Créez un code ici et collez-le dans l’écran d’association Homey."],
+  "Create Homey code": ["Homey-code maken", "Homey-Code erstellen", "Créer un code Homey"],
+  "Homey pairing code": ["Homey-koppelcode", "Homey-Kopplungscode", "Code d’association Homey"],
+  "Copy code": ["Code kopiëren", "Code kopieren", "Copier le code"],
+  "Homey can read what is playing and recently added titles. It cannot change settings or control playback.": ["Homey kan afspeelsessies en recent toegevoegde titels lezen. Het kan geen instellingen wijzigen of afspelen bedienen.", "Homey kann Wiedergaben und kürzlich hinzugefügte Titel lesen. Es kann keine Einstellungen oder Wiedergabe steuern.", "Homey peut lire les lectures en cours et les titres récemment ajoutés. Il ne peut ni modifier les réglages ni contrôler la lecture."],
+  "Connected Homeys": ["Gekoppelde Homeys", "Verbundene Homeys", "Homeys associés"],
+  "No Homeys connected yet.": ["Nog geen Homeys gekoppeld.", "Noch keine Homeys verbunden.", "Aucun Homey associé."],
+
   'TV connections': ['Tv-koppelingen', 'TV-Verbindungen', 'Connexions TV'],
   'Connect TV Thuis using your phone, without typing passwords on your TV.': ['Koppel TV Thuis via je telefoon, zonder wachtwoorden op je tv in te typen.', 'Verbinde TV Thuis über dein Handy, ohne Passwörter am Fernseher einzutippen.', 'Associez TV Thuis avec votre téléphone, sans saisir de mots de passe sur le téléviseur.'],
   'On your TV, open AIO Media → Connect with AIO and scan the QR code.': ['Open op je tv AIO Media → Koppelen met AIO en scan de QR-code.', 'Öffne am Fernseher AIO Media → Mit AIO verbinden und scanne den QR-Code.', 'Sur le téléviseur, ouvrez AIO Media → Associer à AIO et scannez le QR code.'],
