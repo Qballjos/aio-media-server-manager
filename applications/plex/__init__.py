@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import requests
@@ -46,10 +47,76 @@ MANIFEST = AppManifest(
 class PlexApp(BaseApplication):
     manifest = MANIFEST
 
+    @property
+    def home_dir(self) -> Path:
+        exe = self.executable_path()
+        if exe is not None:
+            real_parent = exe.resolve().parent
+            if (real_parent / "Resources").is_dir():
+                return real_parent
+
+        deb_home = self.install_dir / "usr" / "lib" / "plexmediaserver"
+        if (deb_home / "Resources").is_dir():
+            return deb_home
+
+        res_path = self.install_dir / "Resources"
+        if res_path.is_dir() and not res_path.is_symlink():
+            return self.install_dir
+
+        if self.install_dir.is_dir():
+            for res_dir in self.install_dir.rglob("Resources"):
+                if res_dir.is_dir() and not res_dir.is_symlink() and (res_dir / "cacert.pem").is_file():
+                    return res_dir.parent
+
+        if exe is not None:
+            return exe.resolve().parent
+
+        return self.install_dir
+
+    def working_directory(self) -> Path | None:
+        return self.home_dir
+
+    def _ensure_symlinks(self) -> None:
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        home = self.home_dir
+        if home != self.install_dir and home.is_dir():
+            for item in ("Resources", "lib", self.executable_name):
+                src = home / item
+                dst = self.install_dir / item
+                if src.exists() and not dst.exists():
+                    try:
+                        dst.symlink_to(src)
+                    except OSError:
+                        pass
+
+    def post_install(self) -> None:
+        self._ensure_symlinks()
+
     def extra_env(self) -> dict[str, str]:
-        env = {
+        self._ensure_symlinks()
+        home = self.home_dir
+        lib_dir = home / "lib"
+
+        existing_ld = os.environ.get("LD_LIBRARY_PATH", "")
+        ld_dirs = [str(home)]
+        if lib_dir.is_dir():
+            ld_dirs.append(str(lib_dir))
+        if existing_ld:
+            ld_dirs.append(existing_ld)
+
+        existing_path = os.environ.get("PATH", "")
+        path_dirs = [str(home)]
+        if existing_path:
+            path_dirs.append(existing_path)
+
+        env: dict[str, str] = {
             "PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR": str(self.config_dir),
-            "PLEX_MEDIA_SERVER_HOME": str(self.install_dir),
+            "PLEX_MEDIA_SERVER_HOME": str(home),
+            "PLEX_MEDIA_SERVER_MAX_PLUGIN_PROCS": "6",
+            "PLEX_MEDIA_SERVER_INFO_VENDOR": "aio-media-server-manager",
+            "PLEX_MEDIA_SERVER_INFO_DEVICE": "aio-media-server-manager",
+            "LD_LIBRARY_PATH": ":".join(ld_dirs),
+            "PATH": ":".join(path_dirs),
         }
         claim = secret_store.get_secret("plex_claim")
         if claim:
@@ -87,8 +154,9 @@ class PlexApp(BaseApplication):
                 f"Refusing to install Plex asset '{filename}': "
                 f"it does not match host arch={host_arch.value}."
             )
-        archive_path = settings.cache_dir / "downloads" / filename
-        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_dir = installer.settings.cache_dir / "downloads"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = cache_dir / filename
         sha = installer.download_file(url, archive_path)
         exe = installer.activate_archive(
             archive_path=archive_path,
@@ -111,6 +179,7 @@ class PlexApp(BaseApplication):
             ),
             encoding="utf-8",
         )
+        self.post_install()
         return InstallResult(
             app_name=self.name,
             version=version,
