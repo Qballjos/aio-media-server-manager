@@ -207,3 +207,7 @@ Report vulnerabilities through [GitHub private advisories](https://github.com/Qb
 ## License
 
 [MIT](LICENSE)
+
+## Homey dashboard integration
+
+Homey can pair with AIO using a five-minute, one-use code from **Settings → Homey connections**. Each connection gets its own revocable, read-only dashboard credential. No admin password, TV credential or media-server key is exported. The companion Homey app shows server status, Now playing and Recently added widgets. See [Homey protocol and setup](docs/homey.md).
