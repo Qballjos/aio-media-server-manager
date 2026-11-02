@@ -35,7 +35,7 @@ On macOS arm64, 2 November 2026:
   scroll behavior and consistent font families.
 - Ruff, frontend production build and strict documentation build: **passed**.
 - Changed CI workflows parsed successfully. Native Linux amd64/arm64 CI is
-  configured. In [beta run 41536074848](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41536074848), both native browser jobs and the frontend build passed. Python 3.11/3.12/3.14 exposed an unsafe-path validation ordering bug on Linux; this checkout validates archive paths before exclusion filters. The corrected Python 3.11/3.12/3.14 jobs passed in [run 41537035155](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41537035155). That run also exposed a mobile setup-test locator whose indices changed while unchecking options; the test now selects a stable list. A subsequent remote run must verify the full workflow.
+  configured. In [beta run 41536074848](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41536074848), both native browser jobs and the frontend build passed. Python 3.11/3.12/3.14 exposed an unsafe-path validation ordering bug on Linux; this checkout validates archive paths before exclusion filters. The corrected Python 3.11/3.12/3.14 jobs passed in [run 41537035155](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41537035155). That run also exposed a mobile setup-test locator whose indices changed while unchecking options; the test now selects a stable list. The complete corrected workflow [41537663957](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41537663957) passed on beta commit `22be3d7`, including both browser architectures, all three Python versions, both Docker builds and nightly publication.
 
 Coverage percentage was not measured. Browser service adapters are synthetic;
 real media-app installation and external WebDAV acceptance remain open below.
@@ -59,9 +59,9 @@ appliance image job. Do not present ARMv7 as a supported Docker image.
 
 | Environment | Automated coverage configured | Acceptance status |
 | --- | --- | --- |
-| Python logic on Linux amd64 | Existing Python CI (3.11, 3.12, 3.14) | Python 3.11/3.12/3.14 passed in run 41537035155 |
-| Browser journeys on Linux amd64 | Native amd64 job, desktop and mobile Chromium | Passed in beta run 41536074848 |
-| Browser journeys on Linux arm64 | Native `ubuntu-24.04-arm` job, desktop and mobile Chromium | Passed in beta run 41536074848 |
+| Python logic on Linux amd64 | Existing Python CI (3.11, 3.12, 3.14) | Python 3.11/3.12/3.14 passed in run 41537663957 |
+| Browser journeys on Linux amd64 | Native amd64 job, desktop and mobile Chromium | Passed in beta run 41537663957 |
+| Browser journeys on Linux arm64 | Native `ubuntu-24.04-arm` job, desktop and mobile Chromium | Passed in beta run 41537663957 |
 | macOS arm64 | Local Python, Node and Chromium tests | Local evidence only; not a Linux appliance installation |
 | Docker amd64 / arm64 real catalog apps | Architecture-specific image builds exist | Full install/start/auto-wire acceptance still needed |
 | Native Linux / LXC | Installation scripts and tests exist | Full catalog acceptance still needed |
@@ -102,7 +102,7 @@ reproducible logs. Known upstream gaps must stay explicit.
 
 ## Next priorities
 
-1. Confirm the corrected Python jobs and image publication in the next beta workflow run.
+1. Retain the successful beta workflow [41537663957](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41537663957) as the automated baseline for real-appliance acceptance.
 2. Validate every supported catalog app on actual Docker amd64/arm64 appliances,
    then the advertised NAS/native platforms.
 3. Test a real WebDAV destination and recovery on a replacement host.
