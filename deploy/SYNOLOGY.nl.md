@@ -1,125 +1,84 @@
-# Synology
+# Synology: AIO stap voor stap installeren
 
-Draai AIO als **één** Container Manager-**project**. Voeg geen extra services of losse Sonarr-/Radarr-/downloadcontainers ernaast toe.
+Deze route is voor een **nieuwe installatie**. Je maakt één project in Container Manager. Je hoeft geen instellingenbestand te schrijven en geen losse mediatools te installeren.
 
-**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
-Je DSM moet `linux/amd64`- of `linux/arm64`-images kunnen draaien.
+## Dit heb je nodig
 
-## Installeer eerst Container Manager
+- Een Synology NAS waarop **Container Manager** beschikbaar is in Package Center.
+- Je eigen DSM-gebruikersnaam en wachtwoord, met beheerdersrechten. Gebruik niet zomaar de voorbeeldnaam `admin`.
+- Een computer op hetzelfde thuisnetwerk. Houd DSM in je browser open.
 
-Installeer en start **Container Manager** via DSM Package Center voordat je dit script uitvoert. Laat DSM de gedeelde map `docker` maken; maak `/volume1/docker` niet vooraf handmatig aan. Het script controleert het pakket, de Docker-engine en de bestaande map `${VOLUME}/docker` voordat het iets aanmaakt of migreert. Gebruik `VOLUME` voor het volume waarop DSM deze map heeft gemaakt.
+## 1. Installeer Container Manager
 
-## Mappen en het project maken (SSH)
+Open DSM in je browser. Ga naar **Package Center**, zoek **Container Manager** en klik op **Installeren**. Rond de installatie af en open het pakket.
 
-Zet SSH aan (**Configuratiescherm → Terminal en SNMP → SSH-service inschakelen**) en daarna:
+**Controle:** open File Station. Er moet nu een gedeelde map **docker** zijn. Maak deze map niet vooraf zelf. Deze beginnersroute gebruikt de standaardlocatie op volume1; staat docker op een ander volume, gebruik dan de [geavanceerde Synology-gids](SYNOLOGY_ADVANCED.md).
+
+## 2. Zet de persoonlijke map en SSH aan
+
+Ga in DSM naar **Configuratiescherm → Gebruiker en groep → Geavanceerd**. Schakel de **gebruikerbasismapservice / User Home Service** in. Die geeft jouw DSM-account een persoonlijke map voor downloads en media.
+
+Ga daarna naar **Configuratiescherm → Terminal en SNMP → Terminal** en schakel **SSH-service inschakelen** in. Laat poort **22** staan en klik op **Toepassen**.
+
+**Controle:** in File Station zie je **home**. In Terminal en SNMP staat SSH aangevinkt.
+
+## 3. Maak vanaf je computer verbinding met de NAS
+
+Open **Terminal** op een Mac of **Windows Terminal / PowerShell** op Windows. Dit is de app waarin je opdrachten typt; niet de adresbalk van je browser.
+
+Typ `ssh GEBRUIKERSNAAM@NAS-IP`. Vervang beide delen. Voor gebruiker `alex` en NAS-adres `192.168.1.50` wordt dat:
 
 ```bash
-ssh admin@<nas-ip>
+ssh alex@192.168.1.50
 ```
 
-Het installatiescript maakt `/volume1/docker/aio-media-manager` (met `config/` en `backups/`) en een databoom in de **DSM-gebruikershome** (`File Station → Home → aio-media-manager` met `downloads/` en `media/`). Dat pad is een echte gebruikershome, dus DSM kan het tonen. Een kale map `/volume1/data` is geen gedeelde map en verschijnt niet in File Station; het script opnieuw draaien verplaatst die boom naar home als hij nog bestaat. Downloads en media blijven één bind (`/data`), zodat *Arr kan hardlinken. Config-back-ups gaan naar de `/backups`-mount; neem die map op in een Hyper Backup-taak, of wijs `BACKUPS=` naar een ander volume.
+Gebruik je eigen gegevens, niet dit voorbeeldadres. Het NAS-adres vind je in de adresbalk van DSM of bij **Configuratiescherm → Netwerk → Netwerkinterface**. Bevestig de eerste verbinding alleen als het adres klopt. Voer je DSM-wachtwoord in. Tijdens het typen verschijnen geen tekens; dat is normaal.
 
-User Home Service moet aan staan (Configuratiescherm → Gebruiker en groep → Geavanceerd). SSH als de DSM-gebruiker wiens Home de bibliotheken moet bevatten, of zet `HOME_USER=`.
+**Controle:** de opdrachtregel toont nu de naam van je NAS. Vanaf nu draaien de volgende opdrachten op de NAS.
+
+## 4. Laat AIO de projectbestanden maken
+
+Kopieer dit hele blok naar het terminalvenster waarin je met de NAS bent verbonden en druk op Enter:
 
 ```bash
-id
 curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sudo sh
 ```
 
-Als SSH `admin` is maar Home van een andere DSM-gebruiker moet zijn:
+Dit haalt het voorbereidingsscript op en maakt de mappen en het projectbestand. Het start AIO nog niet. Vraagt sudo om een wachtwoord? Gebruik opnieuw je DSM-wachtwoord.
 
-```bash
-id media
-sudo HOME_USER=media PUID=1026 PGID=100 sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
-```
+**Controle:** het script eindigt met **Container Manager project files are ready**. Noteer de regel **Compose** en de projectmap die daar staat. Zie je een fout? Ga niet verder met een half aangemaakt project.
 
-Ander volume of andere paden:
+## 5. Maak het project in Container Manager
 
-```bash
-sudo VOLUME=/volume2 \
-     HOME_USER=media \
-     BACKUPS=/volume1/backups/aio-media-manager \
-     PUID=1026 PGID=100 \
-     sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
-```
+Ga terug naar DSM. Open **Container Manager → Project → Maken / Create**.
 
-Om bibliotheken op een gedeelde DSM-map te houden in plaats van Home, zet je `DATA=` op die map (nog steeds één ouder voor `downloads` en `media`):
+1. Naam: **aio-media-manager**.
+2. Pad: kies de projectmap die het script heeft getoond; standaard **docker → aio-media-manager**.
+3. Gebruik het **bestaande docker-compose.yml** in die map. Vraagt jouw DSM om uploaden? Selecteer dat aangemaakte bestand; maak geen tweede bestand met andere instellingen.
+4. Laat de gegenereerde instellingen staan en rond de wizard af. Start het project.
 
-```bash
-sudo DATA=/volume1/media/aio-media-manager \
-     PUID=1026 PGID=100 \
-     sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
-```
+**Controle:** het project bevat één container met de naam **aio-media-manager**. De status wordt actief. Het downloaden van de eerste versie kan enkele minuten duren.
 
-Het gegenereerde bestand is `/volume1/docker/aio-media-manager/docker-compose.yml` (geen `build:`-sleutel — Container Manager haalt GHCR op). Een statische kopie staat in [`synology/docker-compose.yml`](synology/docker-compose.yml).
+## 6. Open je nieuwe dashboard
 
-Als GHCR privé is: `sudo docker login ghcr.io` voordat je het project start.
+Open een nieuw browsertabblad met **http://NAS-IP:8080**. Voor de voorbeeld-NAS is dat `http://192.168.1.50:8080`; gebruik jouw eigen adres.
 
-## Optionele SSD-downloadopslag
+**Controle:** AIO vraagt om een beheerdersaccount. Maak dat aan en rond de wizard af. De apps kies je daar; je hoeft niet alle apps te installeren. Je bestanden komen standaard in **File Station → home → aio-media-manager**.
 
-Maak eerst via DSM een gedeelde map op een ondersteund SSD-opslagvolume, bijvoorbeeld `/volume2/download-cache`. Met `DOWNLOAD_CACHE` gaan onvolledige downloads en Usenet-uitpakken naar die SSD. Afgeronde torrents en geïmporteerde media blijven op de gewone DATA-locatie. SSD-HDD-imports kopiëren bestanden. DSM SSD-cache heeft geen map die je kunt mounten en versnelt grote sequentiële overdrachten niet gegarandeerd; een eigen SSD-volume geeft voorspelbare plaatsing. Het script formatteert geen schijven. Houd genoeg vrije ruimte voor downloaden plus uitpakken en stel een ondergrens in de clients in. Migreer bestaande stagingbestanden met AIO gestopt voordat je de mounts toevoegt. Geef bij opnieuw uitvoeren dezelfde DOWNLOAD_CACHE mee. Zie [volledige SSD-uitleg en bron](https://qballjos.github.io/aio-media-server-manager/deploy/SYNOLOGY/#optional-ssd-download-workspace).
+Je kunt de SSH-verbinding daarna afsluiten met `exit`. SSH weer uitschakelen in DSM stopt AIO niet.
 
-```bash
-sudo DOWNLOAD_CACHE=/volume2/download-cache/aio-media-manager \
-     PUID=1026 PGID=100 \
-     sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
-```
+Na installatie: [zo gebruik je het dashboard](../docs/USAGE.md).
 
-## Importeren in Container Manager
+## Als het niet lukt
 
-1. Open **Container Manager → Project → Maken**.
-2. **Projectnaam:** `aio-media-manager`
-3. **Pad:** `/volume1/docker/aio-media-manager` (dezelfde map die het script gebruikte).
-4. **Bron:** gebruik het **bestaande** `docker-compose.yml` (plak geen tweede compose-bestand en voeg geen extra services toe).
-5. Start het project.
+| Wat zie je? | Wat doe je? |
+|---|---|
+| Container Manager ontbreekt in Package Center | Controleer bij Synology of jouw model het pakket ondersteunt. Maak niet handmatig een docker-map als vervanging. |
+| Er staat Permission denied of het script stopt | Controleer je DSM-account, of Container Manager actief is en of de map docker bestaat. Bewaar de precieze foutmelding. |
+| De browser kan AIO niet openen | Controleer dat het project actief is. Gebruik het NAS-adres, niet het adres van je laptop, met :8080 erachter. |
 
-De interface hoort één service `aio-media-manager` te tonen. Open `http://<nas-ip>:8080` voor de manager. **Interface openen** op cataloguskaarten gebruikt de app-poorten (Sonarr `8989`, Radarr `7878`, …), die het project-compose nu publiceert. Als je compose vóór die wijziging hebt gegenereerd, kopieer dan de `ports:`-lijst uit [`synology/docker-compose.yml`](synology/docker-compose.yml) naar het projectbestand en maak de container opnieuw aan.
+## Geavanceerd
 
-Het installatiescript mount host-`/sys` ook alleen-lezen op `/host/sys`, zodat de serverkaart op Start het netwerkverkeer van de NAS toont. Als het project-compose daarvóór is gegenereerd, voeg `- /sys:/host/sys:ro` toe onder `volumes:` en maak opnieuw aan. Zonder die regel is de grafiek alleen het verkeer van deze container. Geïnstalleerde apps werk je later bij via **Instellingen → Updates** (schema’s staan standaard uit). Het project opnieuw aanmaken werkt AIO bij.
+Voor andere opslaglocaties, SSD-instellingen, bestaande installaties en technische opties: [SYNOLOGY — Geavanceerd](SYNOLOGY_ADVANCED.md).
 
-Om vanuit SSH te starten in plaats van de interface:
-
-```bash
-sudo docker compose -f /volume1/docker/aio-media-manager/docker-compose.yml pull
-sudo docker compose -f /volume1/docker/aio-media-manager/docker-compose.yml up -d
-```
-
-Daarna toont Container Manager het nog steeds als het projectpad overeenkomt.
-
-## Hardware-transcoden
-
-Als `/dev/dri` bestaat, voeg dit blok toe onder `aio-media-manager` in het project-compose-bestand, maak daarna opnieuw aan en start het project:
-
-```yaml
-    devices:
-      - /dev/dri:/dev/dri
-```
-
-```bash
-ls -l /dev/dri
-```
-
-## VPN (qBittorrent, Prowlarr, Flaresolverr)
-
-```bash
-sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
-# scp wg0.conf into that directory
-```
-
-Zet `AMM_VPN_ENABLED=true` in het project-compose en start het project opnieuw. Zolang de VPN aan staat, kunnen Prowlarr, qBittorrent en Flaresolverr het huis-WAN niet gebruiken: ze gaan alleen via de tunnel naar buiten. Is de tunnel bij boot down, dan wachten ze; AIO probeert de VPN opnieuw en start ze als de handshake terug is. Een lokale DNS-cache voor die apps (gebonden aan de tunnel) vermindert indexer-fouten door korte DNS-timeouts. De kernel van Synology heeft vaak geen WireGuard-module; de appliance-image bevat **wireguard-go** als terugval en maakt `/dev/net/tun` aan als die ontbreekt. Dat werkt alleen als het project `privileged: true` blijft (het installatiescript zet dat). Maak de container opnieuw aan nadat je een actuele image hebt opgehaald, en sla de VPN daarna op bij **Instellingen → Netwerk**. OpenVPN gebruikt dezelfde device-node en heeft ook privileged mode nodig. Op DSM kan Synology-ACL de VPN-app-uid (910) na `chown` blokkeren; als die apps hun configmap niet kunnen schrijven, wis de ACL op het hostpad zoals de logs beschrijven.
-
-## Cloudflare Tunnel
-
-Voeg geen tweede projectservice toe. Schrijf de token op de NAS en zet de tunnel daarna aan bij **Instellingen → Netwerk** (bewaard over herstarts heen). Optioneel zet je `AMM_CLOUDFLARE_TUNNEL_ENABLED=true` in het project-compose. Zie [CLOUDFLARE.md](CLOUDFLARE.md).
-
-```bash
-sudo mkdir -p /volume1/docker/aio-media-manager/config/cloudflare
-sudo tee /volume1/docker/aio-media-manager/config/cloudflare/tunnel.token >/dev/null <<'EOF'
-eyJ...paste-token...
-EOF
-sudo chmod 600 /volume1/docker/aio-media-manager/config/cloudflare/tunnel.token
-```
-
-## Rechten
-
-`PUID`/`PGID` in het compose-bestand moeten overeenkomen met de `chown` die het script heeft toegepast. Als apps niet kunnen schrijven, herstel het eigendom via SSH in plaats van als root te draaien.
+[Officiële producthulp: Synology](https://kb.synology.com/en-global/DSM/help/ContainerManager/docker_project?version=7).

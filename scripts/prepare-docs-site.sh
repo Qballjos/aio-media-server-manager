@@ -23,6 +23,9 @@ copy_localized() {
 copy_localized "${ROOT}/docs" index "${OUT}"
 copy_localized "${ROOT}/docs" INSTALL "${OUT}"
 copy_localized "${ROOT}/docs" USAGE "${OUT}"
+copy_localized "${ROOT}/docs" USAGE_ADVANCED "${OUT}"
+copy_localized "${ROOT}/docs" ADVANCED "${OUT}"
+copy_localized "${ROOT}/docs" REFERENCE "${OUT}"
 
 if [[ -d "${ROOT}/docs/assets" ]]; then
   cp -R "${ROOT}/docs/assets/." "${OUT}/assets/"
@@ -44,7 +47,7 @@ if [[ -d "${ROOT}/frontend/public/app-icons" ]]; then
   cp -R "${ROOT}/frontend/public/app-icons/." "${OUT}/assets/app-icons/"
 fi
 
-for name in README DOCKER LINUX UNRAID SYNOLOGY TRUENAS CLOUDFLARE CLOUDFLARE_ACCESS; do
+for name in README DOCKER DOCKER_ADVANCED LINUX UNRAID UNRAID_ADVANCED SYNOLOGY SYNOLOGY_ADVANCED TRUENAS TRUENAS_ADVANCED CLOUDFLARE CLOUDFLARE_ACCESS; do
   copy_localized "${ROOT}/deploy" "${name}" "${OUT}/deploy"
 done
 
@@ -65,6 +68,9 @@ def rewrite(text: str, *, kind: str) -> str:
         text = text.replace("](../.env.example)", f"]({repo_root}/.env.example)")
         text = text.replace("](../CONTRIBUTING.md)", f"]({repo_root}/CONTRIBUTING.md)")
     if kind == "deploy":
+        text = text.replace("](../docs/USAGE_ADVANCED.md", "](../USAGE_ADVANCED.md")
+        text = text.replace("](../docs/ADVANCED.md", "](../ADVANCED.md")
+        text = text.replace("](../docs/REFERENCE.md", "](../REFERENCE.md")
         text = text.replace("](../docs/USAGE.md", "](../USAGE.md")
         text = text.replace("](../docs/INSTALL.md", "](../INSTALL.md")
         text = text.replace("](../CONTRIBUTING.md)", f"]({repo_root}/CONTRIBUTING.md)")
@@ -81,9 +87,9 @@ def kind_for(path: Path) -> str | None:
     if path.parent.name == "deploy":
         return "deploy"
     base = path.name.split(".", 1)[0]
-    if base == "INSTALL":
+    if base in {"INSTALL", "REFERENCE"}:
         return "install"
-    if base == "USAGE":
+    if base in {"USAGE", "USAGE_ADVANCED"}:
         return "usage"
     return None
 

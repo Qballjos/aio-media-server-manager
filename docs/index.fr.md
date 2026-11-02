@@ -9,12 +9,12 @@ title: AIO Media Server Manager
 <section class="landing-hero" aria-labelledby="landing-title">
 <div class="landing-intro">
 <p class="eyebrow">VOTRE SERVEUR. VOS MÉDIAS. VOS RÈGLES.</p>
-<h1 id="landing-title">Tous vos outils média.<br>
-<span>Enfin réunis.</span>
+<h1 id="landing-title">Votre serveur média complet.<br>
+<span>Moins de réglages. Plus de cinéma.</span>
 </h1>
-<p class="landing-lead">Téléchargements, bibliothèques, demandes et streaming. Une installation. Tout au même endroit.</p>
+<p class="landing-lead">Installez une fois, choisissez vos applications et laissez AIO relier les outils compatibles. Commencez avec l’assistant, puis configurez sauvegardes, mises à jour et options avancées selon vos besoins.</p>
 <div class="landing-actions">
-<a class="landing-button primary" href="INSTALL.md">Commencer <span aria-hidden="true">↗</span>
+<a class="landing-button primary" href="#install">Installer AIO <span aria-hidden="true">↗</span>
 </a>
 <a class="landing-button" href="#app-preview">Découvrir le tableau de bord <span aria-hidden="true">↓</span>
 </a>
@@ -27,7 +27,8 @@ title: AIO Media Server Manager
 <div class="showcase-wrap" id="app-preview" role="region" aria-label="Aperçu de l’interface AIO">
 <div class="preview-controls js-only">
 <div class="preview-tabs" role="tablist" aria-label="Aperçu de l’interface AIO">
-<button type="button" role="tab" id="preview-tab-home" aria-controls="preview-panel-home" aria-selected="true" tabindex="0" data-screen="home">Tableau de bord</button>
+<button type="button" role="tab" id="preview-tab-current" aria-controls="preview-panel-current" aria-selected="true" tabindex="0" data-screen="current">App actuelle</button>
+<button type="button" role="tab" id="preview-tab-home" aria-controls="preview-panel-home" aria-selected="false" tabindex="-1" data-screen="home">Essayer les widgets</button>
 <button type="button" role="tab" id="preview-tab-catalog" aria-controls="preview-panel-catalog" aria-selected="false" tabindex="-1" data-screen="catalog">Catalogue</button>
 <button type="button" role="tab" id="preview-tab-settings" aria-controls="preview-panel-settings" aria-selected="false" tabindex="-1" data-screen="settings">Réglages</button>
 </div>
@@ -44,11 +45,15 @@ title: AIO Media Server Manager
 <i>
 </i>
 </span>
-<span>aio.home <span aria-hidden="true">/</span> <span data-screen-name>Tableau de bord</span>
+<span>aio.home <span aria-hidden="true">/</span> <span data-screen-name>App actuelle</span>
 </span>
 <span class="browser-lock" aria-hidden="true">⌘</span>
 </div>
-<div class="preview-panel" id="preview-panel-home" role="tabpanel" aria-labelledby="preview-tab-home" data-panel="home">
+<div class="preview-panel" id="preview-panel-current" role="tabpanel" aria-labelledby="preview-tab-current" data-panel="current">
+<img src="__AIO_ASSET__/screenshots/light/home.png" data-preview-image="home" alt="Interface réelle avec exemples fictifs : affiches, téléchargements et dates de sortie des épisodes et films." width="1280" loading="eager">
+<p class="preview-screenshot-caption">Interface réelle avec exemples fictifs : affiches, téléchargements et dates de sortie des épisodes et films.</p>
+</div>
+<div class="preview-panel" id="preview-panel-home" role="tabpanel" aria-labelledby="preview-tab-home" data-panel="home" hidden>
 <div class="demo-dashboard" data-widget-lab>
 <div class="demo-nav">
 <span class="demo-brand">
@@ -246,10 +251,10 @@ title: AIO Media Server Manager
 </div>
 </div>
 <div class="preview-panel" id="preview-panel-catalog" role="tabpanel" aria-labelledby="preview-tab-catalog" data-panel="catalog" hidden>
-<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-preview-image="catalog" alt="Catalogue — Capture de l’application AIO" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-preview-image="catalog" alt="Catalogue — Capture de l’application AIO" width="1280" height="720" loading="lazy">
 </div>
 <div class="preview-panel" id="preview-panel-settings" role="tabpanel" aria-labelledby="preview-tab-settings" data-panel="settings" hidden>
-<img src="__AIO_ASSET__/screenshots/light/settings.png" data-preview-image="settings" alt="Réglages — Capture de l’application AIO" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png" data-preview-image="settings" alt="Réglages — Capture de l’application AIO" width="1280" height="720" loading="lazy">
 </div>
 </div>
 <p class="preview-caption">Aperçu interactif · données fictives<span aria-hidden="true"> · </span>
@@ -271,6 +276,20 @@ title: AIO Media Server Manager
 <noscript>
 <p class="landing-note">Sans JavaScript, l’aperçu reste statique. Les guides et captures restent accessibles.</p>
 </noscript>
+<section class="landing-section" id="how-it-works">
+<div class="section-heading">
+<p class="eyebrow">DE L’INSTALLATION AU QUOTIDIEN</p>
+<h2>Simple pour débuter. De quoi évoluer.</h2>
+</div>
+<ol class="widget-steps">
+<li><span class="step-number">1</span><div><h3>Installer sur votre serveur</h3><p>Choisissez Docker, Unraid, Synology ou TrueNAS ci-dessous. Le guide explique le stockage, les permissions et le démarrage d’AIO.</p></div></li>
+<li><span class="step-number">2</span><div><h3>Choisir vos applications</h3><p>Créez votre compte administrateur et suivez l’assistant. Choisissez votre serveur média et les outils utiles ; ajoutez-en d’autres plus tard.</p></div></li>
+<li><span class="step-number">3</span><div><h3>Laisser AIO les relier</h3><p>AIO configure les connexions compatibles, les clients de téléchargement et les dossiers des bibliothèques. Vous fournissez vos identifiants et sources média.</p></div></li>
+<li><span class="step-number">4</span><div><h3>Personnaliser votre installation</h3><p>Ouvrez vos applications depuis un tableau de bord. Organisez les widgets et configurez sauvegardes, mises à jour et options avancées à votre rythme.</p></div></li>
+</ol>
+<a class="landing-button primary" href="#install">Choisir votre serveur ↓</a>
+<p><a class="landing-text-link" href="ADVANCED.md">Vous avez déjà un serveur média ? Consultez les guides avancés avant de modifier votre installation.</a></p>
+</section>
 <section class="landing-section widget-section" id="widgets">
 <div class="section-heading">
 <p class="eyebrow">UN ACCUEIL À VOTRE IMAGE</p>
@@ -320,18 +339,18 @@ title: AIO Media Server Manager
 <a class="landing-text-link" href="USAGE.md">Découvrir le tableau de bord →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-theme-image="catalog" alt="Catalogue" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-theme-image="catalog" alt="Catalogue" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section feature-row reverse">
 <div>
 <p class="eyebrow">MOINS D’EFFORT. PLUS DE CONTRÔLE.</p>
 <h2>Bien régler, une fois.</h2>
-<p>Stockage, sauvegardes, mises à jour et connexions réunis. Commencez par l’essentiel ; ajoutez l’accès distant plus tard.</p>
+<p>Les réglages sont groupés avec un champ de recherche. Profil et apparence sont dans Personnel, les connexions dans Connexions, les mises à jour et sauvegardes dans Maintenance.</p>
 <a class="landing-text-link" href="USAGE.md#screens">Découvrir le tableau de bord →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/settings.png" data-theme-image="settings" alt="Réglages" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png" data-theme-image="settings" alt="Réglages" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section" id="install">
@@ -374,6 +393,7 @@ title: AIO Media Server Manager
 <p>Inutile de connaître toutes les apps. Le guide explique les prérequis, où cliquer et le résultat attendu.</p>
 <a class="landing-button primary" href="INSTALL.md">Lire le guide d’installation ↗</a>
 </div>
+<p class="advanced-route-link"><a href="ADVANCED.md" class="landing-text-link">Configuration avancée →</a></p>
 </section>
 <section class="landing-section landing-faq">
 <div class="section-heading">

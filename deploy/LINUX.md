@@ -1,5 +1,8 @@
 # Linux / LXC (no Docker)
 
+!!! info "Advanced"
+    This page is for a custom or technical setup. It is not needed for a first local installation. [Beginner guides](../docs/INSTALL.md).
+
 Use this on Debian, Ubuntu, or a Proxmox LXC when you prefer **not** to use Docker.  
 Sonarr and the rest still run as processes under AIO — you do not create a systemd unit per app.
 

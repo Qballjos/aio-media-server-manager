@@ -34,8 +34,6 @@ theme:
         name: Switch to system preference
   features:
     - navigation.tabs
-    - navigation.sections
-    - navigation.expand
     - navigation.top
     - navigation.footer
     - search.suggest
@@ -66,6 +64,14 @@ plugins:
           build: true
           site_description: Eén installatie voor je hele media-stack thuis — downloads, automatisering en afspelen.
           nav_translations:
+            Beginner guides: Aan de slag
+            Start here: Begin hier
+            Using AIO: AIO gebruiken
+            Choose your server: Kies jouw server
+            Docker on Linux: Docker op Linux
+            Advanced: Geavanceerd
+            Dashboard reference: Dashboard — naslag
+            Ports and settings: Poorten en instellingen
             Home: Start
             Getting started: Aan de slag
             Install: Installeren
@@ -78,6 +84,14 @@ plugins:
           build: true
           site_description: Eine Installation für den ganzen Medien-Stapel zu Hause — Downloads, Automatisierung und Wiedergabe.
           nav_translations:
+            Beginner guides: Einstieg
+            Start here: Hier beginnen
+            Using AIO: AIO benutzen
+            Choose your server: Server auswählen
+            Docker on Linux: Docker auf Linux
+            Advanced: Fortgeschritten
+            Dashboard reference: Dashboard-Referenz
+            Ports and settings: Ports und Einstellungen
             Home: Start
             Getting started: Erste Schritte
             Install: Installieren
@@ -90,6 +104,14 @@ plugins:
           build: true
           site_description: Une installation pour toute la pile média à la maison — téléchargements, automatisation et lecture.
           nav_translations:
+            Beginner guides: Pour débuter
+            Start here: Commencer ici
+            Using AIO: Utiliser AIO
+            Choose your server: Choisir votre serveur
+            Docker on Linux: Docker sur Linux
+            Advanced: Avancé
+            Dashboard reference: Référence du tableau de bord
+            Ports and settings: Ports et paramètres
             Home: Accueil
             Getting started: Pour commencer
             Install: Installer
@@ -125,16 +147,23 @@ extra:
 
 nav:
   - Home: index.md
-  - Getting started:
-      - Install: INSTALL.md
-      - Using the dashboard: USAGE.md
-  - Deploy:
-      - Overview: deploy/README.md
-      - Docker: deploy/DOCKER.md
-      - Linux / LXC: deploy/LINUX.md
+  - Beginner guides:
+      - Start here: INSTALL.md
+      - Using AIO: USAGE.md
+      - Choose your server: deploy/README.md
       - Unraid: deploy/UNRAID.md
       - Synology: deploy/SYNOLOGY.md
+      - Docker on Linux: deploy/DOCKER.md
       - TrueNAS: deploy/TRUENAS.md
-  - Remote access:
-      - Cloudflare Tunnel: deploy/CLOUDFLARE.md
-      - Cloudflare Access: deploy/CLOUDFLARE_ACCESS.md
+  - Advanced:
+      - Overview: ADVANCED.md
+      - Dashboard reference: USAGE_ADVANCED.md
+      - Ports and settings: REFERENCE.md
+      - Unraid: deploy/UNRAID_ADVANCED.md
+      - Synology: deploy/SYNOLOGY_ADVANCED.md
+      - Docker: deploy/DOCKER_ADVANCED.md
+      - TrueNAS: deploy/TRUENAS_ADVANCED.md
+      - Linux / LXC: deploy/LINUX.md
+      - Remote access:
+          - Cloudflare Tunnel: deploy/CLOUDFLARE.md
+          - Cloudflare Access: deploy/CLOUDFLARE_ACCESS.md

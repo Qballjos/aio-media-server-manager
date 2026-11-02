@@ -9,12 +9,12 @@ title: AIO Media Server Manager
 <section class="landing-hero" aria-labelledby="landing-title">
 <div class="landing-intro">
 <p class="eyebrow">JOUW SERVER. JOUW MEDIA. JOUW REGELS.</p>
-<h1 id="landing-title">Je hele media-stack.<br>
-<span>Eindelijk bij elkaar.</span>
+<h1 id="landing-title">Je complete mediaserver.<br>
+<span>Minder instellen. Meer kijken.</span>
 </h1>
-<p class="landing-lead">Downloads, bibliotheken, aanvragen en afspelen. Eén installatie. Eén plek om alles te regelen.</p>
+<p class="landing-lead">Eén installatie, jouw apps kiezen en AIO koppelt ondersteunde tools voor je. Begin met de installatiewizard en groei door naar back-ups, updates en geavanceerde instellingen.</p>
 <div class="landing-actions">
-<a class="landing-button primary" href="INSTALL.md">Aan de slag <span aria-hidden="true">↗</span>
+<a class="landing-button primary" href="#install">Installeer AIO <span aria-hidden="true">↗</span>
 </a>
 <a class="landing-button" href="#app-preview">Ontdek het dashboard <span aria-hidden="true">↓</span>
 </a>
@@ -27,7 +27,8 @@ title: AIO Media Server Manager
 <div class="showcase-wrap" id="app-preview" role="region" aria-label="Voorbeeld van de AIO-interface">
 <div class="preview-controls js-only">
 <div class="preview-tabs" role="tablist" aria-label="Voorbeeld van de AIO-interface">
-<button type="button" role="tab" id="preview-tab-home" aria-controls="preview-panel-home" aria-selected="true" tabindex="0" data-screen="home">Dashboard</button>
+<button type="button" role="tab" id="preview-tab-current" aria-controls="preview-panel-current" aria-selected="true" tabindex="0" data-screen="current">Huidige app</button>
+<button type="button" role="tab" id="preview-tab-home" aria-controls="preview-panel-home" aria-selected="false" tabindex="-1" data-screen="home">Widgets proberen</button>
 <button type="button" role="tab" id="preview-tab-catalog" aria-controls="preview-panel-catalog" aria-selected="false" tabindex="-1" data-screen="catalog">Catalogus</button>
 <button type="button" role="tab" id="preview-tab-settings" aria-controls="preview-panel-settings" aria-selected="false" tabindex="-1" data-screen="settings">Instellingen</button>
 </div>
@@ -44,11 +45,15 @@ title: AIO Media Server Manager
 <i>
 </i>
 </span>
-<span>aio.home <span aria-hidden="true">/</span> <span data-screen-name>Dashboard</span>
+<span>aio.home <span aria-hidden="true">/</span> <span data-screen-name>Huidige app</span>
 </span>
 <span class="browser-lock" aria-hidden="true">⌘</span>
 </div>
-<div class="preview-panel" id="preview-panel-home" role="tabpanel" aria-labelledby="preview-tab-home" data-panel="home">
+<div class="preview-panel" id="preview-panel-current" role="tabpanel" aria-labelledby="preview-tab-current" data-panel="current">
+<img src="__AIO_ASSET__/screenshots/light/home.png" data-preview-image="home" alt="De echte interface met fictieve voorbeelden: posters, downloads en releasedatums van afleveringen en films." width="1280" loading="eager">
+<p class="preview-screenshot-caption">De echte interface met fictieve voorbeelden: posters, downloads en releasedatums van afleveringen en films.</p>
+</div>
+<div class="preview-panel" id="preview-panel-home" role="tabpanel" aria-labelledby="preview-tab-home" data-panel="home" hidden>
 <div class="demo-dashboard" data-widget-lab>
 <div class="demo-nav">
 <span class="demo-brand">
@@ -246,10 +251,10 @@ title: AIO Media Server Manager
 </div>
 </div>
 <div class="preview-panel" id="preview-panel-catalog" role="tabpanel" aria-labelledby="preview-tab-catalog" data-panel="catalog" hidden>
-<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-preview-image="catalog" alt="Catalogus — Screenshot van AIO" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-preview-image="catalog" alt="Catalogus — Screenshot van AIO" width="1280" height="720" loading="lazy">
 </div>
 <div class="preview-panel" id="preview-panel-settings" role="tabpanel" aria-labelledby="preview-tab-settings" data-panel="settings" hidden>
-<img src="__AIO_ASSET__/screenshots/light/settings.png" data-preview-image="settings" alt="Instellingen — Screenshot van AIO" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png" data-preview-image="settings" alt="Instellingen — Screenshot van AIO" width="1280" height="720" loading="lazy">
 </div>
 </div>
 <p class="preview-caption">Interactief voorbeeld · fictieve gegevens<span aria-hidden="true"> · </span>
@@ -271,6 +276,20 @@ title: AIO Media Server Manager
 <noscript>
 <p class="landing-note">Zonder JavaScript blijft het voorbeeld statisch. De handleidingen en screenshots werken gewoon.</p>
 </noscript>
+<section class="landing-section" id="how-it-works">
+<div class="section-heading">
+<p class="eyebrow">VAN INSTALLATIE NAAR DAGELIJKS GEBRUIK</p>
+<h2>Makkelijk beginnen. Uitgebreid doorgroeien.</h2>
+</div>
+<ol class="widget-steps">
+<li><span class="step-number">1</span><div><h3>Installeer op je server</h3><p>Kies hieronder Docker, Unraid, Synology of TrueNAS. Volg de handleiding voor opslag, rechten en het starten van AIO.</p></div></li>
+<li><span class="step-number">2</span><div><h3>Kies je apps</h3><p>Maak je beheerdersaccount en volg de installatiewizard. Kies de mediaserver en tools die je nodig hebt; voeg later meer toe.</p></div></li>
+<li><span class="step-number">3</span><div><h3>Laat AIO ze koppelen</h3><p>AIO stelt ondersteunde koppelingen, downloadclients en bibliotheekmappen in. Je providergegevens en mediabronnen vul je zelf aan.</p></div></li>
+<li><span class="step-number">4</span><div><h3>Maak het van jou</h3><p>Open je apps vanuit één dashboard. Richt widgets in en stel back-ups, updates en geavanceerde opties in wanneer je eraan toe bent.</p></div></li>
+</ol>
+<a class="landing-button primary" href="#install">Kies jouw server ↓</a>
+<p><a class="landing-text-link" href="ADVANCED.md">Heb je al een mediaserver? Bekijk de geavanceerde handleidingen voordat je je bestaande setup aanpast.</a></p>
+</section>
 <section class="landing-section widget-section" id="widgets">
 <div class="section-heading">
 <p class="eyebrow">HOME, OP JOUW MANIER</p>
@@ -320,18 +339,18 @@ title: AIO Media Server Manager
 <a class="landing-text-link" href="USAGE.md">Leer het dashboard kennen →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-theme-image="catalog" alt="Catalogus" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-theme-image="catalog" alt="Catalogus" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section feature-row reverse">
 <div>
 <p class="eyebrow">MINDER GEDOE. MEER OVERZICHT.</p>
 <h2>Eén keer goed instellen.</h2>
-<p>Opslag, back-ups, updates en verbindingen overzichtelijk bij elkaar. Begin met de basis en voeg toegang van buitenaf later toe.</p>
+<p>Instellingen staan in groepen met een zoekveld. Je profiel en uiterlijk vind je bij Persoonlijk, koppelingen bij Verbindingen en updates en back-ups bij Onderhoud.</p>
 <a class="landing-text-link" href="USAGE.md#screens">Leer het dashboard kennen →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/settings.png" data-theme-image="settings" alt="Instellingen" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png" data-theme-image="settings" alt="Instellingen" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section" id="install">
@@ -374,6 +393,7 @@ title: AIO Media Server Manager
 <p>Je hoeft niet elke app of instelling te kennen. De installatiegids legt uit wat je nodig hebt, waarop je klikt en wat je daarna hoort te zien.</p>
 <a class="landing-button primary" href="INSTALL.md">Lees de installatiegids ↗</a>
 </div>
+<p class="advanced-route-link"><a href="ADVANCED.md" class="landing-text-link">Geavanceerde instellingen →</a></p>
 </section>
 <section class="landing-section landing-faq">
 <div class="section-heading">

@@ -11,7 +11,7 @@
     const status = landing.querySelector('[data-preview-status]');
     const assetRoot = new URL(landing.querySelector('[data-preview-image]').getAttribute('src'), document.baseURI);
     const imageUrl = (theme, name) => new URL(`../${theme}/${name}.png`, assetRoot).href;
-    let screen = 'home';
+    let screen = 'current';
     let theme = 'light';
     const selectScreen = (name, focus = false) => {
       screen = name;

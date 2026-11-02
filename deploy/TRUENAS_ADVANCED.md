@@ -1,0 +1,68 @@
+# TrueNAS SCALE — Advanced
+
+!!! info "Advanced"
+    This is the technical reference. For a first installation, follow the beginner guide instead. [Beginner guide](TRUENAS.md).
+
+Deploy AIO as **one** custom app / Docker install. Do not also install Sonarr, Radarr, or download clients as separate SCALE apps if you want this all-in-one model.
+
+**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`
+
+## Create datasets and folders (SSH)
+
+Enable SSH (**System → Services → SSH**), then:
+
+```bash
+ssh admin@<truenas-ip>
+```
+
+Replace `tank` with your pool name. Config stays on an apps dataset. **Downloads and media go in the login user's home** so the Files UI can browse them (`~/aio-media-manager`). Keep those two as directories on the **same** dataset so *Arr can hardlink.
+
+```bash
+sudo zfs create -p tank/apps/aio-media-manager
+sudo zfs create -p tank/backups/aio-media-manager
+
+LOGIN_USER="${SUDO_USER:-$(id -un)}"
+HOME_DIR="$(getent passwd "${LOGIN_USER}" | cut -d: -f6)"
+DATA="${HOME_DIR}/aio-media-manager"
+
+sudo mkdir -p \
+  /mnt/tank/apps/aio-media-manager/vpn \
+  "${DATA}/downloads" \
+  "${DATA}/media"
+```
+
+`tank/backups/aio-media-manager` holds configuration backups. A separate dataset lets you snapshot or replicate it on its own schedule. Put it on another pool if you have one.
+
+TV, movies, anime, music, books, comics, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
+
+Set the owner to your media user (TrueNAS `apps` is often UID/GID `568`; confirm with `id apps` or `id`):
+
+```bash
+id apps
+sudo chown -R 568:568 \
+  /mnt/tank/apps/aio-media-manager \
+  "${DATA}" \
+  /mnt/tank/backups/aio-media-manager
+```
+
+If user home is not enabled, create it under Credentials → Users, or set `DATA` to a folder you can see in **Files** (still one parent for `downloads` and `media`).
+
+## Custom App
+
+1. **Apps → Discover → Custom App** (or Launch Docker Image).
+2. Image: `ghcr.io/qballjos/aio-media-server-manager:latest`
+3. Port forwarding: `8080` → `8080` plus the child WebUI ports from [INSTALL.md](../docs/REFERENCE.md#ports) (or host network).
+4. Storage (paths from the SSH commands above):
+   - `/mnt/tank/apps/aio-media-manager` → `/config`
+   - `$HOME/aio-media-manager` → `/data`
+   - `/mnt/tank/backups/aio-media-manager` → `/backups`
+   - `/sys` → `/host/sys` (read-only), so Home's Server card shows the server's network traffic. Without it, the graph is only this container's traffic.
+5. Environment: `PUID` / `PGID` = the UID/GID you used with `chown`, plus `TZ`, `AMM_DOWNLOAD_DIR=/data/downloads` and `AMM_MEDIA_DIR=/data/media`. Optional `GITHUB_TOKEN` for GitHub rate limits (or Settings → Updates after first-run).
+6. Privileged / `NET_ADMIN` if you enable VPN for qBittorrent, Prowlarr, and Flaresolverr. Those apps wait for a live tunnel; DNS for them is cached through the tunnel (Usenet stays off it). Details: [DOCKER.md](DOCKER_ADVANCED.md#optional-vpn).
+7. GPU: pass `/dev/dri` (Intel/AMD) or NVIDIA runtime when transcoding.
+
+The manager UI is `http://<truenas-ip>:8080`. Recreate the custom app after an image update so newly published ports apply.
+
+## Updates
+
+TrueNAS will pull a newer `:latest` when you update the app. Pin a semver tag (`:0.3.0`) if you want slower upgrades once git tags exist. That updates AIO. Installed apps update from **Settings → Updates** (schedules default to off).

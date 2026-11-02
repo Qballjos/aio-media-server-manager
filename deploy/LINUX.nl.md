@@ -1,5 +1,8 @@
 # Linux / LXC (geen Docker)
 
+!!! info "Geavanceerd"
+    Deze pagina is voor een aangepaste of technische opstelling. Je hebt dit niet nodig voor je eerste installatie op het thuisnetwerk. [Beginnershandleidingen](../docs/INSTALL.md).
+
 Gebruik dit op Debian, Ubuntu of een Proxmox-LXC als je **geen** Docker wilt.  
 Sonarr en de rest draaien nog steeds als processen onder AIO — je maakt geen systemd-unit per app.
 

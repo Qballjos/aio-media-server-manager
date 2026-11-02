@@ -15,7 +15,7 @@ Follow **one** guide below. Do not run commands from all the guides.
 | Synology NAS | [Synology setup](deploy/SYNOLOGY.md) | Container Manager installed and running; let DSM create the docker folder |
 | TrueNAS SCALE | [TrueNAS setup](deploy/TRUENAS.md) | Permission to create a custom app and storage folders |
 | Another computer with Docker | [Docker setup](deploy/DOCKER.md) | Docker and Docker Compose installed and running |
-| Debian, Ubuntu or Proxmox LXC without Docker | [Native Linux setup](deploy/LINUX.md) | Comfortable administering a Linux server |
+| Debian, Ubuntu or Proxmox LXC without Docker | [Native Linux setup](ADVANCED.md) | Comfortable administering a Linux server |
 
 A **NAS** is a network storage server. If you are reading this on a laptop, the server is usually a separate device. Run installation commands on that device; open the dashboard from your laptop or phone afterward.
 
@@ -33,7 +33,7 @@ The platform guide creates the right folders for you. Do not copy placeholder pa
 
 A **host path** is a folder on your NAS. A **container path**, such as `/data/media`, is how AIO sees that folder inside the container. They refer to the same files through a folder mapping; do not create a second library because the path looks different.
 
-SSD staging and an HDD library work together. Imports between them copy files. Hardlinks (two names for one stored file) only work on the same filesystem; they are an optimisation, not a requirement to use AIO.
+SSD downloads and an HDD library can work together. Follow the folders in your platform guide; custom storage is covered under Advanced.
 
 !!! tip "Leave the defaults alone at first"
     Keep the paths and ports from your platform guide unless they conflict with something already running. A VPN, domain name and Cloudflare account are **optional**. You can add them later.
@@ -74,7 +74,7 @@ Replace `YOUR-SERVER-IP` with your NAS/server's address, for example `http://192
 | Synology docker folder missing | Install and start DSM Container Manager first. Do not make the docker shared folder manually before installation. |
 | Home widget empty | Check Catalog for the app it depends on, then the widget help in [Using the dashboard](USAGE.md#customize-home). |
 | Download speed low | Check whether active downloads/unpacking land on HDDs or SSD. Use the storage options in your NAS guide. |
-| Open UI cannot connect | Check that app is running and its port is published (reference below). |
+| Open UI cannot connect | Check that app is running and its port is published (advanced port reference). |
 
 ## Updates and optional remote access
 
@@ -84,41 +84,12 @@ Updating AIO and updating the apps inside it are different actions:
 - **Managed apps:** use **Settings → Updates** in AIO. Automatic schedules default to off.
 - **Remote access:** configure [Cloudflare Tunnel](deploy/CLOUDFLARE.md), then [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md). Start locally before adding this.
 
-The tables below are reference material. You do not need to memorise them to finish setup.
+Technical reference material is kept separately under Advanced.
 
-## Ports {#ports}
+## Advanced
 
-The manager UI uses **8080**. Child apps listen inside the same container. Compose and NAS templates publish those ports on the host so **Open UI** works (`http://YOUR-IP:8989` for Sonarr, and so on). Host networking is an alternative if you prefer not to map each port.
+These pages cover custom setups and troubleshooting. They are not extra steps you must complete after installing AIO. [Advanced](ADVANCED.md).
 
-| Application | Default port |
-|-------------|--------------|
-| <img src="__AIO_ASSET__/assets/logo-aio-media-manager.png" alt="" class="aio-app-icon" /> Manager UI | 8080 |
-| <img src="__AIO_ASSET__/assets/app-icons/qbittorrent.svg" alt="" class="aio-app-icon" /> qBittorrent | 8081 |
-| <img src="__AIO_ASSET__/assets/app-icons/shelfmark.png" alt="" class="aio-app-icon" /> Shelfmark | 8084 |
-| <img src="__AIO_ASSET__/assets/app-icons/sabnzbd.svg" alt="" class="aio-app-icon" /> SABnzbd | 8085 |
-| <img src="__AIO_ASSET__/assets/app-icons/jellyfin.svg" alt="" class="aio-app-icon" /> Jellyfin | 8096 |
-| <img src="__AIO_ASSET__/assets/app-icons/flaresolverr.png" alt="" class="aio-app-icon" /> Flaresolverr | 8191 (x86_64 only) |
-| <img src="__AIO_ASSET__/assets/app-icons/bazarr.svg" alt="" class="aio-app-icon" /> Bazarr | 6767 |
-| <img src="__AIO_ASSET__/assets/app-icons/nzbget.svg" alt="" class="aio-app-icon" /> NZBGet | 6789 |
-| <img src="__AIO_ASSET__/assets/app-icons/lidarr.svg" alt="" class="aio-app-icon" /> Lidarr | 8686 |
-| <img src="__AIO_ASSET__/assets/app-icons/sonarr.svg" alt="" class="aio-app-icon" /> Sonarr | 8989 |
-| <img src="__AIO_ASSET__/assets/app-icons/radarr.svg" alt="" class="aio-app-icon" /> Radarr | 7878 |
-| <img src="__AIO_ASSET__/assets/app-icons/prowlarr.svg" alt="" class="aio-app-icon" /> Prowlarr | 9696 |
-| <img src="__AIO_ASSET__/assets/app-icons/seerr.svg" alt="" class="aio-app-icon" /> Seerr | 5055 |
-| <img src="__AIO_ASSET__/assets/app-icons/grimmory.svg" alt="" class="aio-app-icon" /> Grimmory | 6060 |
-| <img src="__AIO_ASSET__/assets/app-icons/neutarr.svg" alt="" class="aio-app-icon" /> NeutArr | 9705 |
-| <img src="__AIO_ASSET__/assets/app-icons/recyclarr.svg" alt="" class="aio-app-icon" /> Recyclarr | none (CLI only) |
-| <img src="__AIO_ASSET__/assets/app-icons/plex.svg" alt="" class="aio-app-icon" /> Plex | 32400 |
+### Ports and configuration variables {#ports}
 
-## Common environment variables
-
-Copy [`.env.example`](../.env.example) for native installs. Many of these can also be set later in **Settings**.
-
-| Variable | Purpose |
-|----------|---------|
-| `PUID` / `PGID` | User the apps run as (match folder ownership) |
-| `TZ` / `AMM_TIMEZONE` | Timezone for logs and schedules |
-| `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Paths inside the container (change host mounts in compose) |
-| `GITHUB_TOKEN` | Optional; higher GitHub API limits for updates |
-| `AMM_CLOUDFLARE_TUNNEL_*` | Optional remote tunnel (`cloudflared` starts after apps on boot) |
-| `AMM_VPN_*` | Optional VPN for qBittorrent, Prowlarr, and Flaresolverr (they wait for the tunnel; local DNS cache for those apps) |
+[Ports and configuration variables](REFERENCE.md#ports).

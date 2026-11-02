@@ -9,12 +9,12 @@ title: AIO Media Server Manager
 <section class="landing-hero" aria-labelledby="landing-title">
 <div class="landing-intro">
 <p class="eyebrow">YOUR SERVER. YOUR MEDIA. YOUR RULES.</p>
-<h1 id="landing-title">Your whole media stack.<br>
-<span>Finally, together.</span>
+<h1 id="landing-title">Your complete media server.<br>
+<span>Less setup. More watching.</span>
 </h1>
-<p class="landing-lead">Downloads, libraries, requests and streaming. One install. One place to make it all work.</p>
+<p class="landing-lead">Install once, choose your apps, and let AIO connect supported tools for you. Start with a guided setup; grow into backups, updates and advanced settings.</p>
 <div class="landing-actions">
-<a class="landing-button primary" href="INSTALL.md">Get started <span aria-hidden="true">↗</span>
+<a class="landing-button primary" href="#install">Install AIO <span aria-hidden="true">↗</span>
 </a>
 <a class="landing-button" href="#app-preview">Explore the dashboard <span aria-hidden="true">↓</span>
 </a>
@@ -27,7 +27,8 @@ title: AIO Media Server Manager
 <div class="showcase-wrap" id="app-preview" role="region" aria-label="AIO interface preview">
 <div class="preview-controls js-only">
 <div class="preview-tabs" role="tablist" aria-label="AIO interface preview">
-<button type="button" role="tab" id="preview-tab-home" aria-controls="preview-panel-home" aria-selected="true" tabindex="0" data-screen="home">Dashboard</button>
+<button type="button" role="tab" id="preview-tab-current" aria-controls="preview-panel-current" aria-selected="true" tabindex="0" data-screen="current">Current app</button>
+<button type="button" role="tab" id="preview-tab-home" aria-controls="preview-panel-home" aria-selected="false" tabindex="-1" data-screen="home">Try widgets</button>
 <button type="button" role="tab" id="preview-tab-catalog" aria-controls="preview-panel-catalog" aria-selected="false" tabindex="-1" data-screen="catalog">Catalog</button>
 <button type="button" role="tab" id="preview-tab-settings" aria-controls="preview-panel-settings" aria-selected="false" tabindex="-1" data-screen="settings">Settings</button>
 </div>
@@ -44,11 +45,15 @@ title: AIO Media Server Manager
 <i>
 </i>
 </span>
-<span>aio.home <span aria-hidden="true">/</span> <span data-screen-name>Dashboard</span>
+<span>aio.home <span aria-hidden="true">/</span> <span data-screen-name>Current app</span>
 </span>
 <span class="browser-lock" aria-hidden="true">⌘</span>
 </div>
-<div class="preview-panel" id="preview-panel-home" role="tabpanel" aria-labelledby="preview-tab-home" data-panel="home">
+<div class="preview-panel" id="preview-panel-current" role="tabpanel" aria-labelledby="preview-tab-current" data-panel="current">
+<img src="__AIO_ASSET__/screenshots/light/home.png" data-preview-image="home" alt="Real interface, fictional examples: posters, downloads and episode/movie release dates." width="1280" loading="eager">
+<p class="preview-screenshot-caption">Real interface, fictional examples: posters, downloads and episode/movie release dates.</p>
+</div>
+<div class="preview-panel" id="preview-panel-home" role="tabpanel" aria-labelledby="preview-tab-home" data-panel="home" hidden>
 <div class="demo-dashboard" data-widget-lab>
 <div class="demo-nav">
 <span class="demo-brand">
@@ -246,10 +251,10 @@ title: AIO Media Server Manager
 </div>
 </div>
 <div class="preview-panel" id="preview-panel-catalog" role="tabpanel" aria-labelledby="preview-tab-catalog" data-panel="catalog" hidden>
-<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-preview-image="catalog" alt="Catalog — AIO application screenshot" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-preview-image="catalog" alt="Catalog — AIO application screenshot" width="1280" height="720" loading="lazy">
 </div>
 <div class="preview-panel" id="preview-panel-settings" role="tabpanel" aria-labelledby="preview-tab-settings" data-panel="settings" hidden>
-<img src="__AIO_ASSET__/screenshots/light/settings.png" data-preview-image="settings" alt="Settings — AIO application screenshot" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png" data-preview-image="settings" alt="Settings — AIO application screenshot" width="1280" height="720" loading="lazy">
 </div>
 </div>
 <p class="preview-caption">Interactive preview · sample data<span aria-hidden="true"> · </span>
@@ -271,6 +276,20 @@ title: AIO Media Server Manager
 <noscript>
 <p class="landing-note">With JavaScript disabled, the preview remains a static example. The guides and screenshots still work.</p>
 </noscript>
+<section class="landing-section" id="how-it-works">
+<div class="section-heading">
+<p class="eyebrow">FROM INSTALL TO EVERYDAY USE</p>
+<h2>Easy to start. Room to grow.</h2>
+</div>
+<ol class="widget-steps">
+<li><span class="step-number">1</span><div><h3>Install on your server</h3><p>Choose Docker, Unraid, Synology or TrueNAS below. Follow the guide for storage, permissions and starting AIO.</p></div></li>
+<li><span class="step-number">2</span><div><h3>Choose your apps</h3><p>Create your administrator account and follow the setup wizard. Pick the media server and tools you need; add more later.</p></div></li>
+<li><span class="step-number">3</span><div><h3>Let AIO connect them</h3><p>AIO configures supported connections, download clients and library folders. Your provider details and media sources remain yours to supply.</p></div></li>
+<li><span class="step-number">4</span><div><h3>Make it your own</h3><p>Open your apps from one dashboard. Arrange widgets and configure backups, updates and advanced options when you need them.</p></div></li>
+</ol>
+<a class="landing-button primary" href="#install">Choose your server ↓</a>
+<p><a class="landing-text-link" href="ADVANCED.md">Already running a media stack? Review the advanced guides before changing your setup.</a></p>
+</section>
 <section class="landing-section widget-section" id="widgets">
 <div class="section-heading">
 <p class="eyebrow">HOME, YOUR WAY</p>
@@ -320,18 +339,18 @@ title: AIO Media Server Manager
 <a class="landing-text-link" href="USAGE.md">Learn the dashboard →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-theme-image="catalog" alt="Catalog" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-theme-image="catalog" alt="Catalog" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section feature-row reverse">
 <div>
 <p class="eyebrow">LESS FUSS. MORE CONTROL.</p>
 <h2>Set it up once.</h2>
-<p>Keep storage, backups, updates and connections together. Start with the essentials; add remote access when you need it.</p>
+<p>Grouped settings with search. Find your profile and appearance under Personal, connections under Connections, and updates and backups under Maintenance.</p>
 <a class="landing-text-link" href="USAGE.md#screens">Learn the dashboard →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/settings.png" data-theme-image="settings" alt="Settings" width="1024" height="928" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png" data-theme-image="settings" alt="Settings" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section" id="install">
@@ -374,6 +393,7 @@ title: AIO Media Server Manager
 <p>No need to know every app or every setting. The install guide explains what you need, what to click, and what you should see next.</p>
 <a class="landing-button primary" href="INSTALL.md">Read the install guide ↗</a>
 </div>
+<p class="advanced-route-link"><a href="ADVANCED.md" class="landing-text-link">Advanced setup →</a></p>
 </section>
 <section class="landing-section landing-faq">
 <div class="section-heading">
