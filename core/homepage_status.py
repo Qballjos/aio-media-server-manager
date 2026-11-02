@@ -159,7 +159,7 @@ def _installed_and_running(catalog: ApplicationCatalog, running: set[str], name:
     return catalog.has(name) and catalog.get(name).is_installed() and name in running
 
 
-def now_playing(host: str, scheme: str = "http") -> list[dict[str, Any]]:
+def now_playing(host: str, scheme: str = "http", *, strict: bool = False) -> list[dict[str, Any]]:
     catalog = ApplicationCatalog()
     running = _running_names()
     rows: list[dict[str, Any]] = []
@@ -167,6 +167,8 @@ def now_playing(host: str, scheme: str = "http") -> list[dict[str, Any]]:
         plugin = catalog.get("jellyfin")
         # Only the stored key: finding one logs in to Jellyfin, which the Home snapshot already does single-flight.
         key = secret_store.get_secret("jellyfin_api_key")
+        if strict and not key:
+            raise RuntimeError("Jellyfin session access unavailable")
         if key:
             data, error = _fetch_json(
                 f"http://127.0.0.1:{plugin.port}/Sessions",
@@ -174,6 +176,8 @@ def now_playing(host: str, scheme: str = "http") -> list[dict[str, Any]]:
                 params={"ActiveWithinSeconds": "960"},
             )
             if error:
+                if strict:
+                    raise RuntimeError("Jellyfin sessions unavailable")
                 logger.debug("Jellyfin sessions failed: %s", error)
             rows += parse_jellyfin_sessions(data, _web_url(plugin.name, plugin.port, host, scheme))
     if _installed_and_running(catalog, running, "plex"):
@@ -183,7 +187,11 @@ def now_playing(host: str, scheme: str = "http") -> list[dict[str, Any]]:
             resp = requests.get(f"{client.base_url}/status/sessions", headers=client._headers(), timeout=_TIMEOUT)
             if resp.status_code == 200:
                 rows += parse_plex_sessions(resp.json(), _web_url(plugin.name, plugin.port, host, scheme))
+            elif strict:
+                raise RuntimeError("Plex sessions unavailable")
         except Exception as exc:
+            if strict:
+                raise RuntimeError("Plex sessions unavailable") from None
             logger.debug("Plex sessions failed: %s", exc)
     return rows
 

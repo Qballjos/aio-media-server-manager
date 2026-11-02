@@ -1,5 +1,16 @@
 /** English source text → [Nederlands, Deutsch, Français]. */
 export const TABLE = {
+  "Homey connections": ["Homey-koppelingen", "Homey-Verbindungen", "Connexions Homey"],
+  "Connect Homey with a one-use code. Homey can only read dashboard data.": ["Koppel Homey met een eenmalige code. Homey kan alleen dashboardgegevens lezen.", "Verbinde Homey mit einem einmaligen Code. Homey kann nur Dashboard-Daten lesen.", "Associez Homey avec un code à usage unique. Homey peut uniquement lire les données du tableau de bord."],
+  "In Homey, add AIO Media Server Manager and enter this server address.": ["Voeg in Homey AIO Media Server Manager toe en vul dit serveradres in.", "Füge in Homey AIO Media Server Manager hinzu und gib diese Serveradresse ein.", "Dans Homey, ajoutez AIO Media Server Manager et saisissez cette adresse de serveur."],
+  "Create a code here and paste it in the Homey pairing screen.": ["Maak hier een code en plak die in het koppelscherm van Homey.", "Erstelle hier einen Code und füge ihn im Homey-Kopplungsfenster ein.", "Créez un code ici et collez-le dans l’écran d’association Homey."],
+  "Create Homey code": ["Homey-code maken", "Homey-Code erstellen", "Créer un code Homey"],
+  "Homey pairing code": ["Homey-koppelcode", "Homey-Kopplungscode", "Code d’association Homey"],
+  "Copy code": ["Code kopiëren", "Code kopieren", "Copier le code"],
+  "Homey can read what is playing and recently added titles. It cannot change settings or control playback.": ["Homey kan afspeelsessies en recent toegevoegde titels lezen. Het kan geen instellingen wijzigen of afspelen bedienen.", "Homey kann Wiedergaben und kürzlich hinzugefügte Titel lesen. Es kann keine Einstellungen oder Wiedergabe steuern.", "Homey peut lire les lectures en cours et les titres récemment ajoutés. Il ne peut ni modifier les réglages ni contrôler la lecture."],
+  "Connected Homeys": ["Gekoppelde Homeys", "Verbundene Homeys", "Homeys associés"],
+  "No Homeys connected yet.": ["Nog geen Homeys gekoppeld.", "Noch keine Homeys verbunden.", "Aucun Homey associé."],
+
   "Using your username initial.": ["De eerste letter van je gebruikersnaam wordt gebruikt.", "Der Anfangsbuchstabe deines Benutzernamens wird verwendet.", "L’initiale de votre nom d’utilisateur est utilisée."],
   "Custom image in use.": ["Je eigen profielfoto wordt gebruikt.", "Dein eigenes Profilbild wird verwendet.", "Votre photo de profil est utilisée."],
   "Recommended: 512 × 512 px": ["Aanbevolen: 512 × 512 px", "Empfohlen: 512 × 512 px", "Recommandé : 512 × 512 px"],
@@ -22,7 +33,7 @@ export const TABLE = {
   "Protect your settings and restore a backup.": ["Bescherm je instellingen en herstel een back-up.", "Sichere deine Einstellungen und stelle Sicherungen wieder her.", "Protégez vos réglages et restaurez une sauvegarde."],
   "Keep your apps and manager up to date.": ["Houd je apps en de manager up-to-date.", "Halte deine Apps und den Manager aktuell.", "Gardez vos apps et le gestionnaire à jour."],
   "Configure your Usenet provider and download clients.": ["Stel je Usenet-provider en downloadclients in.", "Konfiguriere deinen Usenet-Anbieter und deine Downloadclients.", "Configurez votre fournisseur Usenet et vos clients de téléchargement."],
-  "Connect media services and pair your TV.": ["Verbind je mediadiensten en koppel je tv.", "Verbinde Mediendienste und kopple deinen Fernseher.", "Connectez vos services multimédias et associez votre téléviseur."],
+  "Connect media services and pair your TV or Homey.": ["Verbind je mediadiensten en koppel je tv of Homey.", "Verbinde Mediendienste und kopple deinen Fernseher oder Homey.", "Connectez vos services multimédias et associez votre téléviseur ou Homey."],
   "Reach your apps securely outside your home.": ["Bereik je apps veilig buitenshuis.", "Greife auch unterwegs sicher auf deine Apps zu.", "Accédez à vos apps en toute sécurité hors de chez vous."],
   "Manage the secure connection for your apps.": ["Beheer de beveiligde verbinding voor je apps.", "Verwalte die sichere Verbindung für deine Apps.", "Gérez la connexion sécurisée de vos apps."],
   "Personalize your home and sign-in screen.": ["Personaliseer je startpagina en aanmeldscherm.", "Personalisiere deine Startseite und den Anmeldebildschirm.", "Personnalisez votre accueil et votre écran de connexion."],

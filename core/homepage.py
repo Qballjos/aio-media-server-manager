@@ -1756,17 +1756,22 @@ def _collect_jellyfin_recent(
     notes: list[dict[str, Any]],
     host: str,
     scheme: str = "http",
+    *,
+    read_only: bool = False,
 ) -> list[dict[str, Any]]:
-    if not _source_ready(catalog, running, "jellyfin", "recent", notes, need_key=True):
+    if not _source_ready(catalog, running, "jellyfin", "recent", notes, need_key=not read_only):
         return []
     plugin = catalog.get("jellyfin")
-    key = get_application_api_key("jellyfin", plugin.config_dir)
+    key = secret_store.get_secret("jellyfin_api_key") if read_only else get_application_api_key("jellyfin", plugin.config_dir)
+    if read_only and not key:
+        _note(notes, "recent", "jellyfin", "error", "stored API key unavailable")
+        return []
     web = _web_url(plugin.name, plugin.port, host, scheme)
     items: list[dict[str, Any]] = []
     data, error = None, None
     # A whole series added at once fills page after page with its episodes; keep paging until
     # there are enough tiles. ponytail: capped at _JELLYFIN_RECENT_MAX rows (10 requests).
-    for start in range(0, _JELLYFIN_RECENT_MAX, _JELLYFIN_RECENT_PAGE):
+    for start in range(0, min(_JELLYFIN_RECENT_MAX, 2 * _JELLYFIN_RECENT_PAGE) if read_only else _JELLYFIN_RECENT_MAX, _JELLYFIN_RECENT_PAGE):
         page, page_error = _fetch_json(
             f"http://127.0.0.1:{plugin.port}/Items",
             headers=jellyfin_auth_headers(key),

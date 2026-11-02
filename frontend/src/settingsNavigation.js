@@ -10,7 +10,7 @@ export const SETTINGS_GROUPS = [
   { label: 'Connections', items: [
     { id: 'vpn', label: 'VPN', icon: 'shield', description: 'Manage the secure connection for your apps.', keywords: 'wireguard openvpn provider tunnel privadovpn' },
     { id: 'remote', label: 'External access', icon: 'globe', description: 'Reach your apps securely outside your home.', keywords: 'cloudflare tunnel domain subdomain dns proxy access externe toegang domein' },
-    { id: 'integrations', label: 'App connections', icon: 'link', description: 'Connect media services and pair your TV.', keywords: 'jellyfin seerr api key token tv pairing koppelingen sleutel' },
+    { id: 'integrations', label: 'App connections', icon: 'link', description: 'Connect media services and pair your TV or Homey.', keywords: 'jellyfin seerr api key token tv homey pairing koppelingen sleutel' },
     { id: 'usenet', label: 'Usenet', icon: 'download', description: 'Configure your Usenet provider and download clients.', keywords: 'nzb sabnzbd nzbget server provider download' },
   ] },
   { label: 'Maintenance', items: [

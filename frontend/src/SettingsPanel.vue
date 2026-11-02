@@ -13,6 +13,7 @@ import VpnConfigFields from './VpnConfigFields.vue'
 import UiSelect from './UiSelect.vue'
 import { timezoneChoices } from './timezones.js'
 import TvConnections from './TvConnections.vue'
+import HomeyConnections from './HomeyConnections.vue'
 import LanguageSelect from './LanguageSelect.vue'
 import {
   canPromptInstall,
@@ -2887,6 +2888,7 @@ onBeforeUnmount(() => {
     </template>
     <template v-else-if="section === 'integrations'">
       <TvConnections />
+      <HomeyConnections />
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>{{ $t('Jellyfin API key') }}</h3>
