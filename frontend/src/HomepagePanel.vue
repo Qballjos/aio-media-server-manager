@@ -1603,7 +1603,7 @@ onUnmounted(() => {
     <p v-if="snapshotError" class="home-notice">{{ snapshotError }}</p>
     <p v-if="vpnNotice" class="home-notice">
       {{ vpnNotice }}
-      <a href="#/settings/network" class="home-notice-link">{{ $t('Open Settings → Network') }}</a>
+      <a href="#/settings/vpn" class="home-notice-link">{{ $t('Open Settings → VPN') }}</a>
     </p>
 
     <div v-if="!loading && !snapshot.apps.length" class="home-empty glass-card">

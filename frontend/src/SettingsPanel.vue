@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { resolveSettingsSection, SETTINGS_NAV } from './router'
+import { resolveSettingsSection, SETTINGS_PAGES } from './settingsNavigation.js'
+import SettingsSidebar from './SettingsSidebar.vue'
 import { apiError, apiRequest, readJson } from './api.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug } from './homepageDebug.js'
@@ -55,6 +56,7 @@ const props = defineProps({
 const emit = defineEmits(['session', 'updates', 'vpn'])
 const route = useRoute()
 const section = computed(() => resolveSettingsSection(route.params.section))
+const currentPage = computed(() => SETTINGS_PAGES.find(page => page.id === section.value))
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -1662,8 +1664,8 @@ function formatWhen(ts) {
 watch(section, (s, prev) => {
   error.value = ''
   notice.value = ''
-  if (prev && (s === 'network' || s === 'homepage' || s === 'visuals')) refreshSettings()
-  if (s === 'network') {
+  if (prev && ['vpn', 'remote', 'homepage', 'integrations', 'visuals'].includes(s)) refreshSettings()
+  if (s === 'remote' || s === 'vpn') {
     refreshTunnelStatus()
     refreshHostnames()
   }
@@ -1677,6 +1679,10 @@ onMounted(() => {
   refreshPwaInstall()
   stopPwa = subscribePwaInstall(refreshPwaInstall)
   loadAll()
+  if (section.value === 'remote') {
+    refreshTunnelStatus()
+    refreshHostnames()
+  }
   if (section.value === 'usenet') loadUsenet()
   if (section.value === 'notifications') loadNotifications()
 })
@@ -1689,24 +1695,13 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="settings-page animate-fade">
-    <div class="settings-header">
-      <div>
-        <h2 class="section-title">{{ $t('Settings') }}</h2>
-        <p class="section-subtitle">{{ $t('Manage this appliance after first-run. Bind mounts and the manager port stay in compose/env.') }}</p>
-      </div>
-    </div>
-
-    <nav class="settings-nav" :aria-label="$t('Settings sections')">
-      <RouterLink
-        v-for="item in SETTINGS_NAV"
-        :key="item[0]"
-        :to="{ name: 'settings', params: { section: item[0] } }"
-        class="settings-nav-btn"
-        :class="{ active: section === item[0] }"
-      >
-        {{ $t(item[1]) }}
-      </RouterLink>
-    </nav>
+    <SettingsSidebar :section="section" />
+    <div class="settings-content">
+      <header class="settings-header">
+        <p class="settings-eyebrow">{{ $t('Settings') }}</p>
+        <h2 class="section-title">{{ $t(currentPage.label) }}</h2>
+        <p class="section-subtitle">{{ $t(currentPage.description) }}</p>
+      </header>
 
     <div v-if="error" class="ui-alert ui-alert-error">{{ error }}</div>
     <p v-if="notice" class="share-meta">{{ notice }}</p>
@@ -1834,7 +1829,7 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">{{ $t('GLASS') }}</span>
-          <h3>{{ $t('Glass') }}</h3>
+          <h3>{{ $t('Background and transparency') }}</h3>
           <p>{{ $t('How clear, how soft and how deep the panels feel. Changes show as you drag and are saved on your profile.') }}</p>
         </div>
         <div class="glass-sliders">
@@ -1861,7 +1856,7 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">{{ $t('BRANDING') }}</span>
-          <h3>{{ $t('Name and icons') }}</h3>
+          <h3>{{ $t('Brand name and icons') }}</h3>
           <p>{{ $t('Rename the header title and replace the header icon, login logo, and favicon. Images are stored on this appliance.') }}</p>
         </div>
         <form class="form-stack" @submit.prevent="saveBrandTitle">
@@ -1920,11 +1915,10 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else-if="section === 'account'">
-      <TvConnections />
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">{{ $t('ACCOUNT') }}</span>
-          <h3>{{ $t('Administrator') }}</h3>
+          <h3>{{ $t('Profile and security') }}</h3>
           <p>{{ $t('Current password is required for any change. The welcome line uses your first name when it is filled in. Email is used for Seerr wiring.') }}</p>
         </div>
         <div class="brand-asset-list account-avatar-block">
@@ -1989,56 +1983,12 @@ onBeforeUnmount(() => {
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save account') }}</button>
         </form>
       </div>
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <h3>{{ $t('Install on this device') }}</h3>
-          <p>{{ $t('Add the manager to the home screen like a phone or tablet app.') }}</p>
-        </div>
-        <p v-if="pwaStandalone" class="share-idle">{{ $t('This browser is already running as an installed app.') }}</p>
-        <template v-else>
-          <button
-            v-if="pwaCanInstall"
-            type="button"
-            class="ui-btn ui-btn-primary"
-            @click="installPwaFromSettings"
-          >
-            {{ $t('Install app') }}
-          </button>
-          <p v-else-if="pwaIos" class="share-idle">
-            {{ $t('iPhone/iPad: open this page in Safari, tap Share, then Add to Home Screen.') }}
-          </p>
-          <p v-else class="share-idle">
-            {{ $t('Chrome or Edge: menu → Install app / Add to Home Screen. Android’s install prompt needs HTTPS (Cloudflare Tunnel or a reverse proxy). On a plain LAN HTTP URL, use the browser menu if Install is offered.') }}
-          </p>
-        </template>
-      </div>
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <h3>{{ $t('Donate') }}</h3>
-          <p>{{ $t('🤖 AI writes some code. I break it. We fix it together.') }}</p>
-        </div>
-        <p class="share-idle">{{ $t('Can’t spare a few bucks? Drop a star on GitHub instead. It feeds the ego, and that’s almost as good.') }}</p>
-        <div class="account-donate-actions">
-          <a
-            class="ui-btn"
-            href="https://www.paypal.com/donate/?business=P8CTXW8ER3PBY&no_recurring=0&item_name=Sponsor+My+Next+Bug&currency_code=EUR"
-            target="_blank"
-            rel="noopener noreferrer"
-          >{{ $t('PayPal') }}</a>
-          <a
-            class="ui-btn"
-            href="https://ko-fi.com/qballjos"
-            target="_blank"
-            rel="noopener noreferrer"
-          >{{ $t('Ko-fi') }}</a>
-        </div>
-      </div>
     </template>
 
     <template v-else-if="section === 'system'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>{{ $t('Clock and logs') }}</h3>
+          <h3>{{ $t('Time and logging') }}</h3>
           <p>{{ $t('Timezone for backups, updates, and logs. Log level applies immediately.') }}</p>
         </div>
         <form class="form-stack" @submit.prevent="patchSettings({ timezone: form.timezone, log_level: form.log_level })">
@@ -2069,7 +2019,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>{{ $t('File ownership') }}</h3>
+          <h3>{{ $t('File permissions') }}</h3>
           <p>{{ $t('Saving PUID/PGID restarts running apps so new files stay owned correctly.') }}</p>
         </div>
         <form class="form-stack" @submit.prevent="patchSettings({ puid: Number(form.puid), pgid: Number(form.pgid) })">
@@ -2398,7 +2348,7 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <template v-else-if="section === 'network'">
+    <template v-else-if="section === 'vpn'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>{{ $t('VPN') }}</h3>
@@ -2463,6 +2413,8 @@ onBeforeUnmount(() => {
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save VPN') }}</button>
         </form>
       </div>
+    </template>
+    <template v-else-if="section === 'remote'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Cloudflare Tunnel</h3>
@@ -2494,7 +2446,7 @@ onBeforeUnmount(() => {
         <p class="ui-alert ui-alert-warning">
           {{ $t('Run a tunnel token on one server only. If another server (say, the one this replaces) still runs it, Cloudflare splits visitors between both and every login ends in "Session expired". Give a new server its own tunnel.') }}
         </p>
-        <p class="share-meta">{{ tunnelLive.summary || 'Status loads when you open Network.' }}</p>
+        <p class="share-meta">{{ tunnelLive.summary || $t('Connection status will appear here.') }}</p>
         <p v-if="tunnelLive.token_saved || tunnelLive.token_present" class="share-meta font-mono">
           {{ $t('Stored at') }} {{ tunnelLive.token_file || '/config/cloudflare/tunnel.token' }}
         </p>
@@ -2891,7 +2843,7 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'homepage'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>{{ $t('Login message') }}</h3>
+          <h3>{{ $t('Sign-in welcome message') }}</h3>
           <p>{{ $t('Shown on the sign-in screen under the logo. Leave it empty to hide the line.') }}</p>
         </div>
         <form class="form-stack" @submit.prevent="saveLoginMessage">
@@ -2931,6 +2883,9 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
+    </template>
+    <template v-else-if="section === 'integrations'">
+      <TvConnections />
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>{{ $t('Jellyfin API key') }}</h3>
@@ -2990,7 +2945,7 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'diagnostics'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>{{ $t('Widget debug') }}</h3>
+          <h3>{{ $t('Widget troubleshooting') }}</h3>
           <p>
             {{ $t('Show empty calendar, downloads, and recently added tiles plus per-source skip notes. Saved on your profile. API keys are never shown.') }}
           </p>
@@ -3013,7 +2968,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>{{ $t('Support share') }}</h3>
+          <h3>{{ $t('Temporary support access') }}</h3>
           <p>
             {{ $t('Capture recent errors behind a time-limited URL for support. Secrets are redacted. The link expires after') }} {{ share.ttl_hours || 24 }} {{ $t('hours. Host dumps and process logs use the same switch, except from localhost which is always allowed for troubleshooting.') }}
           </p>
@@ -3052,22 +3007,80 @@ onBeforeUnmount(() => {
         <pre v-else class="error-log font-mono">{{ errors.map(e => `[${e.timestamp}] ${e.level} ${e.source}\n${e.message}`).join('\n\n') }}</pre>
       </div>
     </template>
+    <template v-else-if="section === 'about'">
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>{{ $t('Install on this device') }}</h3>
+          <p>{{ $t('Add the manager to the home screen like a phone or tablet app.') }}</p>
+        </div>
+        <p v-if="pwaStandalone" class="share-idle">{{ $t('This browser is already running as an installed app.') }}</p>
+        <template v-else>
+          <button
+            v-if="pwaCanInstall"
+            type="button"
+            class="ui-btn ui-btn-primary"
+            @click="installPwaFromSettings"
+          >
+            {{ $t('Install app') }}
+          </button>
+          <p v-else-if="pwaIos" class="share-idle">
+            {{ $t('iPhone/iPad: open this page in Safari, tap Share, then Add to Home Screen.') }}
+          </p>
+          <p v-else class="share-idle">
+            {{ $t('Chrome or Edge: menu → Install app / Add to Home Screen. Android’s install prompt needs HTTPS (Cloudflare Tunnel or a reverse proxy). On a plain LAN HTTP URL, use the browser menu if Install is offered.') }}
+          </p>
+        </template>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>{{ $t('Donate') }}</h3>
+          <p>{{ $t('🤖 AI writes some code. I break it. We fix it together.') }}</p>
+        </div>
+        <p class="share-idle">{{ $t('Can’t spare a few bucks? Drop a star on GitHub instead. It feeds the ego, and that’s almost as good.') }}</p>
+        <div class="account-donate-actions">
+          <a
+            class="ui-btn"
+            href="https://www.paypal.com/donate/?business=P8CTXW8ER3PBY&no_recurring=0&item_name=Sponsor+My+Next+Bug&currency_code=EUR"
+            target="_blank"
+            rel="noopener noreferrer"
+          >{{ $t('PayPal') }}</a>
+          <a
+            class="ui-btn"
+            href="https://ko-fi.com/qballjos"
+            target="_blank"
+            rel="noopener noreferrer"
+          >{{ $t('Ko-fi') }}</a>
+        </div>
+      </div>
+    </template>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .settings-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  align-items: start;
+  gap: 1.75rem;
   min-width: 0;
 }
-.settings-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+.settings-content { display:flex; flex-direction:column; gap:1rem; min-width:0; }
+.settings-header { padding:.5rem 0 .75rem; }
+.settings-eyebrow { color:var(--text-dim); font-size:.75rem; font-weight:600; margin:0 0 .5rem; }
+.settings-content :deep(.glass-card) { border-radius:12px; box-shadow:none; background:rgb(var(--glass-tint) / .94); backdrop-filter:none; }
+.settings-content :deep(.settings-card-head .accent-badge) { display:none; }
+.settings-content :deep(.ui-input),
+.settings-content :deep(.ui-select-btn),
+.settings-content :deep(.ui-btn) { border-radius:8px; box-shadow:none; }
+.settings-content :deep(.form-stack > button[type="submit"]) { align-self:flex-start; min-width:9rem; }
+@media (max-width: 1000px) {
+  .settings-page { grid-template-columns:220px minmax(0,1fr); gap:1rem; }
+}
+@media (max-width: 760px) {
+  .settings-page { grid-template-columns:minmax(0,1fr); }
+  .settings-header { padding-top:.25rem; }
+  .settings-content :deep(.settings-card) { padding:1rem; }
 }
 .section-title {
   font-size: var(--text-title);
@@ -3079,11 +3092,6 @@ onBeforeUnmount(() => {
   font-size: var(--text-body);
   color: var(--text-dim);
   margin: 0.2rem 0 0;
-}
-.settings-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
 }
 .settings-card {
   padding: 1.4rem 1.5rem;

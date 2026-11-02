@@ -518,7 +518,7 @@ onUnmounted(() => {
             <RouterLink
               v-for="chip in statusChips"
               :key="chip.key"
-              :to="{ name: 'settings', params: { section: 'network' } }"
+              :to="{ name: 'settings', params: { section: 'vpn' } }"
               class="metric-pill status-chip"
               :data-tone="chip.tone"
               :title="chip.title"

@@ -2,56 +2,10 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 
 const emptyView = { name: 'EmptyView', render: () => null }
 
-/** Canonical Settings hashes (`#/settings/<id>`). */
-export const SETTINGS_SECTIONS = [
-  'account',
-  'visuals',
-  'system',
-  'updates',
-  'backups',
-  'network',
-  'notifications',
-  'usenet',
-  'homepage',
-  'diagnostics',
-]
-
-/** Older hashes from the 11-tab layout. */
-export const SETTINGS_ALIASES = {
-  general: 'system',
-  storage: 'system',
-  permissions: 'system',
-  github: 'updates',
-  vpn: 'network',
-  remote: 'network',
-  integrations: 'homepage',
-  debug: 'diagnostics',
-  theming: 'visuals',
-  appearance: 'visuals',
-  branding: 'visuals',
-}
-
-export const SETTINGS_NAV = [
-  ['account', 'Account'],
-  ['visuals', 'Visuals'],
-  ['system', 'System'],
-  ['updates', 'Updates'],
-  ['backups', 'Backups'],
-  ['network', 'Network'],
-  ['notifications', 'Notifications'],
-  ['usenet', 'Usenet'],
-  ['homepage', 'Homepage'],
-  ['diagnostics', 'Diagnostics'],
-]
+import { SETTINGS_SECTIONS, resolveSettingsSection } from './settingsNavigation.js'
+export { SETTINGS_SECTIONS, SETTINGS_ALIASES, SETTINGS_NAV, resolveSettingsSection } from './settingsNavigation.js'
 
 const SETTINGS_SET = new Set(SETTINGS_SECTIONS)
-
-export function resolveSettingsSection(section) {
-  const value = String(section || '')
-  if (SETTINGS_SET.has(value)) return value
-  if (value in SETTINGS_ALIASES) return SETTINGS_ALIASES[value]
-  return 'account'
-}
 
 export const router = createRouter({
   history: createWebHashHistory(),
