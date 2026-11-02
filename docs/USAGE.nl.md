@@ -27,6 +27,28 @@ Begin klein (bijvoorbeeld Radarr + één downloadclient + Jellyfin) en voeg de r
 
 ---
 
+## De widgets op je hoofdpagina aanpassen {#customize-home}
+
+<div class="widget-visual-guide" role="group" aria-label="De widgets op je hoofdpagina aanpassen">
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>De bewerkknop</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>Ga naar Home en klik op het pictogram met vier blokjes naast de paginatabs. Er verschijnen handgrepen en een bewerkbalk.</p></div>
+<div class="widget-visual-step"><span class="visual-number">2</span><strong>Verplaatsen: sleep de handgreep</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Downloads</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Formaat: sleep deze hoek</p></div>
+<div class="widget-visual-step"><span class="visual-number">3</span><strong>Kies wat je toevoegt</strong><div class="visual-toolbar"><span>＋ Widget toevoegen</span><span>Klaar</span></div><p>Kies Widget toevoegen, daarna Dit formaat of Elk formaat en vervolgens de widget. Wijzigingen worden automatisch opgeslagen; kies Klaar als je klaar bent.</p></div>
+</div>
+
+[Probeer het interactieve voorbeeld](index.md#app-preview){ .md-button .md-button--primary }
+
+Hier zie je de echte bediening uitgelegd; het websitevoorbeeld gebruikt fictieve gegevens en vereenvoudigde bewegingen.
+
+Klik in de bewerkstand op een widget om de formaatkeuzes te openen. De × verwijdert hem uit het gekozen schermformaat; gebruik meteen Ongedaan maken als je de verkeerde hebt verwijderd.
+
+Wijzigingen worden automatisch in je AIO-profiel opgeslagen; Klaar sluit de bewerkstand. Telefoon, tablet en desktop kunnen een eigen indeling hebben. De formaatknoppen verschijnen alleen als het venster die schermgroottes kan tonen.
+
+!!! tip "Dashboard"
+    Een lege kaart? Controleer eerst de bron-app in Catalogus. Instellingen → Hoofdpagina → Lege widgets uitleggen kan de oorzaak tonen. Hier stel je ook het appdock in; de vormgeving verander je via Instellingen → Visueel.
+
+Met het toetsenbord: Tab naar een widget in de bewerkstand; pijltjes verplaatsen, Shift + pijltjes wijzigen het formaat, Enter opent de formaatkeuzes en Delete verwijdert.
+
+
 ## Start
 
 Start is een raster. Telefoon, tablet en desktop houden elk hun eigen indeling (4, 8 en 12 kolommen). De indelingsknop op het tabblad Start verplaatst, vergroot, voegt toe en verwijdert widgets. **Instellingen → Startpagina** toont of verbergt de app-balk, zet de aanmeldtekst en bewaart een Jellyfin- of Seerr-API-sleutel als Start die zelf niet kan lezen.
@@ -57,7 +79,7 @@ Als je publieke Cloudflare-hostnamen hebt ingesteld, kan **Interface openen** in
 
 Als een app gezond is — of als je op **Auto-koppelen** klikt — zet AIO downloadmappen en categorieën, hoofdmapen en downloadclients in Sonarr, Radarr en Lidarr, Prowlarr-sync, Seerr, Bazarr-koppeling en startconfiguraties voor Recyclarr en NeutArr. **Instellingen → Usenet** bewaart de nieuwsserver en stuurt die naar SABnzbd en NZBGet. Prowlarr krijgt ook een startset publieke indexers. Verwijder wat je niet wilt; ze worden niet opnieuw toegevoegd.
 
-Houd **downloads** en **media** op hetzelfde volume, zodat voltooide bestanden kunnen **hardlinken**.
+SSD-downloadopslag en een HDD-bibliotheek werken samen; imports ertussen kopiëren bestanden. Hardlinks vereisen hetzelfde bestandssysteem.
 
 Nog zelf af te maken:
 

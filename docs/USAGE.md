@@ -27,6 +27,28 @@ Start small (for example Radarr + one download client + Jellyfin), then add the 
 
 ---
 
+## Arrange your Home widgets {#customize-home}
+
+<div class="widget-visual-guide" role="group" aria-label="Arrange your Home widgets">
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>The edit button</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>On Home, choose the four-block layout icon next to the page tabs. Widget handles and an editing toolbar appear.</p></div>
+<div class="widget-visual-step"><span class="visual-number">2</span><strong>Move: drag the grip</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Downloading</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Resize: drag this corner</p></div>
+<div class="widget-visual-step"><span class="visual-number">3</span><strong>Choose what to add</strong><div class="visual-toolbar"><span>＋ Add widget</span><span>Done</span></div><p>Choose Add widget, pick This size or Every size, then choose a widget. Changes save automatically; choose Done when finished.</p></div>
+</div>
+
+[Try the interactive example](index.md#app-preview){ .md-button .md-button--primary }
+
+This is a visual explanation of the real controls; the website demo uses sample data and simplified movement.
+
+Click a widget while editing to open its size choices. The × removes it from the selected screen size; use Undo immediately if you removed the wrong one.
+
+Changes save automatically to your AIO profile; Done closes editing. A separate phone/tablet/desktop layout means changing desktop does not always change your phone. The size buttons only appear when the window can preview those sizes.
+
+!!! tip "Dashboard"
+    For an empty card, first check its source app in Catalog. Settings → Homepage → Explain empty widgets can show why content is missing. Settings → Homepage also controls the app dock; Settings → Visuals changes the look.
+
+On a keyboard: Tab to a widget while editing; arrow keys move it, Shift + arrows resize, Enter opens size choices, and Delete removes it.
+
+
 ## Home
 
 Home is a grid. Phone, tablet, and desktop each keep their own layout (4, 8, and 12 columns). The layout control on the Home tab moves, resizes, adds, and removes widgets. **Settings → Homepage** shows or hides the app dock, sets the sign-in message, and holds a Jellyfin or Seerr API key when Home cannot read one itself.
@@ -57,7 +79,7 @@ If you set up Cloudflare public hostnames, **Open UI** can instead use `https://
 
 After an app is healthy — or when you click **Auto-Wire** — AIO sets download folders and categories, root folders and download clients in Sonarr, Radarr, and Lidarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr. **Settings → Usenet** holds the news server and sends it to SABnzbd and NZBGet. Prowlarr also gets a starter set of public indexers. Remove any you do not want; they are not added back.
 
-Keep **downloads** and **media** on the same volume so completed files can **hardlink**.
+SSD staging and an HDD library are supported; imports across them copy files. Hardlinks require the same filesystem.
 
 Still yours to finish:
 

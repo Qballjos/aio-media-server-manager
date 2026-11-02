@@ -43,6 +43,9 @@ theme:
     - content.code.copy
     - toc.follow
 
+extra_javascript:
+  - javascripts/showcase.js
+
 extra_css:
   - stylesheets/extra.css
 
@@ -97,6 +100,7 @@ plugins:
 
 hooks:
   - docs/hooks/donate.py
+  - docs/hooks/showcase.py
 
 markdown_extensions:
   - admonition

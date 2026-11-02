@@ -15,6 +15,7 @@
   <Overview>
     One-container media appliance. All *Arr apps, downloaders, and media servers run as supervised processes inside this one container — not as extra containers.
   </Overview>
+  <Description>Run deploy/unraid/install.sh before first start to validate the SSD/NVMe pool and prepare download staging. Finished torrents and media stay on the array. Migrate existing downloads before applying these mounts.</Description>
   <Category>MediaServer:Video MediaApp:Video Downloaders:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/unraid/templates/aio-media-manager.xml</TemplateURL>
@@ -38,6 +39,8 @@
   <Config Name="Plex" Target="32400" Default="32400" Mode="tcp" Description="Plex" Type="Port" Display="always" Required="false" Mask="false">32400</Config>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/aio-media-manager" Mode="rw" Description="App settings and child-app config" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/aio-media-manager</Config>
   <Config Name="Data" Target="/data" Default="/mnt/user/aio-media-manager" Mode="rw" Description="downloads/ and media/ share" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/aio-media-manager</Config>
+  <Config Name="Incomplete downloads (SSD pool)" Target="/data/downloads/incomplete" Default="/mnt/cache/aio-download-cache/incomplete" Mode="rw" Description="SSD/NVMe pool for active Usenet and torrent downloads. Run deploy/unraid/install.sh first; change cache to your pool name. Migrate existing files before applying." Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/aio-download-cache/incomplete</Config>
+  <Config Name="Completed Usenet downloads (SSD pool)" Target="/data/downloads/complete" Default="/mnt/cache/aio-download-cache/complete" Mode="rw" Description="SSD/NVMe unpacking and completed Usenet staging. Media is imported onto the array; finished torrents remain under /data/downloads/torrents." Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/aio-download-cache/complete</Config>
   <Config Name="Backups" Target="/backups" Default="/mnt/user/backups/aio-media-manager" Mode="rw" Description="Configuration backups" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/backups/aio-media-manager</Config>
   <Config Name="Host sys" Target="/host/sys" Default="/sys" Mode="ro" Description="Read-only host /sys so Home shows the server's network traffic, not just this container's." Type="Path" Display="advanced" Required="false" Mask="false">/sys</Config>
   <Config Name="Intel/AMD GPU" Target="/dev/dri" Default="" Mode="rw" Description="Optional /dev/dri for transcoding" Type="Device" Display="advanced" Required="false" Mask="false"/>
