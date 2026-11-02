@@ -6,7 +6,7 @@ import { catalogQueryFromState, catalogStateFromQuery, sameCatalogQuery } from '
 import { appWebUrl } from './appWebUrl.js'
 import { openApp } from './appOpen.js'
 import { apiError, apiRequest, readJson } from './api.js'
-import { formatUpdateWhen, formatUptime } from './format.js'
+import { formatUptime } from './format.js'
 import { useToasts } from './useToasts.js'
 import { t } from './i18n/index.js'
 import UiSelect from './UiSelect.vue'
@@ -32,7 +32,10 @@ const iconFailed = ref({})
 const openCardMenu = ref('')
 
 function openLogs(service) { emit('open-logs', service) }
-function openAppSettings(service) { emit('open-settings', service) }
+function openAppSettings(service) {
+  closeCardMenu()
+  emit('open-settings', service)
+}
 function openHealthModal() { emit('open-health') }
 function refreshDashboard() { return props.refreshDashboard() }
 
@@ -139,13 +142,6 @@ const combinedServices = computed(() => {
   })
 })
 
-const catalogUpdateCount = computed(
-  () => (props.updateStatus.available || []).filter((row) => row.kind !== 'appliance').length
-)
-const applianceUpdate = computed(
-  () => (props.updateStatus.available || []).find((row) => row.kind === 'appliance')
-)
-
 function categoryLabel(name) {
   return t(CATEGORY_LABELS[name] || name)
 }
@@ -170,55 +166,39 @@ function isRunningService(s) {
   return s.state === 'running' || s.state === 'healthy'
 }
 
-function toggleCategoryFilter(category) {
-  if (category === 'all') {
-    patchCatalogQuery({ cat: [] })
-    return
+const discoverSelected = computed(() => !catalogCategoriesSelected.value.length && !catalogStatusFilters.value.length)
+const featuredService = computed(() => {
+  const media = combinedServices.value.filter(service => service.category === 'media')
+  return media.find(service => service.name === 'jellyfin') || media.find(service => service.name === 'plex') || media[0]
+})
+const showDiscovery = computed(() => discoverSelected.value && !catalogSearchInput.value.trim())
+const catalogHeading = computed(() => {
+  if (catalogSearchInput.value.trim()) return t('Search results')
+  if (catalogCategoriesSelected.value.length === 1) return categoryLabel(catalogCategoriesSelected.value[0])
+  if (catalogStatusFilters.value.length === 1) {
+    return t({ installed: 'My apps', active: 'Active', available: 'Available' }[catalogStatusFilters.value[0]])
   }
-  const current = [...catalogCategoriesSelected.value]
-  const idx = current.indexOf(category)
-  if (idx >= 0) current.splice(idx, 1)
-  else current.push(category)
-  patchCatalogQuery({ cat: current })
+  return t('Discover')
+})
+function selectCatalogSection(status = '', category = '') {
+  patchCatalogQuery({ status: status ? [status] : [], cat: category ? [category] : [] })
 }
-
-function removeCategoryFilter(category) {
-  patchCatalogQuery({ cat: catalogCategoriesSelected.value.filter((c) => c !== category) })
+function onAppRowClick(event, service) {
+  if (event.target.closest('button, a, input, select, [role="listbox"]')) return
+  openAppSettings(service)
 }
-
-function toggleStatusFilter(key) {
-  const current = [...catalogStatusFilters.value]
-  const idx = current.indexOf(key)
-  if (idx >= 0) current.splice(idx, 1)
-  else current.push(key)
-  patchCatalogQuery({ status: current })
+function primaryAction(service) {
+  if (service.is_crash_loop) return resetCrashLoop(service.name)
+  if (!service.installed) return installApp(service.name, service.displayName)
+  if (!service.daemon) return syncRecyclarr()
+  if (!isServiceActive(service)) return startApp(service.name)
 }
-
-function removeStatusFilter(key) {
-  patchCatalogQuery({ status: catalogStatusFilters.value.filter((k) => k !== key) })
-}
-
-function scrollToCatalog() {
-  document.getElementById('catalog-toolbar')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-function openCatalog() {
-  router.push({ name: 'catalog' })
-}
-
-function filterByActiveServices() {
-  toggleStatusFilter('active')
-  scrollToCatalog()
-}
-
-function filterByInstalledPlugins() {
-  toggleStatusFilter('installed')
-  scrollToCatalog()
-}
-
-function filterByAvailablePlugins() {
-  toggleStatusFilter('available')
-  scrollToCatalog()
+function primaryActionLabel(service) {
+  if (service.is_crash_loop) return t('Reset')
+  if (service.installBusy) return t('Installing')
+  if (!service.installed) return t('Install')
+  if (!service.daemon) return t('Sync')
+  return t('Start')
 }
 
 const visibleServices = computed(() => {
@@ -273,7 +253,6 @@ const availableAppCount = computed(() => {
   return combinedServices.value.filter(s => !s.installed).length
 })
 
-const catalogSize = computed(() => combinedServices.value.length)
 const vpnUnprotected = computed(() => {
   const vpn = props.systemInfo?.vpn
   if (!vpn) return false
@@ -284,7 +263,6 @@ const cloudflareTunnelIssue = computed(() => {
   const tunnel = props.systemInfo?.cloudflare_tunnel
   return Boolean(tunnel?.enabled && !tunnel?.connected)
 })
-const transcodingAvailable = computed(() => props.systemInfo?.transcoding?.available)
 const hardlinksSupported = computed(() => props.systemInfo?.storage?.download_dir?.hardlinks_supported !== false)
 
 // --- App Control Actions ---
@@ -454,26 +432,6 @@ function statusLabel(service) {
   return String(service.state || 'stopped').toUpperCase().replace('_', ' ')
 }
 
-function statusBadgeClass(service) {
-  if (service.installJob === 'failed') return 'badge-failed'
-  if (service.installBusy) return 'badge-stopped'
-  if (service.is_crash_loop || service.state === 'crash_loop') return 'badge-failed font-bold'
-  if (!service.daemon && !isServiceActive(service)) return 'badge-inactive'
-  switch (service.state) {
-    case 'healthy':
-    case 'running':
-      return 'badge-running'
-    case 'stopped':
-      return 'badge-stopped'
-    case 'crashed':
-    case 'failed':
-      return 'badge-failed'
-    default:
-      return 'badge-inactive'
-  }
-}
-
-
 function onDocumentClick() {
   closeCardMenu()
 }
@@ -485,113 +443,6 @@ onUnmounted(() => {
 </script>
 
 <template>
-        <!-- Metric Cards -->
-        <section class="metrics-grid">
-          <div
-            class="stat-card glass-card stat-card-filter"
-            :class="{ 'is-filter-on': catalogStatusFilters.includes('active') }"
-            role="button"
-            tabindex="0"
-            :aria-pressed="catalogStatusFilters.includes('active')"
-            :title="$t('Show only running apps')"
-            @click="filterByActiveServices"
-            @keydown.enter.prevent="filterByActiveServices"
-            @keydown.space.prevent="filterByActiveServices"
-          >
-            <div class="stat-icon-wrapper active-color">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div class="stat-label">{{ $t('ACTIVE') }}</div>
-              <div class="stat-value font-mono">
-                <span class="text-glow-cyan">{{ activeAppCount }}</span>
-                <span class="stat-sub"> {{ $t('running') }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            class="stat-card glass-card stat-card-filter"
-            :class="{ 'is-filter-on': catalogStatusFilters.includes('installed') }"
-            role="button"
-            tabindex="0"
-            :aria-pressed="catalogStatusFilters.includes('installed')"
-            :title="$t('Show only installed applications')"
-            @click="filterByInstalledPlugins"
-            @keydown.enter.prevent="filterByInstalledPlugins"
-            @keydown.space.prevent="filterByInstalledPlugins"
-          >
-            <div class="stat-icon-wrapper installed-color">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div class="stat-label">{{ $t('INSTALLED') }}</div>
-              <div class="stat-value font-mono">
-                <span class="text-glow-purple">{{ installedAppCount }}</span>
-                <span class="stat-sub"> {{ $t('of') }} {{ catalogSize }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            class="stat-card glass-card stat-card-filter"
-            :class="{ 'is-filter-on': catalogStatusFilters.includes('available') }"
-            role="button"
-            tabindex="0"
-            :aria-pressed="catalogStatusFilters.includes('available')"
-            :title="$t('Show applications that are not installed yet')"
-            @click="filterByAvailablePlugins"
-            @keydown.enter.prevent="filterByAvailablePlugins"
-            @keydown.space.prevent="filterByAvailablePlugins"
-          >
-            <div class="stat-icon-wrapper storage-color">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div class="stat-label">{{ $t('AVAILABLE') }}</div>
-              <div class="stat-value font-mono">
-                <span class="text-glow-cyan">{{ availableAppCount }}</span>
-                <span class="stat-sub"> {{ $t('of') }} {{ catalogSize }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            class="stat-card glass-card stat-card-filter"
-            :class="{ 'is-filter-on': showHealthModal }"
-            role="button"
-            tabindex="0"
-            :title="$t('Host health')"
-            @click="openHealthModal"
-            @keydown.enter.prevent="openHealthModal"
-            @keydown.space.prevent="openHealthModal"
-          >
-            <div class="stat-icon-wrapper refresh-color">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div class="stat-label">{{ $t('HEALTH') }}</div>
-              <div class="stat-value font-mono">
-                <span :class="healthTone === 'ok' ? 'text-emerald' : 'text-warn'">{{ healthTone === 'ok' ? 'OK' : 'HIGH' }}</span>
-                <span class="stat-sub"> · CPU {{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
         <div
           v-if="vpnUnprotected"
           class="alert-banner alert-error"
@@ -617,344 +468,194 @@ onUnmounted(() => {
         </div>
 
 
-        <!-- Services Section Header -->
-        <div class="section-title-row">
-          <div>
-            <h2 class="section-title">{{ $t('Applications') }}</h2>
-            <p class="section-subtitle">
-              {{ $t('Install, start, and manage apps in this appliance.') }}
-              <span v-if="updateStatus.last_check_at || (updateStatus.available || []).length">
-                {{ $t('Last update check') }} {{ formatUpdateWhen(updateStatus.last_check_at) }}
-                {{ $t('· last apply') }} {{ formatUpdateWhen(updateStatus.last_apply_at) }}
-                · {{ catalogUpdateCount }} {{ $t('waiting') }}
-                <span v-if="applianceUpdate"> {{ $t('· appliance image update') }}</span>
+  <section class="catalog-store glass-card" :aria-label="$t('Catalog')">
+    <aside class="catalog-store-sidebar">
+      <h2 class="catalog-sidebar-title">{{ $t('Catalog') }}</h2>
+      <label class="catalog-search-label" for="catalog-search">{{ $t('Search') }}</label>
+      <input id="catalog-search" v-model="catalogSearchInput" type="search" class="ui-input catalog-store-search"
+        :placeholder="$t('Search apps…')" autocomplete="off" spellcheck="false" />
+      <nav class="catalog-store-nav" :aria-label="$t('Catalog')">
+        <button type="button" :aria-pressed="discoverSelected" @click="selectCatalogSection()">
+          <span aria-hidden="true">✧</span>{{ $t('Discover') }}
+        </button>
+        <button type="button" :aria-pressed="catalogStatusFilters.includes('installed')" @click="selectCatalogSection('installed')">
+          <span aria-hidden="true">▦</span>{{ $t('My apps') }}<small>{{ installedAppCount }}</small>
+        </button>
+        <button type="button" :aria-pressed="catalogStatusFilters.includes('active')" @click="selectCatalogSection('active')">
+          <span aria-hidden="true">▷</span>{{ $t('Active') }}<small>{{ activeAppCount }}</small>
+        </button>
+        <button type="button" :aria-pressed="catalogStatusFilters.includes('available')" @click="selectCatalogSection('available')">
+          <span aria-hidden="true">＋</span>{{ $t('Available') }}<small>{{ availableAppCount }}</small>
+        </button>
+        <p class="catalog-sidebar-label">{{ $t('Category') }}</p>
+        <button v-for="category in catalogCategories" :key="category" type="button"
+          :aria-pressed="catalogCategoriesSelected.includes(category)" @click="selectCatalogSection('', category)">
+          <span aria-hidden="true">{{ { media: '▷', automation: '✧', downloading: '↓', indexers: '⌕', subtitles: '≡', requests: '＋', optimization: '◇', maintenance: '⚙' }[category] || '◇' }}</span>
+          {{ categoryLabel(category) }}
+        </button>
+      </nav>
+      <button type="button" class="catalog-store-health" :class="{ 'is-warning': healthTone !== 'ok' }" @click="openHealthModal">
+        <span>{{ $t('Health') }} · {{ healthTone === 'ok' ? 'OK' : $t('HIGH') }}</span>
+        <small>CPU {{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</small>
+      </button>
+    </aside>
+    <div class="catalog-store-main">
+      <header class="catalog-store-heading">
+        <h2>{{ catalogHeading }}</h2>
+        <button type="button" class="ui-btn ui-btn-ghost" :disabled="isLoadingData" @click="refreshDashboard">{{ $t('Refresh') }}</button>
+      </header>
+      <button v-if="showDiscovery && featuredService" type="button" class="catalog-feature" @click="openAppSettings(featuredService)">
+        <span class="catalog-feature-copy">
+          <span class="catalog-feature-kicker">{{ $t('Your own cinema') }}</span>
+          <strong>{{ $t('All your stories. One home.') }}</strong>
+          <span>{{ featuredService.description }}</span>
+          <span class="catalog-feature-link">{{ $t('Explore {name}', { name: featuredService.displayName }) }} →</span>
+        </span>
+        <img v-if="featuredService.iconSrc && !iconFailed[featuredService.name]" :src="featuredService.iconSrc" alt="" @error="iconFailed[featuredService.name] = true" />
+      </button>
+      <div id="catalog-toolbar" class="catalog-store-list-heading">
+        <h3>{{ showDiscovery ? $t('For your media server') : $t('Applications') }} <span>{{ visibleServices.length }}</span></h3>
+        <UiSelect id="catalog-sort" v-model="catalogSort" variant="inline" :aria-label="$t('Sort')"
+          :options="[{ value: 'popularity', label: $t('Popularity') }, { value: 'az', label: $t('A to Z') }]" />
+      </div>
+      <div class="catalog-store-apps">
+        <article v-for="service in visibleServices" :key="service.name" class="catalog-store-app"
+          :class="{ 'has-open-menu': openCardMenu === service.name }" @click="onAppRowClick($event, service)">
+          <button type="button" class="catalog-app-details" :aria-label="t('Settings for {name}', { name: service.displayName })" @click="openAppSettings(service)">
+            <span class="app-badge catalog-store-icon" :class="{ 'has-icon': service.iconSrc && !iconFailed[service.name] }">
+              <img v-if="service.iconSrc && !iconFailed[service.name]" :src="service.iconSrc" alt="" class="app-icon" @error="iconFailed[service.name] = true" />
+              <span v-else>{{ service.name.substring(0, 2).toUpperCase() }}</span>
+            </span>
+            <span class="catalog-app-copy">
+              <span class="catalog-app-name">{{ service.displayName }}</span>
+              <span class="catalog-app-description">{{ service.description }}</span>
+              <span class="catalog-app-state" :class="{ 'is-active': isServiceActive(service), 'is-failed': service.installJob === 'failed' || service.is_crash_loop }">
+                <template v-if="service.installed || service.installBusy || service.installJob === 'failed'">{{ statusLabel(service) }}</template>
+                <template v-else>{{ categoryLabel(service.category) }}</template>
+                <span v-if="service.updateAvailable" class="catalog-app-update"> · {{ $t('Update available') }}</span>
               </span>
-              <span v-if="backupStatus.schedule">
-                {{ $t('· last backup') }} {{ formatUpdateWhen(backupStatus.last_backup_at) }}
-                <span v-if="backupStatus.last_error" class="text-warn">{{ $t('(last attempt failed)') }}</span>
-              </span>
-            </p>
-          </div>
-          <button @click="refreshDashboard" class="ui-btn ui-btn-ghost" :disabled="isLoadingData">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ 'spin-anim': isLoadingData }">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <polyline points="1 20 1 14 7 14"></polyline>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-            <span>{{ $t('Refresh') }}</span>
+            </span>
           </button>
-        </div>
-
-        <div id="catalog-toolbar" class="catalog-toolbar glass-card">
-          <div class="catalog-filter-group catalog-search-group">
-            <label class="catalog-filter-label" for="catalog-search">{{ $t('Search') }}</label>
-            <input
-              id="catalog-search"
-              v-model="catalogSearchInput"
-              type="search"
-              class="ui-input catalog-search-input"
-              :placeholder="$t('Search apps…')"
-              autocomplete="off"
-              spellcheck="false"
-            />
-          </div>
-          <div class="catalog-filter-group">
-            <span class="catalog-filter-label">{{ $t('Status') }}</span>
-            <div class="catalog-chips" role="group" :aria-label="$t('Filter by status')">
-              <button
-                type="button"
-                class="catalog-chip"
-                :class="{ active: catalogStatusFilters.includes('active') }"
-                @click="toggleStatusFilter('active')"
-              >
-                {{ $t('Active') }}
-                <span
-                  v-if="catalogStatusFilters.includes('active')"
-                  class="chip-clear"
-                  role="button"
-                  :aria-label="$t('Remove active filter')"
-                  @click.stop="removeStatusFilter('active')"
-                >×</span>
-              </button>
-              <button
-                type="button"
-                class="catalog-chip"
-                :class="{ active: catalogStatusFilters.includes('installed') }"
-                @click="toggleStatusFilter('installed')"
-              >
-                {{ $t('Installed') }}
-                <span
-                  v-if="catalogStatusFilters.includes('installed')"
-                  class="chip-clear"
-                  role="button"
-                  :aria-label="$t('Remove installed filter')"
-                  @click.stop="removeStatusFilter('installed')"
-                >×</span>
-              </button>
-              <button
-                type="button"
-                class="catalog-chip"
-                :class="{ active: catalogStatusFilters.includes('available') }"
-                @click="toggleStatusFilter('available')"
-              >
-                {{ $t('Available') }}
-                <span
-                  v-if="catalogStatusFilters.includes('available')"
-                  class="chip-clear"
-                  role="button"
-                  :aria-label="$t('Remove available filter')"
-                  @click.stop="removeStatusFilter('available')"
-                >×</span>
-              </button>
-            </div>
-          </div>
-          <div class="catalog-filter-group">
-            <span class="catalog-filter-label">{{ $t('Category') }}</span>
-            <div class="catalog-chips" role="group" :aria-label="$t('Filter by category')">
-              <button
-                type="button"
-                class="catalog-chip"
-                :class="{ active: catalogCategoriesSelected.length === 0 }"
-                @click="toggleCategoryFilter('all')"
-              >
-                {{ $t('All') }}
-              </button>
-              <button
-                v-for="category in catalogCategories"
-                :key="category"
-                type="button"
-                class="catalog-chip"
-                :class="{ active: catalogCategoriesSelected.includes(category) }"
-                @click="toggleCategoryFilter(category)"
-              >
-                {{ categoryLabel(category) }}
-                <span
-                  v-if="catalogCategoriesSelected.includes(category)"
-                  class="chip-clear"
-                  role="button"
-                  :aria-label="t('Remove {category} filter', { category: categoryLabel(category) })"
-                  @click.stop="removeCategoryFilter(category)"
-                >×</span>
-              </button>
-            </div>
-          </div>
-          <div class="catalog-filter-group catalog-sort-group">
-            <label class="catalog-filter-label" for="catalog-sort">{{ $t('Sort') }}</label>
-            <UiSelect
-              id="catalog-sort"
-              v-model="catalogSort"
-              class="catalog-sort-select"
-              variant="inline"
-              :aria-label="$t('Sort')"
-              :options="[
-                { value: 'popularity', label: $t('Popularity') },
-                { value: 'az', label: $t('A to Z') },
-              ]"
-            />
-          </div>
-          <span class="catalog-count font-mono">{{ visibleServices.length }} {{ $t('shown ·') }} {{ installedAppCount }} {{ $t('installed ·') }} {{ availableAppCount }} {{ $t('available') }}</span>
-        </div>
-
-        <!-- Services Grid -->
-        <div class="services-grid">
-          <div
-            v-for="service in visibleServices"
-            :key="service.name"
-            class="service-card glass-card"
-            :class="{ 'is-running': service.state === 'running' || service.state === 'healthy', 'has-open-menu': openCardMenu === service.name }"
-          >
-            <!-- Card Header -->
-            <div class="service-header">
-              <div class="service-ident">
-                <div class="app-badge" :class="[service.category, { 'has-icon': service.iconSrc && !iconFailed[service.name] }]">
-                  <img
-                    v-if="service.iconSrc && !iconFailed[service.name]"
-                    :src="service.iconSrc"
-                    :alt="service.displayName"
-                    class="app-icon"
-                    @error="iconFailed[service.name] = true"
-                  />
-                  <span v-else>{{ service.name.substring(0, 2).toUpperCase() }}</span>
-                </div>
-                <div>
-                  <div class="service-name-row">
-                    <h3 class="service-name">{{ service.displayName }}</h3>
-                    <a
-                      v-if="service.helpUrl"
-                      :href="service.helpUrl"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="help-btn"
-                      :title="$t('Help / wiki for {name}', { name: service.displayName })"
-                    >?</a>
-                    <span class="category-pill">{{ categoryLabel(service.category) }}</span>
-                    <span v-if="service.updateAvailable" class="update-pill">{{ $t('Update available') }}</span>
-                  </div>
-                  <div v-if="service.daemon" class="service-port font-mono">
-                    <span class="port-label">{{ $t('PORT:') }}</span>
-                    <a
-                      :href="service.webUrl"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="port-link"
-                      @click="openApp($event, service.name, service.webUrl)"
-                      :title="$t('Open UI')"
-                    >
-                      :{{ service.port }}
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                        <polyline points="15 3 21 3 21 9"></polyline>
-                        <line x1="10" y1="14" x2="21" y2="3"></line>
-                      </svg>
-                    </a>
-                  </div>
-                </div>
+          <div class="catalog-app-actions">
+            <a v-if="service.installed && service.daemon && isServiceActive(service) && !service.installBusy && !service.is_crash_loop"
+              :href="service.webUrl" target="_blank" rel="noopener noreferrer" class="catalog-get" @click="openApp($event, service.name, service.webUrl)">{{ $t('Open') }}</a>
+            <button v-else type="button" class="catalog-get" :disabled="!!actionLoading[service.name] || service.installBusy" @click="primaryAction(service)">
+              <span v-if="actionLoading[service.name] || service.installBusy" class="spinner spinner-sm" :aria-label="$t('Loading…')"></span>
+              <template v-else>{{ primaryActionLabel(service) }}</template>
+            </button>
+            <div class="card-menu-wrap" @click.stop @keydown.esc.stop="closeCardMenu">
+              <button type="button" class="catalog-app-more" :aria-label="t('More actions for {name}', { name: service.displayName })"
+                :aria-expanded="openCardMenu === service.name" @click="toggleCardMenu(service.name)">⋯</button>
+              <div v-if="openCardMenu === service.name" class="card-menu glass-popover">
+                <button type="button" @click="openAppSettings(service)">{{ $t('Settings') }}</button>
+                <template v-if="service.installed">
+                  <button v-if="isServiceActive(service)" type="button" :disabled="!!actionLoading[service.name] || service.installBusy" @click="closeCardMenu(); stopApp(service.name)">{{ $t('Stop') }}</button>
+                  <button v-if="isServiceActive(service)" type="button" :disabled="!!actionLoading[service.name] || service.installBusy" @click="closeCardMenu(); restartApp(service.name)">{{ $t('Restart') }}</button>
+                  <button type="button" @click="closeCardMenu(); openLogs(service)">{{ $t('Logs') }}</button>
+                  <button type="button" :disabled="!!actionLoading[service.name] || service.installBusy" @click="closeCardMenu(); updateApp(service.name)">{{ $t('Update') }}</button>
+                  <button type="button" class="danger" :disabled="!!actionLoading[service.name] || service.installBusy" @click="closeCardMenu(); uninstallApp(service.name)">{{ $t('Uninstall') }}</button>
+                </template>
+                <a v-if="service.helpUrl" :href="service.helpUrl" target="_blank" rel="noopener noreferrer">{{ $t('Guide') }}</a>
               </div>
-
-              <!-- Status Badge -->
-              <span class="status-badge" :class="statusBadgeClass(service)">
-                <span class="badge-dot"></span>
-                <span>{{ statusLabel(service) }}</span>
-              </span>
-            </div>
-
-            <!-- Description -->
-            <p class="service-desc">{{ service.description }}</p>
-            <p v-if="service.installMessage && (service.installBusy || service.installJob === 'failed')" class="service-progress">
-              <span aria-live="polite">{{ service.installMessage }}</span>
-              <small v-if="service.installBusy && service.installUpdatedAt">
-                {{ $t('Last progress {when} ago', { when: formatUptime(Date.now() / 1000 - service.installUpdatedAt) }) }}
-              </small>
-            </p>
-
-            <!-- Metadata footer -->
-            <div class="service-meta font-mono">
-              <span v-if="service.installedVersion">v{{ String(service.installedVersion).replace(/^v/, '') }}<template v-if="service.latestVersion"> → {{ service.latestVersion }}</template></span>
-              <span v-else-if="service.installed">{{ $t('Installed') }}</span>
-              <span v-else class="text-dim">{{ $t('Not installed') }}</span>
-
-              <span v-if="service.uptime" class="uptime-text">
-                up {{ formatUptime(service.uptime) }}
-              </span>
-              <span v-if="service.pid" class="pid-text">PID: {{ service.pid }}</span>
-            </div>
-
-            <!-- Action Controls -->
-            <div class="service-actions">
-              <template v-if="!service.installed">
-                <button
-                  @click="installApp(service.name, service.displayName)"
-                  class="btn-action btn-install"
-                  :disabled="actionLoading[service.name] === 'install' || service.installBusy"
-                >
-                  <span v-if="actionLoading[service.name] === 'install' || service.installBusy" class="spinner spinner-sm" :aria-label="$t('Installing')"></span>
-                  <span v-else>{{ $t('Install') }}</span>
-                </button>
-                <button type="button" class="btn-action btn-logs" @click.stop="openAppSettings(service)">
-                  {{ $t('Settings') }}
-                </button>
-              </template>
-
-              <template v-else>
-                <button
-                  v-if="service.is_crash_loop"
-                  @click="resetCrashLoop(service.name)"
-                  class="btn-action btn-stop"
-                  :title="$t('Clear crash history and unlock auto-restart')"
-                >
-                  {{ $t('Reset') }}
-                </button>
-                <button
-                  v-else-if="!isServiceActive(service) && service.daemon"
-                  @click="startApp(service.name)"
-                  class="btn-action btn-start"
-                  :disabled="!!actionLoading[service.name]"
-                >
-                  <span v-if="actionLoading[service.name] === 'start'" class="spinner spinner-sm"></span>
-                  <span v-else>{{ $t('Start') }}</span>
-                </button>
-                <button
-                  v-else-if="isServiceActive(service)"
-                  @click="stopApp(service.name)"
-                  class="btn-action btn-stop"
-                  :disabled="!!actionLoading[service.name]"
-                >
-                  <span v-if="actionLoading[service.name] === 'stop'" class="spinner spinner-sm"></span>
-                  <span v-else>{{ $t('Stop') }}</span>
-                </button>
-                <button
-                  v-else-if="!service.daemon"
-                  type="button"
-                  class="btn-action btn-start"
-                  :disabled="!!actionLoading[service.name]"
-                  @click="syncRecyclarr"
-                >
-                  <span v-if="actionLoading[service.name] === 'sync'" class="spinner spinner-sm"></span>
-                  <span v-else>{{ $t('Sync') }}</span>
-                </button>
-                <a
-                  v-if="service.daemon"
-                  :href="service.webUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="btn-action btn-webui"
-                  @click="openApp($event, service.name, service.webUrl)"
-                >
-                  {{ $t('Open UI') }}
-                </a>
-                <div class="card-menu-wrap" @click.stop>
-                  <button
-                    type="button"
-                    class="btn-action btn-more"
-                    :class="{ open: openCardMenu === service.name }"
-                    :title="$t('More actions')"
-                    @click="toggleCardMenu(service.name)"
-                  >
-                    {{ $t('More') }}
-                  </button>
-                  <div v-if="openCardMenu === service.name" class="card-menu glass-popover">
-                    <button
-                      v-if="isServiceActive(service)"
-                      type="button"
-                      @click="closeCardMenu(); restartApp(service.name)"
-                    >
-                      {{ $t('Restart') }}
-                    </button>
-                    <button type="button" @click="closeCardMenu(); openLogs(service)">{{ $t('Logs') }}</button>
-                    <button type="button" @click="openAppSettings(service)">{{ $t('Settings') }}</button>
-                    <button
-                      type="button"
-                      :disabled="!!actionLoading[service.name]"
-                      @click="closeCardMenu(); updateApp(service.name)"
-                    >
-                      {{ actionLoading[service.name] === 'update' ? 'Updating…' : 'Update' }}
-                    </button>
-                    <button
-                      type="button"
-                      class="danger"
-                      :disabled="!!actionLoading[service.name]"
-                      @click="closeCardMenu(); uninstallApp(service.name)"
-                    >
-                      {{ $t('Uninstall') }}
-                    </button>
-                  </div>
-                </div>
-              </template>
             </div>
           </div>
-          <p v-if="visibleServices.length === 0" class="catalog-empty">{{ $t('No applications match these filters.') }}</p>
-        </div>
-
+          <p v-if="service.installMessage && (service.installBusy || service.installJob === 'failed')" class="catalog-app-progress" aria-live="polite">
+            {{ service.installMessage }}
+            <small v-if="service.installBusy && service.installUpdatedAt">{{ $t('Last progress {when} ago', { when: formatUptime(Date.now() / 1000 - service.installUpdatedAt) }) }}</small>
+          </p>
+        </article>
+      </div>
+      <p v-if="visibleServices.length === 0" class="catalog-empty">{{ $t('No applications match these filters.') }}</p>
+      <section v-if="showDiscovery" class="catalog-collections" :aria-label="$t('Explore categories')">
+        <button v-if="catalogCategories.includes('automation')" type="button" @click="selectCatalogSection('', 'automation')">
+          <span class="catalog-feature-kicker">{{ $t('Less manual work') }}</span>
+          <strong>{{ $t('Your collection grows on its own.') }}</strong>
+          <span>{{ $t('Discover automation for films and series.') }}</span>
+        </button>
+        <button v-if="catalogCategories.includes('media')" type="button" @click="selectCatalogSection('', 'media')">
+          <span class="catalog-feature-kicker">{{ $t('Ready to watch') }}</span>
+          <strong>{{ $t('Your media, everywhere.') }}</strong>
+          <span>{{ $t('Choose a media server that fits you.') }}</span>
+        </button>
+      </section>
+    </div>
+  </section>
 </template>
 
 <style scoped>
-.service-progress {
-  display: grid;
-  gap: 0.25rem;
-  margin: 0 0 0.8rem;
-  color: var(--text-muted);
-  font-size: var(--text-body);
-  line-height: 1.4;
-  overflow-wrap: anywhere;
+.catalog-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.catalog-store { display: grid; grid-template-columns: 13.5rem minmax(0, 1fr); padding: 0; isolation: isolate; overflow: visible; }
+.catalog-store-sidebar { display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem 0.875rem; border-right: 1px solid var(--border-subtle); background: var(--panel-shine); border-radius: var(--radius-glass) 0 0 var(--radius-glass); }
+.catalog-sidebar-title { margin: 0 0.5rem; font-size: var(--text-title); letter-spacing: -0.04em; }
+.catalog-store-search { width: 100%; min-width: 0; border-radius: var(--radius-inset); }
+.catalog-store-nav { display: grid; gap: 0.25rem; }
+.catalog-store-nav button { display: flex; align-items: center; gap: 0.6rem; width: 100%; border: 1px solid transparent; border-radius: 10px; padding: 0.65rem; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--text-body); text-align: left; cursor: pointer; }
+.catalog-store-nav button > span { width: 1.1rem; color: var(--color-primary-text); text-align: center; flex-shrink: 0; }
+.catalog-store-nav button > small { margin-left: auto; font-size: var(--text-kicker); }
+.catalog-store-nav button:hover { background: var(--bg-surface); }
+.catalog-store-nav button[aria-pressed='true'] { background: var(--pill-active); color: var(--color-primary-text); }
+.catalog-sidebar-label { padding: 1rem 0.65rem 0.35rem; font-size: var(--text-kicker); color: var(--text-dim); }
+.catalog-store-health { display: grid; gap: 0.25rem; margin-top: auto; padding: 1.25rem 0.65rem 0; background: transparent; border: 0; border-top: 1px solid var(--border-subtle); font: inherit; font-size: var(--text-body); color: var(--color-success-fg); cursor: pointer; text-align: left; }
+.catalog-store-health small { color: var(--text-dim); font-size: var(--text-kicker); }
+.catalog-store-health.is-warning { color: var(--color-warning-fg); }
+.catalog-store-main { min-width: 0; padding: 1.75rem; }
+.catalog-store-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+.catalog-store-heading h2 { font-size: var(--text-display); letter-spacing: -0.04em; }
+.catalog-feature { display: grid; grid-template-columns: minmax(0, 1fr) 8rem; align-items: center; gap: 1.5rem; width: 100%; padding: 1.75rem; border: 1px solid var(--border-strong); border-radius: var(--radius-tile); background: linear-gradient(125deg, rgb(var(--color-primary-rgb) / 0.19), transparent), var(--bg-surface); color: var(--text-main); text-align: left; cursor: pointer; font: inherit; }
+.catalog-feature-copy { display: grid; gap: 0.75rem; max-width: 28rem; }
+.catalog-feature-kicker { color: var(--color-primary-text); text-transform: uppercase; letter-spacing: 0.1em; font-size: var(--text-kicker); }
+.catalog-feature-copy strong { font-size: clamp(1.4rem, 2.5vw, 2rem); line-height: 1.15; letter-spacing: -0.035em; font-weight: 600; }
+.catalog-feature-copy > span:not(.catalog-feature-kicker):not(.catalog-feature-link) { color: var(--text-muted); font-size: var(--text-body); }
+.catalog-feature-link { color: var(--color-primary-text); font-size: var(--text-body); }
+.catalog-feature img { width: 7rem; height: 7rem; object-fit: contain; filter: drop-shadow(0 1rem 1rem rgb(0 0 0 / 0.2)); }
+.catalog-store-list-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin: 1.5rem 0 0.25rem; }
+.catalog-store-list-heading h3 { font-size: var(--text-strong); font-weight: 600; letter-spacing: -0.02em; }
+.catalog-store-list-heading h3 span { margin-left: 0.4rem; font-size: var(--text-kicker); color: var(--text-dim); font-weight: 400; }
+.catalog-store-apps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1.75rem; }
+.catalog-store-app { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; padding: 1.1rem 0; border-bottom: 1px solid var(--border-subtle); position: relative; cursor: pointer; }
+.catalog-store-app.has-open-menu { z-index: 5; }
+.catalog-app-details { display: flex; align-items: center; gap: 0.8rem; min-width: 0; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.catalog-store-icon { width: 3rem; height: 3rem; min-width: 3rem; border-radius: 12px; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); }
+.catalog-store-icon .app-icon { width: 2.35rem; height: 2.35rem; }
+.catalog-app-copy { display: grid; gap: 0.2rem; min-width: 0; }
+.catalog-app-name { font-size: var(--text-body); font-weight: 600; }
+.catalog-app-description { font-size: var(--text-kicker); color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.catalog-app-state { color: var(--text-dim); font-size: var(--text-kicker); overflow-wrap: anywhere; }
+.catalog-app-state.is-active { color: var(--color-success-fg); }
+.catalog-app-state.is-failed, .catalog-app-update { color: var(--color-warning-fg); }
+.card-menu a { display: block; padding: 0.55rem 0.75rem; color: var(--text-main); font-size: var(--text-body); text-decoration: none; }
+.catalog-app-actions { display: flex; align-items: center; gap: 0.2rem; }
+.catalog-get { display: inline-flex; align-items: center; justify-content: center; min-width: 4.3rem; min-height: 2rem; padding: 0.35rem 0.8rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--pill-active); color: var(--color-primary-text); font: inherit; font-size: var(--text-kicker); font-weight: 600; text-decoration: none; cursor: pointer; }
+.catalog-get:hover { background: var(--bg-surface-elevated); }
+.catalog-get:disabled { opacity: 0.6; cursor: wait; }
+.catalog-app-more { display: grid; place-items: center; width: 1.8rem; min-height: 2rem; padding: 0; border: 0; background: transparent; color: var(--text-dim); font-size: var(--text-strong); cursor: pointer; border-radius: var(--radius-sm); }
+.catalog-app-progress { grid-column: 1 / -1; color: var(--text-muted); font-size: var(--text-kicker); overflow-wrap: anywhere; }
+.catalog-app-progress small { display: block; font-size: inherit; }
+.catalog-collections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1.75rem; }
+.catalog-collections button { display: grid; align-content: start; gap: 0.65rem; padding: 1.25rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-tile); background: var(--bg-surface); color: var(--text-main); text-align: left; font: inherit; cursor: pointer; }
+.catalog-collections strong { font-size: var(--text-strong); letter-spacing: -0.02em; }
+.catalog-collections button > span:last-child { color: var(--text-muted); font-size: var(--text-body); }
+@media (max-width: 1100px) { .catalog-store-apps { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .catalog-store { grid-template-columns: minmax(0, 1fr); }
+  .catalog-store-sidebar { border-right: 0; border-bottom: 1px solid var(--border-subtle); padding: 1rem; border-radius: var(--radius-glass) var(--radius-glass) 0 0; }
+  .catalog-sidebar-title, .catalog-sidebar-label, .catalog-store-health { display: none; }
+  .catalog-store-nav { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .catalog-store-nav button { width: auto; padding: 0.5rem 0.65rem; font-size: var(--text-kicker); }
+  .catalog-store-nav button > span, .catalog-store-nav button > small { display: none; }
+  .catalog-store-main { padding: 1.25rem; }
+  .catalog-feature { grid-template-columns: minmax(0, 1fr) 4rem; padding: 1.25rem; gap: 0.75rem; }
+  .catalog-feature img { width: 4rem; height: 4rem; }
+  .catalog-collections { grid-template-columns: minmax(0, 1fr); }
 }
+@media (max-width: 400px) {
+  .catalog-feature { grid-template-columns: minmax(0, 1fr); }
+  .catalog-feature img { display: none; }
+  .catalog-store-main { padding: 1rem; }
+  .catalog-app-details { gap: 0.5rem; }
+  .catalog-store-icon { width: 2.25rem; height: 2.25rem; min-width: 2.25rem; }
+  .catalog-store-icon .app-icon { width: 1.85rem; height: 1.85rem; }
+  .catalog-get { min-width: 3.4rem; padding-inline: 0.5rem; }
+}
+@media (pointer: coarse) { .catalog-get, .catalog-app-more, .catalog-store-nav button { min-height: 44px; } .catalog-app-more { width: 36px; } }
 </style>

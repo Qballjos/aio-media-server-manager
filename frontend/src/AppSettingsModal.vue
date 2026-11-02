@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { openApp } from './appOpen.js'
@@ -15,6 +15,26 @@ const emit = defineEmits(['close', 'saved'])
 const { showToast } = useToasts()
 
 const settingsApp = computed(() => props.service)
+const settingsDialog = ref(null)
+let returnFocus = null
+function dialogKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeAppSettings()
+  }
+  if (event.key !== 'Tab') return
+  const controls = [...(settingsDialog.value?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]') || [])]
+    .filter(element => element.getClientRects().length)
+  const first = controls[0]
+  const last = controls[controls.length - 1]
+  if (!first) { event.preventDefault(); return }
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === settingsDialog.value)) {
+    event.preventDefault(); last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault(); first.focus()
+  }
+}
+onBeforeUnmount(() => returnFocus?.isConnected && returnFocus.focus())
 const openUiUrl = computed(() => {
   const service = props.service
   if (!service?.name || !service?.port) return ''
@@ -281,8 +301,17 @@ async function syncRecyclarr() {
 
 watch(
   () => props.service,
-  (service) => {
-    if (service) loadSettings(service)
+  async (service, previous) => {
+    if (service) {
+      if (!previous) returnFocus = document.activeElement
+      loadSettings(service)
+      await nextTick()
+      settingsDialog.value?.querySelector('.btn-close')?.focus()
+    } else {
+      await nextTick()
+      if (returnFocus?.isConnected) returnFocus.focus()
+      returnFocus = null
+    }
   },
   { immediate: true }
 )
@@ -291,15 +320,21 @@ watch(
 <template>
     <div v-if="settingsApp" class="modal-backdrop" @click.self="closeAppSettings">
       <div
+        ref="settingsDialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="app-settings-title"
+        tabindex="-1"
+        @keydown="dialogKeydown"
         class="settings-modal glass-card animate-scale"
         :class="{ 'settings-modal-wide': settingsApp.name === 'recyclarr' }"
       >
         <div class="modal-header">
           <div class="modal-title-group">
-            <h3>{{ settingsApp.displayName }} settings</h3>
+            <h3 id="app-settings-title">{{ $t('Settings for {name}', { name: settingsApp.displayName }) }}</h3>
             <span class="font-mono text-dim">({{ settingsApp.name }})</span>
           </div>
-          <button type="button" class="btn-icon btn-close" :title="$t('Close')" @click="closeAppSettings">×</button>
+          <button type="button" class="btn-icon btn-close" :title="$t('Close')" :aria-label="$t('Close')" @click="closeAppSettings">×</button>
         </div>
         <div v-if="settingsError" class="ui-alert ui-alert-error">{{ settingsError }}</div>
         <form class="app-settings-form" @submit.prevent="saveAppSettings">
@@ -414,7 +449,7 @@ watch(
                 class="ui-input font-mono"
                 type="password"
                 autocomplete="off"
-                :placeholder="settingsMeta.api_key_configured
+                :placeholder="settingsMeta?.api_key_configured
                   ? $t('Saved — paste a new key to replace')
                   : (settingsApp.name === 'seerr' ? $t('Settings → General → API Key') : $t('Dashboard → API Keys'))"
               />
@@ -432,8 +467,8 @@ watch(
                 <a href="https://github.com/VueTorrent/VueTorrent" target="_blank" rel="noopener noreferrer">VueTorrent</a>
                 {{ $t('instead of the stock qBittorrent WebUI. Turn off for the stock UI. Turning back on re-downloads the latest release. Sonarr, Radarr, and Lidarr still use the same WebAPI.') }}
               </span>
-              <span v-if="settingsMeta.vuetorrent_version" class="settings-hint">
-                {{ $t('Installed') }} {{ settingsMeta.vuetorrent_version }}
+              <span v-if="settingsMeta?.vuetorrent_version" class="settings-hint">
+                {{ $t('Installed') }} {{ settingsMeta?.vuetorrent_version }}
               </span>
               <button
                 v-if="settingsForm.vuetorrent"
