@@ -17,7 +17,8 @@ class SetupFlow {
       if (step === 5) await page.getByRole('checkbox', { name: /SABnzbd/ }).uncheck()
       if (step === 7) await expect(page.getByRole('checkbox', { name: /starter set of public/ })).not.toBeChecked()
       if (step === 10) {
-        for (const checkbox of await page.locator('.wizard-options input[type="checkbox"]:checked').all()) await checkbox.uncheck()
+        // Keep indices stable as checkboxes change state during the loop.
+        for (const checkbox of await page.locator('.wizard-options input[type="checkbox"]').all()) await checkbox.uncheck()
       }
       await page.getByRole('button', { name: 'Next', exact: true }).click()
     }

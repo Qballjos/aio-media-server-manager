@@ -30,12 +30,12 @@ On macOS arm64, 2 November 2026:
 
 - Python regression suite: **654 passed** (including three portable unsafe-path regressions).
 - Frontend behavior tests: **65 passed**.
-- Chromium browser journeys: **10 passed**, five each on desktop and mobile.
-  Two additional focused header checks passed, covering centering at 320–1440 px,
+- Chromium browser journeys: **12 passed**, six each on desktop and mobile,
+  including focused header checks covering centering at 320–1440 px,
   scroll behavior and consistent font families.
 - Ruff, frontend production build and strict documentation build: **passed**.
 - Changed CI workflows parsed successfully. Native Linux amd64/arm64 CI is
-  configured. In [beta run 41536074848](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41536074848), both native browser jobs and the frontend build passed. Python 3.11/3.12/3.14 exposed an unsafe-path validation ordering bug on Linux; this checkout validates archive paths before exclusion filters. A new remote run must verify the correction.
+  configured. In [beta run 41536074848](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41536074848), both native browser jobs and the frontend build passed. Python 3.11/3.12/3.14 exposed an unsafe-path validation ordering bug on Linux; this checkout validates archive paths before exclusion filters. The corrected Python 3.11/3.12/3.14 jobs passed in [run 41537035155](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41537035155). That run also exposed a mobile setup-test locator whose indices changed while unchecking options; the test now selects a stable list. A subsequent remote run must verify the full workflow.
 
 Coverage percentage was not measured. Browser service adapters are synthetic;
 real media-app installation and external WebDAV acceptance remain open below.
@@ -59,7 +59,7 @@ appliance image job. Do not present ARMv7 as a supported Docker image.
 
 | Environment | Automated coverage configured | Acceptance status |
 | --- | --- | --- |
-| Python logic on Linux amd64 | Existing Python CI (3.11, 3.12, 3.14) | Original beta run failed unsafe-path regression; correction verified locally, remote rerun pending |
+| Python logic on Linux amd64 | Existing Python CI (3.11, 3.12, 3.14) | Python 3.11/3.12/3.14 passed in run 41537035155 |
 | Browser journeys on Linux amd64 | Native amd64 job, desktop and mobile Chromium | Passed in beta run 41536074848 |
 | Browser journeys on Linux arm64 | Native `ubuntu-24.04-arm` job, desktop and mobile Chromium | Passed in beta run 41536074848 |
 | macOS arm64 | Local Python, Node and Chromium tests | Local evidence only; not a Linux appliance installation |
