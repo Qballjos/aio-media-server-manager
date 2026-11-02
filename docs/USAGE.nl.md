@@ -14,6 +14,8 @@ Maak het beheerdersaccount en doorloop de wizard. Begin bijvoorbeeld met Jellyfi
 | Catalogus | Installeer apps, bekijk of ze actief zijn en open een app met Open. |
 | Instellingen | Pas het uiterlijk van AIO, je account en updates aan. Hier voeg je geen films toe aan je mediaserver. |
 
+**Header:** Start, Catalogus en Instellingen blijven gecentreerd over de volledige header. Op smalle schermen krijgen ze een eigen gecentreerde rij. De header scrollt mee met de pagina. Op Start staat de knop met vier blokjes rechts, naast je account. Alle app-pagina’s, bedieningselementen en labels gebruiken Figtree; als dat weblettertype niet kan laden, gebruikt de app overal dezelfde systeemlettertypen als terugval.
+
 ## De nieuwe catalogus gebruiken {#catalog-menu}
 
 Open bovenaan **Catalogus**. Links kies je wat je wilt zien; rechts verschijnen de apps.
@@ -86,7 +88,7 @@ Een serie zet je in media/tv. Open na het kopiëren Jellyfin → Dashboard → B
 ## 5. De widgets op Home aanpassen {#customize-home}
 
 <div class="widget-visual-guide" role="group" aria-label="De widgets op je hoofdpagina aanpassen">
-<div class="widget-visual-step"><span class="visual-number">1</span><strong>De bewerkknop</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>Ga naar Home en klik op het pictogram met vier blokjes naast de paginatabs. Er verschijnen handgrepen en een bewerkbalk.</p></div>
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>De bewerkknop</strong><div class="visual-nav"><span class="visual-nav-pages"><span>Home</span><span>Catalog</span><span>Settings</span></span><span class="visual-nav-tools"><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span><span aria-label="Account">●</span></span></div><p>Ga naar Home en klik op het pictogram met vier blokjes rechts in de header, naast je account. Er verschijnen handgrepen en een bewerkbalk.</p></div>
 <div class="widget-visual-step"><span class="visual-number">2</span><strong>Verplaatsen: sleep de handgreep</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Downloads</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Formaat: sleep deze hoek</p></div>
 <div class="widget-visual-step"><span class="visual-number">3</span><strong>Kies wat je toevoegt</strong><div class="visual-toolbar"><span>＋ Widget toevoegen</span><span>Klaar</span></div><p>Kies Widget toevoegen, daarna Dit formaat of Elk formaat en vervolgens de widget. Wijzigingen worden automatisch opgeslagen; kies Klaar als je klaar bent.</p></div>
 </div>
@@ -118,6 +120,16 @@ Gebruik Instellingen → Updates voor de apps binnen AIO. AIO zelf bijwerken doe
 ## Screenshots en technische naslag {#screens}
 
 [Screenshots en technische naslag](USAGE_ADVANCED.md#screens).
+
+### Controles, voortgang en herstel
+
+Voor een installatie of handmatige update toont AIO controles voor opslag, onderhoud en downloadtoegang. Los een blokkade op voordat je doorgaat. **Catalogus → Installatievoortgang** toont de stappen en opent de live logs; je kunt het venster sluiten en opnieuw openen. Mislukt het instellen na een geslaagde installatie, dan probeert **Opnieuw proberen** alleen het starten en koppelen opnieuw.
+
+Via **Instellingen → App-koppelingen → Mijn installatie controleren** lees je de daadwerkelijk opgeslagen koppelingen terug. **Auto-koppelen** past de automatische configuratie toe; de controle zelf wijzigt geen app-instellingen. Publieke startindexers vereisen een expliciete keuze.
+
+**Instellingen → Back-ups** ondersteunt versleutelde HTTPS/WebDAV-kopieën en veilige hersteltests in een tijdelijke map. Bewaar het versleutelingswachtwoord buiten de server. **Instellingen → Meldingen** bevat opslaggrenzen en recente incidenten. De app-instellingen van Recyclarr hebben een **Handmatige configuratie** om eigen YAML exact te behouden.
+
+Lees [installatiecontrole en herstel](operations.md) en [sessies, HTTPS en noodherstel](security-operations.md).
 
 ## Geavanceerd
 

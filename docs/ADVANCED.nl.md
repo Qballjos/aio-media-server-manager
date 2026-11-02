@@ -9,6 +9,9 @@ Deze pagina’s zijn voor een aangepaste opstelling en technisch uitzoekwerk. He
 - [Appkoppelingen, instellingen en problemen oplossen](USAGE_ADVANCED.md)
 - [Poorten en configuratievariabelen](REFERENCE.md)
 
+- [Installatiecontrole, externe back-ups en herstel](operations.md)
+- [Sessies, HTTPS en noodherstel](security-operations.md)
+
 ## Andere opslag, migratie en handmatige installatie
 
 - [Unraid](deploy/UNRAID_ADVANCED.md)

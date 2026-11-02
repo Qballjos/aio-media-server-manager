@@ -14,6 +14,8 @@ Administratorkonto erstellen und den Assistenten abschließen. Beginne etwa mit 
 | Katalog | Apps installieren, Status prüfen und über Öffnen öffnen. |
 | Einstellungen | Aussehen, Konto und Updates von AIO; hier werden keine Filme zu einer Medienbibliothek hinzugefügt. |
 
+**Kopfzeile:** Home, Katalog und Einstellungen bleiben über die gesamte Kopfzeile zentriert. Auf schmalen Bildschirmen erhalten sie eine eigene zentrierte Zeile. Die Kopfzeile scrollt mit der Seite. Auf Home befindet sich der Layoutknopf rechts neben deinem Konto. Alle App-Seiten, Bedienelemente und Beschriftungen verwenden Figtree; kann die Webschrift nicht geladen werden, gilt überall dieselbe Systemschrift-Ausweichliste.
+
 ## Den neuen Katalog benutzen {#catalog-menu}
 
 Öffne oben **Katalog**. Links wählst du die Ansicht, rechts erscheinen die Apps.
@@ -86,7 +88,7 @@ Serien kommen nach media/tv. Nach dem Kopieren unter Jellyfin → Dashboard → 
 ## 5. Home-Widgets anordnen {#customize-home}
 
 <div class="widget-visual-guide" role="group" aria-label="Widgets auf Home anordnen">
-<div class="widget-visual-step"><span class="visual-number">1</span><strong>Der Layoutknopf</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>Wähle auf Home das Symbol mit vier Blöcken neben den Seitentabs. Griffe und eine Bearbeitungsleiste erscheinen.</p></div>
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>Der Layoutknopf</strong><div class="visual-nav"><span class="visual-nav-pages"><span>Home</span><span>Catalog</span><span>Settings</span></span><span class="visual-nav-tools"><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span><span aria-label="Konto">●</span></span></div><p>Wähle auf Home das Symbol mit vier Blöcken rechts in der Kopfzeile neben deinem Konto. Griffe und eine Bearbeitungsleiste erscheinen.</p></div>
 <div class="widget-visual-step"><span class="visual-number">2</span><strong>Verschieben: Griff ziehen</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Downloads</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Größe: diese Ecke ziehen</p></div>
 <div class="widget-visual-step"><span class="visual-number">3</span><strong>Widget auswählen</strong><div class="visual-toolbar"><span>＋ Widget hinzufügen</span><span>Fertig</span></div><p>Wähle Widget hinzufügen, dann Diese Größe oder Jede Größe und das Widget. Änderungen werden automatisch gespeichert; beende mit Fertig.</p></div>
 </div>
@@ -118,6 +120,16 @@ Unter Einstellungen → Updates werden die Apps innerhalb AIO aktualisiert. AIO 
 ## Screenshots und technische Referenz {#screens}
 
 [Screenshots und technische Referenz](USAGE_ADVANCED.md#screens).
+
+### Prüfungen, Fortschritt und Wiederherstellung
+
+Vor Installation oder manuellen Updates zeigt AIO Speicher-, Wartungs- und Downloadprüfungen. Blockierende Ergebnisse müssen zuerst behoben werden. **Katalog → Installationsfortschritt** zeigt Schritte und Live-Logs; das Fenster lässt sich schließen und wieder öffnen. Nach fehlgeschlagener Einrichtung einer installierten App wiederholt **Erneut versuchen** nur Start und Verknüpfung.
+
+Unter **Einstellungen → App-Verbindungen → Installation prüfen** wird die tatsächliche Konfiguration zurückgelesen. **Auto-Verknüpfen** wendet die automatische Konfiguration an; die Prüfung selbst ändert keine App-Einstellungen. Öffentliche Starter-Indexer erfordern eine ausdrückliche Auswahl.
+
+**Einstellungen → Backups** unterstützt verschlüsselte HTTPS/WebDAV-Kopien und Wiederherstellungstests in einem temporären Ordner. Bewahre das Verschlüsselungspasswort außerhalb des Servers auf. **Benachrichtigungen** bietet Speichergrenzen und Vorfallsverlauf. Recyclarr hat einen manuellen Modus zum unveränderten Erhalt eigener YAML-Dateien.
+
+Siehe [Installationsprüfung und Wiederherstellung](operations.md) sowie [Sitzungen, HTTPS und Notfallzugriff](security-operations.md).
 
 ## Fortgeschritten
 

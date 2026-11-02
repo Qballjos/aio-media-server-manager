@@ -49,3 +49,29 @@ backup job polling, so switching sections does not cancel a running operation.
 Home keeps that state alive as the layout changes. Scoped page styles live in
 `settingsPanel.css` and `homepagePanel.css`; settings form/backup styles sit with
 the corresponding section components.
+
+## App-wide styling and typography
+
+`src/main.js` loads **style.css first, then dashboard.css**, once for the entire
+application. `style.css` owns design tokens (colors, sizes, spacing and typefaces)
+and shared `ui-*` controls. `dashboard.css` styles the shell, header, catalog and
+shared modal surfaces. Vue components and the extracted page stylesheets add
+scoped rules for their own screen; those rules should reuse the shared tokens.
+
+All application text uses `--font-sans`: **Figtree**, with a common system-font
+fallback if the web font is unavailable. Form controls and code elements inherit
+that family. `--font-mono` and `.font-mono` are compatibility names and now use
+the same family. Define typography centrally rather than adding a new font to an
+individual page. Figtree is requested by `index.html`; font sizes and weights
+can still differ by role.
+
+The header uses equal flexible side columns around the three page links, so
+their center is the center of the full header, independently of the logo,
+updates and account controls. The Home layout button is in the right-hand tools
+group. At widths up to 1100 px, the page links occupy a separate centered row.
+The header is in normal document flow and scrolls away; it is not sticky.
+
+Theme, accent and glass preferences update shared CSS variables through
+`theme.js`, `branding.js` and `glass.js`. They change appearance without selecting
+a different typeface. Screen-specific styles belong with their component; shared
+controls and typography belong in the app-wide stylesheets.

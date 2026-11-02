@@ -38,3 +38,9 @@ Copiez [`.env.example`](../.env.example) pour une installation native. Beaucoup 
 | `GITHUB_TOKEN` | Facultatif ; limite d’API GitHub plus haute pour les mises à jour |
 | `AMM_CLOUDFLARE_TUNNEL_*` | Tunnel distant facultatif (`cloudflared` démarre après les apps au boot) |
 | `AMM_VPN_*` | VPN facultatif pour qBittorrent, Prowlarr et Flaresolverr (ils attendent le tunnel ; cache DNS local pour ces apps) |
+| `AMM_SECURE_COOKIES` | Activer avec `true` pour HTTPS ; valeur par défaut `false` pour HTTP sur le réseau local. |
+| `AMM_PREFLIGHT_MIN_FREE_MB` | Espace libre minimal en MiB par emplacement avant installation/mise à jour ; valeur par défaut `512`. |
+| `AMM_BACKUP_RECOVERY_TOKEN` | Secret de récupération facultatif de l’opérateur, au moins 32 caractères, uniquement sans compte administrateur fonctionnel. À supprimer après récupération ; voir le guide de sécurité. |
+
+- [Vérifications, sauvegardes externes et restauration](operations.md)
+- [Sessions, HTTPS et récupération d’urgence](security-operations.md)

@@ -86,6 +86,8 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Home.** A grid with its own layout on phone, tablet, and desktop: greeting, search, calendar, downloading, recently added, requests, trending, now playing, storage, server, and needs attention, plus an app dock. Recently added and Trending keep loading as you scroll (Jellyfin recently added walks the library; Plex stays on its latest 20). The Server card shows the host's network traffic when `/sys` is mounted read-only at `/host/sys`. Arrange widgets with the layout control on the Home tab. The dock is shown or hidden under **Settings → Homepage**. Widget diagnostics live under **Settings → Diagnostics** (empty tiles explained; API keys never shown).
 
+**Navigation and typography.** Home, Catalog and Settings stay centered across the full header. The header scrolls with the page; the Home layout button sits beside the account. All app screens and controls use Figtree with a common system-font fallback.
+
 **Visuals.** Dark / light / system theme, accent color, wallpaper, custom header title, and replaceable header icon, login logo, and favicon under **Settings → Visuals**.
 
 **Notifications.** Settings → Notifications sends Discord and email when an app crash-loops, the VPN or Cloudflare tunnel drops, an update is available, or a disk passes 90% full, and again when it recovers.

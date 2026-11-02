@@ -1,10 +1,10 @@
 # Roadmap and release readiness
 
-Reviewed against the current working copy on **2 November 2026**. Local changes
-are not proof of a published release. This document distinguishes implementation,
+Reviewed against **beta commit `542518a`**, pushed on **2 November 2026**. A push
+to beta is not proof of a successful image build or a published stable release. This document distinguishes implementation,
 repeatable tests and acceptance on a real appliance.
 
-## Implemented in this working copy
+## Implemented on beta
 
 - Protected backup access and explicit operator recovery; safe restore paths.
 - Honest rollback results, retained recovery copies, session revocation and
@@ -17,6 +17,8 @@ repeatable tests and acceptance on a real appliance.
 - Explicit opt-in for public starter indexers in the wizard and App connections.
 - Settings backup/notification sections and their state are separated; Home
   calendar behavior has a dedicated module. Stylesheets are kept separately.
+- The page links stay centered over the full, non-sticky header. All app text
+  uses Figtree, including forms and labels; the layout button sits beside the account.
 - Browser journeys use the real manager routes, filesystem backups and rollback,
   with synthetic media app/provider boundaries. Desktop and mobile are covered.
 
@@ -26,12 +28,14 @@ See [operations](operations.md) and [security operations](security-operations.md
 
 On macOS arm64, 2 November 2026:
 
-- Python regression suite: **651 passed**.
+- Python regression suite: **654 passed** (including three portable unsafe-path regressions).
 - Frontend behavior tests: **65 passed**.
 - Chromium browser journeys: **10 passed**, five each on desktop and mobile.
+  Two additional focused header checks passed, covering centering at 320–1440 px,
+  scroll behavior and consistent font families.
 - Ruff, frontend production build and strict documentation build: **passed**.
 - Changed CI workflows parsed successfully. Native Linux amd64/arm64 CI is
-  configured but has not run for these unpushed changes.
+  configured. In [beta run 41536074848](https://github.com/Qballjos/aio-media-server-manager/actions/runs/41536074848), both native browser jobs and the frontend build passed. Python 3.11/3.12/3.14 exposed an unsafe-path validation ordering bug on Linux; this checkout validates archive paths before exclusion filters. A new remote run must verify the correction.
 
 Coverage percentage was not measured. Browser service adapters are synthetic;
 real media-app installation and external WebDAV acceptance remain open below.
@@ -55,9 +59,9 @@ appliance image job. Do not present ARMv7 as a supported Docker image.
 
 | Environment | Automated coverage configured | Acceptance status |
 | --- | --- | --- |
-| Python logic on Linux amd64 | Existing Python CI (3.11, 3.12, 3.14) | Local suite executed; remote CI must run after pushing |
-| Browser journeys on Linux amd64 | Native amd64 job, desktop and mobile Chromium | Configured; this checkout has not run that remote job |
-| Browser journeys on Linux arm64 | Native `ubuntu-24.04-arm` job, desktop and mobile Chromium | Configured; this checkout has not run that remote job |
+| Python logic on Linux amd64 | Existing Python CI (3.11, 3.12, 3.14) | Original beta run failed unsafe-path regression; correction verified locally, remote rerun pending |
+| Browser journeys on Linux amd64 | Native amd64 job, desktop and mobile Chromium | Passed in beta run 41536074848 |
+| Browser journeys on Linux arm64 | Native `ubuntu-24.04-arm` job, desktop and mobile Chromium | Passed in beta run 41536074848 |
 | macOS arm64 | Local Python, Node and Chromium tests | Local evidence only; not a Linux appliance installation |
 | Docker amd64 / arm64 real catalog apps | Architecture-specific image builds exist | Full install/start/auto-wire acceptance still needed |
 | Native Linux / LXC | Installation scripts and tests exist | Full catalog acceptance still needed |
@@ -98,7 +102,7 @@ reproducible logs. Known upstream gaps must stay explicit.
 
 ## Next priorities
 
-1. Execute and retain the Linux amd64/arm64 browser CI results after pushing.
+1. Confirm the corrected Python jobs and image publication in the next beta workflow run.
 2. Validate every supported catalog app on actual Docker amd64/arm64 appliances,
    then the advertised NAS/native platforms.
 3. Test a real WebDAV destination and recovery on a replacement host.

@@ -80,6 +80,15 @@ and traces under `frontend/test-results` and an HTML report under
 use `npx --no-install playwright show-report` or `playwright show-trace` to inspect
 artifacts. Avoid storing real credentials in these test fixtures or reports.
 
+### Header and typography checks
+
+A separate desktop/mobile scenario checks Home, Catalog and Settings at widths
+1440, 1100, 960, 768, 390 and 320 px. It compares the page-link center with the
+entire header center, checks that the header scrolls out of view, and compares
+visible control/code font families with the body font. The layout button is
+absent before login and setup. These are computed-style and geometry checks;
+they do not verify delivery of the Google-hosted Figtree font.
+
 ## Architecture and target acceptance
 
 CI defines native Linux amd64 and arm64 browser jobs. Configured jobs are not

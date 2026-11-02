@@ -9,6 +9,9 @@ These pages cover custom setups and troubleshooting. They are not extra steps yo
 - [App connections, settings and troubleshooting](USAGE_ADVANCED.md)
 - [Ports and configuration variables](REFERENCE.md)
 
+- [Installation checks, external backups and recovery](operations.md)
+- [Sessions, HTTPS and emergency recovery](security-operations.md)
+
 ## Custom storage, migration and manual setup
 
 - [Unraid](deploy/UNRAID_ADVANCED.md)

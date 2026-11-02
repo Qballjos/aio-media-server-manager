@@ -38,3 +38,9 @@ Copy [`.env.example`](../.env.example) for native installs. Many of these can al
 | `GITHUB_TOKEN` | Optional; higher GitHub API limits for updates |
 | `AMM_CLOUDFLARE_TUNNEL_*` | Optional remote tunnel (`cloudflared` starts after apps on boot) |
 | `AMM_VPN_*` | Optional VPN for qBittorrent, Prowlarr, and Flaresolverr (they wait for the tunnel; local DNS cache for those apps) |
+| `AMM_SECURE_COOKIES` | Set to `true` when the manager is served over HTTPS; default `false` for LAN HTTP. |
+| `AMM_PREFLIGHT_MIN_FREE_MB` | Minimum free MiB required on storage paths before installation/update; default `512`. |
+| `AMM_BACKUP_RECOVERY_TOKEN` | Optional operator recovery secret of at least 32 characters, only before a working admin account. Remove after recovery; see the security guide. |
+
+- [Installation checks, external backups and recovery](operations.md)
+- [Sessions, HTTPS and emergency recovery](security-operations.md)

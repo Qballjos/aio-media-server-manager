@@ -30,10 +30,12 @@ Start small (for example Radarr + one download client + Jellyfin), then add the 
 
 ---
 
+**Header:** Home, Catalog and Settings stay centered across the full header. On narrow screens they have their own centered row. The header scrolls with the page. On Home, the four-block layout button is on the right, beside your account. All app pages, controls and labels use Figtree; when that web font cannot load, the same system-font fallback is used throughout.
+
 ## Arrange your Home widgets {#customize-home}
 
 <div class="widget-visual-guide" role="group" aria-label="Arrange your Home widgets">
-<div class="widget-visual-step"><span class="visual-number">1</span><strong>The edit button</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>On Home, choose the four-block layout icon next to the page tabs. Widget handles and an editing toolbar appear.</p></div>
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>The edit button</strong><div class="visual-nav"><span class="visual-nav-pages"><span>Home</span><span>Catalog</span><span>Settings</span></span><span class="visual-nav-tools"><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span><span aria-label="Account">●</span></span></div><p>On Home, choose the four-block layout icon on the right of the header, beside your account. Widget handles and an editing toolbar appear.</p></div>
 <div class="widget-visual-step"><span class="visual-number">2</span><strong>Move: drag the grip</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Downloading</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Resize: drag this corner</p></div>
 <div class="widget-visual-step"><span class="visual-number">3</span><strong>Choose what to add</strong><div class="visual-toolbar"><span>＋ Add widget</span><span>Done</span></div><p>Choose Add widget, pick This size or Every size, then choose a widget. Changes save automatically; choose Done when finished.</p></div>
 </div>
@@ -80,7 +82,7 @@ If you set up Cloudflare public hostnames, **Open** can instead use `https://son
 
 ## What the wizard wires
 
-After an app is healthy — or when you click **Auto-Wire** — AIO sets download folders and categories, root folders and download clients in Sonarr, Radarr, and Lidarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr. **Settings → Usenet** holds the news server and sends it to SABnzbd and NZBGet. Prowlarr also gets a starter set of public indexers. Remove any you do not want; they are not added back.
+After an app is healthy — or when you click **Auto-Wire** — AIO sets download folders and categories, root folders and download clients in Sonarr, Radarr, and Lidarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr. **Settings → Usenet** holds the news server and sends it to SABnzbd and NZBGet. Public starter indexers are off by default. Enable them explicitly in the wizard or Settings → App connections, then run Auto-Wire to add them. Disabling the choice keeps existing indexers. Remove any you do not want; they are not added back.
 
 SSD staging and an HDD library are supported; imports across them copy files. Hardlinks require the same filesystem.
 
@@ -104,6 +106,16 @@ The first time NeutArr starts, before it has an account, it asks for a one-time 
 That value is the file `/config/neutarr/.setup-token` inside the appliance (the host folder mounted as `/config`). NeutArr deletes the file after the account is created, and the Settings field goes empty. Until NeutArr has started, the field stays empty.
 
 ---
+
+### Checks, progress and recovery
+
+Before an install or manual update, AIO shows storage, maintenance and download-access checks. Resolve any blocking result before continuing. **Catalog → Installation activity** shows stages and opens live logs; close and reopen it as needed. If setup fails after installation, **Try again** retries starting and connecting the app.
+
+In **Settings → App connections**, choose **Check my installation** to read back the actual configuration. **Auto-Wire** applies automatic configuration; the check itself changes no app settings. Public starter indexers require an explicit opt-in.
+
+**Settings → Backups** supports encrypted HTTPS/WebDAV copies and safe restore tests in a temporary folder. Keep the encryption password outside the server. **Settings → Notifications** adds disk warning/recovery thresholds and recent incidents. Recyclarr app settings include **Manual configuration** to preserve edited YAML exactly.
+
+See [installation checks and recovery](operations.md) and [sessions, HTTPS and emergency access](security-operations.md).
 
 ## Opening each app’s UI
 

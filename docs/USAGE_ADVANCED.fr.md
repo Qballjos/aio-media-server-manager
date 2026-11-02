@@ -30,10 +30,12 @@ Commencez petit (par exemple Radarr + un client de téléchargement + Jellyfin),
 
 ---
 
+**En-tête :** Accueil, Catalogue et Réglages restent centrés sur toute la largeur de l’en-tête. Sur les petits écrans, ils occupent une ligne centrée distincte. L’en-tête défile avec la page. Sur Accueil, le bouton de disposition se trouve à droite, près du compte. Toutes les pages, commandes et étiquettes de l’app utilisent Figtree ; si cette police ne peut pas être chargée, la même liste de polices système de remplacement s’applique partout.
+
 ## Organiser les widgets de l’accueil {#customize-home}
 
 <div class="widget-visual-guide" role="group" aria-label="Organiser les widgets de l’accueil">
-<div class="widget-visual-step"><span class="visual-number">1</span><strong>Le bouton de disposition</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>Sur Home, choisissez l’icône à quatre blocs à côté des onglets. Les poignées et la barre de modification apparaissent.</p></div>
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>Le bouton de disposition</strong><div class="visual-nav"><span class="visual-nav-pages"><span>Home</span><span>Catalog</span><span>Settings</span></span><span class="visual-nav-tools"><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span><span aria-label="Compte">●</span></span></div><p>Sur Home, choisissez l’icône à quatre blocs à droite de l’en-tête, près du compte. Les poignées et la barre de modification apparaissent.</p></div>
 <div class="widget-visual-step"><span class="visual-number">2</span><strong>Déplacer : glisser la poignée</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Téléchargements</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Taille : glisser ce coin</p></div>
 <div class="widget-visual-step"><span class="visual-number">3</span><strong>Choisir un widget</strong><div class="visual-toolbar"><span>＋ Ajouter un widget</span><span>Terminé</span></div><p>Choisissez Ajouter un widget, puis Cette taille ou Toutes les tailles et le widget. Les changements sont enregistrés automatiquement ; terminez avec Terminé.</p></div>
 </div>
@@ -80,7 +82,7 @@ Si vous avez configuré des noms d’hôte publics Cloudflare, **Ouvrir** peut u
 
 ## Ce que l’assistant relie
 
-Dès qu’une app est saine — ou si vous cliquez sur **Liaison auto** — AIO règle les dossiers et catégories de téléchargement, les dossiers racines et les clients de téléchargement dans Sonarr, Radarr et Lidarr, la synchro Prowlarr, Seerr, le lien Bazarr, et les configurations de départ de Recyclarr et NeutArr. **Réglages → Usenet** enregistre le serveur de news et l’envoie à SABnzbd et NZBGet. Prowlarr reçoit aussi un jeu de départ d’indexeurs publics. Retirez ce que vous ne voulez pas ; ils ne sont pas rajoutés.
+Dès qu’une app est saine — ou si vous cliquez sur **Liaison auto** — AIO règle les dossiers et catégories de téléchargement, les dossiers racines et les clients de téléchargement dans Sonarr, Radarr et Lidarr, la synchro Prowlarr, Seerr, le lien Bazarr, et les configurations de départ de Recyclarr et NeutArr. **Réglages → Usenet** enregistre le serveur de news et l’envoie à SABnzbd et NZBGet. Les indexeurs publics de départ sont désactivés par défaut. Activez-les explicitement dans l’assistant ou Réglages → Connexions des apps, puis lancez Liaison auto. Désactiver ce choix ne supprime pas les indexeurs existants. Retirez ce que vous ne voulez pas ; ils ne sont pas rajoutés.
 
 SSD temporaire et bibliothèque HDD sont pris en charge ; les imports entre eux copient les fichiers. Les liens physiques exigent le même système de fichiers.
 
@@ -104,6 +106,16 @@ La première fois que NeutArr démarre, avant d’avoir un compte, il demande un
 Cette valeur est le fichier `/config/neutarr/.setup-token` dans l’appliance (le dossier hôte monté comme `/config`). NeutArr supprime le fichier une fois le compte créé, et le champ dans Réglages se vide. Tant que NeutArr n’a pas démarré, le champ reste vide.
 
 ---
+
+### Vérifications, progression et restauration
+
+Avant une installation ou une mise à jour manuelle, AIO vérifie le stockage, la maintenance et l’accès aux téléchargements. Corrigez les blocages avant de continuer. **Catalogue → Progression des installations** affiche les étapes et les journaux en direct ; la fenêtre peut être fermée puis rouverte. Si la configuration échoue après l’installation, **Réessayer** relance uniquement le démarrage et les connexions.
+
+Dans **Réglages → Connexions des apps → Vérifier mon installation**, AIO relit la configuration effective. **Liaison auto** applique la configuration automatique ; la vérification ne modifie aucun réglage des apps. Les indexeurs publics de départ nécessitent un choix explicite.
+
+**Réglages → Sauvegardes** propose des copies HTTPS/WebDAV chiffrées et des tests de restauration dans un dossier temporaire. Conservez le mot de passe de chiffrement hors du serveur. **Notifications** inclut des seuils de stockage et l’historique des incidents. Recyclarr propose un mode manuel pour préserver exactement votre YAML.
+
+Voir [vérifications et restauration](operations.md) et [sessions, HTTPS et récupération d’urgence](security-operations.md).
 
 ## Ouvrir l’interface de chaque app
 

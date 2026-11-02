@@ -9,6 +9,9 @@ Diese Seiten behandeln eigene Konfigurationen und technische Fehlersuche. Sie si
 - [App-Verbindungen, Einstellungen und Fehler](USAGE_ADVANCED.md)
 - [Ports und Konfigurationsvariablen](REFERENCE.md)
 
+- [Installationsprüfung, externe Backups und Wiederherstellung](operations.md)
+- [Sitzungen, HTTPS und Notfallzugriff](security-operations.md)
+
 ## Eigener Speicher, Migration und manuelle Installation
 
 - [Unraid](deploy/UNRAID_ADVANCED.md)

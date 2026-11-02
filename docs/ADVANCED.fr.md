@@ -9,6 +9,9 @@ Ces pages concernent les réglages personnalisés et le dépannage technique. Ce
 - [Connexions, réglages et dépannage](USAGE_ADVANCED.md)
 - [Ports et variables de configuration](REFERENCE.md)
 
+- [Vérifications, sauvegardes externes et restauration](operations.md)
+- [Sessions, HTTPS et récupération d’urgence](security-operations.md)
+
 ## Stockage personnalisé, migration et installation manuelle
 
 - [Unraid](deploy/UNRAID_ADVANCED.md)

@@ -168,7 +168,7 @@ body { background-image: var(--aio-page-glow); background-attachment: fixed; }
 .widget-visual-step > strong { display: block; font-size: .7rem; line-height: 1.4; margin: .5rem 0 .8rem; }
 .widget-visual-step p { font-size: .62rem; color: var(--aio-muted); }
 .visual-number { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--aio-gradient); color: #fff; font-size: .6rem; font-weight: 700; }
-.visual-nav { display: flex; justify-content: center; align-items: center; gap: .5rem; height: 6rem; padding: .3rem; font-size: .45rem; background: #9cd2f344; border-radius: .65rem; }
+.visual-nav { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .5rem; height: 6rem; padding: .3rem; font-size: .45rem; background: #9cd2f344; border-radius: .65rem; }
 .visual-highlight { display: inline-flex; padding: .35rem; border: 2px solid #0a6cff; border-radius: .4rem; box-shadow: 0 0 0 4px #0a6cff22; }.visual-highlight svg { width: .85rem; height: .85rem; }
 .visual-widget { position: relative; padding: 1.6rem .7rem .7rem; height: 6rem; background: #9cd2f344; border: 2px dashed #5aa2ff; border-radius: .65rem; font-size: .65rem; }.visual-grip { position: absolute; top: .2rem; left: .6rem; font-size: .9rem; color: #095fe0; }.visual-remove { position: absolute; top: .2rem; right: .5rem; }.visual-corner { position: absolute; bottom: .15rem; right: .35rem; font-size: 1rem; color: #095fe0; }.visual-widget-line { display: block; margin-top: .5rem; width: 80%; height: .2rem; border-radius: 1rem; background: #9b91ba55; }.visual-widget-line.short { width: 50%; }.visual-toolbar { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .3rem; height: 6rem; background: #9cd2f344; border-radius: .65rem; font-size: .5rem; }.visual-toolbar span { background: var(--aio-card); padding: .35rem .5rem; border-radius: 1rem; }.visual-toolbar span:first-child { background: #497ee5; color: #fff; }
 @media (max-width: 760px) { .widget-visual-guide { grid-template-columns: 1fr; }.visual-nav, .visual-widget, .visual-toolbar { max-width: 18rem; } }
@@ -243,3 +243,6 @@ body { background-image: var(--aio-page-glow); background-attachment: fixed; }
   aspect-ratio: 16 / 9;
 }
 .aio-landing .feature-shot img { object-fit: contain; }
+
+.visual-nav-pages { grid-column: 2; display: inline-flex; gap: .4rem; align-items: center; }
+.visual-nav-tools { grid-column: 3; display: inline-flex; justify-content: flex-end; align-items: center; gap: .35rem; }
