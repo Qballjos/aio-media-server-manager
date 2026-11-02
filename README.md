@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <strong>One install for your whole home media stack.</strong><br />
+  <strong>Your complete media server. Less setup. More watching.</strong><br />
   Sonarr, Radarr, download clients, and players run inside a single appliance — not a container per app.
 </p>
 
@@ -25,6 +25,12 @@
 
 You run **one** Docker container (or one native Linux service). AIO installs the apps you choose, starts them, wires folders and APIs together, and gives you one web dashboard. There is no per-app Compose stack and no Debrid functionality.
 
+**Start simple. Grow when you’re ready.** Choose your apps in the setup wizard. AIO connects supported tools, download clients and library folders for you; you supply your provider details and media sources. Backups, update controls and advanced settings are there when you need them.
+
+**[Install AIO — choose your server](https://qballjos.github.io/aio-media-server-manager/#install)** · **[Try the interactive dashboard preview](https://qballjos.github.io/aio-media-server-manager/#app-preview)**
+
+The preview uses fictional data and does not connect to your server.
+
 **This project was vibe coded** — built with AI pair-programming in Cursor, guided by a human who wanted one appliance instead of a Compose novel. Expect a fast-moving stack; issues and PRs are welcome when something feels off.
 
 🤖 AI writes some code. I break it. We fix it together.
@@ -35,21 +41,7 @@ Can’t spare a few bucks? Drop a star on GitHub instead. It feeds the ego, and 
 
 ## Screenshots
 
-Light is on the left, dark is on the right. Visuals, catalog app settings, and the other Settings sections are in the [usage guide](docs/USAGE.md#screens).
-
-<p align="center">
-  <img src="docs/screenshots/light/login.png" alt="Administrator sign-in, light theme" width="440" />
-  <img src="docs/screenshots/dark/login.png" alt="Administrator sign-in, dark theme" width="440" />
-</p>
-
-<p align="center"><em>Sign-in.</em></p>
-
-<p align="center">
-  <img src="docs/screenshots/light/dashboard.png" alt="Home before any applications are installed, light theme" width="440" />
-  <img src="docs/screenshots/dark/dashboard.png" alt="Home before any applications are installed, dark theme" width="440" />
-</p>
-
-<p align="center"><em>Home — before any apps with a WebUI are installed.</em></p>
+See a populated dashboard in the [interactive preview](https://qballjos.github.io/aio-media-server-manager/#app-preview), using fictional sample data. The screenshots below show the real app: light on the left, dark on the right. Visuals, catalog app settings, and the other Settings sections are in the [usage guide](docs/USAGE.md#screens).
 
 <p align="center">
   <img src="docs/screenshots/light/catalog.png" alt="Catalog with application cards and install controls, light theme" width="440" />

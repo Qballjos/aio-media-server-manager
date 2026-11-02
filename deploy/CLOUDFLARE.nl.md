@@ -1,5 +1,8 @@
 # Cloudflare Tunnel
 
+!!! info "Geavanceerd"
+    Deze pagina is voor een aangepaste of technische opstelling. Je hebt dit niet nodig voor je eerste installatie op het thuisnetwerk. [Beginnershandleidingen](../docs/INSTALL.md).
+
 Bereik AIO (en optionele apps zoals Sonarr of Jellyfin) vanaf internet **zonder poorten open te zetten** op je router.
 
 In gewone woorden: een klein programma (`cloudflared`) draait **in AIO**, belt naar buiten naar Cloudflare, en Cloudflare serveert `https://your-name.yourdomain.com`. Je thuisfirewall blijft dicht voor inkomend verkeer.
@@ -54,7 +57,7 @@ Cloudflare toont installatiecommando’s voor Docker, Windows, enzovoort. **Draa
 ## Stap 3 — Plak de connectortoken in AIO
 
 1. Open `http://YOUR-SERVER-IP:8080`.
-2. **Instellingen → Netwerk → Cloudflare Tunnel**
+2. **Instellingen → Externe toegang → Cloudflare Tunnel**
 3. Zet **Tunnel inschakelen** aan, plak de `eyJ…`-token en sla op.
 4. De status hoort **Enabled**, **Token saved**, **Tunnel up** en **cloudflared ready** te tonen.  
    De **CF**-pil in de kop wordt groen/blauw als alles gezond is.
@@ -78,7 +81,7 @@ In Cloudflare heten dat **[Published applications](https://developers.cloudflare
 
 Nadat de connectortoken is opgeslagen (stap 3):
 
-1. **Instellingen → Netwerk → Publieke subdomeinen**
+1. **Instellingen → Externe toegang → Publieke subdomeinen**
 2. Zet **Publiek app-domein** op je zone (bijvoorbeeld `example.com` of `example.co.uk`).
 3. Maak een API-token zoals Cloudflare het beschrijft ([Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)):
    - **My Profile → API Tokens** (gebruiker) of **Manage Account → Account API Tokens**
@@ -154,7 +157,7 @@ sudo chmod 600 "$CONFIG/cloudflare/tunnel.token"
 sudo chown "${PUID:-1000}:${PGID:-1000}" "$CONFIG/cloudflare/tunnel.token"
 ```
 
-Zet hem daarna aan bij **Instellingen → Netwerk** (voorkeur — hij wordt in `amm_config.json` bewaard en overleeft containerherstarts, ook als compose nog `AMM_CLOUDFLARE_TUNNEL_ENABLED=false` heeft), of zet dit en maak opnieuw aan:
+Zet hem daarna aan bij **Instellingen → Externe toegang** (voorkeur — hij wordt in `amm_config.json` bewaard en overleeft containerherstarts, ook als compose nog `AMM_CLOUDFLARE_TUNNEL_ENABLED=false` heeft), of zet dit en maak opnieuw aan:
 
 ```bash
 AMM_CLOUDFLARE_TUNNEL_ENABLED=true
@@ -183,7 +186,7 @@ Zet de tunnel aan in Instellingen (of via de omgeving) en start `aio-media-manag
 ## Controleren of het werkt
 
 1. Cloudflare: tunnelstatus **Healthy**
-2. AIO: Instellingen → Netwerk → tunnel **verbonden**
+2. AIO: Instellingen → Externe toegang → tunnel **verbonden**
 3. Vanaf mobiele data (of een ander netwerk): open `https://media.example.com` (jouw hostnaam)
 4. Optionele API-check (geeft de token niet terug): `GET /api/cloudflare/tunnel/status`
 
@@ -191,7 +194,7 @@ Zet de tunnel aan in Instellingen (of via de omgeving) en start `aio-media-manag
 
 ## Vertrouwde reverse-proxy-IP’s
 
-**Instellingen → Netwerk → Vertrouwde reverse-proxy-IP’s** (`AMM_TRUSTED_PROXIES`).
+**Instellingen → Externe toegang → Vertrouwde reverse-proxy-IP’s** (`AMM_TRUSTED_PROXIES`).
 
 Dit vertelt AIO welke nabije proxy’s `X-Forwarded-*`-headers mogen sturen (echt client-IP en https tegenover http).
 

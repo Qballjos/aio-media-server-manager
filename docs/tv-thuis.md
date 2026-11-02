@@ -5,7 +5,7 @@ De tv hoeft geen AIO-beheerderswachtwoord, Jellyfin-adres of Jellyfin API-sleute
 
 1. Open op Android TV / Google TV **TV Thuis → Startscherm → AIO Media → Koppelen met AIO**.
 2. Scan de QR-code met een telefoon op hetzelfde netwerk.
-3. Open op die telefoon je bestaande AIO-installatie en ga naar **Instellingen → Account → Tv-koppelingen**.
+3. Open op die telefoon je bestaande AIO-installatie en ga naar **Instellingen → App-koppelingen → Tv-koppelingen**.
 4. Kies **Koppellink maken**, kopieer de link en plak hem op de telefoonpagina van de tv.
 5. De tv controleert de link en bewaart de nieuwe koppeling. Gebruik **Verbinding testen** op de tv.
 

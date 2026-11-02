@@ -1,5 +1,8 @@
 # Cloudflare Tunnel
 
+!!! info "Fortgeschritten"
+    Diese Seite behandelt eine technische Einrichtung. Für die erste lokale Installation ist sie nicht erforderlich. [Einsteigeranleitungen](../docs/INSTALL.md).
+
 Erreichen Sie AIO (und optionale Apps wie Sonarr oder Jellyfin) aus dem Internet, **ohne Ports** an Ihrem Router zu öffnen.
 
 In einfachen Worten: ein kleines Programm (`cloudflared`) läuft **in AIO**, wählt sich zu Cloudflare hinaus, und Cloudflare liefert `https://your-name.yourdomain.com` aus. Ihre Heim-Firewall bleibt für eingehenden Verkehr geschlossen.
@@ -54,7 +57,7 @@ Cloudflare zeigt Installationsbefehle für Docker, Windows und so weiter. **Füh
 ## Schritt 3 — Connector-Token in AIO einfügen
 
 1. Öffnen Sie `http://YOUR-SERVER-IP:8080`.
-2. **Einstellungen → Netzwerk → Cloudflare Tunnel**
+2. **Einstellungen → Externer Zugriff → Cloudflare Tunnel**
 3. Schalten Sie **Tunnel aktivieren** ein, fügen Sie das `eyJ…`-Token ein und speichern Sie.
 4. Der Status sollte **Enabled**, **Token saved**, **Tunnel up** und **cloudflared ready** zeigen.  
    Die **CF**-Pille in der Kopfzeile wird grün/blau, wenn alles gesund ist.
@@ -78,7 +81,7 @@ In Cloudflare heißen das **[Published applications](https://developers.cloudfla
 
 Nachdem das Connector-Token gespeichert ist (Schritt 3):
 
-1. **Einstellungen → Netzwerk → Öffentliche Subdomains**
+1. **Einstellungen → Externer Zugriff → Öffentliche Subdomains**
 2. Setzen Sie **Öffentliche App-Domain** auf Ihre Zone (z. B. `example.com` oder `example.co.uk`).
 3. Legen Sie ein API-Token so an, wie Cloudflare es beschreibt ([Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)):
    - **My Profile → API Tokens** (Benutzer) oder **Manage Account → Account API Tokens**
@@ -154,7 +157,7 @@ sudo chmod 600 "$CONFIG/cloudflare/tunnel.token"
 sudo chown "${PUID:-1000}:${PGID:-1000}" "$CONFIG/cloudflare/tunnel.token"
 ```
 
-Aktivieren Sie ihn danach unter **Einstellungen → Netzwerk** (bevorzugt — er wird in `amm_config.json` gespeichert und überlebt Container-Neustarts, auch wenn Compose noch `AMM_CLOUDFLARE_TUNNEL_ENABLED=false` hat), oder setzen Sie dies und erstellen Sie neu:
+Aktivieren Sie ihn danach unter **Einstellungen → Externer Zugriff** (bevorzugt — er wird in `amm_config.json` gespeichert und überlebt Container-Neustarts, auch wenn Compose noch `AMM_CLOUDFLARE_TUNNEL_ENABLED=false` hat), oder setzen Sie dies und erstellen Sie neu:
 
 ```bash
 AMM_CLOUDFLARE_TUNNEL_ENABLED=true
@@ -183,7 +186,7 @@ Aktivieren Sie den Tunnel in den Einstellungen (oder über die Umgebung) und sta
 ## Prüfen, ob es funktioniert
 
 1. Cloudflare: Tunnelstatus **Healthy**
-2. AIO: Einstellungen → Netzwerk → Tunnel **verbunden**
+2. AIO: Einstellungen → Externer Zugriff → Tunnel **verbunden**
 3. Über Mobilfunk (oder ein anderes Netz): öffnen Sie `https://media.example.com` (Ihren Hostnamen)
 4. Optionale API-Prüfung (gibt das Token nicht zurück): `GET /api/cloudflare/tunnel/status`
 
@@ -191,7 +194,7 @@ Aktivieren Sie den Tunnel in den Einstellungen (oder über die Umgebung) und sta
 
 ## Vertrauenswürdige Reverse-Proxy-IPs
 
-**Einstellungen → Netzwerk → Vertrauenswürdige Reverse-Proxy-IPs** (`AMM_TRUSTED_PROXIES`).
+**Einstellungen → Externer Zugriff → Vertrauenswürdige Reverse-Proxy-IPs** (`AMM_TRUSTED_PROXIES`).
 
 Das sagt AIO, welche nahen Proxys `X-Forwarded-*`-Header senden dürfen (echte Client-IP und https gegenüber http).
 

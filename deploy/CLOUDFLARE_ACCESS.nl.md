@@ -1,5 +1,8 @@
 # Cloudflare Access (aanmeldpoort)
 
+!!! info "Geavanceerd"
+    Deze pagina is voor een aangepaste of technische opstelling. Je hebt dit niet nodig voor je eerste installatie op het thuisnetwerk. [Beginnershandleidingen](../docs/INSTALL.md).
+
 Gebruik beide deuren. Cloudflare Access is de extra aanmelding vóór de *Arr-apps, de downloadclients en Seerr. Het AIO-dashboard, Jellyfin en Plex houden de aanmelding die ze al hebben.
 
 Access vervangt het wachtwoord van Sonarr of het account van Seerr niet. Het vraagt alleen wie je bent **voordat** die pagina laadt. Adressen op je thuisnetwerk (`http://nas-ip:8989`) slaan Access over. Aanroepen binnen AIO op `127.0.0.1` ook.
@@ -103,7 +106,7 @@ Je hebt geen aparte Block-regel nodig. Geen overeenkomst betekent weigeren.
 
 Als de aanmeldmethode er is, maakt AIO de Access-applicaties. De aanmeldmethode zelf maakt AIO niet.
 
-1. **Instellingen → Netwerk → Publieke subdomeinen**.
+1. **Instellingen → Externe toegang → Publieke subdomeinen**.
 2. Zet **Vrijgeven** aan voor de *Arr-apps, downloadclients en Seerr die op internet mogen. Laat Jellyfin, Plex en AIO van Access af (die staan op **Eigen aanmelding**).
 3. **Publiceren naar Cloudflare** eerst, zodat de hostnamen bestaan.
 4. Onder **E-mailadressen voor Cloudflare Access** de adressen die binnen mogen. Laat de lijst leeg alleen als de enige aanmeldmethode Cloudflare is met **Restrict to account members**.

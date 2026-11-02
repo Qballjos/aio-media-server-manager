@@ -1,5 +1,8 @@
 # Cloudflare Access (Anmeldetor)
 
+!!! info "Fortgeschritten"
+    Diese Seite behandelt eine technische Einrichtung. Für die erste lokale Installation ist sie nicht erforderlich. [Einsteigeranleitungen](../docs/INSTALL.md).
+
 Nutzen Sie beide Türen. Cloudflare Access ist die zusätzliche Anmeldung vor den *Arr-Apps, den Download-Clients und Seerr. Das AIO-Dashboard, Jellyfin und Plex behalten die Anmeldung, die sie schon haben.
 
 Access ersetzt das Passwort von Sonarr oder das Konto von Seerr nicht. Es fragt nur, wer Sie sind, **bevor** diese Seite lädt. Adressen im Heimnetz (`http://nas-ip:8989`) überspringen Access. Aufrufe innerhalb von AIO auf `127.0.0.1` ebenfalls.
@@ -103,7 +106,7 @@ Eine eigene Block-Regel brauchen Sie nicht. Kein Treffer bedeutet Ablehnen.
 
 Sobald die Anmeldemethode existiert, legt AIO die Access-Anwendungen an. Die Anmeldemethode selbst legt AIO nicht an.
 
-1. **Einstellungen → Netzwerk → Öffentliche Subdomains**.
+1. **Einstellungen → Externer Zugriff → Öffentliche Subdomains**.
 2. Schalten Sie **Freigeben** für die *Arr-Apps, Download-Clients und Seerr ein, die ins Internet sollen. Lassen Sie Jellyfin, Plex und AIO ohne Access (sie sind mit **Eigene Anmeldung** markiert).
 3. Zuerst **Bei Cloudflare veröffentlichen**, damit die Hostnamen existieren.
 4. Unter **E-Mail-Adressen für Cloudflare Access** die Adressen, die eintreten dürfen. Lassen Sie die Liste leer, nur wenn die einzige Anmeldemethode Cloudflare mit **Restrict to account members** ist.
