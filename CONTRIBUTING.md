@@ -77,7 +77,7 @@ Report vulnerabilities through [GitHub private advisories](https://github.com/Qb
 
 ## Pull requests
 
-- For a nightly build, target `beta`, never `main`. Pushes to `beta` run Nightly and publish `:nightly`; `main` publishes the stable `:latest` image. Promote to `main` only when a stable release is explicitly requested.
+- For a nightly build, target `beta`, never `main`. Pushes to `beta` run Nightly and publish `:nightly`; Every push to `main` (including documentation-only changes) runs CI, builds both stable image architectures, and then publishes a GitHub release and its versioned image alongside `:latest`. Releases queue instead of canceling earlier pushes. Failed tests or builds prevent publication. Patch versions increment automatically from existing stable tags; a higher version in `pyproject.toml` selects a new minor/major series. No version-bump commit is pushed back to `main`. Reruns reuse the release for the same commit. Promote to `main` only when a stable release is explicitly requested.
 - Keep the change focused and explain *why* in the PR body.
 - Add or update tests when behaviour changes.
 - Squash merge is preferred.

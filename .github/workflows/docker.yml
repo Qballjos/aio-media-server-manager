@@ -1,20 +1,10 @@
 name: Docker
 
-# Build/push GHCR only when the image contents change — not docs, wiki, or Actions YAML churn.
+# Every main push is a stable release, including documentation-only changes.
 on:
   push:
     branches: [main]
     tags: ["v*"]
-    paths:
-      - "Dockerfile"
-      - "main.py"
-      - "pyproject.toml"
-      - "poetry.lock"
-      - "logo-aio-media-manager.png"
-      - "api/**"
-      - "applications/**"
-      - "core/**"
-      - "frontend/**"
   pull_request:
     paths:
       - "Dockerfile"
@@ -26,6 +16,9 @@ on:
       - "applications/**"
       - "core/**"
       - "frontend/**"
+      - "scripts/release_version.py"
+      - "tests/test_release_version.py"
+      - ".github/workflows/docker.yml"
   workflow_dispatch:
 
 permissions:
@@ -33,11 +26,43 @@ permissions:
 
 concurrency:
   group: docker-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  queue: max
 
 jobs:
+  tests:
+    name: Tests
+    uses: ./.github/workflows/ci.yml
+
+  version:
+    name: Prepare release version
+    needs: tests
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Choose version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            version="${REF_NAME#v}"
+          else
+            version=$(python scripts/release_version.py)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   docker:
     name: Docker ${{ matrix.platform }}
+    needs: version
     runs-on: ${{ matrix.runner }}
     if: github.event_name != 'pull_request'
     strategy:
@@ -54,6 +79,7 @@ jobs:
       attestations: write
       id-token: write
     env:
+      AMM_VERSION: ${{ needs.version.outputs.version }}
       IMAGE: ghcr.io/qballjos/aio-media-server-manager
     steps:
       - name: Prepare
@@ -61,8 +87,6 @@ jobs:
           platform=${{ matrix.platform }}
           echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Read version
-        run: echo "AMM_VERSION=$(awk '/^version = /{gsub(/"/,"",$3); print $3; exit}' pyproject.toml)" >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
@@ -73,8 +97,11 @@ jobs:
         id: meta
         with:
           images: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.version=${{ env.AMM_VERSION }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ env.AMM_VERSION }},enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -108,7 +135,7 @@ jobs:
   docker-merge:
     name: Docker merge
     runs-on: ubuntu-latest
-    needs: docker
+    needs: [version, docker]
     if: github.event_name != 'pull_request'
     permissions:
       contents: read
@@ -116,6 +143,7 @@ jobs:
       attestations: write
       id-token: write
     env:
+      AMM_VERSION: ${{ needs.version.outputs.version }}
       IMAGE: ghcr.io/qballjos/aio-media-server-manager
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -133,8 +161,11 @@ jobs:
         id: meta
         with:
           images: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.version=${{ env.AMM_VERSION }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ env.AMM_VERSION }},enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -146,6 +177,30 @@ jobs:
             $(printf '${{ env.IMAGE }}@sha256:%s ' *)
       - name: Inspect image
         run: docker buildx imagetools inspect ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+
+  release:
+    name: Publish GitHub release
+    needs: [version, docker-merge]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Publish release for this push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          tag="v$RELEASE_VERSION"
+          # An existing release makes reruns safe; never move an existing tag.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists."
+          else
+            gh release create "$tag" --target "$RELEASE_SHA" \
+              --title "$tag" --generate-notes --latest
+          fi
 
   docker-pr:
     name: Docker build (PR)
