@@ -27,6 +27,28 @@ Commencez petit (par exemple Radarr + un client de téléchargement + Jellyfin),
 
 ---
 
+## Organiser les widgets de l’accueil {#customize-home}
+
+<div class="widget-visual-guide" role="group" aria-label="Organiser les widgets de l’accueil">
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>Le bouton de disposition</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>Sur Home, choisissez l’icône à quatre blocs à côté des onglets. Les poignées et la barre de modification apparaissent.</p></div>
+<div class="widget-visual-step"><span class="visual-number">2</span><strong>Déplacer : glisser la poignée</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Téléchargements</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Taille : glisser ce coin</p></div>
+<div class="widget-visual-step"><span class="visual-number">3</span><strong>Choisir un widget</strong><div class="visual-toolbar"><span>＋ Ajouter un widget</span><span>Terminé</span></div><p>Choisissez Ajouter un widget, puis Cette taille ou Toutes les tailles et le widget. Les changements sont enregistrés automatiquement ; terminez avec Terminé.</p></div>
+</div>
+
+[Essayer la démo interactive](index.md#app-preview){ .md-button .md-button--primary }
+
+Ces illustrations expliquent les vraies commandes ; la démo du site utilise des données fictives et des mouvements simplifiés.
+
+En mode édition, cliquez sur un widget pour ses tailles. × le retire de la taille d’écran choisie ; utilisez immédiatement Annuler si nécessaire.
+
+Les changements sont enregistrés automatiquement dans votre profil AIO ; Terminé ferme l’éditeur. Téléphone, tablette et ordinateur peuvent avoir leur propre disposition. Les boutons de taille apparaissent uniquement quand la fenêtre peut les prévisualiser.
+
+!!! tip "Tableau de bord"
+    Pour une carte vide, vérifiez l’app source dans le catalogue. Réglages → Homepage → Explain empty widgets peut expliquer pourquoi. Homepage règle aussi le dock ; Visuals règle l’apparence.
+
+Au clavier : Tab vers le widget, flèches pour déplacer, Maj + flèches pour redimensionner, Entrée pour les tailles, Suppr pour retirer.
+
+
 ## Accueil
 
 Accueil est une grille. Téléphone, tablette et bureau gardent chacun leur disposition (4, 8 et 12 colonnes). Le bouton de disposition sur l’onglet Accueil déplace, agrandit, ajoute et retire des widgets. **Réglages → Page d’accueil** affiche ou masque la barre d’apps, règle le texte de connexion et enregistre une clé d’API Jellyfin ou Seerr si Accueil ne peut pas la lire seul.
@@ -57,7 +79,7 @@ Si vous avez configuré des noms d’hôte publics Cloudflare, **Ouvrir l’inte
 
 Dès qu’une app est saine — ou si vous cliquez sur **Liaison auto** — AIO règle les dossiers et catégories de téléchargement, les dossiers racines et les clients de téléchargement dans Sonarr, Radarr et Lidarr, la synchro Prowlarr, Seerr, le lien Bazarr, et les configurations de départ de Recyclarr et NeutArr. **Réglages → Usenet** enregistre le serveur de news et l’envoie à SABnzbd et NZBGet. Prowlarr reçoit aussi un jeu de départ d’indexeurs publics. Retirez ce que vous ne voulez pas ; ils ne sont pas rajoutés.
 
-Gardez **downloads** et **media** sur le même volume pour que les fichiers terminés puissent être des **liens physiques**.
+SSD temporaire et bibliothèque HDD sont pris en charge ; les imports entre eux copient les fichiers. Les liens physiques exigent le même système de fichiers.
 
 Encore à faire vous-même :
 

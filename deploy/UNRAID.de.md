@@ -10,56 +10,22 @@ Installieren Sie **einen** AIO-Container. Fügen Sie keine Community-Application
 | [`unraid/ca_profile.xml`](unraid/ca_profile.xml) | Profil des Community-Applications-Betreuers |
 | [`unraid.xml`](unraid.xml) | Älterer Pfad für dieselbe Vorlage (Kompatibilität) |
 
-## Ordner über SSH anlegen
+## SSD-Downloadspeicher vorbereiten
 
-Aktivieren Sie SSH (**Settings → Management Access**), dann:
+Starten Sie das Array mit einem eingebundenen SSD/NVMe-Pool und führen Sie als root aus:
 
 ```bash
 ssh root@<unraid-ip>
+curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/unraid/install.sh | sh
 ```
 
-Downloads und Medien liegen auf der **User Share** `aio-media-manager` (sichtbar in Shares / im Dateibrowser). Die Config bleibt in appdata.
-
-```bash
-mkdir -p \
-  /mnt/user/appdata/aio-media-manager/vpn \
-  /mnt/user/backups/aio-media-manager \
-  /mnt/user/aio-media-manager/downloads \
-  /mnt/user/aio-media-manager/media
-
-chown -R 99:100 \
-  /mnt/user/appdata/aio-media-manager \
-  /mnt/user/backups/aio-media-manager \
-  /mnt/user/aio-media-manager
-```
-
-`/mnt/user/backups/aio-media-manager` nimmt die Konfigurationssicherungen auf. Nutzen Sie eine Share, die auf dem Array liegt (nicht nur auf dem Cache-Pool), damit ein Cache-Ausfall die Sicherungen nicht mitnimmt.
-
-Serien, Filme, Anime, Musik, Bücher, Comics, vollständige/unvollständige Downloads, Torrent-Kategorien und Transcode-Caches werden beim ersten Start in diesen Mounts angelegt.
-
-`99:100` ist Unraid `nobody`/`users` (PUID 99, PGID 100). Wenn Sie einen eigenen Share-Benutzer nutzen, führen Sie `id thatuser` aus und `chown` auf diese UID:GID.
-
-Für Hardlinks lassen Sie Downloads und Medien als Unterordner **eines** Cache- oder Plattenpfads (nicht zwei `/mnt/user`-FUSE-Shares), zum Beispiel eine nur-Cache-Share namens `aio-media-manager`:
-
-```bash
-mkdir -p /mnt/cache/aio-media-manager/downloads /mnt/cache/aio-media-manager/media
-chown -R 99:100 /mnt/cache/aio-media-manager
-```
-
-Binden Sie `/data` dann an `/mnt/cache/aio-media-manager` (dieselbe Share, Plattenpfad) statt an `/mnt/user/aio-media-manager`.
+Das Skript prüft den Pool vor dem Anlegen der Ordner und installiert die lokale Docker-Vorlage. Für einen anderen Pool laden Sie das Skript herunter und starten es mit `CACHE_ROOT=/mnt/fast sh /tmp/amm-install.sh`. Die Freigabe `aio-download-cache` bleibt ausschließlich auf diesem Pool (kein sekundärer Speicher, kein Mover zum Array). Unvollständige Downloads und das Entpacken von Usenet-Dateien nutzen die SSD; fertige Torrents und die Medienbibliothek bleiben unter `/mnt/user/aio-media-manager` auf dem Array. SSD-HDD-Importe kopieren Dateien. Halten Sie Platz für Downloads und Entpacken frei und konfigurieren Sie eine Freiplatzgrenze in den Downloadern. Vorhandene Downloadordner mit Dateien oder Symlinks werden abgelehnt: AIO stoppen, Dateien kopieren und prüfen, dann die Mounts anwenden. Ohne Pool stoppt das Skript; für eine bewusste HDD-Installation entfernen Sie beide SSD-Mounts aus der Vorlage. Siehe [vollständige Speicheranleitung](UNRAID.md).
 
 ## Aus der Vorlage installieren (Ihr Server)
 
 ### Option A — lokale Benutzervorlage
 
-1. Kopieren Sie die XML auf den Flash-Stick:
-
-   ```bash
-   mkdir -p /boot/config/plugins/dockerMan/templates-user
-   curl -fsSL \
-     -o /boot/config/plugins/dockerMan/templates-user/my-aio-media-manager.xml \
-     https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/unraid/templates/aio-media-manager.xml
-   ```
+1. Führen Sie zuerst das Vorbereitungsskript oben aus; es installiert die lokale Benutzervorlage mit den gewählten Poolpfaden.
 
 2. Docker → **Add Container** → wählen Sie **aio-media-manager** (oder `my-aio-media-manager`) in der Liste Template.
 3. Bestätigen Sie Pfade, `PUID`/`PGID` und `TZ`, dann Apply.
@@ -77,77 +43,81 @@ Binden Sie `/data` dann an `/mnt/cache/aio-media-manager` (dieselbe Share, Platt
 8. Pfade:
    - `/config` → `/mnt/user/appdata/aio-media-manager`
    - `/data` → `/mnt/user/aio-media-manager`
+   - `/data/downloads/incomplete` → `/mnt/cache/aio-download-cache/incomplete`
+   - `/data/downloads/complete` → `/mnt/cache/aio-download-cache/complete`
    - `/backups` → `/mnt/user/backups/aio-media-manager`
    - `/host/sys` → `/sys` (nur lesend). Die Server-Karte auf Start zeigt dann den Netzwerkverkehr des Servers. Die Vorlage nennt das **Host sys** (erweitert). Ohne diese Zeile ist die Grafik nur der Verkehr dieses Containers.
 9. Variablen: `PUID=99`, `PGID=100`, `TZ=<IANA timezone>`, `AMM_DOWNLOAD_DIR=/data/downloads`, `AMM_MEDIA_DIR=/data/media`. Optional: `GITHUB_TOKEN`.
 
 Nach dem Aktualisieren des Images erstellen Sie den Container neu, damit hinzugefügte WebUI-Portzuordnungen gelten.
 
-## In Community Applications veröffentlichen (öffentlicher Katalog)
+??? note "Für Maintainer: Vorlage veröffentlichen (nicht zur Installation nötig)"
 
-Community Apps hostet **Ihre** Dateien nicht. Sie halten ein öffentliches GitHub-Repo mit Vorlagen; der CA-Scanner von Lime Technology indexiert es, nachdem Sie es einreichen.
+    ## In Community Applications veröffentlichen (öffentlicher Katalog)
 
-### 1. Ein Vorlagen-Repository vorbereiten
+    Community Apps hostet **Ihre** Dateien nicht. Sie halten ein öffentliches GitHub-Repo mit Vorlagen; der CA-Scanner von Lime Technology indexiert es, nachdem Sie es einreichen.
 
-Empfohlen: ein **eigenes öffentliches Repo** (zum Beispiel `Qballjos/unraid-templates`), dessen Wurzel so aussieht:
+    ### 1. Ein Vorlagen-Repository vorbereiten
 
-```text
-ca_profile.xml
-templates/aio-media-manager.xml
-```
+    Empfohlen: ein **eigenes öffentliches Repo** (zum Beispiel `Qballjos/unraid-templates`), dessen Wurzel so aussieht:
 
-Aus diesem Projekt kopieren:
+    ```text
+    ca_profile.xml
+    templates/aio-media-manager.xml
+    ```
 
-```bash
-# from a clone of aio-media-server-manager
-mkdir -p ../unraid-templates/templates
-cp deploy/unraid/ca_profile.xml ../unraid-templates/
-cp deploy/unraid/templates/aio-media-manager.xml ../unraid-templates/templates/
-```
+    Aus diesem Projekt kopieren:
 
-Dann:
+    ```bash
+    # from a clone of aio-media-server-manager
+    mkdir -p ../unraid-templates/templates
+    cp deploy/unraid/ca_profile.xml ../unraid-templates/
+    cp deploy/unraid/templates/aio-media-manager.xml ../unraid-templates/templates/
+    ```
 
-1. Legen Sie das öffentliche GitHub-Repo an und pushen Sie `main`.
-2. Bearbeiten Sie `templates/aio-media-manager.xml` und setzen Sie `<TemplateURL>` auf die **raw**-URL dieser Datei im neuen Repo (muss zum echten Pfad auf `main` passen).
-3. Lassen Sie `<Repository>` bei `ghcr.io/qballjos/aio-media-server-manager:latest` (das Image bleibt auf GHCR; nur die Vorlagen-XML liegt im Vorlagen-Repo).
-4. Optional: öffnen Sie einen Support-Thread im Unraid-Forum und tragen Sie die URL in `ca_profile.xml` bei `<Forum>` und in den `<Support>`-Tags der Vorlage ein (GitHub Issues reicht zum Start).
+    Dann:
 
-Sie *können* stattdessen das Haupt-Repo der App einreichen, wenn die XML auffindbar ist und jede App ein `<Repository>`-Tag hat, aber ein kleines eigenes Vorlagen-Repo ist, was CA-Betreuer meist erwarten.
+    1. Legen Sie das öffentliche GitHub-Repo an und pushen Sie `main`.
+    2. Bearbeiten Sie `templates/aio-media-manager.xml` und setzen Sie `<TemplateURL>` auf die **raw**-URL dieser Datei im neuen Repo (muss zum echten Pfad auf `main` passen).
+    3. Lassen Sie `<Repository>` bei `ghcr.io/qballjos/aio-media-server-manager:latest` (das Image bleibt auf GHCR; nur die Vorlagen-XML liegt im Vorlagen-Repo).
+    4. Optional: öffnen Sie einen Support-Thread im Unraid-Forum und tragen Sie die URL in `ca_profile.xml` bei `<Forum>` und in den `<Support>`-Tags der Vorlage ein (GitHub Issues reicht zum Start).
 
-### 2. Einreichen
+    Sie *können* stattdessen das Haupt-Repo der App einreichen, wenn die XML auffindbar ist und jede App ein `<Repository>`-Tag hat, aber ein kleines eigenes Vorlagen-Repo ist, was CA-Betreuer meist erwarten.
 
-1. Melden Sie sich unter **[https://ca.unraid.net/submit](https://ca.unraid.net/submit)** mit Ihrem Unraid- / Forenkonto an.
-2. Registrieren Sie die **GitHub-Repository-URL** (das Vorlagen-Repo).
-3. Führen Sie **Validate** und danach **Scan** aus. Beheben Sie gemeldete XML-Probleme.
-4. Warten Sie auf die Moderation. Nach der Freigabe erscheint die App für alle unter dem Reiter Apps.
+    ### 2. Einreichen
 
-Hilfreiche Docs:
+    1. Melden Sie sich unter **[https://ca.unraid.net/submit](https://ca.unraid.net/submit)** mit Ihrem Unraid- / Forenkonto an.
+    2. Registrieren Sie die **GitHub-Repository-URL** (das Vorlagen-Repo).
+    3. Führen Sie **Validate** und danach **Scan** aus. Beheben Sie gemeldete XML-Probleme.
+    4. Warten Sie auf die Moderation. Nach der Freigabe erscheint die App für alle unter dem Reiter Apps.
 
-- [Submission help](https://ca.unraid.net/submit/help)
-- [Repository XML format](https://ca.unraid.net/submit/help/repository-xml)
-- [XML field reference](https://ca.unraid.net/submit/help/xml-field-reference)
-- [Browse catalog](https://ca.unraid.net/apps) (prüfen Sie zuerst Namenskollisionen)
+    Hilfreiche Docs:
 
-Nutzen Sie **nicht** den eingestellten Anfrageweg `selfhosters/unRAID-CA-templates`.
+    - [Submission help](https://ca.unraid.net/submit/help)
+    - [Repository XML format](https://ca.unraid.net/submit/help/repository-xml)
+    - [XML field reference](https://ca.unraid.net/submit/help/xml-field-reference)
+    - [Browse catalog](https://ca.unraid.net/apps) (prüfen Sie zuerst Namenskollisionen)
 
-### 3. Nach der Aufnahme
+    Nutzen Sie **nicht** den eingestellten Anfrageweg `selfhosters/unRAID-CA-templates`.
 
-- Liefern Sie Updates, indem Sie ein neues Container-Image veröffentlichen (`:latest` oder Semver-Tags). Nutzer aktualisieren über das Docker-Update von Unraid — die Vorlage müssen Sie in der Regel **nicht** bei jeder Veröffentlichung anheben.
-- Ändern Sie die Vorlagen-XML nur, wenn sich Ports, Pfade oder Umgebungsvariablen ändern; CA liest `<TemplateURL>` beim Aktualisieren neu.
+    ### 3. Nach der Aufnahme
 
-### Privat / nur für sich (nicht der öffentliche Katalog)
+    - Liefern Sie Updates, indem Sie ein neues Container-Image veröffentlichen (`:latest` oder Semver-Tags). Nutzer aktualisieren über das Docker-Update von Unraid — die Vorlage müssen Sie in der Regel **nicht** bei jeder Veröffentlichung anheben.
+    - Ändern Sie die Vorlagen-XML nur, wenn sich Ports, Pfade oder Umgebungsvariablen ändern; CA liest `<TemplateURL>` beim Aktualisieren neu.
 
-Um eigene GitHub-Vorlagen ohne CA-Freigabe zu nutzen, hängen Sie die Repo-URL an:
+    ### Privat / nur für sich (nicht der öffentliche Katalog)
 
-```text
-/boot/config/plugins/dockerMan/template-repos
-```
+    Um eigene GitHub-Vorlagen ohne CA-Freigabe zu nutzen, hängen Sie die Repo-URL an:
 
-(eine URL pro Zeile). Die Vorlagen erscheinen dann unter Docker → Add Container. Das listet die App **nicht** im öffentlichen Community-Applications-Katalog.
+    ```text
+    /boot/config/plugins/dockerMan/template-repos
+    ```
 
-## FUSE / Hardlinks
+    (eine URL pro Zeile). Die Vorlagen erscheinen dann unter Docker → Add Container. Das listet die App **nicht** im öffentlichen Community-Applications-Katalog.
 
-Bevorzugen Sie `/mnt/cache/aio-media-manager` oder einen einzelnen Plattenpfad für Downloads und Medien, wenn Hardlinks zählen. `/mnt/user` (FUSE) mit einer Plattenshare zu mischen kann atomare Verschiebungen brechen.
+## FUSE / hardlinks
+
+SSD-Downloads und Array-Medien liegen auf verschiedenen Dateisystemen: Importe kopieren Dateien. Fertige Torrents und die Bibliothek bleiben unter `/data`; Hardlinks erfordern dasselbe physische Dateisystem. Mischen Sie bei Migrationen keine `/mnt/user`- und `/mnt/disk*`-Pfade derselben Dateien.
 
 ## Updates
 

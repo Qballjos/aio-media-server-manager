@@ -5,6 +5,10 @@ Führen Sie AIO als **ein** Container-Manager-**Projekt** aus. Fügen Sie keine 
 **Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
 Ihr DSM muss `linux/amd64`- oder `linux/arm64`-Images ausführen können.
 
+## Container Manager zuerst installieren
+
+Installieren und starten Sie **Container Manager** über DSM Package Center, bevor Sie das Skript ausführen. Lassen Sie DSM die Freigabe `docker` anlegen; erstellen Sie `/volume1/docker` nicht vorher von Hand. Das Skript prüft Paket, Docker-Engine und den vorhandenen Ordner `${VOLUME}/docker`, bevor es Ordner anlegt oder Daten migriert. Setzen Sie `VOLUME` auf das Volume dieser DSM-Freigabe.
+
 ## Ordner und das Projekt anlegen (SSH)
 
 Aktivieren Sie SSH (**Systemsteuerung → Terminal und SNMP → SSH-Dienst aktivieren**), dann:
@@ -50,6 +54,16 @@ sudo DATA=/volume1/media/aio-media-manager \
 Die erzeugte Datei ist `/volume1/docker/aio-media-manager/docker-compose.yml` (kein `build:`-Schlüssel — Container Manager holt GHCR). Eine statische Kopie liegt in [`synology/docker-compose.yml`](synology/docker-compose.yml).
 
 Wenn GHCR privat ist: `sudo docker login ghcr.io`, bevor Sie das Projekt starten.
+
+## Optionaler SSD-Downloadspeicher
+
+Erstellen Sie zuerst in DSM eine Freigabe auf einem unterstützten SSD-Speichervolume, etwa `/volume2/download-cache`. Mit DOWNLOAD_CACHE nutzen unvollständige Downloads und die Usenet-Entpackung die SSD. Fertige Torrents und importierte Medien bleiben am normalen DATA-Pfad. SSD-HDD-Importe kopieren Dateien. DSM SSD-Cache bietet keinen Ordner für einen Mount und beschleunigt große sequenzielle Transfers nicht garantiert; ein eigenes SSD-Volume legt den Speicherort gezielt fest. Das Skript formatiert keine Laufwerke. Halten Sie Platz für Download und Entpackung frei und konfigurieren Sie eine Freiplatzgrenze. Migrieren Sie vorhandene Dateien bei gestopptem AIO vor dem Hinzufügen der Mounts. Verwenden Sie bei erneuter Ausführung denselben DOWNLOAD_CACHE-Wert. Siehe [vollständige SSD-Anleitung mit Quelle](https://qballjos.github.io/aio-media-server-manager/deploy/SYNOLOGY/#optional-ssd-download-workspace).
+
+```bash
+sudo DOWNLOAD_CACHE=/volume2/download-cache/aio-media-manager \
+     PUID=1026 PGID=100 \
+     sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
+```
 
 ## In Container Manager importieren
 

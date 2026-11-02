@@ -8,56 +8,51 @@ So läuft AIO üblicherweise: **ein Container**, der den Manager und jede App st
 
 ---
 
-## 1. Ordner anlegen (über SSH)
+## 1. Server prüfen
+
+Führe diese Befehle auf dem AIO-Server aus, gegebenenfalls nach SSH-Anmeldung mit eigenem Benutzer und Serveradresse.
 
 ```bash
-ssh user@host
+docker info
+docker compose version
+git --version
 ```
 
-```bash
-id
-export PUID="$(id -u)"
-export PGID="$(id -g)"
-export AMM_DATA_HOST="${HOME}/aio-media-manager"
+Erwartet: eine laufende Docker-Engine sowie Compose- und Git-Versionen. Fehlende Werkzeuge oder Zugriffsfehler zuerst nach Host-Anleitung beheben. Auf NAS-Systemen die [Plattformanleitung](README.md) verwenden, keine zweite Docker-Engine installieren.
 
-mkdir -p "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media"
-sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,backups}
-sudo chown -R "${PUID}:${PGID}" "${AMM_DATA_HOST}" /opt/aio-media-manager
-```
-
-**Warum diese Pfade?**
-
-- Downloads und Medien liegen unter **Ihrem Home**, damit der Dateimanager des Hosts sie sieht.
-- Lassen Sie sie als zwei Ordner unter **einem** Elternordner, damit Hardlinks funktionieren. Getrennte Mounts auf verschiedenen Platten (oder verschiedenen btrfs-Subvolumes) erzwingen oft vollständige Kopien.
-- Legen Sie **backups** auf eine andere Platte als **config**, wenn möglich. Ohne einen `/backups`-Mount fällt AIO auf `/config/backups` zurück und warnt in den Einstellungen.
-
-Bibliotheken schon woanders? Setzen Sie `AMM_DATA_HOST` auf diesen Elternordner (darin müssen weiterhin `downloads` und `media` liegen).
-
----
-
-## 2. Mit Compose starten (empfohlen)
+## 2. Dateien holen und Ordner anlegen
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
+id
+export PUID="$(id -u)"
+export PGID="$(id -g)"
+export AMM_DATA_HOST="${HOME}/aio-media-manager"
+mkdir -p config/vpn backups "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media"
+sudo chown -R "${PUID}:${PGID}" config backups "${AMM_DATA_HOST}"
 ```
 
-Prüfen Sie `docker-compose.yml`:
+Bleibe danach im Ordner mit docker-compose.yml. Die Befehle erstellen config und backups im Checkout sowie Downloads und Medien im Home-Verzeichnis. Die Standard-Mounts verwenden **diese** Ordner, nicht /opt/aio-media-manager/config.
 
-- Die Volume-Pfade passen zu den angelegten Ordnern
-- `PUID` / `PGID` passen zu `id`
-- `TZ` ist Ihre Zeitzone (oder setzen Sie sie später in den Einstellungen)
+## 3. docker-compose.yml prüfen
 
-Wenn Sie `sudo docker compose` nutzen, setzen Sie `AMM_DATA_HOST` ausdrücklich, damit Daten nicht in `/root` landen.
+Öffne die Datei im Texteditor. Setze PUID/PGID auf uid/gid aus id; im Compose stehen zunächst 1000:1000. Exportierte Shellvariablen überschreiben diese festen Werte nicht. Setze TZ etwa auf Europe/Berlin. Ordnerzuordnungen zunächst beibehalten; Backups möglichst später auf einen anderen Datenträger legen.
+
+!!! tip "sudo"
+    Bei sudo können Variablen verloren gehen und HOME kann /root werden. Gib den Datenpfad ausdrücklich mit: `sudo env AMM_DATA_HOST="$AMM_DATA_HOST" docker compose up -d`. Bei Updates denselben Pfad verwenden.
+
+## 4. AIO starten
 
 ```bash
 docker compose pull
 docker compose up -d
+docker compose ps
 ```
 
-Öffnen Sie `http://YOUR-HOST:8080`, legen Sie das Administratorkonto an und folgen Sie dann [Das Dashboard nutzen](../docs/USAGE.md).
+Erwartet: ein laufender Container aio-media-manager. Der erste Image-Download kann einige Minuten dauern. Öffne http://DEINE-SERVER-IP:8080 mit deiner tatsächlichen Adresse, erstelle das Administratorkonto und schließe den Assistenten ab. Danach [Dashboard-Anleitung](../docs/USAGE.md). Bei Fehlern: docker compose logs --tail=100. Bei Portkonflikten die **Hostseite** ändern, Container neu erstellen und den neuen Port öffnen.
 
-**Später aktualisieren:** erneut holen und neu erstellen:
+## Später aktualisieren
 
 ```bash
 docker compose pull

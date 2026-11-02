@@ -8,56 +8,51 @@ Dit is de gewone manier om AIO te draaien: **één container** die de manager en
 
 ---
 
-## 1. Mappen maken (via SSH)
+## 1. Controleer de server
+
+Voer de opdrachten uit op de server waarop AIO moet draaien. Verbind zo nodig eerst via SSH met je eigen gebruikersnaam en serveradres.
 
 ```bash
-ssh user@host
+docker info
+docker compose version
+git --version
 ```
 
-```bash
-id
-export PUID="$(id -u)"
-export PGID="$(id -g)"
-export AMM_DATA_HOST="${HOME}/aio-media-manager"
+Verwacht: informatie over een actieve Docker-engine, een Compose-versie en een Git-versie. Ontbreekt iets of krijg je een rechtenfout? Los dat eerst op via de instructies van je host. Gebruik op een NAS de bijbehorende [platformgids](README.md) en installeer geen tweede Docker-engine.
 
-mkdir -p "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media"
-sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,backups}
-sudo chown -R "${PUID}:${PGID}" "${AMM_DATA_HOST}" /opt/aio-media-manager
-```
-
-**Waarom deze paden?**
-
-- Downloads en media staan onder **je home**, zodat de bestandsbeheerder van de host ze ziet.
-- Houd ze als twee mappen onder **één** ouder, zodat hardlinks werken. Losse mounts op verschillende schijven (of verschillende btrfs-subvolumes) dwingen vaak een volledige kopie af.
-- Zet **backups** op een andere schijf dan **config** als dat kan. Zonder een `/backups`-mount valt AIO terug op `/config/backups` en waarschuwt in Instellingen.
-
-Heb je de bibliotheken al ergens anders? Zet `AMM_DATA_HOST` op die oudermap (daarin moeten nog steeds `downloads` en `media` staan).
-
----
-
-## 2. Starten met Compose (aanbevolen)
+## 2. Haal de bestanden op en maak mappen
 
 ```bash
 git clone https://github.com/Qballjos/aio-media-server-manager.git
 cd aio-media-server-manager
+id
+export PUID="$(id -u)"
+export PGID="$(id -g)"
+export AMM_DATA_HOST="${HOME}/aio-media-manager"
+mkdir -p config/vpn backups "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media"
+sudo chown -R "${PUID}:${PGID}" config backups "${AMM_DATA_HOST}"
 ```
 
-Controleer `docker-compose.yml`:
+Blijf hierna in de map met `docker-compose.yml`. Deze opdrachten maken `config/` en `backups/` in de projectmap, plus downloads en media in je thuismap. De standaard Compose-koppelingen wijzen naar **deze** mappen, niet naar `/opt/aio-media-manager/config`.
 
-- De volumepaden komen overeen met de mappen die je hebt gemaakt
-- `PUID` / `PGID` komen overeen met `id`
-- `TZ` is je tijdzone (of zet die later in Instellingen)
+## 3. Controleer docker-compose.yml
 
-Als je `sudo docker compose` gebruikt, zet `AMM_DATA_HOST` expliciet, zodat data niet in `/root` belandt.
+Open het bestand in een teksteditor. Zet PUID en PGID op de uid/gid uit `id`; de waarden in het bestand zijn standaard 1000:1000. Alleen de shellvariabelen exporteren overschrijft deze vaste Compose-waarden niet. Zet TZ op je tijdzone, bijvoorbeeld Europe/Amsterdam. Houd de mapkoppelingen eerst gelijk. Kies voor back-ups later liefst een andere schijf.
+
+!!! tip "sudo"
+    Gebruik je sudo? Omgevingsvariabelen kunnen verdwijnen en HOME kan /root worden. Geef je datamap dan expliciet mee: `sudo env AMM_DATA_HOST="$AMM_DATA_HOST" docker compose up -d`. Gebruik dezelfde map bij updates.
+
+## 4. Start AIO
 
 ```bash
 docker compose pull
 docker compose up -d
+docker compose ps
 ```
 
-Open `http://YOUR-HOST:8080`, maak het beheerdersaccount en volg daarna [Het dashboard gebruiken](../docs/USAGE.md).
+Verwacht: één actieve container met de naam aio-media-manager. Het eerste downloaden van de image kan enkele minuten duren. Open `http://JOUW-SERVER-IP:8080` met je echte serveradres, maak het beheerdersaccount en rond de wizard af. Lees daarna [Het dashboard gebruiken](../docs/USAGE.md). Bij fouten: `docker compose logs --tail=100`. Bij een poortconflict wijzig je de **hostkant** van de poortkoppeling, maak je de container opnieuw aan en open je de nieuwe poort.
 
-**Later bijwerken:** opnieuw ophalen en daarna opnieuw aanmaken:
+## Later bijwerken
 
 ```bash
 docker compose pull
