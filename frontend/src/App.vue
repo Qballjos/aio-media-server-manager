@@ -452,11 +452,13 @@ onUnmounted(() => {
         >
           {{ $t('Settings') }}
         </RouterLink>
-        <template v-if="currentView === 'home'">
-          <span class="nav-tabs-divider" aria-hidden="true"></span>
+      </nav>
+
+      <div class="nav-tools">
+        <template v-if="authStatus.authenticated && wizardCompleted && currentView === 'home'">
           <button
             type="button"
-            class="metric-pill metric-pill-action nav-edit-btn"
+            class="metric-pill metric-pill-action nav-edit-btn glass-pill"
             :class="{ 'is-active': homeEditing }"
             :aria-pressed="homeEditing"
             :title="homeEditing ? $t('Done arranging Home') : $t('Edit the Home layout')"
@@ -467,92 +469,92 @@ onUnmounted(() => {
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
           </button>
         </template>
-      </nav>
 
-      <div class="nav-metrics" :class="{ 'nav-metrics-authenticated': authStatus.authenticated }">
-        <RouterLink
-          v-if="showUpdatesPill"
-          :to="{ name: 'settings', params: { section: 'updates' } }"
-          class="metric-pill is-updates"
-          :title="$t('Open Settings → Updates')"
-        >
-          <span class="metric-val font-mono">{{ updatesPillLabel }}</span>
-        </RouterLink>
-        <button
-          v-if="authStatus.authenticated && currentView === 'catalog'"
-          @click="runAutomatedWiring"
-          class="metric-pill metric-pill-action"
-          :disabled="wiringRunning"
-          :title="$t('Wire installed apps to each other')"
-        >
-          <span v-if="wiringRunning" class="spinner spinner-sm"></span>
-          <span v-else>⚡ <span class="hide-compact">{{ $t('Auto-Wire') }}</span></span>
-        </button>
-      </div>
-
-      <details v-if="authStatus.authenticated" class="nav-account" @keydown.esc="$event.currentTarget.removeAttribute('open')">
-        <summary class="glass-pill" :aria-label="`${authStatus.username} account. ${wizardCompleted ? statusChips.map(chip => chip.title).join('. ') : ''}`">
-          <span v-if="wizardCompleted && statusChips.length" class="nav-account-status">
-            <span v-for="chip in statusChips" :key="chip.key" class="status-chip" :data-tone="chip.tone" :title="chip.title">
-              <span class="status-dot" aria-hidden="true"></span>
-              <span>{{ chip.label }}</span>
-            </span>
-          </span>
-          <span class="user-avatar" aria-hidden="true">
-            <img v-if="authStatus.avatar_url" :src="authStatus.avatar_url" alt="" class="user-avatar-img" />
-            <template v-else>{{ authStatus.username?.[0]?.toUpperCase() || 'A' }}</template>
-          </span>
-          <svg class="nav-account-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </summary>
-        <div class="nav-account-menu glass-popover">
-          <RouterLink
-            v-if="wizardCompleted"
-            :to="{ name: 'settings', params: { section: 'account' } }"
-            class="metric-pill metric-pill-action"
-            @click="$event.currentTarget.closest('details').removeAttribute('open')"
-          >{{ authStatus.username }} · {{ $t('Account') }}</RouterLink>
-          <template v-if="wizardCompleted">
-            <RouterLink
-              v-for="chip in statusChips"
-              :key="chip.key"
-              :to="{ name: 'settings', params: { section: 'vpn' } }"
-              class="metric-pill status-chip"
-              :data-tone="chip.tone"
-              :title="chip.title"
-              :aria-label="chip.title"
-              @click="$event.currentTarget.closest('details').removeAttribute('open')"
-            >
-              <span class="status-dot" aria-hidden="true"></span>
-              <span>{{ chip.label }}</span>
-            </RouterLink>
-          </template>
-          <div v-if="transcodingAvailable" class="metric-pill nav-account-info" :title="$t('Hardware transcoding available')">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span>{{ $t('GPU · hardware transcoding') }}</span>
-          </div>
+        <div class="nav-metrics" :class="{ 'nav-metrics-authenticated': authStatus.authenticated }">
           <RouterLink
             v-if="showUpdatesPill"
             :to="{ name: 'settings', params: { section: 'updates' } }"
-            class="metric-pill is-updates nav-account-phone-only"
-            @click="$event.currentTarget.closest('details').removeAttribute('open')"
-          >{{ updatesPillLabel }}</RouterLink>
+            class="metric-pill is-updates"
+            :title="$t('Open Settings → Updates')"
+          >
+            <span class="metric-val font-mono">{{ updatesPillLabel }}</span>
+          </RouterLink>
           <button
-            v-if="currentView === 'catalog'"
+            v-if="authStatus.authenticated && currentView === 'catalog'"
             @click="runAutomatedWiring"
-            class="metric-pill metric-pill-action nav-account-phone-only"
+            class="metric-pill metric-pill-action"
             :disabled="wiringRunning"
             :title="$t('Wire installed apps to each other')"
           >
             <span v-if="wiringRunning" class="spinner spinner-sm"></span>
-            <span v-else>⚡</span>
-            {{ $t('Auto-Wire') }}
+            <span v-else>⚡ <span class="hide-compact">{{ $t('Auto-Wire') }}</span></span>
           </button>
-          <button v-if="showPwaInstall" type="button" class="metric-pill metric-pill-action" @click="installPwa">{{ $t('Install app') }}</button>
-          <button type="button" @click="handleLogout" class="metric-pill metric-pill-action">{{ $t('Log out') }}</button>
         </div>
-      </details>
+
+        <details v-if="authStatus.authenticated" class="nav-account" @keydown.esc="$event.currentTarget.removeAttribute('open')">
+          <summary class="glass-pill" :aria-label="`${authStatus.username} account. ${wizardCompleted ? statusChips.map(chip => chip.title).join('. ') : ''}`">
+            <span v-if="wizardCompleted && statusChips.length" class="nav-account-status">
+              <span v-for="chip in statusChips" :key="chip.key" class="status-chip" :data-tone="chip.tone" :title="chip.title">
+                <span class="status-dot" aria-hidden="true"></span>
+                <span>{{ chip.label }}</span>
+              </span>
+            </span>
+            <span class="user-avatar" aria-hidden="true">
+              <img v-if="authStatus.avatar_url" :src="authStatus.avatar_url" alt="" class="user-avatar-img" />
+              <template v-else>{{ authStatus.username?.[0]?.toUpperCase() || 'A' }}</template>
+            </span>
+            <svg class="nav-account-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </summary>
+          <div class="nav-account-menu glass-popover">
+            <RouterLink
+              v-if="wizardCompleted"
+              :to="{ name: 'settings', params: { section: 'account' } }"
+              class="metric-pill metric-pill-action"
+              @click="$event.currentTarget.closest('details').removeAttribute('open')"
+            >{{ authStatus.username }} · {{ $t('Account') }}</RouterLink>
+            <template v-if="wizardCompleted">
+              <RouterLink
+                v-for="chip in statusChips"
+                :key="chip.key"
+                :to="{ name: 'settings', params: { section: 'vpn' } }"
+                class="metric-pill status-chip"
+                :data-tone="chip.tone"
+                :title="chip.title"
+                :aria-label="chip.title"
+                @click="$event.currentTarget.closest('details').removeAttribute('open')"
+              >
+                <span class="status-dot" aria-hidden="true"></span>
+                <span>{{ chip.label }}</span>
+              </RouterLink>
+            </template>
+            <div v-if="transcodingAvailable" class="metric-pill nav-account-info" :title="$t('Hardware transcoding available')">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span>{{ $t('GPU · hardware transcoding') }}</span>
+            </div>
+            <RouterLink
+              v-if="showUpdatesPill"
+              :to="{ name: 'settings', params: { section: 'updates' } }"
+              class="metric-pill is-updates nav-account-phone-only"
+              @click="$event.currentTarget.closest('details').removeAttribute('open')"
+            >{{ updatesPillLabel }}</RouterLink>
+            <button
+              v-if="currentView === 'catalog'"
+              @click="runAutomatedWiring"
+              class="metric-pill metric-pill-action nav-account-phone-only"
+              :disabled="wiringRunning"
+              :title="$t('Wire installed apps to each other')"
+            >
+              <span v-if="wiringRunning" class="spinner spinner-sm"></span>
+              <span v-else>⚡</span>
+              {{ $t('Auto-Wire') }}
+            </button>
+            <button v-if="showPwaInstall" type="button" class="metric-pill metric-pill-action" @click="installPwa">{{ $t('Install app') }}</button>
+            <button type="button" @click="handleLogout" class="metric-pill metric-pill-action">{{ $t('Log out') }}</button>
+          </div>
+        </details>
+      </div>
     </header>
 
     <main class="content-wrapper">

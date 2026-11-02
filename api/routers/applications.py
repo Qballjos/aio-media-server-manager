@@ -215,6 +215,10 @@ async def start_application(name: str, request: Request) -> dict[str, Any]:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
 
     supervisor = ProcessSupervisor.get()
+    from core.install_jobs import get_job, set_job
+    pending_restart = (get_job(name) or {}).get("status") == "restart_required"
+    if pending_restart and supervisor.status(name).value == "running":
+        raise HTTPException(status_code=409, detail="Restart this application to apply its saved settings")
     cmd = plugin.start_command()
     env = plugin.extra_env()
     cwd = plugin.working_directory()
@@ -231,6 +235,8 @@ async def start_application(name: str, request: Request) -> dict[str, Any]:
     except RuntimeError as err:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
 
+    if pending_restart:
+        set_job(name, "started", "Saved settings are active")
     return {
         "status": "started",
         "name": name,
@@ -285,8 +291,12 @@ async def restart_application(name: str, request: Request) -> dict[str, Any]:
         except VpnIsolationError as err:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
 
+    from core.install_jobs import get_job, set_job
+    pending_restart = (get_job(name) or {}).get("status") == "restart_required"
     try:
-        if supervisor.status(name).value == "stopped":
+        if pending_restart:
+            await supervisor.stop(name)
+        if pending_restart or supervisor.status(name).value == "stopped":
             # If stopped, simply start it
             cmd = plugin.start_command()
             await supervisor.start(
@@ -301,6 +311,8 @@ async def restart_application(name: str, request: Request) -> dict[str, Any]:
     except VpnIsolationError as err:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
 
+    if pending_restart:
+        set_job(name, "started", "Saved settings are active")
     return {
         "status": "restarted",
         "name": name,
@@ -570,7 +582,14 @@ async def patch_application_settings(
         except VpnIsolationError as err:
             logger.warning("Left '%s' stopped after settings change: %s", name, err)
 
+    from core.install_jobs import set_job, get_job
+    pending_restart = running and not restarted and (body.port is not None or vuetorrent_changed)
+    if pending_restart:
+        set_job(name, "restart_required", "Restart this application to apply its saved settings before updating")
+    elif restarted and (get_job(name) or {}).get("status") == "restart_required":
+        set_job(name, "started", "Saved settings are active")
     payload = _application_settings(plugin, request)
+    payload["restart_required"] = pending_restart
     payload["restarted"] = restarted
     payload["status"] = "updated"
     if tunnel_sync is not None:
@@ -606,7 +625,7 @@ async def check_application_update(name: str, request: Request) -> dict[str, Any
         plugin = catalog.get(name)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    return updater.update_available(plugin)
+    return await asyncio.to_thread(updater.update_available, plugin)
 
 
 @router.post("/{name}/update", summary="Update an application with rollback on failure")
@@ -623,8 +642,12 @@ async def update_application(name: str, request: Request) -> dict[str, Any]:
         )
     from core.maintenance import update_in_progress
 
-    with update_in_progress():
-        outcome = await updater.update(plugin)
+    from core.preflight import PreflightError
+    try:
+        with update_in_progress():
+            outcome = await updater.update(plugin)
+    except PreflightError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
         from core.update_schedule import scheduler
 

@@ -204,6 +204,8 @@ class IntegrationEngine:
         from core.app_prefs import load_prefs, set_app_option
 
         options = (load_prefs(self._settings).get("options") or {}).get("prowlarr") or {}
+        if options.get("public_indexers_opt_in") is not True:
+            return _step("prowlarr", "starter_indexers", True, "Public indexers are disabled; explicit opt-in required")
         tried = set(options.get("starter_indexers") or [])
         starter = prowlarr_client.add_starter_indexers(
             skip=tried, definitions_wait=0.0 if tried else 45.0, progress=progress

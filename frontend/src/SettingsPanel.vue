@@ -3,8 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { resolveSettingsSection, SETTINGS_PAGES } from './settingsNavigation.js'
 import SettingsSidebar from './SettingsSidebar.vue'
+import IntegrationCheck from './IntegrationCheck.vue'
+import BackupSettings from './settings/BackupSettings.vue'
+import { useBackups } from './composables/useBackups.js'
+import NotificationSettings from './settings/NotificationSettings.vue'
+import PreflightReview from './PreflightReview.vue'
+const preflightReview = ref(null)
 import { apiError, apiRequest, readJson } from './api.js'
-import { startGuardedInterval } from './pageVisible.js'
 import { readHomepageWidgetDebug } from './homepageDebug.js'
 import { versionLabel } from './statusChips.js'
 import { formatUptime } from './format.js'
@@ -65,25 +70,10 @@ const notice = ref('')
 const USENET_CLIENTS = { sabnzbd: 'SABnzbd', nzbget: 'NZBGet' }
 const usenet = ref({ server: null, clients: [] })
 const usenetForm = ref({ host: '', port: 563, ssl: true, username: '', password: '', connections: 8 })
-// Settings → Notifications: the saved state (secrets only as "saved") and the editable form.
-const notif = ref(null)
-const notifForm = ref({
-  discord: { enabled: false, webhook_url: '' },
-  email: { enabled: false, host: '', port: 587, security: 'starttls', username: '', password: '', sender: '', recipients: '' },
-  events: {},
-})
-const notifTesting = ref('')
-const NOTIF_EVENT_NAMES = { apps: 'Apps', vpn: 'VPN', tunnel: 'Cloudflare tunnel', updates: 'Updates', disk: 'Storage' }
 const usenetClientNames = computed(() => (usenet.value.clients || []).map((name) => USENET_CLIENTS[name] || name))
 const share = ref({ active: false, url: '', expires_at: null, ttl_hours: 24 })
 const errors = ref([])
 const copied = ref(false)
-const backups = ref([])
-const backupInfo = ref({ backup_dir: '', legacy_dir: '', schedule: {} })
-const backupJob = ref(null)
-const restoreTarget = ref(null)
-const uploading = ref(false)
-let stopJobPollFn = null
 const passwordForm = ref({ current_password: '', new_password: '', confirm_password: '' })
 const passwordSaving = ref(false)
 const form = ref({
@@ -139,6 +129,7 @@ const profileAvatar = ref({
 })
 const avatarUploading = ref(false)
 const snapshot = ref({})
+const backupController = useBackups({ snapshot, error, notice, reload: loadAll })
 const vpnLive = ref({})
 const vpnBusy = ref(false)
 const tunnelLive = ref({})
@@ -955,10 +946,7 @@ async function loadAll() {
     else error.value = 'Could not load settings.'
     if (bakRes.ok) {
       const bak = await readJson(bakRes)
-      backups.value = bak.backups || []
-      backupInfo.value = bak
-      if (bak.job?.status === 'running' && !stopJobPollFn) watchJob(bak.job)
-      else if (!stopJobPollFn) backupJob.value = bak.job
+      backupController.applyPayload(bak)
     }
     if (diagRes.ok) {
       const diag = await readJson(diagRes)
@@ -1015,71 +1003,6 @@ async function toggleVpn() {
   form.value.vpn_enabled = next
   const ok = await patchSettings({ vpn_enabled: next })
   if (!ok) form.value.vpn_enabled = !next
-}
-
-function fillNotifForm(data) {
-  notif.value = data
-  notifForm.value = {
-    discord: { enabled: data.discord.enabled, webhook_url: '' },
-    email: { ...data.email, password: '', recipients: (data.email.recipients || []).join(', ') },
-    events: { ...data.events },
-  }
-}
-
-async function loadNotifications() {
-  try {
-    const res = await apiRequest('/api/notifications')
-    if (res.ok) fillNotifForm(await readJson(res))
-  } catch (_) {
-    /* the form still works without the saved values */
-  }
-}
-
-/** Blank secret fields keep what is saved; "Remove" sends an empty string. */
-async function saveNotifications(overrides = {}) {
-  saving.value = true
-  error.value = ''
-  notice.value = ''
-  const form = notifForm.value
-  const body = {
-    discord: { enabled: form.discord.enabled, webhook_url: form.discord.webhook_url.trim() || null },
-    email: { ...form.email, password: form.email.password || null },
-    events: form.events,
-  }
-  delete body.email.password_saved
-  if (overrides.removeWebhook) Object.assign(body.discord, { webhook_url: '', enabled: false })
-  if (overrides.removePassword) body.email.password = ''
-  try {
-    const res = await apiRequest('/api/notifications', { method: 'PUT', body: JSON.stringify(body) })
-    const data = await readJson(res)
-    if (!res.ok) {
-      error.value = apiError(data, 'Could not save notifications.')
-      return false
-    }
-    fillNotifForm(data)
-    notice.value = 'Notifications saved.'
-    return true
-  } catch (err) {
-    error.value = err?.message || 'Could not save notifications.'
-    return false
-  } finally {
-    saving.value = false
-  }
-}
-
-async function testNotification(channel) {
-  if (!(await saveNotifications())) return
-  notifTesting.value = channel
-  try {
-    const res = await apiRequest('/api/notifications/test', { method: 'POST', body: JSON.stringify({ channel }) })
-    const data = await readJson(res)
-    if (!res.ok) error.value = apiError(data, 'Could not send the test message.')
-    else notice.value = channel === 'discord' ? 'Test message sent to Discord.' : 'Test e-mail sent.'
-  } catch (err) {
-    error.value = err?.message || 'Could not send the test message.'
-  } finally {
-    notifTesting.value = ''
-  }
 }
 
 async function loadUsenet() {
@@ -1359,13 +1282,14 @@ async function watchUpdate(name) {
 }
 
 async function applyAppUpdate(item) {
+  if (preflightReview.value && !(await preflightReview.value.review(item.name, 'update'))) return { ok: false, reason: 'Cancelled' }
   updatingApp.value = item.name
   watchUpdate(item.name)
   try {
     const res = await apiRequest(`/api/applications/${item.name}/update`, { method: 'POST' })
     const data = await readJson(res)
     // Updated but not running again (the VPN it needs is down, say): the new version is in, the app is not.
-    if (res.ok && data.status !== 'rolled_back') return { ok: true, version: data.version || item.latest_version, stopped: data.start_error || '' }
+    if (res.ok && data.status === 'updated') return { ok: true, version: data.version || item.latest_version, stopped: data.start_error || '' }
     return { ok: false, reason: apiError(data, 'update failed') }
   } catch (err) {
     return { ok: false, reason: err.message || 'update failed' }
@@ -1406,194 +1330,6 @@ async function updateAllApps() {
   const problems = [failed.length ? `Not updated: ${failed.join(', ')}.` : '', stopped.length ? `Updated but stopped: ${stopped.join(', ')}.` : ''].filter(Boolean)
   if (problems.length) error.value = `Updated ${items.length - failed.length} of ${items.length}. ${problems.join(' ')}`
   else notice.value = `Updated all ${items.length} apps.`
-}
-
-const backupJobRunning = computed(() => backupJob.value?.status === 'running')
-const backupOnConfigVolume = computed(() => {
-  const dir = backupInfo.value.backup_dir || ''
-  const config = snapshot.value.config_dir || ''
-  return !!dir && !!config && (dir === config || dir.startsWith(`${config}/`))
-})
-const backupJobPercent = computed(() => {
-  const job = backupJob.value
-  if (!job || !job.total) return 0
-  return Math.min(100, Math.round((job.done / job.total) * 100))
-})
-
-function stopJobPoll() {
-  if (stopJobPollFn) stopJobPollFn()
-  stopJobPollFn = null
-}
-
-function describeJob(job) {
-  const result = job.result || {}
-  if (job.status === 'error') return `${job.kind} failed: ${job.error}`
-  if (job.kind === 'backup') {
-    const warn = (result.warnings || []).length
-    return `Created ${result.name}${warn ? ` with ${warn} warning(s)` : ''}.`
-  }
-  if (job.kind === 'verify') {
-    return result.ok
-      ? `${result.name} is intact (${result.checked} files checked).`
-      : `${result.name} failed verification: ${result.error}`
-  }
-  if (job.kind === 'restore') {
-    const parts = [`Restored ${result.files} files (${(result.sections || []).join(', ')}).`]
-    if (result.safety_backup) parts.push(`Previous state saved as ${result.safety_backup}.`)
-    if ((result.restarted || []).length) parts.push(`Restarted ${result.restarted.join(', ')}.`)
-    if ((result.restart_failed || []).length) parts.push(`Could not restart ${result.restart_failed.join(', ')}.`)
-    return parts.join(' ')
-  }
-  return 'Done.'
-}
-
-function watchJob(job) {
-  backupJob.value = job
-  stopJobPoll()
-  if (!job || job.status !== 'running') return
-  stopJobPollFn = startGuardedInterval(async () => {
-    try {
-      const res = await apiRequest('/api/backups/job')
-      if (!res.ok) return
-      const data = await readJson(res)
-      backupJob.value = data.job
-      if (!data.job || data.job.status !== 'running') {
-        stopJobPoll()
-        if (data.job?.status === 'error' || (data.job?.kind === 'verify' && !data.job?.result?.ok)) {
-          error.value = describeJob(data.job)
-        } else if (data.job) {
-          notice.value = describeJob(data.job)
-        }
-        await loadAll()
-      }
-    } catch (_) {
-      /* keep polling */
-    }
-  }, 1000)
-}
-
-async function startBackupJob(endpoint, body) {
-  error.value = ''
-  notice.value = ''
-  try {
-    const res = await apiRequest(endpoint, { method: 'POST', body: JSON.stringify(body || {}) })
-    const data = await readJson(res)
-    if (!res.ok) {
-      error.value = apiError(data, 'Backup action failed.')
-      return
-    }
-    watchJob(data.job)
-  } catch (err) {
-    error.value = err.message
-  }
-}
-
-function createBackup() {
-  return startBackupJob('/api/backups', { label: 'manual' })
-}
-
-function verifyBackup(name) {
-  return startBackupJob(`/api/backups/${encodeURIComponent(name)}/verify`)
-}
-
-async function openRestore(name) {
-  error.value = ''
-  const res = await apiRequest(`/api/backups/${encodeURIComponent(name)}`)
-  const data = await readJson(res)
-  if (!res.ok) {
-    error.value = apiError(data, 'Could not read backup.')
-    return
-  }
-  restoreTarget.value = { name, sections: data.sections || [], selected: ['all'] }
-}
-
-function toggleRestoreSection(value) {
-  const target = restoreTarget.value
-  if (!target) return
-  if (value === 'all') {
-    target.selected = ['all']
-    return
-  }
-  const picked = new Set(target.selected.filter((item) => item !== 'all'))
-  if (picked.has(value)) picked.delete(value)
-  else picked.add(value)
-  target.selected = picked.size ? [...picked] : ['all']
-}
-
-async function confirmRestore() {
-  const target = restoreTarget.value
-  if (!target) return
-  const scope = target.selected.includes('all') ? 'everything' : target.selected.join(', ')
-  if (!window.confirm(`Restore ${scope} from ${target.name}? Affected apps are stopped, the current state is saved first, then apps restart.`)) return
-  restoreTarget.value = null
-  await startBackupJob(`/api/backups/${encodeURIComponent(target.name)}/restore`, {
-    sections: target.selected.includes('all') ? null : target.selected,
-  })
-}
-
-async function downloadBackup(name) {
-  error.value = ''
-  try {
-    const res = await apiRequest(`/api/backups/${encodeURIComponent(name)}/download`)
-    if (!res.ok) {
-      const data = await readJson(res)
-      error.value = apiError(data, `Download failed (HTTP ${res.status}).`)
-      return
-    }
-    const url = URL.createObjectURL(await res.blob())
-    const link = document.createElement('a')
-    link.href = url
-    link.download = name
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-  } catch (err) {
-    error.value = err.message
-  }
-}
-
-async function uploadBackup(event) {
-  const file = event.target?.files?.[0]
-  if (event.target) event.target.value = ''
-  if (!file) return
-  uploading.value = true
-  error.value = ''
-  notice.value = ''
-  try {
-    const res = await apiRequest(`/api/backups/upload?filename=${encodeURIComponent(file.name)}`, {
-      method: 'POST',
-      body: file,
-      json: false,
-      headers: { 'Content-Type': 'application/octet-stream' },
-    })
-    const data = await readJson(res)
-    if (!res.ok) {
-      error.value = apiError(data, 'Upload failed.')
-      return
-    }
-    notice.value = `Uploaded ${data.backup?.name || file.name}. Verify it, then restore when ready.`
-    await loadAll()
-  } catch (err) {
-    error.value = err.message
-  } finally {
-    uploading.value = false
-  }
-}
-
-async function deleteBackup(name) {
-  if (!window.confirm(`Delete ${name}?`)) return
-  const res = await apiRequest(`/api/backups/${encodeURIComponent(name)}`, { method: 'DELETE' })
-  if (res.ok) await loadAll()
-}
-
-function backupKindLabel(item) {
-  return {
-    manual: 'Manual',
-    scheduled: 'Scheduled',
-    'pre-restore': 'Before restore',
-    uploaded: 'Uploaded',
-  }[item.kind] || item.kind
 }
 
 async function loadStatus() {
@@ -1698,7 +1434,6 @@ watch(section, (s, prev) => {
     refreshHostnames()
   }
   if (s === 'usenet') loadUsenet()
-  if (s === 'notifications') loadNotifications()
 })
 
 onMounted(() => {
@@ -1712,16 +1447,15 @@ onMounted(() => {
     refreshHostnames()
   }
   if (section.value === 'usenet') loadUsenet()
-  if (section.value === 'notifications') loadNotifications()
 })
 onBeforeUnmount(() => {
   if (stopPwa) stopPwa()
-  stopJobPoll()
   clearInterval(updateTimer)
 })
 </script>
 
 <template>
+  <PreflightReview ref="preflightReview" />
   <section class="settings-page glass-card animate-fade" :aria-label="$t('Settings')">
     <SettingsSidebar :section="section" />
     <div class="settings-content">
@@ -2261,132 +1995,7 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <template v-else-if="section === 'backups'">
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <h3>{{ $t('Backups') }}</h3>
-          <p>
-            {{ $t('Manager settings, secrets, app config and databases. Media, downloads, caches, logs and artwork caches are never included. Databases are copied safely while apps keep running.') }}
-          </p>
-        </div>
-        <p class="share-meta">
-          {{ $t('Stored in') }} <span class="font-mono">{{ backupInfo.backup_dir || snapshot.backup_dir }}</span>
-          {{ $t('· last backup') }} {{ formatWhen(backupInfo.schedule?.last_backup_at) }}
-          <span v-if="backupInfo.schedule?.last_error" class="backup-warn"> {{ $t('· last attempt failed:') }} {{ backupInfo.schedule.last_error }}</span>
-        </p>
-        <p v-if="backupOnConfigVolume" class="settings-hint">
-          {{ $t('Backups sit on the same volume as /config. Map a separate disk or NAS share to') }} <code>/backups</code>
-          {{ $t('(or set') }} <code>AMM_BACKUP_DIR</code>{{ $t(') so a failed disk does not take the backups with it, or download them regularly.') }}
-        </p>
-
-        <div v-if="backupJob && (backupJobRunning || backupJob.status === 'error')" class="backup-job">
-          <strong>{{ backupJob.kind }} · {{ backupJob.stage }}</strong>
-          <div v-if="backupJobRunning" class="backup-progress"><span :style="{ width: `${backupJobPercent}%` }"></span></div>
-          <span v-if="backupJobRunning && backupJob.total" class="path-line">{{ backupJob.done }} / {{ backupJob.total }} files</span>
-          <span v-if="backupJob.status === 'error'" class="backup-warn">{{ backupJob.error }}</span>
-        </div>
-
-        <form class="form-stack" @submit.prevent="patchSettings({
-          backup_retention: Number(form.backup_retention),
-          backup_schedule: form.backup_schedule,
-          backup_time: form.backup_time,
-          backup_weekday: Number(form.backup_weekday),
-          backup_day_of_month: Number(form.backup_day_of_month)
-        })">
-          <label class="ui-field">{{ $t('Automatic backups') }}
-            <UiSelect
-              v-model="form.backup_schedule"
-              :options="[
-                { value: 'off', label: $t('Off') },
-                { value: 'daily', label: $t('Daily') },
-                { value: 'weekly', label: $t('Weekly') },
-                { value: 'monthly', label: $t('Monthly') },
-              ]"
-            />
-          </label>
-          <label v-if="form.backup_schedule !== 'off'" class="ui-field">{{ $t('Time of day') }}
-            <input v-model="form.backup_time" type="time" class="ui-input font-mono" />
-          </label>
-          <label v-if="form.backup_schedule === 'weekly'" class="ui-field">{{ $t('Weekday') }}
-            <UiSelect
-              v-model="form.backup_weekday"
-              :options="[
-                { value: 0, label: $t('Monday') },
-                { value: 1, label: $t('Tuesday') },
-                { value: 2, label: $t('Wednesday') },
-                { value: 3, label: $t('Thursday') },
-                { value: 4, label: $t('Friday') },
-                { value: 5, label: $t('Saturday') },
-                { value: 6, label: $t('Sunday') },
-              ]"
-            />
-          </label>
-          <label v-if="form.backup_schedule === 'monthly'" class="ui-field">{{ $t('Day of month') }}
-            <input v-model.number="form.backup_day_of_month" type="number" min="1" max="28" class="ui-input font-mono" />
-          </label>
-          <label class="ui-field">{{ $t('Keep last N backups') }}
-            <input v-model.number="form.backup_retention" type="number" min="1" max="90" class="ui-input font-mono" />
-          </label>
-          <div class="share-row">
-            <button type="submit" class="ui-btn ui-btn-ghost" :disabled="saving">{{ $t('Save') }}</button>
-            <button type="button" class="ui-btn ui-btn-primary" :disabled="backupJobRunning" @click="createBackup">{{ $t('Backup now') }}</button>
-            <label class="ui-btn ui-btn-ghost backup-upload" :class="{ 'is-disabled': uploading || backupJobRunning }">
-              {{ uploading ? 'Uploading…' : 'Upload backup' }}
-              <input type="file" accept=".tar.gz,.tgz,application/gzip" :disabled="uploading || backupJobRunning" @change="uploadBackup" />
-            </label>
-          </div>
-        </form>
-
-        <div v-if="restoreTarget" class="backup-restore glass-card">
-          <strong>{{ $t('Restore from') }} <span class="font-mono">{{ restoreTarget.name }}</span></strong>
-          <p class="settings-hint">
-            {{ $t('Pick everything or only some apps. The current state is backed up first, affected apps are stopped during the restore and started again afterwards.') }}
-          </p>
-          <div class="backup-sections">
-            <label class="backup-chip">
-              <input type="checkbox" :checked="restoreTarget.selected.includes('all')" @change="toggleRestoreSection('all')" />
-              {{ $t('Everything') }}
-            </label>
-            <label v-for="item in restoreTarget.sections" :key="item" class="backup-chip">
-              <input
-                type="checkbox"
-                :checked="restoreTarget.selected.includes(item)"
-                @change="toggleRestoreSection(item)"
-              />
-              {{ item === 'manager' ? 'Manager settings & secrets' : item }}
-            </label>
-          </div>
-          <div class="share-row">
-            <button type="button" class="ui-btn ui-btn-primary" @click="confirmRestore">{{ $t('Restore') }}</button>
-            <button type="button" class="ui-btn ui-btn-ghost" @click="restoreTarget = null">{{ $t('Cancel') }}</button>
-          </div>
-        </div>
-
-        <ul class="backup-list">
-          <li v-for="item in backups" :key="item.name">
-            <div>
-              <strong class="font-mono">{{ item.name }}</strong>
-              <span class="path-line">
-                {{ backupKindLabel(item) }} · {{ formatWhen(item.created_at) }} · {{ formatBytes(item.size_bytes) }}
-                <template v-if="item.file_count"> · {{ item.file_count }} files</template>
-                <template v-if="item.location === 'legacy'"> {{ $t('· old location') }}</template>
-                <template v-if="item.format < 2"> {{ $t('· old format') }}</template>
-              </span>
-              <span v-if="item.warnings.length" class="path-line backup-warn" :title="item.warnings.join('\n')">
-                {{ item.warnings.length }} {{ $t('warning(s):') }} {{ item.warnings[0] }}
-              </span>
-            </div>
-            <div class="share-row">
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="openRestore(item.name)">{{ $t('Restore') }}</button>
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="verifyBackup(item.name)">{{ $t('Verify') }}</button>
-              <button type="button" class="ui-btn ui-btn-ghost" @click="downloadBackup(item.name)">{{ $t('Download') }}</button>
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="deleteBackup(item.name)">{{ $t('Delete') }}</button>
-            </div>
-          </li>
-          <li v-if="!backups.length" class="share-idle">{{ $t('No backups yet.') }}</li>
-        </ul>
-      </div>
-    </template>
+    <BackupSettings v-else-if="section === 'backups'" :controller="backupController" :form="form" :snapshot="snapshot" :saving="saving" :format-bytes="formatBytes" :format-when="formatWhen" @save="patchSettings" />
 
     <template v-else-if="section === 'vpn'">
       <div class="glass-card settings-card">
@@ -2685,139 +2294,7 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <template v-else-if="section === 'notifications'">
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <h3>{{ $t('Discord') }}</h3>
-          <p>{{ $t("Messages go to a Discord channel through a webhook: in Discord open the channel's settings → Integrations → Webhooks → New Webhook, and copy its URL.") }}</p>
-        </div>
-        <form class="form-stack" @submit.prevent="saveNotifications()">
-          <div class="ui-switch-row">
-            <div class="ui-switch-copy">
-              <strong>{{ $t('Send to Discord') }}</strong>
-              <span>{{ notif?.discord.webhook_saved ? 'A webhook is saved.' : 'No webhook saved yet.' }}</span>
-            </div>
-            <button
-              type="button"
-              class="ui-switch"
-              role="switch"
-              :aria-checked="notifForm.discord.enabled ? 'true' : 'false'"
-              @click="notifForm.discord.enabled = !notifForm.discord.enabled"
-            >
-              <span class="ui-switch-thumb"></span>
-            </button>
-          </div>
-          <label class="ui-field">{{ $t('Webhook URL') }}
-            <input
-              v-model="notifForm.discord.webhook_url"
-              class="ui-input font-mono"
-              type="password"
-              autocomplete="off"
-              :placeholder="notif?.discord.webhook_saved ? $t('Saved — leave blank to keep') : 'https://discord.com/api/webhooks/…'"
-            />
-          </label>
-          <div class="notif-actions">
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save') }}</button>
-            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('discord')">
-              {{ notifTesting === 'discord' ? $t('Sending…') : 'Send a test' }}
-            </button>
-            <button v-if="notif?.discord.webhook_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removeWebhook: true })">{{ $t('Remove webhook') }}</button>
-          </div>
-        </form>
-      </div>
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <h3>{{ $t('E-mail') }}</h3>
-          <p>{{ $t('Messages go out through your own mail server or provider (SMTP). Gmail and Outlook need an app password.') }}</p>
-        </div>
-        <form class="form-stack" @submit.prevent="saveNotifications()">
-          <div class="ui-switch-row">
-            <div class="ui-switch-copy">
-              <strong>{{ $t('Send e-mail') }}</strong>
-              <span>{{ $t('To every address under To.') }}</span>
-            </div>
-            <button
-              type="button"
-              class="ui-switch"
-              role="switch"
-              :aria-checked="notifForm.email.enabled ? 'true' : 'false'"
-              @click="notifForm.email.enabled = !notifForm.email.enabled"
-            >
-              <span class="ui-switch-thumb"></span>
-            </button>
-          </div>
-          <div class="usenet-pair">
-            <label class="ui-field">{{ $t('SMTP server') }}
-              <input v-model.trim="notifForm.email.host" class="ui-input font-mono" placeholder="smtp.example.com" autocomplete="off" />
-            </label>
-            <label class="ui-field">{{ $t('Port') }}
-              <input v-model.number="notifForm.email.port" class="ui-input font-mono" type="number" min="1" max="65535" />
-            </label>
-          </div>
-          <label class="ui-field">{{ $t('Security') }}
-            <UiSelect
-              v-model="notifForm.email.security"
-              :options="[
-                { value: 'starttls', label: $t('STARTTLS (usually port 587)') },
-                { value: 'ssl', label: $t('SSL/TLS (usually port 465)') },
-                { value: 'none', label: $t('None (local relay only)') },
-              ]"
-            />
-          </label>
-          <div class="usenet-pair">
-            <label class="ui-field">{{ $t('Username') }}
-              <input v-model.trim="notifForm.email.username" class="ui-input font-mono" autocomplete="off" />
-            </label>
-            <label class="ui-field">{{ $t('Password') }}
-              <input
-                v-model="notifForm.email.password"
-                class="ui-input"
-                type="password"
-                autocomplete="new-password"
-                :placeholder="notif?.email.password_saved ? $t('Saved — leave blank to keep') : ''"
-              />
-            </label>
-          </div>
-          <label class="ui-field">{{ $t('From') }}
-            <input v-model.trim="notifForm.email.sender" class="ui-input font-mono" :placeholder="$t('Defaults to the username')" autocomplete="off" />
-          </label>
-          <label class="ui-field">To
-            <input v-model="notifForm.email.recipients" class="ui-input font-mono" placeholder="you@example.com, family@example.com" autocomplete="off" />
-          </label>
-          <div class="notif-actions">
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save') }}</button>
-            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('email')">
-              {{ notifTesting === 'email' ? $t('Sending…') : 'Send a test' }}
-            </button>
-            <button v-if="notif?.email.password_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removePassword: true })">{{ $t('Remove password') }}</button>
-          </div>
-        </form>
-      </div>
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <h3>{{ $t('What to send') }}</h3>
-          <p>{{ $t('Checked every minute. Each problem is sent once, and again when it is solved.') }}</p>
-        </div>
-        <div class="form-stack">
-          <div v-for="(label, key) in notif?.event_labels || {}" :key="key" class="ui-switch-row">
-            <div class="ui-switch-copy">
-              <strong>{{ NOTIF_EVENT_NAMES[key] || key }}</strong>
-              <span>{{ label }}</span>
-            </div>
-            <button
-              type="button"
-              class="ui-switch"
-              role="switch"
-              :aria-checked="notifForm.events[key] ? 'true' : 'false'"
-              :disabled="saving"
-              @click="notifForm.events[key] = !notifForm.events[key]; saveNotifications()"
-            >
-              <span class="ui-switch-thumb"></span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </template>
+    <NotificationSettings v-else-if="section === 'notifications'" />
 
     <template v-else-if="section === 'usenet'">
       <div class="glass-card settings-card">
@@ -2925,6 +2402,7 @@ onBeforeUnmount(() => {
       </div>
     </template>
     <template v-else-if="section === 'integrations'">
+      <IntegrationCheck />
       <TvConnections />
       <HomeyConnections />
       <div class="glass-card settings-card">
@@ -3098,523 +2576,5 @@ onBeforeUnmount(() => {
   </section>
 </template>
 
-<style scoped>
-.settings-page {
-  display: grid;
-  grid-template-columns: 13.5rem minmax(0, 1fr);
-  align-items: stretch;
-  gap: 0;
-  padding: 0;
-  min-width: 0;
-  min-height: 44rem;
-  overflow: visible;
-}
-.settings-content { display:flex; flex-direction:column; gap:1.25rem; min-width:0; width:100%; padding:1.75rem; }
-.settings-header { min-width:0; padding:0 0 .25rem; text-align:left; overflow-wrap:anywhere; }
-.settings-header .section-title { font-size:var(--text-display); font-weight:600; letter-spacing:-.04em; }
-.settings-header .section-subtitle { max-width:62ch; margin:.5rem 0 0; }
-.settings-feedback { min-width:0; overflow-wrap:anywhere; }
-.settings-feedback .share-meta { margin:0; }
-/* The page owns the glass. Inset forms share one quiet surface, including connection components. */
-.settings-content :deep(.settings-card) {
-  width:100%; max-width:none; min-width:0; padding:1.25rem;
-  border:1px solid var(--border-subtle); border-radius:var(--radius-tile);
-  background:var(--bg-surface); box-shadow:none; overflow:visible;
-}
-.settings-content :deep(.settings-card::before),
-.settings-content :deep(.settings-card::after) { display:none; }
-.settings-content :deep(.settings-card-head .accent-badge) { display:none; }
-.settings-content :deep(.settings-card-head h3),
-.settings-content :deep(.tv-connections-head h3) { margin:0 0 .35rem; font-size:var(--text-strong); font-weight:600; letter-spacing:-.02em; }
-.settings-content :deep(.settings-card-head p) { font-size:var(--text-body); }
-.settings-content :deep(.form-stack > button[type="submit"]) { align-self:flex-start; min-width:min(9rem,100%); }
-.settings-profile-card .settings-card-head p { max-width:48rem; }
-.settings-profile-card .account-avatar-block,
-.settings-profile-card .profile-form { width:100%; max-width:48rem; }
-.settings-profile-card .brand-asset-row { align-items:center; }
-.settings-profile-card .account-avatar-preview { width:3.5rem; height:3.5rem; border-radius:var(--radius-inset); }
-.settings-profile-card .brand-asset-actions { flex-basis:100%; padding-left:4.5rem; }
-.settings-profile-card .brand-asset-copy { flex:1 1 0; }
-@media (min-width: 1100px) {
-  .settings-profile-card .profile-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
-  .profile-form > label:first-child,
-  .profile-form > label:nth-child(4),
-  .profile-form > button { grid-column:1 / -1; }
-  .profile-form > button { justify-self:start; }
-}
-@media (max-width: 760px) {
-  .settings-page { grid-template-columns:minmax(0,1fr); min-height:0; }
-  .settings-content { padding:1.25rem; gap:1rem; }
-  .settings-profile-card .brand-asset-actions { padding-left:0; }
-  .settings-content :deep(.settings-card) { padding:1rem; }
-  .settings-profile-card .brand-asset-row { align-items:flex-start; }
-  .settings-profile-card .brand-asset-actions { width:100%; }
-  .settings-profile-card .brand-asset-actions > .ui-btn { flex:1; }
-}
-@media (max-width: 400px) { .settings-content { padding:1rem; } }
-.section-title {
-  font-size: var(--text-title);
-  font-weight: 700;
-  margin: 0;
-  color: var(--text-heading);
-}
-.section-subtitle {
-  font-size: var(--text-body);
-  color: var(--text-dim);
-  margin: 0.2rem 0 0;
-}
-.settings-card {
-  padding: 1.4rem 1.5rem;
-  min-width: 0;
-}
-.settings-card-head { min-width:0; overflow-wrap:anywhere; }
-.settings-card-head h3 {
-  margin: 0.4rem 0 0.35rem;
-  font-size: var(--text-strong);
-  color: var(--text-heading);
-}
-.settings-card-head p {
-  color: var(--text-muted);
-  margin: 0 0 1rem;
-  max-width: min(62ch, 100%);
-}
-.accent-badge {
-  display: inline-block;
-  font-size: var(--text-kicker);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  background: rgba(var(--color-primary-rgb), 0.18);
-  color: var(--color-primary-text);
-}
-.notif-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.usenet-pair {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-@media (max-width: 560px) {
-  .usenet-pair {
-    grid-template-columns: 1fr;
-  }
-}
-.form-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  width: 100%;
-  max-width: 36rem;
-  min-width: 0;
-}
-.info-grid {
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 0.75rem;
-}
-.info-grid div {
-  padding: 0.75rem 0.85rem;
-  border-radius: 10px;
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-  min-width: 0;
-}
-.info-grid dt {
-  color: var(--text-dim);
-  font-size: var(--text-kicker);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.info-grid dd {
-  margin: 0.3rem 0 0;
-  color: var(--text-main);
-  font-size: var(--text-body);
-  overflow-wrap: anywhere;
-}
-.storage-table-wrap {
-  overflow-x: auto;
-  min-width: 0;
-}
-.storage-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-body);
-}
-.storage-table th {
-  text-align: left;
-  color: var(--text-dim);
-  font-size: var(--text-kicker);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.4rem 0.6rem 0.65rem;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.storage-table td {
-  padding: 0.75rem 0.6rem;
-  color: var(--text-main);
-  vertical-align: top;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.storage-table strong {
-  display: block;
-  color: var(--text-heading);
-  text-transform: capitalize;
-  margin-bottom: 0.15rem;
-}
-.path-line {
-  display: block;
-  color: var(--text-dim);
-  font-size: var(--text-kicker);
-  overflow-wrap: anywhere;
-}
-.hostname-table-wrap {
-  overflow-x: auto;
-  margin: 0.35rem 0 0.25rem;
-}
-.hostname-table th:first-child,
-.hostname-table td:first-child {
-  width: 4.5rem;
-}
-.hostname-table .ui-input {
-  min-width: 7rem;
-  max-width: 12rem;
-}
-.hostname-preview {
-  font-size: var(--text-body);
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-.share-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-.share-row .ui-input {
-  flex: 1 1 12rem;
-  min-width: 0;
-}
-.share-meta,
-.share-idle {
-  color: var(--text-muted);
-  font-size: var(--text-body);
-  margin-top: 0.55rem;
-}
-.setting-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0.65rem 0 0.35rem;
-}
-.setting-chip {
-  display: inline-flex;
-  align-items: center;
-  font-size: var(--text-kicker);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 0.28rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid var(--border-subtle);
-  background: var(--pill-bg);
-  color: var(--text-main);
-}
-.setting-chip.is-on {
-  color: var(--color-success-fg);
-  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
-  background: var(--color-success-bg);
-}
-.setting-chip.is-warn {
-  color: var(--color-warning-fg);
-  border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
-  background: var(--color-warning-bg);
-}
-.setting-chip.is-bad {
-  color: var(--color-danger-fg);
-  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
-  background: var(--color-danger-bg);
-}
-.setting-chip.is-off { color: var(--text-muted); }
-.share-box {
-  margin-top: 1rem;
-}
-.backup-list {
-  list-style: none;
-  margin: 1rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-.backup-list li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem 0.85rem;
-  border-radius: 10px;
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-}
-.update-all-row {
-  margin-top: 1rem;
-  align-items: center;
-}
-.backup-warn {
-  color: var(--color-warning-fg);
-}
-.backup-job {
-  display: grid;
-  gap: 0.35rem;
-  margin: 0.75rem 0;
-  padding: 0.75rem 0.85rem;
-  border-radius: 10px;
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-  text-transform: capitalize;
-}
-.backup-progress {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--border-subtle);
-  overflow: hidden;
-}
-.backup-progress span {
-  display: block;
-  height: 100%;
-  background: var(--color-primary);
-  transition: width 0.3s ease;
-}
-.backup-upload {
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
-}
-.backup-upload input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.backup-upload.is-disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
-.backup-restore {
-  display: grid;
-  gap: 0.6rem;
-  margin-top: 1rem;
-  padding: 0.9rem 1rem;
-}
-.backup-sections {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.backup-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.65rem;
-  border-radius: 999px;
-  border: 1px solid var(--border-subtle);
-  font-size: var(--text-body);
-  text-transform: capitalize;
-}
-.error-log {
-  background: var(--overlay-soft);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 1rem;
-  max-height: 360px;
-  overflow: auto;
-  white-space: pre-wrap;
-  font-size: var(--text-kicker);
-  color: var(--text-main);
-}
-.brand-asset-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-top: 1.25rem;
-}
-.brand-asset-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.85rem 1rem;
-  align-items: flex-start;
-  padding: 0.9rem;
-  border-radius: 12px;
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-}
-.brand-style-asset { flex-direction:column; align-items:flex-start; }
-.brand-style-title { margin:0; color:var(--text-heading); font-size:var(--text-body); font-weight:600; }
-.brand-style-asset .brand-asset-copy { flex:0 1 auto; width:100%; }
-.brand-style-asset .brand-asset-preview { max-width:100%; object-fit:contain; }
-.brand-asset-preview {
-  width: 3.5rem;
-  height: 3.5rem;
-  border-radius: 12px;
-  object-fit: cover;
-  background: var(--bg-input);
-  border: none;
-  flex-shrink: 0;
-}
-.brand-asset-preview.is-logo {
-  width: 10.5rem;
-  height: 3.5rem;
-  object-fit: contain;
-  object-position: center;
-}
-.brand-asset-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-  flex: 1 1 14rem;
-  overflow-wrap: anywhere;
-}
-.brand-asset-copy strong {
-  color: var(--text-heading);
-  font-size: var(--text-body);
-}
-.brand-asset-copy span {
-  color: var(--text-muted);
-  font-size: var(--text-body);
-  line-height: 1.4;
-}
-.brand-asset-size {
-  color: var(--color-primary-text) !important;
-  font-weight: 600;
-}
-.brand-asset-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  align-items: center;
-}
-.account-avatar-block {
-  margin-bottom: 1.25rem;
-}
-.account-donate-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.85rem;
-}
-.account-avatar-preview {
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: 50%;
-  overflow: hidden;
-  flex-shrink: 0;
-  background: var(--color-primary-button);
-  color: var(--color-primary-contrast);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: var(--text-display);
-  line-height: 1;
-}
-.account-avatar-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.brand-upload-btn {
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
-}
-.brand-upload-btn input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.theme-accent {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--border-subtle);
-}
-.theme-accent-copy {
-  display: grid;
-  gap: 0.15rem;
-}
-.theme-accent-copy strong {
-  font-size: var(--text-body);
-}
-.theme-accent-copy span {
-  font-size: var(--text-body);
-  color: var(--text-muted);
-}
-.accent-picker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem;
-}
-.accent-swatch-input {
-  width: 3rem;
-  height: 2.6rem;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  background: var(--pill-bg);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.accent-swatch-input input {
-  width: 140%;
-  height: 140%;
-  margin: -20%;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  background: transparent;
-}
-.accent-hex-field {
-  flex: 1 1 8rem;
-  min-width: 8rem;
-  max-width: 12rem;
-  margin: 0;
-}
-.accent-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.9rem;
-}
-.accent-preset {
-  width: 1.85rem;
-  height: 1.85rem;
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background: var(--preset);
-  cursor: pointer;
-  padding: 0;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
-}
-.accent-preset.is-active {
-  border-color: var(--text-heading);
-  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.35);
-}
-@media (max-width: 640px) {
-  .settings-card {
-    padding: 1.1rem;
-  }
-  .share-row .ui-btn {
-    width: 100%;
-  }
-}
-</style>
+<style scoped src="./settingsPanel.css"></style>
+<style scoped src="./settings/settingsForms.css"></style>

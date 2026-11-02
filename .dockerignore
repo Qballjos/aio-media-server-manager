@@ -15,3 +15,8 @@ DUMB_docs
 tests
 *.md
 !README.md
+frontend/test-results
+frontend/playwright-report
+frontend/e2e
+frontend/playwright.config.js
+scripts/e2e_server.py

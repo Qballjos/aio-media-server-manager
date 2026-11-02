@@ -159,6 +159,8 @@ nav:
       - Overview: ADVANCED.md
       - Dashboard reference: USAGE_ADVANCED.md
       - Ports and settings: REFERENCE.md
+      - Backups and recovery: operations.md
+      - Security operations: security-operations.md
       - Unraid: deploy/UNRAID_ADVANCED.md
       - Synology: deploy/SYNOLOGY_ADVANCED.md
       - Docker: deploy/DOCKER_ADVANCED.md
@@ -167,3 +169,7 @@ nav:
       - Remote access:
           - Cloudflare Tunnel: deploy/CLOUDFLARE.md
           - Cloudflare Access: deploy/CLOUDFLARE_ACCESS.md
+
+  - Project:
+      - Roadmap and release readiness: release-readiness.md
+      - Verification and browser journeys: testing.md

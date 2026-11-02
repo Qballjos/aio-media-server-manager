@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import re
+import os
+import secrets
 import tarfile
 import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
 from core.backup_jobs import BackupBusyError, backup_jobs
@@ -38,8 +40,16 @@ def _check_archive(path) -> None:
 
 
 def _ensure_authenticated(request: Request) -> None:
-    if not auth_manager.setup_required():
-        auth_manager.authenticate_request(request)
+    if auth_manager.setup_required():
+        # Recovery requires a secret supplied by the server operator, never a public bootstrap.
+        expected = os.environ.get("AMM_BACKUP_RECOVERY_TOKEN", "")
+        supplied = request.headers.get("X-AIO-Recovery-Token", "")
+        allowed = request.method == "GET" and not request.url.path.endswith("/download")
+        allowed = allowed or (request.method == "POST" and request.url.path.endswith(("/upload", "/restore", "/verify")))
+        if len(expected) >= 32 and supplied and secrets.compare_digest(expected.encode(), supplied.encode()) and allowed:
+            return
+        raise HTTPException(status_code=401, detail="Administrator login or an operator recovery token is required.")
+    auth_manager.authenticate_request(request)
 
 
 def _not_found(exc: Exception) -> HTTPException:
@@ -165,3 +175,45 @@ async def delete_backup(name: str, request: Request) -> dict[str, Any]:
     except FileNotFoundError as exc:
         raise _not_found(exc) from exc
     return {"status": "deleted", "name": name}
+
+
+class ExternalConfigBody(BaseModel):
+    enabled: bool = False
+    url: str = Field(default="", max_length=2048)
+    username: str = Field(default="", max_length=200)
+    password: str | None = Field(default=None, max_length=4096)
+    encryption_password: str | None = Field(default=None, max_length=4096)
+
+
+class ExternalActionBody(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+@router.get("/external/config", summary="External HTTPS/WebDAV backup settings")
+async def external_config(request: Request):
+    auth_manager.authenticate_request(request)
+    from core.external_backups import ExternalBackups
+    return ExternalBackups(settings).public()
+
+
+@router.put("/external/config", summary="Configure encrypted external backups")
+async def save_external_config(body: ExternalConfigBody, request: Request):
+    auth_manager.authenticate_request(request)
+    from core.external_backups import ExternalBackups
+    if backup_jobs.busy:
+        raise HTTPException(status_code=409, detail="Wait for the current backup operation to finish")
+    try:
+        return await asyncio.to_thread(ExternalBackups(settings).save, **body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/external/{action}", status_code=202, summary="Export, import or test a backup")
+async def external_action(action: str, body: ExternalActionBody, request: Request):
+    auth_manager.authenticate_request(request)
+    try:
+        return {"job": backup_jobs.start_external(action, body.name)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except BackupBusyError as exc:
+        raise _busy(exc) from exc

@@ -121,6 +121,8 @@ def test_starter_indexers_tags_only_cloudflare_blocked_indexers(
     mock_put.return_value = _resp(202, {})
     client = ProwlarrClient(api_key="k")
     engine = IntegrationEngine(Settings(config_dir=tmp_path / "config"))
+    from core.app_prefs import set_app_option
+    set_app_option("prowlarr", "public_indexers_opt_in", True, app_settings=engine._settings)
     starter = {
         "added": [] if initially_disabled else ["1337x", "YTS"],
         "disabled": ["1337x", "YTS"] if initially_disabled else [],

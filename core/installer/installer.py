@@ -549,23 +549,21 @@ class AppInstaller:
                     os.replace(previous_backup_dir, target_install_dir)
                 raise swap_err
 
-            # 4. Clean up previous backup
-            if previous_backup_dir.exists():
-                shutil.rmtree(previous_backup_dir, ignore_errors=True)
-
             # Return final path to executable inside target_install_dir
             final_exe = self._find_executable(target_install_dir, executable_name)
             if not final_exe:
                 raise FileNotFoundError(
                     f"Executable '{executable_name}' missing after activation at {target_install_dir}"
                 )
+            if previous_backup_dir.exists():
+                shutil.rmtree(previous_backup_dir, ignore_errors=True)
             return final_exe
 
         finally:
             if staging_dir.exists():
                 shutil.rmtree(staging_dir, ignore_errors=True)
             if previous_backup_dir.exists():
-                shutil.rmtree(previous_backup_dir, ignore_errors=True)
+                logger.error("Previous installation retained for recovery at %s", previous_backup_dir)
 
     def activate_binary(
         self,

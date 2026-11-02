@@ -1,3 +1,4 @@
+import { useHomeCalendar } from '../src/composables/useHomeCalendar.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -10,7 +11,7 @@ function panel(apiRequest, timers) {
   const source = readFileSync(new URL('../src/HomepagePanel.vue', import.meta.url), 'utf8')
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*\n/gm, '')
   return runInNewContext(`${script}\n;({snapshot, loading, widgetsPending, loadSnapshot})`, {
-    computed, reactive, ref, apiRequest, homeSnapshotCache, partialRetryDelay, ...homeLayout,
+    computed, reactive, ref, apiRequest, useHomeCalendar, homeSnapshotCache, partialRetryDelay, ...homeLayout,
     readJson: async (response) => response.data,
     defineEmits: () => () => {},
     defineProps: () => ({}),

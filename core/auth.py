@@ -5,10 +5,13 @@ core/auth.py — Local admin authentication, JWT sessions, CSRF, rate limiting.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import re
 import secrets
 import time
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -118,18 +121,25 @@ class AuthManager:
             return {}
 
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            value = json.loads(path.read_text(encoding="utf-8"))
+            return value if isinstance(value, dict) else {}
         except (OSError, json.JSONDecodeError):
             return {}
 
     def _write_auth(self, payload: dict[str, Any]) -> None:
         path = self._auth_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temporary = None
         try:
-            path.chmod(0o600)
-        except OSError:
-            pass
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as stream:
+                temporary = Path(stream.name)
+                json.dump(payload, stream, indent=2)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def setup_required(self) -> bool:
         return not bool(self._read_auth().get("password_hash"))
@@ -152,11 +162,14 @@ class AuthManager:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Admin account already exists.",
             )
+        if self._auth_path.exists() or self._secret_path.exists():
+            raise HTTPException(status_code=409, detail="Existing authentication state requires operator recovery.")
         self._validate_password(password)
         hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
         payload = {
             "username": username.strip() or "admin",
             "password_hash": hashed.decode("utf-8"),
+            "session_version": secrets.token_urlsafe(32),
         }
         if email:
             payload["email"] = email.strip().lower()
@@ -179,7 +192,20 @@ class AuthManager:
 
     def issue_token(self, username: str) -> str:
         now = int(time.time())
+        session_id = secrets.token_hex(32)
+        sessions = self._settings.config_dir / ".sessions"
+        sessions.mkdir(parents=True, exist_ok=True, mode=0o700)
+        for path in sessions.iterdir():
+            try:
+                if path.is_file() and path.stat().st_mtime < now - JWT_TTL_SECONDS:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        session = sessions / session_id
+        session.touch(mode=0o600)
         payload = {
+            "jti": session_id,
+            "ver": self._session_version(),
             "sub": username,
             "iat": now,
             "exp": now + JWT_TTL_SECONDS,
@@ -188,12 +214,34 @@ class AuthManager:
 
     def decode_token(self, token: str) -> dict[str, Any]:
         try:
-            return jwt.decode(token, self.jwt_secret(), algorithms=[JWT_ALGORITHM])
+            if not self._secret_path.is_file():
+                raise jwt.InvalidTokenError("No configured session secret")
+            payload = jwt.decode(token, self.jwt_secret(), algorithms=[JWT_ALGORITHM])
+            session_id = payload.get("jti", "")
+            if not isinstance(session_id, str) or not re.fullmatch(r"[0-9a-f]{64}", session_id):
+                raise jwt.InvalidTokenError("Missing session")
+            if payload.get("ver") != self._session_version() or not (self._settings.config_dir / ".sessions" / session_id).is_file():
+                raise jwt.InvalidTokenError("Session revoked")
+            return payload
         except jwt.PyJWTError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired session.",
             ) from exc
+
+    def _session_version(self) -> str:
+        data = self._read_auth()
+        # Bind sessions to credentials as well as the epoch, including older auth files.
+        return hashlib.sha256(json.dumps(
+            [data.get(key, "") for key in ("username", "password_hash", "session_version")]
+        ).encode()).hexdigest()
+
+    def revoke_request_session(self, request: Request) -> None:
+        self.authenticate_request(request)
+        header = request.headers.get("Authorization", "")
+        token = header[7:].strip() if header.startswith("Bearer ") else request.cookies.get(COOKIE_ACCESS, "")
+        payload = self.decode_token(token)
+        (self._settings.config_dir / ".sessions" / payload["jti"]).unlink(missing_ok=True)
 
     def update_profile(
         self, current_username: str, *, username: str | None = None,
@@ -244,6 +292,7 @@ class AuthManager:
             self._validate_password(new_password)
             hashed = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt())
             data["password_hash"] = hashed.decode("utf-8")
+            data["session_version"] = secrets.token_urlsafe(32)
         self._write_auth(data)
         return {
             "username": username,
@@ -254,7 +303,7 @@ class AuthManager:
 
     def set_session_cookies(self, response: Response, token: str) -> str:
         csrf = secrets.token_urlsafe(32)
-        secure = False  # HTTP-first appliance; reverse-proxy TLS comes later
+        secure = self._settings.secure_cookies
         response.set_cookie(
             COOKIE_ACCESS,
             token,
@@ -276,8 +325,8 @@ class AuthManager:
         return csrf
 
     def clear_session_cookies(self, response: Response) -> None:
-        response.delete_cookie(COOKIE_ACCESS, path="/")
-        response.delete_cookie(COOKIE_CSRF, path="/")
+        response.delete_cookie(COOKIE_ACCESS, path="/", secure=self._settings.secure_cookies, httponly=True, samesite="lax")
+        response.delete_cookie(COOKIE_CSRF, path="/", secure=self._settings.secure_cookies, samesite="lax")
 
     def check_login_rate(self, request: Request) -> None:
         key = request.client.host if request.client else "unknown"

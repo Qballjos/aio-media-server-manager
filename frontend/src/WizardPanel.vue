@@ -202,6 +202,7 @@ async function loadStep(id) {
       selections.cloudflare_tunnel_token = ''
     } else if (id === 7) {
       selections.arr_apps = [...(data.selected || [])]
+      selections.public_indexers_opt_in = !!data.public_indexers_opt_in
     } else if (id === 8) {
       selections.media_servers = [...(data.selected || [])]
       selections.plex_claim = data.plex_claim || ''
@@ -247,7 +248,7 @@ function bodyForStep(id) {
       ...(selections.cloudflare_tunnel_token ? { cloudflare_tunnel_token: selections.cloudflare_tunnel_token } : {})
     }
   }
-  if (id === 7) return { arr_apps: selections.arr_apps }
+  if (id === 7) return { arr_apps: selections.arr_apps, public_indexers_opt_in: !!selections.public_indexers_opt_in }
   if (id === 8) return { media_servers: selections.media_servers, plex_claim: selections.plex_claim }
   if (id === 9) return { request_system: selections.request_system }
   if (id === 10) return { recommended_preview: selections.recommended_preview }
@@ -643,6 +644,7 @@ onUnmounted(() => {
         </template>
 
         <template v-else-if="step === 7">
+          <label class="ui-field"><span><input type="checkbox" v-model="selections.public_indexers_opt_in" /> {{ $t("Add the starter set of public torrent indexers (optional)") }}</span><small>{{ $t("Off by default. You can add your own sources in Prowlarr.") }}</small></label>
           <div class="wizard-options">
             <label
               v-for="option in payload.options || []"

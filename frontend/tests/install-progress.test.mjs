@@ -1,3 +1,4 @@
+import { useHomeCalendar } from '../src/composables/useHomeCalendar.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { setImmediate } from 'node:timers/promises'
@@ -10,7 +11,7 @@ function setup(file, exports, apiRequest) {
   const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*\n/gm, '')
   return runInNewContext(`${script}\n;({${exports.join(',')}})`, {
-    computed, reactive, ref, apiRequest, ...homeLayout,
+    computed, reactive, ref, apiRequest, useHomeCalendar, ...homeLayout,
     homeSnapshotCache: { snapshot: null }, partialRetryDelay: () => null,
     readJson: async (response) => response.data,
     defineEmits: () => () => {},
@@ -54,6 +55,17 @@ test('failed live job immediately disables a cached running Home tile', () => {
   assert.equal(app.state_label, 'Setup failed')
   assert.equal(app.sick, true)
   assert.equal(app.progress_message, 'Build failed')
+  assert.equal(panel.launcherOpen(app), false)
+})
+
+test('incomplete rollback disables a cached running Home tile and keeps recovery details', () => {
+  const panel = setup('HomepagePanel.vue', ['snapshot', 'installJobs', 'launcherGroups', 'launcherOpen'], async () => {})
+  panel.snapshot.value.apps = [{ name: 'seerr', state: 'running', category: 'requests' }]
+  panel.installJobs.value = { seerr: { status: 'rollback_failed', message: 'Recovery incomplete: snapshot failed', updated_at: 123 } }
+  const app = panel.launcherGroups.value[0].apps[0]
+  assert.equal(app.state_label, 'Recovery incomplete')
+  assert.equal(app.sick, true)
+  assert.equal(app.progress_message, 'Recovery incomplete: snapshot failed')
   assert.equal(panel.launcherOpen(app), false)
 })
 

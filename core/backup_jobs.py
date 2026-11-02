@@ -43,6 +43,9 @@ class BackupJobs:
         return dict(self.job) if self.job else None
 
     def _begin(self, kind: str, name: str | None = None) -> dict[str, Any]:
+        from core.maintenance import action_conflict
+        if action_conflict("backup"):
+            raise BackupBusyError("Wait for installation, update or backup maintenance to finish.")
         if self.busy:
             raise BackupBusyError(f"A backup {self.job['kind']} is already running.")
         self.job = {
@@ -76,6 +79,8 @@ class BackupJobs:
                 logger.exception("Backup %s failed", job["kind"])
                 job["status"] = "error"
                 job["error"] = str(exc) or exc.__class__.__name__
+                from core.notifications import notify
+                await asyncio.to_thread(notify, "backups", f"Backup {job['kind']} failed", "Open Settings → Backups for details and retry.", "problem")
             finally:
                 job["finished_at"] = time.time()
                 job["stage"] = job["status"]
@@ -103,12 +108,31 @@ class BackupJobs:
                 result = await asyncio.to_thread(
                     self.manager.create_backup, label, kind=kind, progress=self._progress(job)
                 )
+                job["name"] = result["name"]
+                from core.external_backups import ExternalBackups
+                external = ExternalBackups(self.settings)
+                if external.config().get("enabled"):
+                    job["stage"] = "encrypting and verifying external copy"
+                    result["external"] = await asyncio.to_thread(external.export, result["name"])
         except Exception as exc:
             self._record(kind, ok=False, error=str(exc))
             raise
         job["name"] = result["name"]
         self._record(kind, ok=True, name=result["name"], warnings=len(result.get("warnings") or []))
         return result
+
+    def start_external(self, action: str, name: str) -> dict[str, Any]:
+        from core.external_backups import ExternalBackups
+        external = ExternalBackups(self.settings)
+        functions = {"export": external.export, "import": external.import_backup, "drill": external.drill}
+        if action not in functions:
+            raise ValueError("Invalid external backup action")
+        job = self._begin(action, name)
+        async def work():
+            with backup_in_progress():
+                job["stage"] = {"export": "encrypting and uploading", "import": "downloading and decrypting", "drill": "testing restore in a temporary folder"}[action]
+                return await asyncio.to_thread(functions[action], name)
+        return self._launch(job, work)
 
     # ------------------------------------------------------------------
     # Verify

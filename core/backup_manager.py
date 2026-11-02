@@ -45,7 +45,7 @@ _SPOOL_BYTES = 32 * 1024 * 1024
 _CHUNK = 1024 * 1024
 
 # Top-level entries of config_dir that never belong in a config backup.
-_SKIP_TOP_LEVEL = {"backups", "apps", "cache", "logs", "tmp"}
+_SKIP_TOP_LEVEL = {"backups", "apps", "cache", "logs", "tmp", ".sessions"}
 # Directory names skipped at any depth (compared lower-case).
 _SKIP_DIR_NAMES = {
     "__pycache__",
@@ -455,10 +455,11 @@ class BackupManager:
                 section = self.section_for(rel, mapping)
                 if wanted is not None and section not in wanted:
                     continue
+                _restore_target(dest, member)
                 members.append((member, section))
             total = len(members)
             for index, (member, section) in enumerate(members, start=1):
-                target = dest / member.name
+                target = _restore_target(dest, member)
                 if member.isfile():
                     for suffix in _SQLITE_SIDECARS:
                         Path(f"{target}{suffix}").unlink(missing_ok=True)
@@ -602,7 +603,20 @@ def _add_file(tar: tarfile.TarFile, path: Path, rel: str, staging: Path, warning
     return {"size": size, "sha256": digest.hexdigest(), "method": method}
 
 
+def _restore_target(dest: Path, member: tarfile.TarInfo) -> Path:
+    """Validate before any deletion, extraction or ownership change, including symlink parents."""
+    path = Path(member.name)
+    root = dest.resolve()
+    target = dest / path
+    if path.is_absolute() or ".." in path.parts or not (member.isfile() or member.isdir()):
+        raise tarfile.ExtractError("Unsafe backup member")
+    if not target.resolve().is_relative_to(root) or target.is_symlink():
+        raise tarfile.ExtractError("Backup member escapes configuration directory")
+    return target
+
+
 def _extract_member(tar: tarfile.TarFile, member: tarfile.TarInfo, dest: Path) -> None:
+    _restore_target(dest, member)
     if hasattr(tarfile, "data_filter"):
         tar.extract(member, dest, filter="data")
     else:

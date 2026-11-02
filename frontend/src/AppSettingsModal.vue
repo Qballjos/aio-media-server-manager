@@ -178,6 +178,7 @@ async function saveAppSettings() {
             radarr_hd: !!settingsForm.value.recyclarrPrefs.radarr_hd,
             radarr_anime: !!settingsForm.value.recyclarrPrefs.radarr_anime,
             radarr_uhd: !!settingsForm.value.recyclarrPrefs.radarr_uhd,
+            manual_override: !!settingsForm.value.recyclarrPrefs.manual_override,
             naming: settingsForm.value.recyclarrNaming
           })
         })
@@ -340,6 +341,7 @@ watch(
         <form class="app-settings-form" @submit.prevent="saveAppSettings">
           <div class="app-settings-body">
           <template v-if="settingsApp.name === 'recyclarr' && recyclarrMeta">
+            <label class="ui-field"><span><input type="checkbox" v-model="settingsForm.recyclarrPrefs.manual_override" /> {{ $t('Manual configuration — preserve my YAML exactly') }}</span><small>{{ $t('Automatic generation and endpoint changes are paused while enabled. Save to apply. Edited YAML automatically enables manual mode.') }}</small></label>
             <p class="settings-hint">
               {{ $t('Official TRaSH Guides profiles via Recyclarr v8. HD is on by default; 4K is opt-in. Saving profile checkboxes regenerates YAML. Editing YAML marks the file as custom until you reset.') }}
             </p>

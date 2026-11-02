@@ -10,6 +10,8 @@ import { formatUptime } from './format.js'
 import { useToasts } from './useToasts.js'
 import { t } from './i18n/index.js'
 import UiSelect from './UiSelect.vue'
+import InstallationActivity from './InstallationActivity.vue'
+import PreflightReview from './PreflightReview.vue'
 
 const props = defineProps({
   catalogApps: { type: Array, default: () => [] },
@@ -30,6 +32,22 @@ let catalogSearchTimer = null
 const actionLoading = ref({})
 const iconFailed = ref({})
 const openCardMenu = ref('')
+const activity = ref(null)
+const preflightReview = ref(null)
+async function retryJob(job) {
+  if (job.status === 'rollback_failed') { showToast('Resolve incomplete recovery before retrying the update.', 'error'); return }
+  const service = combinedServices.value.find(item => item.name === job.name)
+  if (job.operation === 'update') return updateApp(job.name)
+  if (service?.installed) {
+    try {
+      const response = await apiRequest(`/api/catalog/${job.name}/retry-setup`, { method: 'POST' })
+      const data = await readJson(response)
+      if (!response.ok) throw new Error(apiError(data))
+      activity.value?.show()
+      await props.refreshDashboard()
+    } catch (err) { showToast(err.message, 'error') }
+  } else installApp(job.name)
+}
 
 function openLogs(service) { emit('open-logs', service) }
 function openAppSettings(service) {
@@ -331,11 +349,12 @@ async function restartApp(name) {
 }
 
 async function updateApp(name) {
+  if (preflightReview.value && !(await preflightReview.value.review(name, 'update'))) return
   actionLoading.value[name] = 'update'
   try {
     const res = await apiRequest(`/api/applications/${name}/update`, { method: 'POST' })
     const data = await readJson(res)
-    if (res.ok && data.status !== 'rolled_back') {
+    if (res.ok && data.status === 'updated') {
       showToast(`Updated ${name} to ${data.version || 'latest'}`, 'success')
       await props.refreshDashboard()
     } else {
@@ -378,11 +397,13 @@ async function uninstallApp(name) {
 }
 
 async function installApp(name, displayName) {
+  if (preflightReview.value && !(await preflightReview.value.review(name))) return
   actionLoading.value[name] = 'install'
   try {
     const res = await apiRequest(`/api/catalog/${name}/install`, { method: 'POST' })
     const data = await readJson(res)
     if (res.ok) {
+      activity.value?.show()
       showToast(`Installing ${displayName || name}…`, 'success')
       setTimeout(() => props.refreshDashboard(), 3000)
     } else {
@@ -436,7 +457,8 @@ async function syncRecyclarr() {
 }
 
 function statusLabel(service) {
-  if (service.installBusy || service.installJob === 'failed') return service.installJob.toUpperCase()
+  if (service.installJob === 'restart_required') return t('Restart required')
+  if (service.installBusy || ['failed', 'rollback_failed'].includes(service.installJob)) return service.installJob.toUpperCase()
   if (service.is_crash_loop) return `CRASH LOOP (${service.recent_crashes || 5})`
   if (!service.daemon && !isServiceActive(service)) return 'CLI'
   return String(service.state || 'stopped').toUpperCase().replace('_', ' ')
@@ -460,6 +482,8 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <PreflightReview ref="preflightReview" />
+  <InstallationActivity ref="activity" @retry="retryJob" @logs="openLogs" />
         <div
           v-if="vpnUnprotected"
           class="alert-banner alert-error"
@@ -573,8 +597,8 @@ onUnmounted(() => {
             <span class="catalog-app-copy">
               <span class="catalog-app-name">{{ service.displayName }}</span>
               <span class="catalog-app-description">{{ service.description }}</span>
-              <span class="catalog-app-state" :class="{ 'is-active': isServiceActive(service), 'is-failed': service.installJob === 'failed' || service.is_crash_loop }">
-                <template v-if="service.installed || service.installBusy || service.installJob === 'failed'">{{ statusLabel(service) }}</template>
+              <span class="catalog-app-state" :class="{ 'is-active': isServiceActive(service), 'is-failed': ['failed', 'rollback_failed'].includes(service.installJob) || service.is_crash_loop }">
+                <template v-if="service.installed || service.installBusy || ['failed', 'rollback_failed'].includes(service.installJob)">{{ statusLabel(service) }}</template>
                 <template v-else>{{ categoryLabel(service.category) }}</template>
                 <span v-if="service.updateAvailable" class="catalog-app-update"> · {{ $t('Update available') }}</span>
               </span>
@@ -603,7 +627,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <p v-if="service.installMessage && (service.installBusy || service.installJob === 'failed')" class="catalog-app-progress" aria-live="polite">
+          <p v-if="service.installMessage && (service.installBusy || ['failed', 'rollback_failed'].includes(service.installJob))" class="catalog-app-progress" aria-live="polite">
             {{ service.installMessage }}
             <small v-if="service.installBusy && service.installUpdatedAt">{{ $t('Last progress {when} ago', { when: formatUptime(Date.now() / 1000 - service.installUpdatedAt) }) }}</small>
           </p>

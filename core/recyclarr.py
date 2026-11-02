@@ -167,6 +167,7 @@ def default_prefs() -> dict[str, Any]:
     flags = {item["id"]: item["default"] for item in PROFILE_OPTIONS}
     flags["naming"] = "plex"
     flags["user_edited"] = False
+    flags["manual_override"] = False
     return flags
 
 
@@ -253,6 +254,8 @@ def load_prefs(config_dir: Path) -> dict[str, Any]:
                 # Bluray and HDTV are part of the Web profiles now, not their own switch.
                 loaded.pop("sonarr_all_sources", None)
                 data.update(loaded)
+                if "manual_override" not in loaded and loaded.get("user_edited"):
+                    data["manual_override"] = True
         except json.JSONDecodeError:
             pass
     return data
@@ -280,6 +283,8 @@ def write_recyclarr_config(
     root.mkdir(parents=True, exist_ok=True)
     path = yaml_path(root)
     stored = load_prefs(root) if prefs is None else {**default_prefs(), **prefs}
+    if load_prefs(root).get("manual_override") or stored.get("manual_override"):
+        return path
     if path.is_file() and not force and (stored.get("user_edited") or _is_foreign(path)):
         _refresh_endpoints(path, sonarr_url, sonarr_key, radarr_url, radarr_key)
         return path
@@ -305,7 +310,7 @@ def save_yaml(config_dir: Path, text: str) -> Path:
     if not cleaned.endswith("\n"):
         cleaned += "\n"
     path.write_text(cleaned, encoding="utf-8")
-    save_prefs(config_dir, {**load_prefs(config_dir), "user_edited": True})
+    save_prefs(config_dir, {**load_prefs(config_dir), "user_edited": True, "manual_override": True})
     return path
 
 
@@ -341,6 +346,9 @@ def apply_prefs_and_render(prefs: dict[str, Any], *, force: bool = True) -> dict
     radarr_port = catalog.get("radarr").port if catalog.has("radarr") else 7878
     if prefs.get("naming") not in {"plex", "jellyfin", "default"}:
         prefs = {**prefs, "naming": "plex"}
+    if prefs.get("manual_override"):
+        save_prefs(config_dir, {**prefs, "manual_override": True})
+        return config_payload()
     merged = save_prefs(config_dir, {**prefs, "user_edited": False})
     write_recyclarr_config(
         config_dir,

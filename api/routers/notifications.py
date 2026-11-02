@@ -34,6 +34,8 @@ class NotificationsBody(BaseModel):
     discord: DiscordBody = DiscordBody()
     email: EmailBody = EmailBody()
     events: dict[str, bool] = {}
+    disk_alert_percent: float = Field(default=90, ge=2, le=99)
+    disk_clear_percent: float = Field(default=85, ge=1, le=98)
 
 
 class TestBody(BaseModel):
@@ -58,6 +60,8 @@ async def put_notifications(body: NotificationsBody, request: Request) -> dict[s
             email=email,
             smtp_password=password,
             events=body.events,
+            disk_alert_percent=body.disk_alert_percent,
+            disk_clear_percent=body.disk_clear_percent,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -71,3 +75,9 @@ async def test_notification(body: TestBody, request: Request) -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not send: {exc}") from exc
     return {"ok": True}
+
+
+@router.get("/history", summary="Recent incidents")
+async def history(request: Request) -> dict[str, Any]:
+    auth_manager.authenticate_request(request)
+    return {"incidents": notifications_mod.incident_history()}

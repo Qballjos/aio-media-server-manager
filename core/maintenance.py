@@ -74,3 +74,8 @@ def pause_reason() -> str | None:
     if _backup_depth > 0:
         return "backup"
     return None
+
+
+def action_conflict(operation: str) -> bool:
+    """Ignore wizard state when checking actual mutating maintenance work."""
+    return bool((operation == "backup" and (_install_depth or _update_depth)) or _backup_depth or (operation == "install" and _update_depth) or (operation == "update" and _install_depth))

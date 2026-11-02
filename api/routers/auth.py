@@ -187,8 +187,9 @@ async def login(req: LoginRequest, request: Request, response: Response) -> dict
 
 
 @router.post("/logout", summary="End session")
-async def logout(response: Response) -> dict:
-    """Clear session cookies."""
+async def logout(request: Request, response: Response) -> dict:
+    """Revoke this session, then clear its cookies."""
+    auth_manager.revoke_request_session(request)
     auth_manager.clear_session_cookies(response)
     return {"status": "ok"}
 

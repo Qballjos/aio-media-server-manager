@@ -34,3 +34,18 @@ Routes are hash-based so refresh keeps the screen: `#/home`, `#/catalog`, and `#
 | `style.css` | Shared `ui-*` controls and theme CSS variables |
 
 See the repository [README](../README.md) and [docs/USAGE.md](../docs/USAGE.md).
+
+## Browser journeys and component boundaries
+
+`npm test` runs Node behavior tests; `npm run test:e2e` runs desktop and mobile
+Chromium journeys. Build first and install the pinned Chromium with
+`npx --no-install playwright install chromium`. See [verification](../docs/testing.md)
+for Python setup, isolation, artifacts and what the fake service adapters cover.
+
+Settings delegates notification forms to `settings/NotificationSettings.vue` and
+backup forms to `settings/BackupSettings.vue`. `composables/useBackups.js` owns the
+backup job polling, so switching sections does not cancel a running operation.
+`composables/useHomeCalendar.js` owns calendar state, grouping and navigation;
+Home keeps that state alive as the layout changes. Scoped page styles live in
+`settingsPanel.css` and `homepagePanel.css`; settings form/backup styles sit with
+the corresponding section components.
