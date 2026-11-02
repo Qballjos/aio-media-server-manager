@@ -84,13 +84,13 @@ const backupJob = ref(null)
 const restoreTarget = ref(null)
 const uploading = ref(false)
 let stopJobPollFn = null
+const passwordForm = ref({ current_password: '', new_password: '', confirm_password: '' })
+const passwordSaving = ref(false)
 const form = ref({
   username: '',
   first_name: '',
   last_name: '',
   email: '',
-  current_password: '',
-  new_password: '',
   timezone: 'UTC',
   log_level: 'INFO',
   puid: 1000,
@@ -1251,14 +1251,12 @@ async function saveAccount() {
   notice.value = ''
   try {
     const body = {
-      current_password: form.value.current_password,
       username: form.value.username,
       first_name: form.value.first_name,
       last_name: form.value.last_name,
       email: form.value.email
     }
-    if (form.value.new_password) body.new_password = form.value.new_password
-    const res = await apiRequest('/api/auth/account', {
+    const res = await apiRequest('/api/auth/profile', {
       method: 'PATCH',
       body: JSON.stringify(body)
     })
@@ -1267,8 +1265,6 @@ async function saveAccount() {
       error.value = apiError(data, 'Could not update account.')
       return
     }
-    form.value.current_password = ''
-    form.value.new_password = ''
     if (data.avatar_url !== undefined) applyProfileAvatar(data)
     emit('session', data)
     notice.value = 'Account updated.'
@@ -1276,6 +1272,37 @@ async function saveAccount() {
     error.value = err.message || 'Could not update account.'
   } finally {
     saving.value = false
+  }
+}
+
+async function savePassword() {
+  error.value = ''
+  notice.value = ''
+  if (passwordForm.value.new_password !== passwordForm.value.confirm_password) {
+    error.value = t('New passwords do not match.')
+    return
+  }
+  passwordSaving.value = true
+  try {
+    const res = await apiRequest('/api/auth/account', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        current_password: passwordForm.value.current_password,
+        new_password: passwordForm.value.new_password,
+      }),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, t('Could not change password.'))
+      return
+    }
+    passwordForm.value = { current_password: '', new_password: '', confirm_password: '' }
+    emit('session', data)
+    notice.value = t('Password changed.')
+  } catch (err) {
+    error.value = err.message || t('Could not change password.')
+  } finally {
+    passwordSaving.value = false
   }
 }
 
@@ -1878,11 +1905,11 @@ onBeforeUnmount(() => {
           <div
             v-for="(slot, key) in branding.slots"
             :key="key"
-            class="brand-asset-row"
+            class="brand-asset-row brand-style-asset"
           >
+            <h4 class="brand-style-title">{{ slot.label }}</h4>
             <img :src="slot.url" :alt="slot.label" class="brand-asset-preview" :class="{ 'is-logo': key === 'logo' }" />
             <div class="brand-asset-copy">
-              <strong>{{ slot.label }}</strong>
               <span>{{ slot.help }}</span>
               <span class="brand-asset-size">{{ $t('Required / recommended:') }} {{ slot.recommended }}</span>
               <span class="share-idle">{{ slot.custom ? 'Custom image in use.' : 'Built-in placeholder — upload to replace.' }}</span>
@@ -1919,8 +1946,8 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card settings-profile-card">
         <div class="settings-card-head">
           <span class="accent-badge">{{ $t('ACCOUNT') }}</span>
-          <h3>{{ $t('Profile and security') }}</h3>
-          <p>{{ $t('Update your personal details. Enter your current password to save changes.') }}</p>
+          <h3>{{ $t('Profile') }}</h3>
+          <p>{{ $t('Update your personal details.') }}</p>
         </div>
         <div class="brand-asset-list account-avatar-block">
           <div class="brand-asset-row">
@@ -1975,13 +2002,25 @@ onBeforeUnmount(() => {
           <label class="ui-field">{{ $t('Email') }}
             <input v-model="form.email" type="email" class="ui-input" required />
           </label>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save profile') }}</button>
+        </form>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>{{ $t('Change password') }}</h3>
+          <p>{{ $t('Enter your current password and choose a new password.') }}</p>
+        </div>
+        <form class="form-stack profile-form" @submit.prevent="savePassword">
           <label class="ui-field">{{ $t('Current password') }}
-            <input v-model="form.current_password" type="password" class="ui-input" required autocomplete="current-password" />
+            <input v-model="passwordForm.current_password" type="password" class="ui-input" required autocomplete="current-password" />
           </label>
-          <label class="ui-field">{{ $t('New password (optional)') }}
-            <input v-model="form.new_password" type="password" class="ui-input" minlength="8" autocomplete="new-password" />
+          <label class="ui-field">{{ $t('New password') }}
+            <input v-model="passwordForm.new_password" type="password" class="ui-input" required minlength="8" autocomplete="new-password" />
           </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save account') }}</button>
+          <label class="ui-field">{{ $t('Confirm new password') }}
+            <input v-model="passwordForm.confirm_password" type="password" class="ui-input" required minlength="8" autocomplete="new-password" />
+          </label>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="passwordSaving">{{ passwordSaving ? $t('Saving…') : $t('Change password') }}</button>
         </form>
       </div>
     </template>
@@ -3414,6 +3453,10 @@ onBeforeUnmount(() => {
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
 }
+.brand-style-asset { flex-direction:column; align-items:flex-start; }
+.brand-style-title { margin:0; color:var(--text-heading); font-size:var(--text-body); font-weight:600; }
+.brand-style-asset .brand-asset-copy { flex:0 1 auto; width:100%; }
+.brand-style-asset .brand-asset-preview { max-width:100%; object-fit:contain; }
 .brand-asset-preview {
   width: 3.5rem;
   height: 3.5rem;

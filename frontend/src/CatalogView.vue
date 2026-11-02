@@ -167,11 +167,21 @@ function isRunningService(s) {
 }
 
 const discoverSelected = computed(() => !catalogCategoriesSelected.value.length && !catalogStatusFilters.value.length)
-const featuredService = computed(() => {
-  const media = combinedServices.value.filter(service => service.category === 'media')
-  return media.find(service => service.name === 'jellyfin') || media.find(service => service.name === 'plex') || media[0]
-})
+const featuredIndex = ref(0)
+const featuredPaused = ref(false)
+const featuredHovered = ref(false)
+const featuredFocused = ref(false)
+let featuredTimer = null
+const featuredPosition = computed(() => featuredIndex.value % (combinedServices.value.length || 1))
+const featuredService = computed(() => combinedServices.value[featuredPosition.value])
 const showDiscovery = computed(() => discoverSelected.value && !catalogSearchInput.value.trim())
+function moveFeatured(direction) {
+  const count = combinedServices.value.length
+  if (count) featuredIndex.value = (featuredPosition.value + direction + count) % count
+}
+function advanceFeatured() {
+  if (showDiscovery.value && !featuredPaused.value && !featuredHovered.value && !featuredFocused.value) moveFeatured(1)
+}
 const catalogHeading = computed(() => {
   if (catalogSearchInput.value.trim()) return t('Search results')
   if (catalogCategoriesSelected.value.length === 1) return categoryLabel(catalogCategoriesSelected.value[0])
@@ -435,10 +445,17 @@ function statusLabel(service) {
 function onDocumentClick() {
   closeCardMenu()
 }
-onMounted(() => document.addEventListener('click', onDocumentClick))
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  featuredPaused.value = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  featuredTimer = setInterval(() => {
+    if (!document.hidden) advanceFeatured()
+  }, 30000)
+})
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
   clearTimeout(catalogSearchTimer)
+  clearInterval(featuredTimer)
 })
 </script>
 
@@ -502,17 +519,44 @@ onUnmounted(() => {
     <div class="catalog-store-main">
       <header class="catalog-store-heading">
         <h2>{{ catalogHeading }}</h2>
-        <button type="button" class="ui-btn ui-btn-ghost" :disabled="isLoadingData" @click="refreshDashboard">{{ $t('Refresh') }}</button>
       </header>
-      <button v-if="showDiscovery && featuredService" type="button" class="catalog-feature" @click="openAppSettings(featuredService)">
-        <span class="catalog-feature-copy">
-          <span class="catalog-feature-kicker">{{ $t('Your own cinema') }}</span>
-          <strong>{{ $t('All your stories. One home.') }}</strong>
+      <section v-if="showDiscovery && featuredService" class="catalog-feature-carousel" :aria-label="$t('Featured apps')"
+        aria-roledescription="carousel" @mouseenter="featuredHovered = true" @mouseleave="featuredHovered = false"
+        @focusin="featuredFocused = true" @focusout="featuredFocused = !!($event.relatedTarget && $event.currentTarget.contains($event.relatedTarget))">
+      <button type="button" class="catalog-feature" @click="openAppSettings(featuredService)">
+        <span :key="featuredService.name" class="catalog-feature-copy">
+          <span class="catalog-feature-kicker">{{ categoryLabel(featuredService.category) }}</span>
+          <strong>{{ featuredService.displayName }}</strong>
           <span>{{ featuredService.description }}</span>
           <span class="catalog-feature-link">{{ $t('Explore {name}', { name: featuredService.displayName }) }} →</span>
         </span>
         <img v-if="featuredService.iconSrc && !iconFailed[featuredService.name]" :src="featuredService.iconSrc" alt="" @error="iconFailed[featuredService.name] = true" />
       </button>
+      <div v-if="combinedServices.length > 1" class="catalog-feature-controls">
+        <div class="catalog-feature-dots catalog-feature-dots-left">
+          <button type="button" class="catalog-feature-arrow" :aria-label="$t('Previous app')" @click="moveFeatured(-1)">
+            <svg viewBox="0 0 12 12" aria-hidden="true"><path d="m7.5 2-4 4 4 4" /></svg>
+          </button>
+          <button v-for="(service, index) in combinedServices.slice(0, Math.ceil(combinedServices.length / 2))" :key="service.name"
+            type="button" class="catalog-feature-dot" :class="{ 'is-current': featuredPosition === index }"
+            :aria-label="$t('Explore {name}', { name: service.displayName })" :aria-pressed="featuredPosition === index"
+            @click="featuredIndex = index"><span aria-hidden="true"></span></button>
+        </div>
+        <button type="button" class="catalog-feature-pause" :aria-label="featuredPaused ? $t('Resume rotation') : $t('Pause rotation')"
+          :aria-pressed="featuredPaused" @click="featuredPaused = !featuredPaused">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path v-if="featuredPaused" d="M3 1.5 10 6 3 10.5Z" /><path v-else d="M2 1h3v10H2zM7 1h3v10H7z" /></svg>
+        </button>
+        <div class="catalog-feature-dots catalog-feature-dots-right">
+          <button v-for="(service, index) in combinedServices.slice(Math.ceil(combinedServices.length / 2))" :key="service.name"
+            type="button" class="catalog-feature-dot" :class="{ 'is-current': featuredPosition === index + Math.ceil(combinedServices.length / 2) }"
+            :aria-label="$t('Explore {name}', { name: service.displayName })" :aria-pressed="featuredPosition === index + Math.ceil(combinedServices.length / 2)"
+            @click="featuredIndex = index + Math.ceil(combinedServices.length / 2)"><span aria-hidden="true"></span></button>
+          <button type="button" class="catalog-feature-arrow" :aria-label="$t('Next app')" @click="moveFeatured(1)">
+            <svg viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2 4 4-4 4" /></svg>
+          </button>
+        </div>
+      </div>
+      </section>
       <div id="catalog-toolbar" class="catalog-store-list-heading">
         <h3>{{ showDiscovery ? $t('For your media server') : $t('Applications') }} <span>{{ visibleServices.length }}</span></h3>
         <UiSelect id="catalog-sort" v-model="catalogSort" variant="inline" :aria-label="$t('Sort')"
@@ -602,6 +646,22 @@ onUnmounted(() => {
 .catalog-store-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
 .catalog-store-heading h2 { font-size: var(--text-display); letter-spacing: -0.04em; }
 .catalog-feature { display: grid; grid-template-columns: minmax(0, 1fr) 8rem; align-items: center; gap: 1.5rem; width: 100%; padding: 1.75rem; border: 1px solid var(--border-strong); border-radius: var(--radius-tile); background: linear-gradient(125deg, rgb(var(--color-primary-rgb) / 0.19), transparent), var(--bg-surface); color: var(--text-main); text-align: left; cursor: pointer; font: inherit; }
+.catalog-feature-carousel { position: relative; }
+.catalog-feature-controls { position: absolute; bottom: 0.8rem; left: 1rem; right: 1rem; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 0.2rem; }
+.catalog-feature-dots { display: flex; flex-wrap: wrap; align-items: center; }
+.catalog-feature-dots-left { justify-content: flex-end; }
+.catalog-feature-dots-right { justify-content: flex-start; }
+.catalog-feature-dot, .catalog-feature-pause, .catalog-feature-arrow { display: inline-flex; justify-content: center; align-items: center; width: 1.5rem; height: 1.5rem; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted); cursor: pointer; }
+.catalog-feature-dot span { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; opacity: 0.45; }
+.catalog-feature-dot.is-current { color: var(--color-primary-text); }
+.catalog-feature-dot.is-current span, .catalog-feature-dot:hover span { opacity: 1; }
+.catalog-feature-pause svg { width: 0.5rem; height: 0.5rem; fill: currentColor; }
+.catalog-feature-arrow svg { width: 0.65rem; height: 0.65rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.catalog-feature-arrow:hover, .catalog-feature-pause:hover { color: var(--text-main); }
+.catalog-feature-dot:focus-visible, .catalog-feature-pause:focus-visible, .catalog-feature-arrow:focus-visible { outline: 2px solid var(--color-primary-text); outline-offset: 1px; }
+.catalog-feature { min-height: 16rem; padding-bottom: 3.75rem; }
+@keyframes catalog-feature-reveal { from { opacity: 0; transform: translateY(0.3rem); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: no-preference) { .catalog-feature-copy { animation: catalog-feature-reveal 300ms ease-out; } }
 .catalog-feature-copy { display: grid; gap: 0.75rem; max-width: 28rem; }
 .catalog-feature-kicker { color: var(--color-primary-text); text-transform: uppercase; letter-spacing: 0.1em; font-size: var(--text-kicker); }
 .catalog-feature-copy strong { font-size: clamp(1.4rem, 2.5vw, 2rem); line-height: 1.15; letter-spacing: -0.035em; font-weight: 600; }
@@ -644,7 +704,7 @@ onUnmounted(() => {
   .catalog-store-nav button { width: auto; padding: 0.5rem 0.65rem; font-size: var(--text-kicker); }
   .catalog-store-nav button > span, .catalog-store-nav button > small { display: none; }
   .catalog-store-main { padding: 1.25rem; }
-  .catalog-feature { grid-template-columns: minmax(0, 1fr) 4rem; padding: 1.25rem; gap: 0.75rem; }
+  .catalog-feature { grid-template-columns: minmax(0, 1fr) 4rem; padding: 1.25rem 1.25rem 3.75rem; gap: 0.75rem; }
   .catalog-feature img { width: 4rem; height: 4rem; }
   .catalog-collections { grid-template-columns: minmax(0, 1fr); }
 }

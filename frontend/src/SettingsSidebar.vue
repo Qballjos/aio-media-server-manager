@@ -79,7 +79,7 @@ const paths = {
 .settings-navigation { position:sticky; top:calc(var(--settings-header-height, 0px) + 1rem); max-height:calc(100dvh - var(--settings-header-height, 0px) - 2rem); overscroll-behavior-y:contain; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; }
 .settings-sidebar-title { margin:0 .5rem 1rem; font-size:var(--text-title); font-weight:600; letter-spacing:-.04em; }
 .settings-search { display:flex; align-items:center; gap:.55rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:var(--radius-inset); background:var(--bg-input); color:var(--text-dim); margin-bottom:1rem; }
-.settings-search:focus-within { outline:2px solid var(--color-primary); outline-offset:2px; }
+.settings-search:focus-within { outline:0; border-color:var(--color-primary); box-shadow:inset 0 0 0 1px var(--color-primary); }
 .settings-search svg { width:16px; height:16px; flex-shrink:0; }
 .settings-search input { width:100%; min-width:0; border:0; outline:0; background:transparent; color:var(--text-main); font:inherit; font-size:var(--text-body); }
 .settings-search input::placeholder { color:var(--text-dim); }

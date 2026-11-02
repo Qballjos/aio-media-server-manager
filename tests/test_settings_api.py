@@ -371,3 +371,41 @@ def test_settings_reports_applied_vpn_and_homepage_keys(tmp_path: Path, monkeypa
     again = client.get("/api/settings", headers=headers)
     assert again.json()["vpn"]["enabled"] is True
     assert again.json()["homepage_keys"]["jellyfin"]["configured"] is True
+
+
+def test_profile_update_does_not_require_or_change_password(tmp_path, monkeypatch):
+    client, _ = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    res = client.patch('/api/auth/profile', headers=headers, json={
+        'username': 'admin', 'first_name': '  Jozef ', 'last_name': 'Ball',
+        'email': 'ops@example.com',
+    })
+    assert res.status_code == 200
+    assert res.json()['first_name'] == 'Jozef'
+    assert auth_manager.verify_password('admin', 'StrongPassword123!')
+    assert auth_manager.email() == 'ops@example.com'
+
+
+def test_profile_endpoint_cannot_change_password(tmp_path, monkeypatch):
+    client, _ = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    res = client.patch('/api/auth/profile', headers=headers, json={'new_password': 'ChangedPassword123!'})
+    assert res.status_code == 422
+    assert auth_manager.verify_password('admin', 'StrongPassword123!')
+
+
+def test_profile_requires_login(tmp_path, monkeypatch):
+    client, _ = _client(tmp_path, monkeypatch)
+    _auth_headers(client)
+    client.cookies.clear()
+    assert client.patch('/api/auth/profile', json={'first_name': 'Other'}).status_code == 401
+
+
+def test_password_change_still_requires_current_password(tmp_path, monkeypatch):
+    client, _ = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    assert client.patch('/api/auth/account', headers=headers, json={'new_password': 'ChangedPassword123!'}).status_code == 422
+    assert client.patch('/api/auth/account', headers=headers, json={'current_password': 'wrong', 'new_password': 'ChangedPassword123!'}).status_code == 401
+    res = client.patch('/api/auth/account', headers=headers, json={'current_password': 'StrongPassword123!', 'new_password': 'ChangedPassword123!'})
+    assert res.status_code == 200
+    assert auth_manager.verify_password('admin', 'ChangedPassword123!')

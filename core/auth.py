@@ -195,6 +195,26 @@ class AuthManager:
                 detail="Invalid or expired session.",
             ) from exc
 
+    def update_profile(
+        self, current_username: str, *, username: str | None = None,
+        email: str | None = None, first_name: str | None = None,
+        last_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Update non-password fields for an authenticated administrator."""
+        data = self._read_auth()
+        if data.get("username") != current_username:
+            raise HTTPException(status_code=401, detail="Invalid session.")
+        if username is not None:
+            data["username"] = username.strip() or current_username
+        if email is not None:
+            data["email"] = normalize_email(email)
+        if first_name is not None:
+            data["first_name"] = normalize_person_name(first_name)
+        if last_name is not None:
+            data["last_name"] = normalize_person_name(last_name)
+        self._write_auth(data)
+        return {key: str(data.get(key) or "") for key in ("username", "email", "first_name", "last_name")}
+
     def update_account(
         self,
         current_username: str,

@@ -11,7 +11,6 @@ import HealthModal from './HealthModal.vue'
 import AppSettingsModal from './AppSettingsModal.vue'
 import WallpaperLayer from './WallpaperLayer.vue'
 import AppLoader from './AppLoader.vue'
-import LanguageSelect from './LanguageSelect.vue'
 import { isLocale, readStoredLocale, t } from './i18n/index.js'
 import { homeEditing } from './homeLayout.js'
 import { startGuardedInterval } from './pageVisible.js'
@@ -550,7 +549,6 @@ onUnmounted(() => {
             <span v-else>⚡</span>
             {{ $t('Auto-Wire') }}
           </button>
-          <LanguageSelect persist compact />
           <button v-if="showPwaInstall" type="button" class="metric-pill metric-pill-action" @click="installPwa">{{ $t('Install app') }}</button>
           <button type="button" @click="handleLogout" class="metric-pill metric-pill-action">{{ $t('Log out') }}</button>
         </div>

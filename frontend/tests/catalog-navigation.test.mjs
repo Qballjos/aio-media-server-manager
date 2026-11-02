@@ -15,7 +15,7 @@ function catalog() {
     { name: 'sonarr', display_name: 'Sonarr', category: 'automation', installed: true, popularity: 10 },
     { name: 'plex', display_name: 'Plex', category: 'media', installed: false, popularity: 5 },
   ]
-  const panel = runInNewContext(`${script}\n;({ selectCatalogSection, visibleServices, catalogSearchInput, showDiscovery, featuredService, onAppRowClick, openCardMenu })`, {
+  const panel = runInNewContext(`${script}\n;({ selectCatalogSection, visibleServices, catalogSearchInput, showDiscovery, featuredService, moveFeatured, featuredPaused, advanceFeatured, onAppRowClick, openCardMenu })`, {
     ...catalogQuery, computed, ref,
     defineProps: () => ({ catalogApps: rows, updateStatus: {}, applications: [{ name: 'jellyfin', installed: true, state: 'running' }] }),
     defineEmits: () => (...args) => emitted.push(args),
@@ -70,4 +70,23 @@ test('app clicks open settings; direct action clicks do not open settings', () =
     panel.onAppRowClick({ target: { closest: () => ({ tagName: tag }) } }, service)
   }
   assert.equal(emitted.length, 1)
+})
+
+test('featured banner visits every app, wraps, and supports pause', () => {
+  const { panel } = catalog()
+  panel.advanceFeatured()
+  assert.equal(panel.featuredService.value.name, 'sonarr')
+  panel.featuredPaused.value = true
+  panel.advanceFeatured()
+  assert.equal(panel.featuredService.value.name, 'sonarr')
+  panel.moveFeatured(1)
+  assert.equal(panel.featuredService.value.name, 'plex')
+  panel.moveFeatured(1)
+  assert.equal(panel.featuredService.value.name, 'jellyfin')
+  panel.moveFeatured(-1)
+  assert.equal(panel.featuredService.value.name, 'plex')
+  panel.featuredPaused.value = false
+  panel.catalogSearchInput.value = 'sonarr'
+  panel.advanceFeatured()
+  assert.equal(panel.featuredService.value.name, 'plex')
 })
