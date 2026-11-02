@@ -27,7 +27,7 @@ async function choose(code) {
 
 <template>
   <div v-if="codes" class="locale-dock">
-    <div v-if="open" class="locale-pop" role="listbox" :aria-label="t('Language')">
+    <div v-if="open" class="locale-pop glass-popover" role="listbox" :aria-label="t('Language')">
       <button
         v-for="item in LOCALES"
         :key="item.code"
@@ -95,7 +95,7 @@ async function choose(code) {
 .locale-dock-btn {
   min-height: 2rem;
   padding: 0 0.75rem;
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   box-shadow: var(--panel-shadow);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -106,17 +106,13 @@ async function choose(code) {
   gap: 0.2rem;
   margin-bottom: 0.4rem;
   padding: 0.3rem;
-  border-radius: 14px;
-  background: var(--menu-bg);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-card);
 }
 
 .locale-code {
   min-width: 3.2rem;
   min-height: 1.9rem;
   padding: 0 0.55rem;
-  border-radius: 10px;
+  border-radius: var(--radius-inset);
   background: transparent;
 }
 

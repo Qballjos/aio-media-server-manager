@@ -1,5 +1,8 @@
 # Cloudflare Access (login gate)
 
+!!! info "Advanced"
+    This page is for a custom or technical setup. It is not needed for a first local installation. [Beginner guides](../docs/INSTALL.md).
+
 Use both doors. Cloudflare Access is the extra login in front of the *Arr apps, the download clients, and Seerr. The AIO dashboard, Jellyfin, and Plex keep the login they already have.
 
 Access does not replace Sonarr’s password or Seerr’s account. It only asks who you are **before** that page loads. Addresses on your home network (`http://nas-ip:8989`) skip Access. Calls inside AIO on `127.0.0.1` skip it too.
@@ -103,7 +106,7 @@ You do not need a separate Block rule. No match means deny.
 
 After the login method exists, AIO creates the Access applications. It does not create the login method.
 
-1. **Settings → Network → Public subdomains**.
+1. **Settings → External access → Public subdomains**.
 2. Turn on **Expose** for the *Arr apps, download clients, and Seerr you want on the internet. Leave Jellyfin, Plex, and AIO off Access (they are marked **Own login**).
 3. **Publish to Cloudflare** first, so the hostnames exist.
 4. Under **Cloudflare Access emails**, list the addresses that may enter. Leave the list empty only when the only login method is Cloudflare with **Restrict to account members**.

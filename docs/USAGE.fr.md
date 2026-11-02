@@ -1,232 +1,101 @@
-# Utiliser le tableau de bord
+# Utiliser AIO pas à pas
 
-Ce guide s’adresse à vous une fois AIO installé et l’interface web ouverte.
+Commencez ici quand AIO s’ouvre dans votre navigateur. Faites fonctionner une app avant d’en ajouter d’autres.
 
-!!! success "But"
-    Terminez l’assistant pour les apps dont vous avez besoin, utilisez Accueil au quotidien, et **Ouvrir l’interface** dans le catalogue quand vous voulez l’écran de cet outil.
+## 1. Terminer la première configuration
 
-Adresse par défaut sur votre réseau local :
+Créez le compte administrateur et terminez l’assistant. Commencez par exemple avec Jellyfin pour vos fichiers existants. Laissez VPN et accès distant désactivés au début. Attendez Running dans le catalogue.
 
-```text
-http://YOUR-SERVER-IP:8080
+## 2. Les trois pages
+
+| AIO | |
+|---|---|
+| Home | Téléchargements, sorties et informations serveur ; les widgets sont personnalisables. |
+| Catalogue | Installer les apps, vérifier leur état et les ouvrir avec Open UI. |
+| Réglages | Apparence, compte et mises à jour AIO ; ce n’est pas ici que vous ajoutez des films à votre bibliothèque. |
+
+## Se repérer dans les réglages {#settings-menu}
+
+Ouvrez **Réglages** en haut. Sur ordinateur, choisissez une page à gauche. Le champ de recherche au-dessus de la liste permet de trouver une option, par exemple le fond ou les sauvegardes. Effacez la recherche pour retrouver toutes les pages. Sur téléphone, touchez **Réglages / page actuelle** pour ouvrir le menu.
+
+| Que voulez-vous modifier ? | Page à choisir |
+|---|---|
+| Nom, photo ou mot de passe | Personnel → **Profil** |
+| Langue, thème ou fond | Personnel → **Langue et apparence** |
+| Barre d’apps ou texte de connexion | Tableau de bord → **Page d’accueil** |
+| Mettre à jour une app | Maintenance → **Mises à jour** |
+| Sauvegarder les réglages | Maintenance → **Sauvegardes** |
+| Comprendre un widget vide | Système → **Aide et diagnostic** |
+
+Le menu ouvre une page. Modifiez l’option à droite et utilisez le bouton **Enregistrer** du bloc lorsqu’il est affiché. Déplacez les widgets directement sur **Accueil** avec l’icône à quatre blocs ; Page d’accueil règle la barre d’apps et le texte de connexion.
+
+![Settings: grouped sidebar and search](screenshots/light/settings.png)
+
+## 3. Ouvrir votre première app
+
+Dans le catalogue, trouvez Jellyfin et choisissez Open UI. Terminez son propre assistant si demandé. Les dossiers par défaut sont /data/media/movies pour les films et /data/media/tv pour les séries. Ils correspondent aux dossiers NAS déjà reliés ; ne créez pas une deuxième copie à cause du nom différent.
+
+**Vérification : Jellyfin s’ouvre dans un onglet séparé. Sans fichiers média, la bibliothèque est vide ; c’est normal.**
+
+## 4. Lire votre premier film {#first-media}
+
+Copiez un fichier film que vous possédez dans le **dossier movies du serveur**, pas Downloads ni la démo du site.
+
+| Serveur | Dossier cible |
+|---|---|
+| Synology | DSM File Station → home → aio-media-manager → media → movies. Choisissez Téléverser puis le fichier sur votre ordinateur. |
+| Unraid | Partage réseau aio-media-manager → media → movies. La dernière étape Unraid explique le partage privé. |
+| TrueNAS | Partage réseau aio-media → media → movies. L’étape 7 TrueNAS configure l’accès. |
+| Docker sur Linux | Sur le serveur, dossier personnel → aio-media-manager → media → movies. Depuis un autre ordinateur, copie SSH avec scp ci-dessous. |
+
+Pour un serveur Linux distant, lancez ce bloc **sur votre ordinateur**, en remplaçant chemin du fichier, utilisateur et IP. La destination correspond à l’installation standard dans le dossier personnel.
+
+Un chemin Windows ressemble à `C:\Users\Alex\Videos\MonFilm.mp4`, sur Mac à `/Users/alex/Movies/MonFilm.mp4`. Gardez les guillemets autour de votre vrai chemin et les mêmes utilisateur/IP que pour SSH.
+
+```bash
+scp "/PATH/TO/YOUR/FILM.mp4" YOUR-USER@SERVER-IP:aio-media-manager/media/movies/
 ```
 
-Remplacez l’IP (et le port, si vous l’avez changé).
+Pour une série utilisez media/tv. Après la copie, ouvrez Jellyfin → Dashboard → Bibliothèques et lancez Scan All Libraries ou l’analyse de cette bibliothèque. Revenez à l’accueil Jellyfin, ouvrez le film et choisissez Lire.
 
----
+**Vérification : le film apparaît et se lit. Sinon comparez le dossier du serveur au chemin choisi dans Jellyfin et relancez l’analyse.**
 
-## Première fois
+## 5. Organiser les widgets Home {#customize-home}
 
-1. Créez le compte **administrateur** quand on vous le demande (nom, **e-mail**, mot de passe).
-2. Terminez l’assistant de première exécution : les apps voulues, un serveur Usenet si vous en utilisez un, un VPN facultatif et un Cloudflare Tunnel facultatif. L’assistant installe ce choix. Le tunnel et le VPN démarrent dès que l’assistant est fini, si vous les avez activés.
-3. Après une recréation du conteneur, le tableau de bord répond pendant que les apps démarrent encore. Avec le VPN activé, qBittorrent, Prowlarr et Flaresolverr attendent que la poignée de main WireGuard soit établie (AIO réessaie le VPN si le premier essai échoue). Cloudflare Tunnel démarre en dernier, une fois que les apps répondent, pour que cloudflared ne journalise pas de connection refused vers des origines qui n’écoutent pas encore.
-4. Attendez que **Catalogue** affiche ces apps comme **actives**. Utilisez **Ouvrir l’interface** pour tout ce qui a encore un compte propre (Plex, Jellyfin, NZBGet).
-5. Ajoutez-en plus tard depuis **Catalogue**. Vous n’avez pas besoin de chaque app.
+<div class="widget-visual-guide" role="group" aria-label="Organiser les widgets de l’accueil">
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>Le bouton de disposition</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>Sur Home, choisissez l’icône à quatre blocs à côté des onglets. Les poignées et la barre de modification apparaissent.</p></div>
+<div class="widget-visual-step"><span class="visual-number">2</span><strong>Déplacer : glisser la poignée</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Téléchargements</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Taille : glisser ce coin</p></div>
+<div class="widget-visual-step"><span class="visual-number">3</span><strong>Choisir un widget</strong><div class="visual-toolbar"><span>＋ Ajouter un widget</span><span>Terminé</span></div><p>Choisissez Ajouter un widget, puis Cette taille ou Toutes les tailles et le widget. Les changements sont enregistrés automatiquement ; terminez avec Terminé.</p></div>
+</div>
 
-Commencez petit (par exemple Radarr + un client de téléchargement + Jellyfin), puis ajoutez le reste.
+[Organiser les widgets Home](index.md#app-preview){ .md-button .md-button--primary }
 
----
+Ces images expliquent les vraies commandes. La démo du site utilise des données fictives sans modifier votre tableau de bord.
 
-## Accueil
+### Pourquoi un widget est-il vide ?
 
-Accueil est une grille. Téléphone, tablette et bureau gardent chacun leur disposition (4, 8 et 12 colonnes). Le bouton de disposition sur l’onglet Accueil déplace, agrandit, ajoute et retire des widgets. **Réglages → Page d’accueil** affiche ou masque la barre d’apps, règle le texte de connexion et enregistre une clé d’API Jellyfin ou Seerr si Accueil ne peut pas la lire seul.
+Vérifiez l’app correspondante dans le catalogue. Les ajouts récents demandent des médias dans Jellyfin/Plex ; le calendrier des titres prévus dans les apps liées. Les widgets vides peuvent disparaître hors édition. Ajouter un widget n’installe pas son app source.
 
-| Widget | Ce qu’il montre |
-|--------|----------------|
-| Salutation | Moment de la journée |
-| Recherche | Recherche dans Seerr |
-| Calendrier | Épisodes et films à venir. Une saison qui commence le même jour tient sur une ligne |
-| Téléchargements | Téléchargements actifs, avec tout mettre en pause / tout reprendre. Les éléments bloqués peuvent être retirés |
-| Ajouts récents | Nouvelles séries et films. Faire défiler charge d’autres pages Jellyfin. Plex reste aux 20 derniers |
-| Demandes | Demandes Seerr pas encore prêtes, plus ce qui a été marqué disponible ou refusé ces 30 derniers jours |
-| Tendances | La liste des tendances de Seerr. Faire défiler continue de charger |
-| En lecture | Qui regarde sur Jellyfin ou Plex, y compris la lecture directe |
-| Stockage | Utilisation disque de la config, des téléchargements et des médias |
-| Serveur | CPU, mémoire et réseau. Avec `/sys` de l’hôte monté sur `/host/sys`, ce sont les cartes réseau du serveur. Sans ce montage, seulement le trafic de ce conteneur |
-| À surveiller | Les mêmes contrôles que Réglages → Notifications, avec un lien pour régler chaque point |
-| Autres téléchargements | Désactivé par défaut ; ajoutez-le via le contrôle de disposition. Ce que SABnzbd, NZBGet et qBittorrent ont téléchargé et qui n’est ni un film ni une série (musique, livres, jeux, logiciels, archives), chacun avec une icône pour son type |
+## 6. À quoi servent les autres apps ?
 
-Installer, démarrer, arrêter et **Ouvrir l’interface** se trouvent dans **Catalogue**. La barre en bas d’Accueil ouvre les apps déjà installées.
+| App | |
+|---|---|
+| Jellyfin / Plex | Lire les fichiers média existants. |
+| Sonarr / Radarr | Organiser séries / films et automatiser les téléchargements choisis. |
+| SABnzbd / NZBGet | Télécharger via Usenet avec votre compte fournisseur. |
+| qBittorrent | Télécharger et partager des torrents. |
+| Prowlarr | Gérer les sources de recherche des apps d’automatisation. |
 
-**Ouvrir l’interface** sur le LAN ressemble en général à `http://YOUR-SERVER-IP:8989` (exemple Sonarr).  
-Si vous avez configuré des noms d’hôte publics Cloudflare, **Ouvrir l’interface** peut utiliser `https://sonarr.yourdomain.com` à la place — voir [Cloudflare Tunnel](deploy/CLOUDFLARE.md).
+Vous n’avez pas besoin de tout. Ajoutez une app dans le catalogue selon vos besoins. Les connexions détaillées sont dans Avancé.
 
----
+## 7. Mettre les apps à jour
 
-## Ce que l’assistant relie
+Réglages → Updates met à jour les apps internes. AIO lui-même se met à jour séparément dans NAS/Docker ; voir le guide avancé de la plateforme. Avant un changement, créez une sauvegarde des réglages dans Backups.
 
-Dès qu’une app est saine — ou si vous cliquez sur **Liaison auto** — AIO règle les dossiers et catégories de téléchargement, les dossiers racines et les clients de téléchargement dans Sonarr, Radarr et Lidarr, la synchro Prowlarr, Seerr, le lien Bazarr, et les configurations de départ de Recyclarr et NeutArr. **Réglages → Usenet** enregistre le serveur de news et l’envoie à SABnzbd et NZBGet. Prowlarr reçoit aussi un jeu de départ d’indexeurs publics. Retirez ce que vous ne voulez pas ; ils ne sont pas rajoutés.
+## Captures et référence technique {#screens}
 
-Gardez **downloads** et **media** sur le même volume pour que les fichiers terminés puissent être des **liens physiques**.
+[Captures et référence technique](USAGE_ADVANCED.md#screens).
 
-Encore à faire vous-même :
+## Avancé
 
-- Un compte Plex.
-- Le jeton d’installation du premier démarrage de NeutArr (ci-dessous), jusqu’à ce que ce compte existe.
-- La connexion à Jellyfin et NZBGet. Sur le LAN, **Ouvrir l’interface** vous connecte déjà à Sonarr, Radarr, Lidarr, Prowlarr, qBittorrent, SABnzbd, Bazarr et Seerr en tant qu’administrateur du gestionnaire. Les noms d’hôte publics montrent toujours la connexion propre de l’app.
-- L’administrateur et l’assistant de première exécution de Seerr sont terminés pour vous à partir de cette connexion partagée (via Jellyfin, ou un Plex revendiqué).
-
-VPN, Cloudflare Tunnel, Recyclarr, NeutArr et sauvegardes sont facultatifs.
-
-### Jeton d’installation du premier démarrage de NeutArr
-
-La première fois que NeutArr démarre, avant d’avoir un compte, il demande un jeton d’installation à usage unique.
-
-1. Attendez que NeutArr soit **actif**.
-2. Ouvrez **Catalogue → NeutArr → Réglages**.
-3. Copiez **Jeton de première installation** et collez-le dans l’écran d’installation de NeutArr.
-
-Cette valeur est le fichier `/config/neutarr/.setup-token` dans l’appliance (le dossier hôte monté comme `/config`). NeutArr supprime le fichier une fois le compte créé, et le champ dans Réglages se vide. Tant que NeutArr n’a pas démarré, le champ reste vide.
-
----
-
-## Ouvrir l’interface de chaque app
-
-| Situation | Ce que vous utilisez |
-|-----------|-------------|
-| À la maison en wifi | **Ouvrir l’interface** → `http://IP:PORT` |
-| Hors de la maison avec Cloudflare | **Ouvrir l’interface** → `https://subdomain.yourdomain.com` |
-| Vous avez changé le port d’écoute d’une app | AIO met à jour les routes publiées ; recréez le conteneur si les liens LAN ont encore l’air faux. Le port du gestionnaire lui-même est Compose/environnement (`AMM_API_PORT`), visible dans **Réglages → Système** |
-
-Si **Ouvrir l’interface** échoue :
-
-- L’app est-elle **active** dans le catalogue ?
-- Êtes-vous sur le même réseau (pour les liens LAN) ?
-- Pour les liens HTTPS : le tunnel est-il connecté et **Publier** a-t-il réussi ? ([Guide Cloudflare](deploy/CLOUDFLARE.md))
-
----
-
-## Les réglages que vous utilisez vraiment
-
-Les noms dans l’interface peuvent être courts ; voici ce qu’ils veulent dire en pratique.
-
-| Section | Pourquoi ça compte |
-|---------|----------------|
-| **Compte** | Nom, e-mail et mot de passe de l’administrateur. Les apps avec une connexion locale utilisent le même compte |
-| **Apparence** | Thème, accent, fond, titre, icône de la barre, logo de connexion et favicon |
-| **Système** | Fuseau horaire, niveau de journal, PUID/PGID et version d’AIO. Les chemins de stockage sont ici ; les montages se changent dans Compose, pas dans cet écran. Le port d’écoute du gestionnaire est seulement Compose/environnement |
-| **Mises à jour** | Vérifier et appliquer les mises à jour des apps installées, une par une ou toutes. Les planifications sont **désactivées** par défaut. Une image AIO plus récente n’est qu’un signal — tirez et recréez sur l’hôte |
-| **Sauvegardes** | Sauvegarde de la config, vérification, restauration par app et une planification |
-| **Réseau** | VPN pour qBittorrent, Prowlarr et Flaresolverr (Usenet reste dehors), avec un cache DNS local pour ces apps afin qu’un court trou du tunnel ne coupe pas les indexeurs Prowlarr ; Cloudflare Tunnel (démarre après les apps au boot) ; sous-domaines publics ; et proxys de confiance |
-| **Notifications** | Webhook Discord et e-mail si une app continue de planter, si le VPN ou le tunnel tombe, s’il y a une mise à jour, ou si un disque dépasse 90 % |
-| **Usenet** | Serveur de news (hôte, port, SSL, identifiants, connexions), envoyé à SABnzbd et NZBGet. Les indexeurs NZB s’ajoutent dans Prowlarr |
-| **Page d’accueil** | Texte de connexion, barre d’apps et clés d’API Jellyfin / Seerr si Accueil ne peut pas les lire |
-| **Diagnostic** | Pourquoi un widget d’Accueil est vide. Les clés d’API ne sont jamais affichées. **Lien d’assistance** est une aide à distance temporaire — laissez-le **désactivé**, sauf si vous déboguez avec quelqu’un en qui vous avez confiance |
-
-Laissez aux apps un moment pour se recharger après un changement important de réseau ou de port — ou redémarrez AIO si les liens restent périmés.
-
-## Écrans {#screens}
-
-Clair à gauche, sombre à droite. Accueil est vide ici parce qu’aucune app avec interface web n’est encore installée. Les réglages d’app dans le catalogue sont la fenêtre que vous ouvrez depuis une carte du catalogue (ici qBittorrent).
-
-### Compte
-
-| Clair | Sombre |
-| --- | --- |
-| ![Compte dans Réglages, thème clair](screenshots/light/settings.png) | ![Compte dans Réglages, thème sombre](screenshots/dark/settings.png) |
-
-### Apparence
-
-| Clair | Sombre |
-| --- | --- |
-| ![Apparence, thème clair](screenshots/light/settings-visuals.png) | ![Apparence, thème sombre](screenshots/dark/settings-visuals.png) |
-
-### Système
-
-| Clair | Sombre |
-| --- | --- |
-| ![Réglages système, thème clair](screenshots/light/settings-system.png) | ![Réglages système, thème sombre](screenshots/dark/settings-system.png) |
-
-### Mises à jour
-
-| Clair | Sombre |
-| --- | --- |
-| ![Mises à jour, thème clair](screenshots/light/settings-updates.png) | ![Mises à jour, thème sombre](screenshots/dark/settings-updates.png) |
-
-### Sauvegardes
-
-| Clair | Sombre |
-| --- | --- |
-| ![Sauvegardes, thème clair](screenshots/light/settings-backups.png) | ![Sauvegardes, thème sombre](screenshots/dark/settings-backups.png) |
-
-### Réseau
-
-| Clair | Sombre |
-| --- | --- |
-| ![Réglages réseau, thème clair](screenshots/light/settings-network.png) | ![Réglages réseau, thème sombre](screenshots/dark/settings-network.png) |
-
-### Notifications
-
-| Clair | Sombre |
-| --- | --- |
-| ![Notifications, thème clair](screenshots/light/settings-notifications.png) | ![Notifications, thème sombre](screenshots/dark/settings-notifications.png) |
-
-### Usenet
-
-| Clair | Sombre |
-| --- | --- |
-| ![Réglages Usenet, thème clair](screenshots/light/settings-usenet.png) | ![Réglages Usenet, thème sombre](screenshots/dark/settings-usenet.png) |
-
-### Page d’accueil
-
-| Clair | Sombre |
-| --- | --- |
-| ![Réglages de la page d’accueil, thème clair](screenshots/light/settings-homepage.png) | ![Réglages de la page d’accueil, thème sombre](screenshots/dark/settings-homepage.png) |
-
-### Diagnostic
-
-| Clair | Sombre |
-| --- | --- |
-| ![Diagnostic, thème clair](screenshots/light/settings-diagnostics.png) | ![Diagnostic, thème sombre](screenshots/dark/settings-diagnostics.png) |
-
-### Réglages d’app dans le catalogue
-
-| Clair | Sombre |
-| --- | --- |
-| ![Réglages qBittorrent dans le catalogue, thème clair](screenshots/light/catalog-settings.png) | ![Réglages qBittorrent dans le catalogue, thème sombre](screenshots/dark/catalog-settings.png) |
-
----
-
-## Sauvegardes
-
-- Utilisez la sauvegarde intégrée si vous avez une installation à conserver.
-- Sauvegardez aussi le dossier **config** sur l’hôte (et le montage des sauvegardes si vous en utilisez un).
-- Les fichiers média sont à part — sauvegardez-les avec votre stratégie NAS ou disque habituelle.
-
----
-
-## Mettre à jour les apps et mettre à jour AIO
-
-| Quoi | Comment |
-|------|-----|
-| **AIO lui-même** (tableau de bord + superviseur) | Tirez une nouvelle image Docker et **recréez le conteneur** ([Installer](INSTALL.md)). Réglages → Mises à jour indique seulement quand `:latest` a bougé |
-| **Apps installées** (Sonarr, Seerr et le reste) | **Réglages → Mises à jour**. Mettez à jour une app ou toutes. La progression est là, et Catalogue et Accueil affichent **Mise à jour…**. Le tableau de bord continue de répondre. Les planifications sont **désactivées** par défaut |
-
-L’image ne met pas ces apps à jour toute seule. Lisez les notes de version sur GitHub si quelque chose d’important a changé.
-
----
-
-## Accrocs fréquents
-
-| Problème | Essayez ceci |
-|---------|----------|
-| Écran vide ou boucle de connexion sur une app | Effacez les données du site pour cette URL ; vérifiez que l’app tourne |
-| NeutArr demande un jeton d’installation | **Catalogue → NeutArr → Réglages** une fois NeutArr démarré. Le jeton disparaît dès que le compte NeutArr existe |
-| Erreurs de droits à l’écriture | Le propriétaire du dossier hôte doit correspondre à l’utilisateur du conteneur (`PUID`/`PGID`) |
-| Sonarr importe mais copie les fichiers | Téléchargements et médias doivent partager un système de fichiers pour les liens physiques |
-| Ça marche à la maison, pas en données mobiles | Il faut un tunnel (+ Access de préférence) ; les IP du LAN ne sont pas joignables en données mobiles |
-| Deux Sonarr en conflit | Retirez un conteneur Sonarr supplémentaire ; seul AIO doit le faire tourner |
-| Le graphique serveur ne compte que ce conteneur | Montez `/sys` de l’hôte en lecture seule sur `/host/sys` et recréez ([Docker](deploy/DOCKER.md)) |
-| Ajouts récents Jellyfin semblent courts | Faites défiler la rangée — d’autres pages se chargent. Si la rangée reste vide, mettez une clé d’API Jellyfin dans **Réglages → Page d’accueil** |
-| Ajouts récents Plex s’arrêtent à 20 | Cette liste, ce sont les 20 derniers de Plex |
-| qBittorrent / Prowlarr / Flaresolverr restent arrêtés après le boot | Le VPN est actif sans poignée de main. Vérifiez **Réglages → Réseau** ; AIO réessaie le tunnel et démarre ces apps quand il est à nouveau up. Un **Stop** manuel du VPN annule cette reprise |
-| Indexeurs Prowlarr indisponibles / échecs RSS | Souvent un délai DNS via le VPN. Après une mise à jour d’AIO, recréez le conteneur, puis **Test All** dans Prowlarr (et retestez dans Sonarr/Radarr) pour effacer l’ancien backoff. Un partage de diagnostic montre les hits du cache DNS VPN et les échecs par résolveur |
-| cloudflared journalise connection refused au boot | Attendu sur les anciennes images où le tunnel démarrait avant les apps. Les images actuelles démarrent Cloudflare en dernier ; recréez depuis un `nightly` / `latest` actuel |
-
----
-
-## Et ensuite
-
-- Liste pour une nouvelle installation : [Installer](INSTALL.md)  
-- Accès distant : [Cloudflare Tunnel](deploy/CLOUDFLARE.md)  
-- Fermer la porte des URL publiques : [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md)
+Connexions personnalisées, VPN, clés et diagnostics sont dans le guide avancé du tableau de bord. [Avancé](USAGE_ADVANCED.md).

@@ -1,5 +1,8 @@
 # Linux / LXC (sans Docker)
 
+!!! info "Avancé"
+    Cette page concerne une configuration technique. Elle n’est pas nécessaire pour une première installation locale. [Guides débutants](../docs/INSTALL.md).
+
 Utilisez ceci sur Debian, Ubuntu ou un LXC Proxmox si vous préférez **ne pas** utiliser Docker.  
 Sonarr et le reste tournent toujours comme des processus sous AIO — vous ne créez pas d’unité systemd par app.
 

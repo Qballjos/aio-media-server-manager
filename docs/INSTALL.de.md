@@ -1,113 +1,87 @@
-# Installieren
+# Deine erste AIO-Installation
 
-AIO in drei Schritten starten: Ordner anlegen, die App starten, das Dashboard öffnen.
+Du musst nicht jede App kennen. Wähle deinen vorhandenen Server und folge genau einer Anleitung.
 
-!!! tip "Lieber ein kurzer Weg?"
-    Die meisten beginnen mit **[Docker](deploy/DOCKER.md)** oder ihrer NAS-Anleitung (**[Unraid](deploy/UNRAID.md)** · **[Synology](deploy/SYNOLOGY.md)** · **[TrueNAS](deploy/TRUENAS.md)**) und kommen danach für Ports und Updates hierher zurück.
+!!! info "Was wird installiert?"
+    AIO betreibt die Medientools in **einem Container**, einer verpackten Anwendung auf deinem Server. Installiere AIO einmal und füge Apps über **AIO → Katalog** hinzu, statt separate Container daneben anzulegen.
 
-## Bevor Sie anfangen
+## 1. Wähle deinen Server
 
-1. **Wählen Sie, wo es läuft** — Unraid, Synology, TrueNAS, normales Docker oder natives Linux.
-2. **Planen Sie zwei Arten von Speicher:**
-   - **Config** — Einstellungen und Datenbanken (klein, davon eine Sicherung machen)
-   - **Downloads + Medien** — die großen Dateien (auf **derselben** Platte/Freigabe lassen, damit Hardlinks funktionieren)
-3. **Kennen Sie Ihre Benutzer-ID** — unter Linux/NAS laufen Apps oft als bestimmter Benutzer (`PUID` / `PGID`). Der muss zum Besitzer Ihrer Ordner passen, sonst gibt es Rechtefehler.
+| Server | Anleitung | Zuerst prüfen |
+|---|---|---|
+| Unraid | [Unraid](deploy/UNRAID.md) | Array gestartet; SSD/NVMe-Pool eingebunden |
+| Synology NAS | [Synology](deploy/SYNOLOGY.md) | Container Manager installiert und gestartet; DSM legt den docker-Ordner an |
+| TrueNAS SCALE | [TrueNAS](deploy/TRUENAS.md) | Zugriff zum Anlegen eigener Apps und Speicherordner |
+| Anderer Docker-Server | [Docker](deploy/DOCKER.md) | Docker und Docker Compose laufen |
+| Linux / Proxmox LXC ohne Docker | [Linux](ADVANCED.md) | Erfahrung mit Linux-Serververwaltung |
 
-Sie brauchen nur **einen** AIO-Container. Installieren Sie Sonarr, Radarr oder Download-Clients nicht als eigene Apps daneben.
+Befehle gehören auf den Server, nicht auf den Laptop, auf dem du diese Seite liest. Danach kannst du das Dashboard auf Laptop oder Handy öffnen.
 
-**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
-**Architekturen:** `linux/amd64`, `linux/arm64` (Flaresolverr ist nur x86_64 und auf ARM ausgeblendet)
+## 2. Wo liegen die Dateien?
 
-## Plattform wählen
+Die Plattformanleitung erstellt die richtigen Ordner. Übernimm keine Platzhalterpfade einer anderen Plattform.
 
-| Wo es läuft | Anleitung |
-|------------------|--------|
-| Docker (jeder Host) | [Docker](deploy/DOCKER.md) |
-| Unraid | [Unraid](deploy/UNRAID.md) |
-| Synology | [Synology](deploy/SYNOLOGY.md) |
-| TrueNAS SCALE | [TrueNAS](deploy/TRUENAS.md) |
-| Debian / Ubuntu / Proxmox LXC (ohne Docker) | [Linux](deploy/LINUX.md) |
-| Alle Möglichkeiten | [Überblick](deploy/README.md) |
+| Ordner | Inhalt | Empfehlung |
+|---|---|---|
+| Config | Einstellungen, Konten, Datenbanken | Sichern |
+| Download-Staging | Laufende Downloads und Entpacken | SSD/NVMe; Platz für Download und entpackte Dateien |
+| Fertige Torrents | Dateien für weiteres Seeding | HDD möglich |
+| Medienbibliothek | Geordnete Filme und Serien | Große HDDs möglich |
+| Backups | Kopien der Einstellungen | Möglichst auf einem anderen Datenträger |
 
-Jede Plattform-Anleitung beginnt mit: SSH öffnen → Ordner anlegen → AIO starten.
+SSD-Downloads und eine HDD-Bibliothek funktionieren zusammen. Verwende zunächst die Ordner der Plattformanleitung; eigener Speicher steht unter Fortgeschritten.
 
-## Ordner auf dem Host
+!!! tip "Zuerst bei den Vorgaben bleiben"
+    Ändere Pfade und Ports nur bei Konflikten. VPN, Domain und Cloudflare sind optional und können später eingerichtet werden.
 
-Per SSH anmelden und etwa dies anlegen (Pfade hängen von der Plattform ab — folgen Sie Ihrer Anleitung):
+## 3. AIO öffnen
 
-```bash
-ssh user@host
+Sobald der Container läuft, öffne im Browser:
 
-mkdir -p "$HOME/aio-media-manager/downloads" "$HOME/aio-media-manager/media"
-sudo mkdir -p /path/to/config /path/to/config/vpn /path/to/backups
-id   # note uid= (PUID) and gid= (PGID)
-sudo chown -R "$PUID:$PGID" "$HOME/aio-media-manager" /path/to/config /path/to/backups
+```text
+http://DEINE-SERVER-IP:8080
 ```
 
-**Downloads** und **Medien** als Geschwister unter einem Ordner lassen, damit *Arr Hardlinks nutzen kann. Einen eigenen Ordner **backups** nach `/backups` einhängen, wenn möglich (besser eine andere Platte als die Config).
+Ersetze die IP durch die Adresse deines NAS. `http://192.168.1.50:8080` ist nur ein Beispiel. Verwende bei geänderter Hostport-Zuordnung deinen eigenen Port.
 
-In diesen Mounts legt AIO Bibliotheken an, etwa `media/tv`, `media/movies` und `downloads/complete`.
+**Erwartetes Ergebnis:** die Kontoerstellung für AIO. Lege Benutzername, E-Mail und Passwort fest. Bei einem Anmeldebildschirm besteht bereits ein Konto; melde dich damit an.
 
-## Nach dem Start
+## 4. Den Assistenten abschließen
 
-1. Dashboard öffnen: `http://YOUR-SERVER-IP:8080`  
-   (Anderen Port nutzen, wenn Sie einen gemappt haben.)
-2. Administratorkonto anlegen (Benutzername, **E-Mail**, Passwort).
-3. Den Assistenten der Ersteinrichtung abschließen und danach [Das Dashboard nutzen](USAGE.md) folgen.
+1. Wähle nur benötigte Apps, etwa Jellyfin zur Wiedergabe und deine Automatisierungs-/Downloadtools.
+2. Ein Usenet-Konto brauchst du nur für einen Usenet-Downloader. AIO liefert kein Abonnement.
+3. VPN und Fernzugriff kannst du vorerst ausgeschaltet lassen.
+4. Warte auf die Installation und prüfe im Katalog den Status **Running**.
+5. Öffne die App über **Open UI**. Jellyfin/Plex können eigene Konten und Bibliothekseinstellungen benötigen; das AIO-Konto ersetzt diese nicht.
 
-Nach `docker compose pull` den Container **neu erstellen** (nicht nur neu starten), damit neue Ports und Laufzeiten gelten. Das aktualisiert AIO. Installierte Apps aktualisieren Sie unter **Einstellungen → Updates** im Dashboard. Diese Zeitpläne sind standardmäßig aus.
+**Erwartetes Ergebnis:** Home, Katalog und Einstellungen sowie deine Apps im Katalog. Die erste Installation kann dauern. Bei Fehlern zuerst die Logs prüfen, statt immer wieder neu zu installieren.
 
-Die Compose-Datei des Repos hängt Host-`/sys` nur lesend unter `/host/sys` ein, damit die Server-Karte auf Start die Netzwerkkarten des Servers zählt. Eine ältere Compose-Datei ohne diese Zeile zeigt nur den Verkehr des Containers, bis Sie die Zeile ergänzen und neu erstellen. Siehe [Docker](deploy/DOCKER.md).
+## 5. Home gestalten
 
-## Optional: Apps von außerhalb erreichen
+[Probiere die visuelle Widget-Demo](index.md#app-preview) und folge der [Dashboard-Anleitung](USAGE.md#customize-home). Sie zeigt Layout-Symbol, Hinzufügen, Verschieben und Größenänderung. Leere Widgets warten häufig auf Inhalte einer verbundenen App.
 
-1. [Cloudflare Tunnel](deploy/CLOUDFLARE.md) — HTTPS, ohne Routerports zu öffnen  
-2. [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md) — eine Anmeldung, damit Fremde die Admin-Apps nicht öffnen können
+## Hilfe bei Problemen
 
-## Ports {#ports}
+| Problem | Nächster Schritt |
+|---|---|
+| Browser verbindet nicht | Läuft AIO? Stimmen IP und Hostport? Zuerst im selben Heimnetz testen. |
+| Port belegt | Hostseite der Portzuordnung ändern und den neuen Port im Browser öffnen. |
+| Permission denied | Ordnerbesitz laut Plattformanleitung prüfen. PUID/PGID sind die numerischen Benutzer-/Gruppen-IDs von AIO. |
+| Synology docker-Ordner fehlt | Zuerst DSM Container Manager installieren und starten; Ordner nicht vorher selbst anlegen. |
+| Widget leer | Zugehörige App im Katalog und die [Widget-Anleitung](USAGE.md#customize-home) prüfen. |
+| Downloads langsam | HDD-/SSD-Zuordnung für Download und Entpacken laut NAS-Anleitung prüfen. |
+| Open UI funktioniert nicht | App-Status und veröffentlichten Port prüfen. |
 
-Die Oberfläche des Managers nutzt **8080**. Kind-Apps lauschen im selben Container. Compose und NAS-Vorlagen veröffentlichen diese Ports auf dem Host, damit **Oberfläche öffnen** funktioniert (`http://YOUR-IP:8989` für Sonarr und so weiter). Host-Netzwerk ist eine Alternative, wenn Sie nicht jeden Port mappen wollen.
+## Updates und Fernzugriff
 
-| Anwendung | Standardport |
-|-------------|--------------|
-| <img src="../assets/logo-aio-media-manager.png" alt="" class="aio-app-icon" /> Manager-Oberfläche | 8080 |
-| <img src="../assets/app-icons/qbittorrent.svg" alt="" class="aio-app-icon" /> qBittorrent | 8081 |
-| <img src="../assets/app-icons/shelfmark.png" alt="" class="aio-app-icon" /> Shelfmark | 8084 |
-| <img src="../assets/app-icons/sabnzbd.svg" alt="" class="aio-app-icon" /> SABnzbd | 8085 |
-| <img src="../assets/app-icons/jellyfin.svg" alt="" class="aio-app-icon" /> Jellyfin | 8096 |
-| <img src="../assets/app-icons/flaresolverr.png" alt="" class="aio-app-icon" /> Flaresolverr | 8191 (nur x86_64) |
-| <img src="../assets/app-icons/bazarr.svg" alt="" class="aio-app-icon" /> Bazarr | 6767 |
-| <img src="../assets/app-icons/nzbget.svg" alt="" class="aio-app-icon" /> NZBGet | 6789 |
-| <img src="../assets/app-icons/lidarr.svg" alt="" class="aio-app-icon" /> Lidarr | 8686 |
-| <img src="../assets/app-icons/sonarr.svg" alt="" class="aio-app-icon" /> Sonarr | 8989 |
-| <img src="../assets/app-icons/radarr.svg" alt="" class="aio-app-icon" /> Radarr | 7878 |
-| <img src="../assets/app-icons/prowlarr.svg" alt="" class="aio-app-icon" /> Prowlarr | 9696 |
-| <img src="../assets/app-icons/seerr.svg" alt="" class="aio-app-icon" /> Seerr | 5055 |
-| <img src="../assets/app-icons/grimmory.svg" alt="" class="aio-app-icon" /> Grimmory | 6060 |
-| <img src="../assets/app-icons/neutarr.svg" alt="" class="aio-app-icon" /> NeutArr | 9705 |
-| <img src="../assets/app-icons/recyclarr.svg" alt="" class="aio-app-icon" /> Recyclarr | keine (nur CLI) |
-| <img src="../assets/app-icons/plex.svg" alt="" class="aio-app-icon" /> Plex | 32400 |
+AIO selbst wird durch Abrufen des neuen Images und Neuerstellen des Containers mit denselben Ordnerzuordnungen aktualisiert; ein Neustart allein reicht nicht. Die Apps darin aktualisierst du über **Einstellungen → Updates**; Zeitpläne sind standardmäßig aus. Richte [Cloudflare Tunnel](deploy/CLOUDFLARE.md) und [Access](deploy/CLOUDFLARE_ACCESS.md) erst ein, wenn der lokale Zugriff funktioniert.
 
-## Häufige Umgebungsvariablen
+Die technische Referenz steht getrennt unter Fortgeschritten.
 
-Kopieren Sie [`.env.example`](../.env.example) für native Installationen. Vieles davon lässt sich später auch unter **Einstellungen** setzen.
+## Fortgeschritten
 
-| Variable | Zweck |
-|----------|---------|
-| `PUID` / `PGID` | Benutzer, als der die Apps laufen (muss zum Ordnerbesitzer passen) |
-| `TZ` / `AMM_TIMEZONE` | Zeitzone für Protokolle und Zeitpläne |
-| `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Pfade im Container (Host-Mounts ändern Sie in Compose) |
-| `GITHUB_TOKEN` | Optional; höheres GitHub-API-Limit für Updates |
-| `AMM_CLOUDFLARE_TUNNEL_*` | Optionaler Tunnel für Fernzugriff (`cloudflared` startet nach den Apps beim Boot) |
-| `AMM_VPN_*` | Optionales VPN für qBittorrent, Prowlarr und Flaresolverr (sie warten auf den Tunnel; lokaler DNS-Cache für diese Apps) |
+Diese Seiten behandeln eigene Konfigurationen und technische Fehlersuche. Sie sind keine verpflichtenden Schritte nach der Installation. [Fortgeschritten](ADVANCED.md).
 
-## Wenn etwas schiefgeht
+### Ports und Konfigurationsvariablen {#ports}
 
-- **Oberfläche öffnet nicht** — läuft der Container? Stimmt der Host-Port?
-- **Zugriff verweigert** — der Ordnerbesitzer muss zu `PUID`/`PGID` passen.
-- **Oberfläche öffnen einer Kind-App scheitert im LAN** — diesen App-Port veröffentlichen (Tabelle oben) oder Host-Netzwerk nutzen; alte Compose-Dateien, die nur `8080` mappen, müssen aktualisiert werden.
-- **Apps doppelt** — eigene Sonarr-/Radarr-Container entfernen; nur AIO soll sie ausführen.
-
-## Entwicklung
-
-Um am Code zu arbeiten, den Checkout **in Docker** laufen lassen (Linux-Binaries). Siehe [Contributing](../CONTRIBUTING.md) und `./scripts/test-env.sh up`.
+[Ports und Konfigurationsvariablen](REFERENCE.md#ports).

@@ -1,0 +1,3 @@
+# Beginner and advanced documentation
+
+Replace mixed platform guides with one beginner path per platform. Each route explains where to click/type, what to replace, and what success looks like. Keep the visual Home widget walkthrough. Preserve existing technical material in explicitly separate advanced pages, with a top-level advanced navigation section. Move ports/settings and native Linux/remote access to that section. Maintain all four languages and check built links and command examples. This task changes documentation and site navigation only; it does not alter installers or the running application.

@@ -1,111 +1,80 @@
-# Synology
+# Synology: AIO Schritt für Schritt installieren
 
-Führen Sie AIO als **ein** Container-Manager-**Projekt** aus. Fügen Sie keine zusätzlichen Dienste oder eigene Sonarr-/Radarr-/Download-Container daneben hinzu.
+Diese Anleitung gilt für eine **neue Installation**. Du erstellst ein Projekt in Container Manager, ohne selbst eine Konfigurationsdatei zu schreiben.
 
-**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
-Ihr DSM muss `linux/amd64`- oder `linux/arm64`-Images ausführen können.
+## Vor dem Start
 
-## Ordner und das Projekt anlegen (SSH)
+- Eine Synology mit Container Manager im Paket-Zentrum.
+- Dein eigenes DSM-Konto mit Administratorrechten und dessen Passwort; nicht einfach den Beispielnamen admin verwenden.
+- Ein Computer im selben Heimnetz; DSM bleibt im Browser geöffnet.
 
-Aktivieren Sie SSH (**Systemsteuerung → Terminal und SNMP → SSH-Dienst aktivieren**), dann:
+## 1. Container Manager installieren
+
+Öffne **Paket-Zentrum**, suche **Container Manager**, installiere und öffne ihn.
+
+**Prüfen:** File Station zeigt die Freigabe **docker**. Nicht vor der Paketinstallation selbst erstellen. Diese Route verwendet volume1; für andere Volumes siehe [Fortgeschritten](SYNOLOGY_ADVANCED.md).
+
+## 2. Persönlichen Ordner und SSH aktivieren
+
+Aktiviere **Systemsteuerung → Benutzer und Gruppe → Erweitert → Benutzer-Home-Dienst / User Home Service**. Damit erhält dein Konto einen persönlichen Medienordner.
+
+Aktiviere dann **Systemsteuerung → Terminal und SNMP → Terminal → SSH-Dienst aktivieren**, lasse Port 22 und wähle Übernehmen.
+
+**Prüfen:** File Station zeigt home und SSH ist angehakt.
+
+## 3. Mit der NAS verbinden
+
+Öffne **Terminal** auf macOS oder **Windows Terminal / PowerShell** auf Windows. Befehle gehören hier hinein, nicht in die Browseradresse. Ersetze Benutzer und NAS-IP in `ssh BENUTZER@NAS-IP`. Beispiel:
 
 ```bash
-ssh admin@<nas-ip>
+ssh alex@192.168.1.50
 ```
 
-Das Installationsskript legt `/volume1/docker/aio-media-manager` an (mit `config/` und `backups/`) und einen Datenbaum im **DSM-Benutzer-Home** (`File Station → Home → aio-media-manager` mit `downloads/` und `media/`). Dieser Pfad ist ein echtes Benutzer-Home, deshalb kann DSM ihn anzeigen. Ein bloßer Ordner `/volume1/data` ist kein freigegebener Ordner und erscheint nicht in File Station; das Skript erneut ausführen verschiebt diesen Baum ins Home, falls er noch existiert. Downloads und Medien bleiben ein Bind (`/data`), damit *Arr Hardlinks nutzen kann. Config-Sicherungen gehen auf den Mount `/backups`; nehmen Sie diesen Ordner in eine Hyper-Backup-Aufgabe auf, oder zeigen Sie `BACKUPS=` auf ein anderes Volume.
+Verwende deine eigenen Daten. Die NAS-IP steht in der DSM-Adresse oder unter Systemsteuerung → Netzwerk → Netzwerkschnittstelle. Bestätige die erste Verbindung nur bei richtiger Adresse. Beim Eingeben des DSM-Passworts sind keine Zeichen sichtbar; das ist normal.
 
-Der Benutzer-Home-Dienst muss an sein (Systemsteuerung → Benutzer und Gruppe → Erweitert). SSH als der DSM-Benutzer, dessen Home die Bibliotheken halten soll, oder setzen Sie `HOME_USER=`.
+**Prüfen:** Die Eingabezeile nennt jetzt deine NAS. Der nächste Befehl läuft dort.
+
+## 4. Projektdateien vorbereiten
+
+Füge den ganzen Block in das verbundene Terminal ein und drücke Enter:
 
 ```bash
-id
 curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sudo sh
 ```
 
-Wenn SSH `admin` ist, Home aber einem anderen DSM-Benutzer gehören soll:
+Das Skript erstellt Ordner und Projektdatei; AIO startet noch nicht. Sudo fragt gegebenenfalls nach deinem DSM-Passwort.
 
-```bash
-id media
-sudo HOME_USER=media PUID=1026 PGID=100 sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
-```
+**Prüfen:** Am Ende steht Container Manager project files are ready. Notiere den ausgegebenen Compose-Pfad. Bei einer Fehlermeldung hier stoppen.
 
-Anderes Volume oder andere Pfade:
+## 5. Projekt in DSM erstellen
 
-```bash
-sudo VOLUME=/volume2 \
-     HOME_USER=media \
-     BACKUPS=/volume1/backups/aio-media-manager \
-     PUID=1026 PGID=100 \
-     sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
-```
+Öffne **Container Manager → Projekt → Erstellen**.
 
-Um Bibliotheken auf einem freigegebenen DSM-Ordner statt im Home zu lassen, setzen Sie `DATA=` auf diesen Ordner (weiterhin ein Elternordner für `downloads` und `media`):
+1. Name: aio-media-manager.
+2. Pfad: der ausgegebene Ordner, normalerweise docker → aio-media-manager.
+3. Die dort vorhandene docker-compose.yml verwenden. Falls DSM einen Upload verlangt, diese erzeugte Datei auswählen und keine zweite Konfiguration anlegen.
+4. Einstellungen beibehalten, Assistent abschließen und Projekt starten.
 
-```bash
-sudo DATA=/volume1/media/aio-media-manager \
-     PUID=1026 PGID=100 \
-     sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
-```
+**Prüfen:** Ein Container aio-media-manager wird aktiv. Der erste Download kann einige Minuten dauern.
 
-Die erzeugte Datei ist `/volume1/docker/aio-media-manager/docker-compose.yml` (kein `build:`-Schlüssel — Container Manager holt GHCR). Eine statische Kopie liegt in [`synology/docker-compose.yml`](synology/docker-compose.yml).
+## 6. Dashboard öffnen
 
-Wenn GHCR privat ist: `sudo docker login ghcr.io`, bevor Sie das Projekt starten.
+Öffne **http://NAS-IP:8080** mit deiner wirklichen NAS-Adresse.
 
-## In Container Manager importieren
+**Prüfen:** AIO zeigt die Kontoerstellung. Erstelle das Administratorkonto und wähle im Assistenten nur benötigte Apps. Dateien liegen normalerweise in File Station → home → aio-media-manager. Mit `exit` beendest du SSH; SSH später abzuschalten stoppt AIO nicht.
 
-1. Öffnen Sie **Container Manager → Projekt → Erstellen**.
-2. **Projektname:** `aio-media-manager`
-3. **Pfad:** `/volume1/docker/aio-media-manager` (derselbe Ordner, den das Skript genutzt hat).
-4. **Quelle:** nutzen Sie die **vorhandene** `docker-compose.yml` (fügen Sie keine zweite Compose-Datei ein und keine weiteren Dienste hinzu).
-5. Starten Sie das Projekt.
+Danach: [Dashboard kennenlernen](../docs/USAGE.md).
 
-Die Oberfläche sollte einen einzelnen Dienst `aio-media-manager` zeigen. Öffnen Sie `http://<nas-ip>:8080` für den Manager. **Oberfläche öffnen** auf Katalogkarten nutzt die App-Ports (Sonarr `8989`, Radarr `7878`, …), die das Projekt-Compose jetzt veröffentlicht. Wenn Sie Compose vor dieser Änderung erzeugt haben, kopieren Sie die `ports:`-Liste aus [`synology/docker-compose.yml`](synology/docker-compose.yml) in die Projektdatei und erstellen Sie den Container neu.
+## Wenn es nicht klappt
 
-Das Installationsskript hängt Host-`/sys` auch nur lesend unter `/host/sys` ein, damit die Server-Karte auf Start den Netzwerkverkehr des NAS zeigt. Wenn das Projekt-Compose davor erzeugt wurde, fügen Sie `- /sys:/host/sys:ro` unter `volumes:` ein und erstellen Sie neu. Ohne diese Zeile ist die Grafik nur der Verkehr dieses Containers. Installierte Apps aktualisieren Sie später unter **Einstellungen → Updates** (Zeitpläne standardmäßig aus). Das Projekt neu zu erstellen aktualisiert AIO.
+| Problem | Nächster Schritt |
+|---|---|
+| Container Manager fehlt | Prüfe die Unterstützung deines NAS-Modells. Ein selbst erstellter docker-Ordner ersetzt das Paket nicht. |
+| Skriptfehler oder Permission denied | DSM-Konto, laufenden Container Manager und docker-Ordner prüfen. Fehlermeldung aufbewahren. |
+| AIO öffnet nicht | Projektstatus prüfen; NAS-IP statt Laptop-IP mit :8080 verwenden. |
 
-Zum Starten über SSH statt über die Oberfläche:
+## Fortgeschritten
 
-```bash
-sudo docker compose -f /volume1/docker/aio-media-manager/docker-compose.yml pull
-sudo docker compose -f /volume1/docker/aio-media-manager/docker-compose.yml up -d
-```
+Für eigene Speicherorte, SSD-Optionen, bestehende Installationen und technische Einstellungen: [SYNOLOGY — Fortgeschritten](SYNOLOGY_ADVANCED.md).
 
-Danach listet Container Manager es weiter, wenn der Projektpfad übereinstimmt.
-
-## Hardware-Transkodierung
-
-Wenn `/dev/dri` existiert, fügen Sie diesen Block unter `aio-media-manager` in die Projekt-Compose-Datei ein, erstellen Sie neu und starten Sie das Projekt:
-
-```yaml
-    devices:
-      - /dev/dri:/dev/dri
-```
-
-```bash
-ls -l /dev/dri
-```
-
-## VPN (qBittorrent, Prowlarr, Flaresolverr)
-
-```bash
-sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
-# scp wg0.conf into that directory
-```
-
-Setzen Sie `AMM_VPN_ENABLED=true` im Projekt-Compose und starten Sie das Projekt erneut. Solange das VPN an ist, können Prowlarr, qBittorrent und Flaresolverr das Haus-WAN nicht nutzen: sie verlassen das Netz nur durch den Tunnel. Ist der Tunnel beim Boot down, warten sie; AIO versucht das VPN erneut und startet sie, sobald der Handshake zurück ist. Ein lokaler DNS-Cache für diese Apps (an den Tunnel gebunden) verringert Indexer-Fehler durch kurze DNS-Timeouts. Der Synology-Kernel hat oft kein WireGuard-Modul; das Appliance-Image enthält **wireguard-go** als Rückfall und legt `/dev/net/tun` an, wenn es fehlt. Das funktioniert nur, wenn das Projekt `privileged: true` bleibt (das Installationsskript setzt das). Erstellen Sie den Container nach dem Holen eines aktuellen Images neu und speichern Sie das VPN danach unter **Einstellungen → Netzwerk**. OpenVPN nutzt denselben Geräteknoten und braucht ebenfalls den privilegierten Modus. Unter DSM kann die Synology-ACL die VPN-App-UID (910) nach `chown` blockieren; wenn diese Apps ihre Config-Ordner nicht schreiben können, löschen Sie die ACL auf dem Host-Pfad wie in den Logs beschrieben.
-
-## Cloudflare Tunnel
-
-Fügen Sie keinen zweiten Projektdienst hinzu. Schreiben Sie das Token auf das NAS und aktivieren Sie den Tunnel danach unter **Einstellungen → Netzwerk** (über Neustarts hinweg gespeichert). Optional setzen Sie `AMM_CLOUDFLARE_TUNNEL_ENABLED=true` im Projekt-Compose. Siehe [CLOUDFLARE.md](CLOUDFLARE.md).
-
-```bash
-sudo mkdir -p /volume1/docker/aio-media-manager/config/cloudflare
-sudo tee /volume1/docker/aio-media-manager/config/cloudflare/tunnel.token >/dev/null <<'EOF'
-eyJ...paste-token...
-EOF
-sudo chmod 600 /volume1/docker/aio-media-manager/config/cloudflare/tunnel.token
-```
-
-## Rechte
-
-`PUID`/`PGID` in der Compose-Datei müssen zum `chown` passen, den das Skript angewendet hat. Wenn Apps nicht schreiben können, korrigieren Sie den Besitzer über SSH, statt als root zu laufen.
+[Offizielle Produkthilfe: Synology](https://kb.synology.com/en-global/DSM/help/ContainerManager/docker_project?version=7).

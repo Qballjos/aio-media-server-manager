@@ -1,65 +1,101 @@
-# TrueNAS SCALE
+# TrueNAS: AIO Schritt für Schritt
 
-Stellen Sie AIO als **eine** Custom App / Docker-Installation bereit. Installieren Sie Sonarr, Radarr oder Download-Clients nicht zusätzlich als eigene SCALE-Apps, wenn Sie dieses Alles-in-einem-Modell wollen.
+Diese Route nutzt das **Custom-App-Formular** ab TrueNAS SCALE 24.10. Zuerst laufen AIO und Jellyfin; weitere Apps und Ports kommen später.
 
-**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`
+## Vor dem Start
 
-## Datasets und Ordner anlegen (SSH)
+- Rechte für Apps und Speicherverwaltung in TrueNAS.
+- Ein vorhandener Pool; keinen neuen Pool erstellen oder formatieren, nur um AIO zu installieren.
+- Eingerichteter Apps-Speicher; eine anfängliche Poolauswahl zuerst abschließen.
 
-Aktivieren Sie SSH (**System → Services → SSH**), dann:
+## 1. Drei AIO-Ordner erstellen
 
-```bash
-ssh admin@<truenas-ip>
-```
+Unter **Datasets** den vorhandenen Pool wählen und mit **Add Dataset** aio-config, aio-data und aio-backups erstellen. Ein Dataset ist hier ein von TrueNAS verwalteter Speicherordner.
 
-Ersetzen Sie `tank` durch den Namen Ihres Pools. Die Config bleibt auf einem Apps-Dataset. **Downloads und Medien kommen ins Home des angemeldeten Benutzers**, damit die Files-Oberfläche sie anzeigen kann (`~/aio-media-manager`). Lassen Sie die beiden als Verzeichnisse auf **demselben** Dataset, damit *Arr Hardlinks nutzen kann.
+Die angezeigten vollständigen Pfade notieren. Ein Pool media ergäbe etwa /mnt/media/aio-config; deinen eigenen Poolnamen verwenden.
 
-```bash
-sudo zfs create -p tank/apps/aio-media-manager
-sudo zfs create -p tank/backups/aio-media-manager
+**Prüfen:** drei neue Datasets. Keine vorhandenen fremden Datenordner für diese Schritte auswählen.
 
-LOGIN_USER="${SUDO_USER:-$(id -un)}"
-HOME_DIR="$(getent passwd "${LOGIN_USER}" | cut -d: -f6)"
-DATA="${HOME_DIR}/aio-media-manager"
+## 2. App-Konto notieren
 
-sudo mkdir -p \
-  /mnt/tank/apps/aio-media-manager/vpn \
-  "${DATA}/downloads" \
-  "${DATA}/media"
-```
+Unter **Credentials → Local Users / Users** apps suchen und die numerische Benutzer- und Gruppen-ID notieren, oft 568, aber die eigenen Werte verwenden. Das sind Kennungen für Ordnerzugriff, keine Passwörter.
 
-`tank/backups/aio-media-manager` hält die Konfigurationssicherungen. Ein eigenes Dataset können Sie nach eigenem Zeitplan snapshotten oder replizieren. Legen Sie es auf einen anderen Pool, wenn Sie einen haben.
+**Prüfen:** zwei Nummern sind notiert. Zugriff wird unten im App-Formular vergeben; nicht die Rechte des ganzen Pools ändern.
 
-Serien, Filme, Anime, Musik, Bücher, Comics, vollständige/unvollständige Downloads, Torrent-Kategorien und Transcode-Caches werden beim ersten Start in diesen Mounts angelegt.
+## 3. App-Formular öffnen
 
-Setzen Sie den Besitzer auf Ihren Medienbenutzer (TrueNAS `apps` ist oft UID/GID `568`; prüfen Sie mit `id apps` oder `id`):
+Unter **Apps → Discover Apps → Custom App** das normale Formular wählen, nicht Install via YAML.
 
-```bash
-id apps
-sudo chown -R 568:568 \
-  /mnt/tank/apps/aio-media-manager \
-  "${DATA}" \
-  /mnt/tank/backups/aio-media-manager
-```
+| Feld | Wert |
+|---|---|
+| Application name | aio-media-manager |
+| Image repository | ghcr.io/qballjos/aio-media-server-manager |
+| Image tag | latest |
 
-Wenn User Home nicht aktiv ist, legen Sie es unter Credentials → Users an, oder setzen Sie `DATA` auf einen Ordner, den Sie in **Files** sehen (weiterhin ein Elternordner für `downloads` und `media`).
+**Prüfen:** bei separatem Tag-Feld kein zusätzliches :latest an die Repository-Adresse hängen.
 
-## Custom App
+## 4. Ordner verbinden
 
-1. **Apps → Discover → Custom App** (oder Launch Docker Image).
-2. Image: `ghcr.io/qballjos/aio-media-server-manager:latest`
-3. Portweiterleitung: `8080` → `8080` plus die WebUI-Ports der Kind-Apps aus [INSTALL.md](../docs/INSTALL.md#ports) (oder Host-Netzwerk).
-4. Speicher (Pfade aus den SSH-Befehlen oben):
-   - `/mnt/tank/apps/aio-media-manager` → `/config`
-   - `$HOME/aio-media-manager` → `/data`
-   - `/mnt/tank/backups/aio-media-manager` → `/backups`
-   - `/sys` → `/host/sys` (nur lesend), damit die Server-Karte auf Start den Netzwerkverkehr des Servers zeigt. Ohne diesen Mount ist die Grafik nur der Verkehr dieses Containers.
-5. Umgebung: `PUID` / `PGID` = die UID/GID aus Ihrem `chown`, plus `TZ`, `AMM_DOWNLOAD_DIR=/data/downloads` und `AMM_MEDIA_DIR=/data/media`. Optional `GITHUB_TOKEN` für das GitHub-Limit (oder Einstellungen → Updates nach der Ersteinrichtung).
-6. Privileged / `NET_ADMIN`, wenn Sie VPN für qBittorrent, Prowlarr und Flaresolverr einschalten. Diese Apps warten auf einen Live-Tunnel; ihr DNS wird über den Tunnel gecacht (Usenet bleibt draußen). Details: [DOCKER.md](DOCKER.md#optionales-vpn).
-7. GPU: reichen Sie `/dev/dri` durch (Intel/AMD) oder die NVIDIA-Laufzeit beim Transkodieren.
+Unter **Storage → Host Path** drei schreibbare Zuordnungen erstellen:
 
-Die Oberfläche des Managers ist `http://<truenas-ip>:8080`. Erstellen Sie die Custom App nach einem Image-Update neu, damit neu veröffentlichte Ports gelten.
+| Echter NAS-Pfad | Mount path in AIO |
+|---|---|
+| Dein aio-config-Pfad | /config |
+| Dein aio-data-Pfad | /data |
+| Dein aio-backups-Pfad | /backups |
 
-## Updates
+Jede Zuordnung schreibbar lassen. Bei allen drei **Host Path**-Zuordnungen **Enable ACL** wählen, unter ACL Entries **Add**, **ID Type = User**, in **ID** die notierte apps-Benutzer-ID und **Access = Full Control**. Nur auf die drei neuen Datasets anwenden. ACL ist die Liste der erlaubten Konten. Fehlen diese Felder, zuerst die TrueNAS-Anleitung deiner Version verwenden.
 
-TrueNAS holt ein neueres `:latest`, wenn Sie die App aktualisieren. Pinnen Sie ein Semver-Tag (`:0.3.0`), wenn Sie langsamer aktualisieren wollen, sobald Git-Tags existieren. Das aktualisiert AIO. Installierte Apps aktualisieren Sie unter **Einstellungen → Updates** (Zeitpläne sind standardmäßig aus).
+**Prüfen:** drei verschiedene NAS-Pfade mit genau /config, /data und /backups.
+
+## 5. Grundeinstellungen eintragen
+
+Unter Environment variables eintragen:
+
+| Name | Wert |
+|---|---|
+| PUID | Notierte apps-Benutzernummer |
+| PGID | Notierte apps-Gruppennummer |
+| AMM_DOWNLOAD_DIR | /data/downloads |
+| AMM_MEDIA_DIR | /data/media |
+
+Unter Port forwarding TCP **8080 nach 8080** für AIO und **8096 nach 8096** für Jellyfin anlegen. VPN/GPU zunächst auslassen.
+
+**Prüfen:** zwei Portzuordnungen. Bei belegtem Port Fortgeschritten lesen, keine Nummer raten.
+
+## 6. Installieren und öffnen
+
+Install wählen, auf Running warten und **http://TRUENAS-IP:8080** mit deiner tatsächlichen Adresse öffnen. Nicht jede Variante zeigt einen WebUI-Knopf.
+
+**Prüfen:** Administratorkonto erstellen, zunächst nur Jellyfin im Assistenten auswählen und über AIO öffnen. Weitere Apps später mit ihren Ports aus der fortgeschrittenen Referenz hinzufügen.
+
+Danach: [Dashboard kennenlernen](../docs/USAGE.md).
+
+## 7. Medienordner vom Computer erreichen
+
+Für die erste Filmkopie brauchst du Dateizugriff. Nutze ein normales TrueNAS-Dateifreigabekonto, nicht root/apps. Falls nötig unter **Credentials → Users → Add** mit Passwort und SMB-Anmeldung erstellen.
+
+1. Unter **Datasets → aio-data → Permissions → Edit ACL** deinen Dateibenutzer mit **Modify** und Vererbung für Dateien/Unterordner hinzufügen. Bestehenden apps-Zugang behalten; nicht die ganze Liste ersetzen. Beim Speichern **Apply permissions recursively** aktivieren, damit auch vorhandene Unterordner diesen Zugriff erhalten. Nur aio-data ändern.
+2. Unter **Shares → Windows (SMB) Shares → Add** den echten aio-data-Pfad wählen, Freigabe **aio-media** nennen und speichern. SMB-Dienst starten, falls gefragt.
+3. Im Windows-Explorer `\\TRUENAS-IP\aio-media` öffnen, nicht im Browser. Auf dem Mac **Finder → Gehe zu → Mit Server verbinden** und `smb://TRUENAS-IP/aio-media`. Eigene IP und Dateikonto verwenden.
+4. Unter media → movies einen eigenen Film hineinkopieren. AIO erstellt diese Unterordner beim Start. Config und Backups nicht mitfreigeben.
+
+**Prüfen:** der Film ist auf dem NAS sichtbar. Danach [erste Wiedergabe](../docs/USAGE.md#first-media).
+
+
+## Wenn es nicht klappt
+
+| Problem | Nächster Schritt |
+|---|---|
+| Anderes Formular | Version prüfen; die Route gilt für Docker-basierte Apps ab 24.10. TrueNAS-Hilfe/Fortgeschritten nutzen. |
+| Permission denied | Drei AIO-Datasets und apps-Konto prüfen, nicht den ganzen Pool ändern. |
+| AIO öffnet nicht | TrueNAS-IP, :8080 und Portzuordnung prüfen. |
+| Weitere App öffnet nicht | Für zusätzliche Apps müssen weitere Ports freigegeben werden; siehe Fortgeschritten. |
+
+## Fortgeschritten
+
+Für eigene Speicherorte, SSD-Optionen, bestehende Installationen und technische Einstellungen: [TRUENAS — Fortgeschritten](TRUENAS_ADVANCED.md).
+
+[Offizielle Produkthilfe: TrueNAS](https://www.truenas.com/docs/scale/25.04/scaleuireference/apps/installcustomappscreens/).
+
+[TrueNAS: app storage and folder access](https://apps.truenas.com/getting-started/app-storage/).

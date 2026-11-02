@@ -1,175 +1,74 @@
-# Docker
+# Docker auf Linux: AIO Schritt für Schritt
 
-So läuft AIO üblicherweise: **ein Container**, der den Manager und jede App startet, die Sie einschalten.
+Diese Route gilt für einen **Linux-Server mit funktionierendem Docker**. Bei Unraid, Synology oder TrueNAS die [eigene Plattform](README.md) wählen und nicht beide Installationen ausführen.
 
-**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
-**Läuft auf:** `linux/amd64` und `linux/arm64`  
-(Auf ARM ist Flaresolverr nicht verfügbar — es braucht x86_64.)
+## Vor dem Start
 
----
+- Linux mit Docker, Docker Compose und Git; fehlendes Docker zuerst nach [offizieller Anleitung](https://docs.docker.com/engine/install/) installieren.
+- Ein Konto, das bereits Docker-Befehle ausführen darf.
+- Ein Computer im selben Netz.
 
-## 1. Ordner anlegen (über SSH)
+## 1. Befehlsfenster öffnen
 
-```bash
-ssh user@host
-```
+Auf dem Server selbst Terminal öffnen. Von einem anderen Computer mit Terminal oder Windows Terminal und `ssh BENUTZER@SERVER-IP` verbinden; beide Werte ersetzen. Danach laufen die Blöcke auf dem Server.
 
 ```bash
-id
-export PUID="$(id -u)"
-export PGID="$(id -g)"
-export AMM_DATA_HOST="${HOME}/aio-media-manager"
-
-mkdir -p "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media"
-sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,backups}
-sudo chown -R "${PUID}:${PGID}" "${AMM_DATA_HOST}" /opt/aio-media-manager
+docker info
+docker compose version
+git --version
 ```
 
-**Warum diese Pfade?**
+**Prüfen:** Docker zeigt Serverdaten, Compose/Git eine Version. Bei command not found oder permission denied zuerst Installation/Zugriff beheben.
 
-- Downloads und Medien liegen unter **Ihrem Home**, damit der Dateimanager des Hosts sie sieht.
-- Lassen Sie sie als zwei Ordner unter **einem** Elternordner, damit Hardlinks funktionieren. Getrennte Mounts auf verschiedenen Platten (oder verschiedenen btrfs-Subvolumes) erzwingen oft vollständige Kopien.
-- Legen Sie **backups** auf eine andere Platte als **config**, wenn möglich. Ohne einen `/backups`-Mount fällt AIO auf `/config/backups` zurück und warnt in den Einstellungen.
+## 2. AIO-Dateien vorbereiten
 
-Bibliotheken schon woanders? Setzen Sie `AMM_DATA_HOST` auf diesen Elternordner (darin müssen weiterhin `downloads` und `media` liegen).
+Im selben Terminal einfügen:
 
----
-
-## 2. Mit Compose starten (empfohlen)
+Besteht hier schon ein Ordner aio-media-server-manager? Diesen Block nicht ausführen, Ordner behalten und [Fortgeschritten](DOCKER_ADVANCED.md) nutzen. Jede Zeile läuft nur, wenn die vorige erfolgreich war.
 
 ```bash
-git clone https://github.com/Qballjos/aio-media-server-manager.git
-cd aio-media-server-manager
+git clone https://github.com/Qballjos/aio-media-server-manager.git &&
+cd aio-media-server-manager &&
+export AMM_DATA_HOST="${HOME}/aio-media-manager" &&
+mkdir -p config/vpn backups "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media" &&
+sed -i -e "s/PUID: \"1000\"/PUID: \"$(id -u)\"/" -e "s/PGID: \"1000\"/PGID: \"$(id -g)\"/" docker-compose.yml
 ```
 
-Prüfen Sie `docker-compose.yml`:
+Das lädt die Projektdateien, erstellt die Ordner und trägt dein Linux-Konto automatisch als AIO-Benutzer ein. Du musst keine Nummern suchen oder Dateien bearbeiten.
 
-- Die Volume-Pfade passen zu den angelegten Ordnern
-- `PUID` / `PGID` passen zu `id`
-- `TZ` ist Ihre Zeitzone (oder setzen Sie sie später in den Einstellungen)
+**Prüfen:** keine Fehler; du stehst im Ordner aio-media-server-manager mit docker-compose.yml. Diesen Ordner behalten: config enthält Einstellungen und backups deren Sicherungen. Medien liegen separat unter aio-media-manager im Home-Ordner. Besteht der Projektordner schon, nicht löschen, sondern Fortgeschritten lesen.
 
-Wenn Sie `sudo docker compose` nutzen, setzen Sie `AMM_DATA_HOST` ausdrücklich, damit Daten nicht in `/root` landen.
+## 3. AIO starten
+
+Im selben Projektordner ausführen:
 
 ```bash
 docker compose pull
 docker compose up -d
+docker compose ps
 ```
 
-Öffnen Sie `http://YOUR-HOST:8080`, legen Sie das Administratorkonto an und folgen Sie dann [Das Dashboard nutzen](../docs/USAGE.md).
+Die erste Zeile lädt die Software, die zweite startet sie im Hintergrund und die dritte zeigt den Status.
 
-**Später aktualisieren:** erneut holen und neu erstellen:
+**Prüfen:** ein Container aio-media-manager steht auf Up oder Running. Das Terminal danach zu schließen stoppt AIO nicht.
 
-```bash
-docker compose pull
-docker compose up -d --force-recreate
-```
+## 4. Dashboard öffnen
 
-Der Container kann sein eigenes Image nicht ersetzen. Einstellungen → Updates meldet eine `:nightly`-Installation nur, wenn `:nightly` sich verschoben hat, und eine `:latest`-Installation nur, wenn `:latest` sich verschoben hat. Holen tun Sie weiter diesen Tag auf dem Host. Installierte Apps (Sonarr, Seerr und der Rest) aktualisieren Sie unter **Einstellungen → Updates**, einzeln oder alle auf einmal. Diese Zeitpläne sind standardmäßig aus. Den Container neu zu erstellen hebt sie nicht an.
+Im Browser **http://SERVER-IP:8080** mit deiner echten Linux-Serveradresse öffnen.
 
-**Ältere Compose-Datei, die nur Port 8080 veröffentlicht hat?** Kopieren Sie die aktuelle `ports:`-Liste aus diesem Repo und erstellen Sie neu, sonst scheitern die **Oberfläche öffnen**-Links der Kind-Apps im LAN.
+**Prüfen:** Administratorkonto erstellen und gewünschte Apps im Assistenten auswählen. Diese Apps nicht zusätzlich als eigene Container installieren.
 
-**`/backups` später ergänzen:** Host-Ordner anlegen, `- /path/to/backups:/backups` unter `volumes:` eintragen und neu erstellen. Alte Sicherungen unter `/config/backups` bleiben wiederherstellbar, bis Sie sie entfernen.
+Danach: [Dashboard kennenlernen](../docs/USAGE.md).
 
-**Host-Netzwerkverkehr auf Start:** fügen Sie `- /sys:/host/sys:ro` unter `volumes:` ein und erstellen Sie neu. Ohne diese Zeile zeigt Start nur den eigenen Verkehr des Containers.
+## Wenn es nicht klappt
 
-Ein optionales `GITHUB_TOKEN` (Compose oder Einstellungen → Updates) hebt das GitHub-API-Limit. Committen Sie das Token nicht.
+| Problem | Nächster Schritt |
+|---|---|
+| Docker-Zugriffsfehler | Docker-Zugriff auf dem Host klären; nicht wahllos alles als root ausführen. |
+| Projektordner besteht schon | Behalten und die Anleitung für bestehende Installationen unter Fortgeschritten nutzen. |
+| Startfehler | Im Projektordner docker compose logs --tail=100 ausführen und die Meldung behalten. |
+| Browser verbindet nicht | docker compose ps, Server-IP und :8080 im selben Heimnetz prüfen. |
 
-### Aus diesem Checkout bauen
+## Fortgeschritten
 
-```bash
-docker compose up -d --build
-```
-
-### Entwicklungs- / Testumgebung
-
-```bash
-./scripts/test-env.sh up
-```
-
-Siehe [CONTRIBUTING.md](../CONTRIBUTING.md).
-
-### Hardware-Transkodierung (Intel/AMD)
-
-Das Image enthält **jellyfin-ffmpeg** (mit Intel-iHD-/VA-API-Treibern). Host-Render-Node mappen, Container nach dem Pull neu erstellen, in Jellyfin unter Playback → Transcoding **Intel Quick Sync** (oder VAAPI) aktivieren.
-
-```bash
-docker compose -f docker-compose.yml -f compose.gpu.yml up -d
-```
-
----
-
-## 3. Einfaches `docker run` (Alternative)
-
-```bash
-docker pull ghcr.io/qballjos/aio-media-server-manager:latest
-
-docker run -d --name aio-media-manager --restart unless-stopped \
-  --privileged \
-  --cap-add NET_ADMIN --cap-add SYS_MODULE \
-  --device /dev/dri:/dev/dri \
-  -p 8080:8080 \
-  -p 8081:8081 -p 8084:8084 -p 8085:8085 -p 8096:8096 \
-  -p 8191:8191 -p 5055:5055 -p 6060:6060 \
-  -p 6767:6767 -p 6789:6789 \
-  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 \
-  -p 32400:32400 \
-  -e PUID="${PUID}" -e PGID="${PGID}" \
-  -e TZ=UTC \
-  -v /opt/aio-media-manager/config:/config \
-  -v "${HOME}/aio-media-manager:/data" \
-  -v /opt/aio-media-manager/backups:/backups \
-  -v /sys:/host/sys:ro \
-  -e AMM_DOWNLOAD_DIR=/data/downloads \
-  -e AMM_MEDIA_DIR=/data/media \
-  ghcr.io/qballjos/aio-media-server-manager:latest
-```
-
-Lassen Sie `--device /dev/dri` weg, wenn der Host keine Intel/AMD-GPU hat (Docker Desktop auf einem Mac, viele VPS-Hosts). Oder nutzen Sie `--network host` statt jeder einzelnen `-p`.
-
-Vollständige Portliste: [Installieren → Ports](../docs/INSTALL.md#ports).
-
----
-
-## Privates GHCR-Image
-
-Wenn pull scheitert, weil das Paket privat ist:
-
-```bash
-echo "$GITHUB_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-docker pull ghcr.io/qballjos/aio-media-server-manager:latest
-```
-
-Auf GitHub können Sie das Paket auch öffentlich machen unter **Packages → settings → Change visibility**.
-
----
-
-## Optionales VPN
-
-Für den Verkehr von qBittorrent / Prowlarr / Flaresolverr:
-
-```bash
-sudo mkdir -p /opt/aio-media-manager/config/vpn
-sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager/config/vpn
-# copy wg0.conf or an OpenVPN profile into that folder
-```
-
-1. Setzen Sie `AMM_VPN_ENABLED=true` (und `AMM_VPN_ENFORCE=true`, wenn Torrents nicht ohne VPN laufen dürfen).
-2. Lassen Sie Usenet-Clients außerhalb des VPN — sie nutzen das normale Netz.
-3. Speichern Sie das Profil unter **Einstellungen → Netzwerk** (oder mounten und per Umgebung aktivieren), dann den Container **neu anlegen**, damit WireGuard beim Boot hochkommt.
-
-Der privilegierte Modus ist nötig für `/dev/net/tun` und das VPN-UID-Routing (WireGuard im Haupt-Netzwerk-Namespace; Torrent-Apps laufen unter einer eigenen UID). Synology braucht oft **wireguard-go** aus dem Image, wenn der Host kein WireGuard-Kernelmodul hat — siehe [SYNOLOGY.md](SYNOLOGY.md).
-
-### Was AIO macht, solange das VPN an ist
-
-- Diese drei Apps starten erst nach einem Live-WireGuard-Handshake. Ist der Tunnel beim Boot down, warten sie; AIO versucht das VPN mit Backoff erneut und startet sie, wenn er wieder da ist. Ein manuelles VPN-**Stop** bricht den Retry ab.
-- DNS für diese Apps läuft über einen kleinen Caching-Forwarder in AIO (`127.0.0.153`), an die Tunnel-Schnittstelle gebunden, damit Lookups nicht aufs Haus-WAN leaken. Er fragt mehrere öffentliche Resolver parallel und kann eine frische Antwort liefern, wenn Upstream kurz still ist — damit Prowlarr-Indexer nicht an einem Timeout scheitern. Andere Apps (Sonarr, Radarr, SABnzbd, …) behalten den Container-Resolver.
-- Usenet-Verkehr nutzt den Tunnel nie.
-
----
-
-## Reverse-Proxy oder Cloudflare
-
-- **Kein Proxy nötig** für das Heimnetz unter `http://server-ip:8080`.
-- Eigenes Traefik/Caddy/Nginx: setzen Sie `AMM_TRUSTED_PROXIES` und optional `AMM_ROOT_PATH`.
-- **Cloudflare Tunnel** (keine eingehenden Ports): [CLOUDFLARE.md](CLOUDFLARE.md).  
-  `cloudflared` läuft **in** diesem Container — fügen Sie keinen zweiten Cloudflare-Dienst hinzu.
+Für eigene Speicherorte, SSD-Optionen, bestehende Installationen und technische Einstellungen: [DOCKER — Fortgeschritten](DOCKER_ADVANCED.md).

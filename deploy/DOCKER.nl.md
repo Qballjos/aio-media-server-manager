@@ -1,175 +1,76 @@
-# Docker
+# Docker op Linux: AIO stap voor stap installeren
 
-Dit is de gewone manier om AIO te draaien: **één container** die de manager en elke app die je aanzet start.
+Deze route gebruikt een **Linux-server waarop Docker al werkt**. Gebruik je Unraid, Synology of TrueNAS? Kies dan eerst [jouw eigen platform](README.md); voer deze opdrachten daar niet óók uit.
 
-**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
-**Werkt op:** `linux/amd64` en `linux/arm64`  
-(Op ARM is Flaresolverr niet beschikbaar — die heeft x86_64 nodig.)
+## Dit heb je nodig
 
----
+- Een Linux-server met Docker, Docker Compose en Git. [Docker installeren](https://docs.docker.com/engine/install/) is een aparte stap als dat nog ontbreekt.
+- Een account waarmee Docker-opdrachten al werken.
+- Een computer op hetzelfde netwerk om het dashboard te openen.
 
-## 1. Mappen maken (via SSH)
+## 1. Open een opdrachtvenster op de server
 
-```bash
-ssh user@host
-```
+Werk je op de server zelf? Open daar **Terminal**. Staat de server elders? Open Terminal op je Mac of Windows Terminal op Windows en verbind met `ssh GEBRUIKER@SERVER-IP`. Vervang beide delen door je eigen gebruikersnaam en het serveradres. Na de verbinding voer je de volgende blokken op de server uit.
 
-```bash
-id
-export PUID="$(id -u)"
-export PGID="$(id -g)"
-export AMM_DATA_HOST="${HOME}/aio-media-manager"
-
-mkdir -p "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media"
-sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,backups}
-sudo chown -R "${PUID}:${PGID}" "${AMM_DATA_HOST}" /opt/aio-media-manager
-```
-
-**Waarom deze paden?**
-
-- Downloads en media staan onder **je home**, zodat de bestandsbeheerder van de host ze ziet.
-- Houd ze als twee mappen onder **één** ouder, zodat hardlinks werken. Losse mounts op verschillende schijven (of verschillende btrfs-subvolumes) dwingen vaak een volledige kopie af.
-- Zet **backups** op een andere schijf dan **config** als dat kan. Zonder een `/backups`-mount valt AIO terug op `/config/backups` en waarschuwt in Instellingen.
-
-Heb je de bibliotheken al ergens anders? Zet `AMM_DATA_HOST` op die oudermap (daarin moeten nog steeds `downloads` en `media` staan).
-
----
-
-## 2. Starten met Compose (aanbevolen)
+Voer dit controleblok in:
 
 ```bash
-git clone https://github.com/Qballjos/aio-media-server-manager.git
-cd aio-media-server-manager
+docker info
+docker compose version
+git --version
 ```
 
-Controleer `docker-compose.yml`:
+**Controle:** Docker toont serverinformatie en de andere opdrachten een versie. Staat er command not found of permission denied? Rond eerst de Docker-/Git-installatie en toegang af; ga niet door met de volgende stap.
 
-- De volumepaden komen overeen met de mappen die je hebt gemaakt
-- `PUID` / `PGID` komen overeen met `id`
-- `TZ` is je tijdzone (of zet die later in Instellingen)
+## 2. Haal de AIO-bestanden op
 
-Als je `sudo docker compose` gebruikt, zet `AMM_DATA_HOST` expliciet, zodat data niet in `/root` belandt.
+Kopieer dit blok naar hetzelfde terminalvenster:
+
+Staat hier al een map aio-media-server-manager? Voer dit blok dan niet uit; bewaar de map en gebruik [Geavanceerd](DOCKER_ADVANCED.md). Elke volgende regel draait alleen als de vorige is gelukt.
+
+```bash
+git clone https://github.com/Qballjos/aio-media-server-manager.git &&
+cd aio-media-server-manager &&
+export AMM_DATA_HOST="${HOME}/aio-media-manager" &&
+mkdir -p config/vpn backups "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media" &&
+sed -i -e "s/PUID: \"1000\"/PUID: \"$(id -u)\"/" -e "s/PGID: \"1000\"/PGID: \"$(id -g)\"/" docker-compose.yml
+```
+
+Dit downloadt de projectmap, maakt de benodigde mappen en zet de gebruiker voor AIO automatisch op je huidige Linux-account. Je hoeft hiervoor geen nummers te zoeken of een bestand te bewerken.
+
+**Controle:** er zijn geen foutmeldingen en je staat nu in de map aio-media-server-manager. Die map bevat docker-compose.yml. Bewaar deze map: config bevat je instellingen en backups je opgeslagen instellingenback-ups. Je media staan apart in de map aio-media-manager in je persoonlijke map. Bestond de projectmap al? Verwijder die niet; lees eerst de geavanceerde gids.
+
+## 3. Start AIO
+
+Voer in dezelfde projectmap uit:
 
 ```bash
 docker compose pull
 docker compose up -d
+docker compose ps
 ```
 
-Open `http://YOUR-HOST:8080`, maak het beheerdersaccount en volg daarna [Het dashboard gebruiken](../docs/USAGE.md).
+De eerste opdracht haalt de AIO-software op; dat kan enkele minuten duren. De tweede start AIO op de achtergrond. De derde toont de status.
 
-**Later bijwerken:** opnieuw ophalen en daarna opnieuw aanmaken:
+**Controle:** je ziet één container aio-media-manager met status Up of Running. Sluit de terminal gerust af als alles werkt; AIO blijft actief.
 
-```bash
-docker compose pull
-docker compose up -d --force-recreate
-```
+## 4. Open het dashboard
 
-De container kan zijn eigen image niet vervangen. Instellingen → Updates meldt een `:nightly`-installatie alleen wanneer `:nightly` is verschoven, en een `:latest`-installatie alleen wanneer `:latest` is verschoven. Ophalen doe je nog steeds die tag op de host. Geïnstalleerde apps (Sonarr, Seerr en de rest) werk je bij via **Instellingen → Updates**, één voor één of allemaal tegelijk. Die schema’s staan standaard uit. De container opnieuw aanmaken werkt ze niet bij.
+Open op je computer **http://SERVER-IP:8080** met het echte adres van je Linux-server. Bijvoorbeeld http://192.168.1.50:8080 als dat jouw serveradres is.
 
-**Ouder compose-bestand dat alleen poort 8080 publiceerde?** Kopieer de huidige `ports:`-lijst uit deze repo en maak opnieuw aan, anders falen de **Interface openen**-links van kind-apps op het LAN.
+**Controle:** je ziet AIO’s account-aanmaakscherm. Maak een beheerdersaccount en kies de benodigde apps in de wizard. Je installeert die apps alleen in AIO, niet als extra Docker-containers.
 
-**`/backups` later toevoegen:** maak de hostmap, voeg `- /path/to/backups:/backups` toe onder `volumes:` en maak opnieuw aan. Oude back-ups onder `/config/backups` blijven herstelbaar tot je ze verwijdert.
+Na installatie: [zo gebruik je het dashboard](../docs/USAGE.md).
 
-**Hostnetwerkverkeer op Start:** voeg `- /sys:/host/sys:ro` toe onder `volumes:` en maak opnieuw aan. Zonder die regel toont Start alleen het eigen verkeer van de container.
+## Als het niet lukt
 
-Een optionele `GITHUB_TOKEN` (compose of Instellingen → Updates) verhoogt de GitHub-API-limiet. Commit de token niet.
+| Wat zie je? | Wat doe je? |
+|---|---|
+| Docker geeft een rechtenfout | Ga terug naar de Docker-installatie/toegang van je Linux-server. Ga niet willekeurig alle opdrachten als root uitvoeren. |
+| De projectmap bestaat al | Stop hier. Bewaar de map en gebruik de uitleg voor bestaande installaties in Geavanceerd. |
+| AIO start niet | Voer in de projectmap `docker compose logs --tail=100` uit en bewaar de fout. Poortconflict? Zie Geavanceerd. |
+| De browser verbindt niet | Controleer de status met docker compose ps, het server-IP en :8080. Gebruik je thuisnetwerk. |
 
-### Bouwen vanuit deze checkout
+## Geavanceerd
 
-```bash
-docker compose up -d --build
-```
-
-### Ontwikkel- / testomgeving
-
-```bash
-./scripts/test-env.sh up
-```
-
-Zie [CONTRIBUTING.md](../CONTRIBUTING.md).
-
-### Hardware-transcoden (Intel/AMD)
-
-De image bevat **jellyfin-ffmpeg** (met Intel iHD / VA-API-drivers). Map de host-rendernode, maak de container opnieuw aan na een pull met die build, en zet in Jellyfin **Intel Quick Sync** (of VAAPI) aan onder Playback → Transcoding.
-
-```bash
-docker compose -f docker-compose.yml -f compose.gpu.yml up -d
-```
-
----
-
-## 3. Gewoon `docker run` (alternatief)
-
-```bash
-docker pull ghcr.io/qballjos/aio-media-server-manager:latest
-
-docker run -d --name aio-media-manager --restart unless-stopped \
-  --privileged \
-  --cap-add NET_ADMIN --cap-add SYS_MODULE \
-  --device /dev/dri:/dev/dri \
-  -p 8080:8080 \
-  -p 8081:8081 -p 8084:8084 -p 8085:8085 -p 8096:8096 \
-  -p 8191:8191 -p 5055:5055 -p 6060:6060 \
-  -p 6767:6767 -p 6789:6789 \
-  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 \
-  -p 32400:32400 \
-  -e PUID="${PUID}" -e PGID="${PGID}" \
-  -e TZ=UTC \
-  -v /opt/aio-media-manager/config:/config \
-  -v "${HOME}/aio-media-manager:/data" \
-  -v /opt/aio-media-manager/backups:/backups \
-  -v /sys:/host/sys:ro \
-  -e AMM_DOWNLOAD_DIR=/data/downloads \
-  -e AMM_MEDIA_DIR=/data/media \
-  ghcr.io/qballjos/aio-media-server-manager:latest
-```
-
-Laat `--device /dev/dri` weg als de host geen Intel/AMD-GPU heeft (Docker Desktop op een Mac, veel VPS-hosts). Of gebruik `--network host` in plaats van elke `-p` te noemen.
-
-Volledige poortenlijst: [Installeren → Poorten](../docs/INSTALL.md#ports).
-
----
-
-## Privé-GHCR-image
-
-Als pull faalt omdat het package privé is:
-
-```bash
-echo "$GITHUB_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-docker pull ghcr.io/qballjos/aio-media-server-manager:latest
-```
-
-Op GitHub kun je het package ook publiek maken onder **Packages → settings → Change visibility**.
-
----
-
-## Optionele VPN
-
-Voor verkeer van qBittorrent / Prowlarr / Flaresolverr:
-
-```bash
-sudo mkdir -p /opt/aio-media-manager/config/vpn
-sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager/config/vpn
-# copy wg0.conf or an OpenVPN profile into that folder
-```
-
-1. Zet `AMM_VPN_ENABLED=true` (en `AMM_VPN_ENFORCE=true` als torrents niet zonder VPN mogen draaien).
-2. Laat Usenet-clients buiten de VPN — die gebruiken het gewone netwerk.
-3. Sla het profiel op bij **Instellingen → Netwerk** (of mount het en zet het via env aan), en **maak de container opnieuw aan** zodat WireGuard bij boot omhoog komt.
-
-Privileged mode is nodig voor `/dev/net/tun` en de VPN-uid-routing (WireGuard in de hoofd-netwerknamespace; torrent-apps draaien als aparte uid). Synology heeft vaak **wireguard-go** uit de image nodig als de host geen WireGuard-kernelmodule heeft — zie [SYNOLOGY.md](SYNOLOGY.md).
-
-### Wat AIO doet zolang de VPN aan staat
-
-- Die drie apps starten pas na een live WireGuard-handshake. Is de tunnel bij boot down, dan wachten ze; AIO probeert de VPN met backoff opnieuw en start ze als hij omhoog is. Een handmatige VPN-**Stop** annuleert die poging.
-- DNS voor die apps gaat via een kleine caching-forwarder in AIO (`127.0.0.153`), gebonden aan de tunnelinterface zodat lookups niet op het huis-WAN lekken. Hij vraagt meerdere publieke resolvers parallel en kan een recent antwoord geven als upstream even stil is — zo blijven Prowlarr-indexers niet hangen op één timeout. Andere apps (Sonarr, Radarr, SABnzbd, …) houden de container-resolver.
-- Usenet-verkeer gebruikt de tunnel nooit.
-
----
-
-## Reverse proxy of Cloudflare
-
-- **Geen proxy nodig** voor gebruik op het thuisnetwerk via `http://server-ip:8080`.
-- Eigen Traefik/Caddy/Nginx: zet `AMM_TRUSTED_PROXIES` en optioneel `AMM_ROOT_PATH`.
-- **Cloudflare Tunnel** (geen inkomende poorten): [CLOUDFLARE.md](CLOUDFLARE.md).  
-  `cloudflared` draait **in** deze container — voeg geen tweede Cloudflare-service toe.
+Voor andere opslaglocaties, SSD-instellingen, bestaande installaties en technische opties: [DOCKER — Geavanceerd](DOCKER_ADVANCED.md).

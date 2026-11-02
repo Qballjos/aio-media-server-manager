@@ -1,175 +1,74 @@
-# Docker
+# Docker on Linux: install AIO step by step
 
-This is the usual way to run AIO: **one container** that starts the manager and every app you enable.
+Use this route on a **Linux server with working Docker**. If you have Unraid, Synology or TrueNAS, follow [that platform](README.md) instead; do not run both installations.
 
-**Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
-**Works on:** `linux/amd64` and `linux/arm64`  
-(On ARM, Flaresolverr is not available — it needs x86_64.)
+## Before you begin
 
----
+- A Linux server with Docker, Docker Compose and Git. If missing, [install Docker](https://docs.docker.com/engine/install/) first.
+- An account already allowed to run Docker commands.
+- A computer on the same network to open the dashboard.
 
-## 1. Create folders (over SSH)
+## 1. Open a command window on the server
 
-```bash
-ssh user@host
-```
+On the server itself, open Terminal. From another computer, open Terminal on macOS or Windows Terminal on Windows and connect with `ssh YOUR-USER@SERVER-IP`, replacing both parts. The blocks below run on the server after that connection.
 
 ```bash
-id
-export PUID="$(id -u)"
-export PGID="$(id -g)"
-export AMM_DATA_HOST="${HOME}/aio-media-manager"
-
-mkdir -p "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media"
-sudo mkdir -p /opt/aio-media-manager/{config,config/vpn,backups}
-sudo chown -R "${PUID}:${PGID}" "${AMM_DATA_HOST}" /opt/aio-media-manager
+docker info
+docker compose version
+git --version
 ```
 
-**Why these paths?**
+**Check:** Docker prints server information, and Compose/Git print versions. Command not found or permission denied means finish installing/accessing those tools first.
 
-- Downloads and media live under **your home** so the host file manager can see them.
-- Keep them as two folders under **one** parent so hardlinks work. Separate mounts on different disks (or different btrfs subvolumes) often force full copies.
-- Put **backups** on another disk than **config** when you can. Without a `/backups` mount, AIO falls back to `/config/backups` and warns in Settings.
+## 2. Download the AIO files
 
-Already have libraries elsewhere? Set `AMM_DATA_HOST` to that parent folder (it still needs `downloads` and `media` inside it).
+Paste this into the same terminal:
 
----
-
-## 2. Start with Compose (recommended)
+Already have a folder named aio-media-server-manager here? Do not run this block; keep it and use [Advanced](DOCKER_ADVANCED.md). Each line below only runs if the preceding line succeeded.
 
 ```bash
-git clone https://github.com/Qballjos/aio-media-server-manager.git
-cd aio-media-server-manager
+git clone https://github.com/Qballjos/aio-media-server-manager.git &&
+cd aio-media-server-manager &&
+export AMM_DATA_HOST="${HOME}/aio-media-manager" &&
+mkdir -p config/vpn backups "${AMM_DATA_HOST}/downloads" "${AMM_DATA_HOST}/media" &&
+sed -i -e "s/PUID: \"1000\"/PUID: \"$(id -u)\"/" -e "s/PGID: \"1000\"/PGID: \"$(id -g)\"/" docker-compose.yml
 ```
 
-Check `docker-compose.yml`:
+This downloads the project, creates its folders and sets AIO’s user to your current Linux account automatically. You do not need to look up numeric IDs or edit a file for this step.
 
-- Volume paths match the folders you created
-- `PUID` / `PGID` match `id`
-- `TZ` is your timezone (or set it later in Settings)
+**Check:** there are no errors and you are in aio-media-server-manager, containing docker-compose.yml. Keep this project folder: config holds settings and backups holds saved configuration copies. Media lives separately under aio-media-manager in your home folder. If the project already exists, do not delete it; use the advanced guide.
 
-If you use `sudo docker compose`, set `AMM_DATA_HOST` explicitly so data does not land in `/root`.
+## 3. Start AIO
+
+In the same project folder, run:
 
 ```bash
 docker compose pull
 docker compose up -d
+docker compose ps
 ```
 
-Open `http://YOUR-HOST:8080`, create the admin account, then follow [Using the dashboard](../docs/USAGE.md).
+The first command downloads the software and can take minutes; the second starts it in the background; the third shows its state.
 
-**Updating later:** pull again, then recreate:
+**Check:** one aio-media-manager container shows Up or Running. Closing the terminal afterward does not stop it.
 
-```bash
-docker compose pull
-docker compose up -d --force-recreate
-```
+## 4. Open the dashboard
 
-The container cannot replace its own image. Settings → Updates notifies a `:nightly` install only when `:nightly` moves, and a `:latest` install only when `:latest` moves. You still pull that tag on the host. Installed apps (Sonarr, Seerr, and the rest) update from **Settings → Updates**, one at a time or all at once. Those schedules default to off. Recreating the container does not bump them.
+Open **http://SERVER-IP:8080** using your Linux server’s real IP, for example http://192.168.1.50:8080 if that is your server.
 
-**Older compose that only published port 8080?** Copy the current `ports:` list from this repo and recreate, or child **Open UI** links will fail on the LAN.
+**Check:** create the AIO administrator account and select needed apps in the wizard. Install those apps inside AIO, not as additional Docker containers.
 
-**Adding `/backups` later:** create the host folder, add `- /path/to/backups:/backups` under `volumes:`, recreate. Old backups under `/config/backups` stay restorable until you remove them.
+After installation: [learn the dashboard](../docs/USAGE.md).
 
-**Host network traffic on Home:** add `- /sys:/host/sys:ro` under `volumes:` and recreate. Without it, Home shows only the container's own traffic.
+## If something goes wrong
 
-Optional `GITHUB_TOKEN` (compose or Settings → Updates) raises GitHub API limits. Do not commit the token.
+| What you see | What to do |
+|---|---|
+| Docker permission error | Return to your server’s Docker installation/access setup. Do not randomly switch every command to root. |
+| Project folder already exists | Stop, keep it, and follow the advanced existing-install instructions. |
+| AIO will not start | Run docker compose logs --tail=100 in the project folder and keep the error. Port conflict? See Advanced. |
+| Browser cannot connect | Check docker compose ps, server IP and :8080. Use the same home network. |
 
-### Build from this checkout
+## Advanced
 
-```bash
-docker compose up -d --build
-```
-
-### Dev / test environment
-
-```bash
-./scripts/test-env.sh up
-```
-
-See [CONTRIBUTING.md](../CONTRIBUTING.md).
-
-### Hardware transcoding (Intel/AMD)
-
-The image includes **jellyfin-ffmpeg** (with Intel iHD / VA-API drivers). Map the host render node, recreate the container after pulling a build that has it, then in Jellyfin enable **Intel Quick Sync** (or VAAPI) under Playback → Transcoding.
-
-```bash
-docker compose -f docker-compose.yml -f compose.gpu.yml up -d
-```
-
----
-
-## 3. Plain `docker run` (alternative)
-
-```bash
-docker pull ghcr.io/qballjos/aio-media-server-manager:latest
-
-docker run -d --name aio-media-manager --restart unless-stopped \
-  --privileged \
-  --cap-add NET_ADMIN --cap-add SYS_MODULE \
-  --device /dev/dri:/dev/dri \
-  -p 8080:8080 \
-  -p 8081:8081 -p 8084:8084 -p 8085:8085 -p 8096:8096 \
-  -p 8191:8191 -p 5055:5055 -p 6060:6060 \
-  -p 6767:6767 -p 6789:6789 \
-  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 \
-  -p 32400:32400 \
-  -e PUID="${PUID}" -e PGID="${PGID}" \
-  -e TZ=UTC \
-  -v /opt/aio-media-manager/config:/config \
-  -v "${HOME}/aio-media-manager:/data" \
-  -v /opt/aio-media-manager/backups:/backups \
-  -v /sys:/host/sys:ro \
-  -e AMM_DOWNLOAD_DIR=/data/downloads \
-  -e AMM_MEDIA_DIR=/data/media \
-  ghcr.io/qballjos/aio-media-server-manager:latest
-```
-
-Drop `--device /dev/dri` if the host has no Intel/AMD GPU (Docker Desktop on a Mac, many VPS hosts). Or use `--network host` instead of listing every `-p`.
-
-Full port list: [Install → Ports](../docs/INSTALL.md#ports).
-
----
-
-## Private GHCR image
-
-If pull fails because the package is private:
-
-```bash
-echo "$GITHUB_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-docker pull ghcr.io/qballjos/aio-media-server-manager:latest
-```
-
-On GitHub you can also make the package public under **Packages → settings → Change visibility**.
-
----
-
-## Optional VPN
-
-For qBittorrent / Prowlarr / Flaresolverr traffic:
-
-```bash
-sudo mkdir -p /opt/aio-media-manager/config/vpn
-sudo chown -R "${PUID}:${PGID}" /opt/aio-media-manager/config/vpn
-# copy wg0.conf or an OpenVPN profile into that folder
-```
-
-1. Set `AMM_VPN_ENABLED=true` (and `AMM_VPN_ENFORCE=true` if torrents must not run without VPN).
-2. Leave Usenet clients off the VPN — they use the normal network.
-3. Save the profile under **Settings → Network** (or mount it and enable via env), then **recreate** the container so WireGuard comes up on boot.
-
-Privileged mode is required for `/dev/net/tun` and the VPN uid routing (WireGuard in the main network namespace; torrent apps run as a dedicated uid). Synology often needs **wireguard-go** from the image when the host has no WireGuard kernel module — see [SYNOLOGY.md](SYNOLOGY.md).
-
-### What AIO does while VPN is on
-
-- Those three apps start only after a live WireGuard handshake. If the tunnel is down at boot, they wait; AIO retries the VPN with backoff and starts them when it is up. A manual VPN **Stop** cancels that retry.
-- DNS for those apps goes through a small caching forwarder inside AIO (`127.0.0.153`), bound to the tunnel interface so lookups cannot leak onto the house WAN. It asks several public resolvers in parallel and can serve a recent answer when upstream is briefly quiet — which keeps Prowlarr indexers from failing on a single timeout. Other apps (Sonarr, Radarr, SABnzbd, …) keep the container resolver.
-- Usenet traffic never uses the tunnel.
-
----
-
-## Reverse proxy or Cloudflare
-
-- **No proxy needed** for home LAN use at `http://server-ip:8080`.
-- Your own Traefik/Caddy/Nginx: set `AMM_TRUSTED_PROXIES` and optionally `AMM_ROOT_PATH`.
-- **Cloudflare Tunnel** (no inbound ports): [CLOUDFLARE.md](CLOUDFLARE.md).  
-  `cloudflared` runs **inside** this container — do not add a second Cloudflare service.
+For custom storage, SSD options, existing installations and technical settings: [DOCKER — Advanced](DOCKER_ADVANCED.md).

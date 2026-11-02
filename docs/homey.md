@@ -2,7 +2,7 @@
 
 ## Setup
 
-This feature requires the companion AIO Homey app. While signed in as AIO administrator, open Settings → Homey connections and create a code. Enter the AIO origin and code when adding AIO Media Server Manager in Homey. Codes expire after five minutes and are one-use; making a new code invalidates the previous invitation. Add the desired dashboard widgets in Homey. Use Homey's Repair with a fresh code after revocation or address changes. Revoke old connections in AIO, including after removing an app/device from Homey.
+This feature requires the companion AIO Homey app. While signed in as AIO administrator, open Settings → App connections → Homey connections and create a code. Enter the AIO origin and code when adding AIO Media Server Manager in Homey. Codes expire after five minutes and are one-use; making a new code invalidates the previous invitation. Add the desired dashboard widgets in Homey. Use Homey's Repair with a fresh code after revocation or address changes. Revoke old connections in AIO, including after removing an app/device from Homey.
 
 Use HTTPS with a valid certificate. Private LAN HTTP is supported by the companion app but does not encrypt codes or credentials. This feature does not configure HTTPS, expose AIO to the internet, install a Homey app or change any playback settings.
 

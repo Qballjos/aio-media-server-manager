@@ -1,5 +1,8 @@
 # Cloudflare Tunnel
 
+!!! info "Advanced"
+    This page is for a custom or technical setup. It is not needed for a first local installation. [Beginner guides](../docs/INSTALL.md).
+
 Reach AIO (and optional apps like Sonarr or Jellyfin) from the internet **without opening ports** on your router.
 
 How it works in plain terms: a small program (`cloudflared`) runs **inside AIO**, dials out to Cloudflare, and Cloudflare serves `https://your-name.yourdomain.com`. Your home firewall stays closed to inbound traffic.
@@ -54,7 +57,7 @@ Cloudflare shows install commands for Docker, Windows, etc. **Do not run those o
 ## Step 3 — Paste the connector token into AIO
 
 1. Open `http://YOUR-SERVER-IP:8080`.
-2. **Settings → Network → Cloudflare Tunnel**
+2. **Settings → External access → Cloudflare Tunnel**
 3. Turn **Enable tunnel** on, paste the `eyJ…` token, Save.
 4. Status should show **Enabled**, **Token saved**, **Tunnel up**, **cloudflared ready**.  
    The header **CF** pill turns green/blue when healthy.
@@ -78,7 +81,7 @@ In Cloudflare these are **[Published applications](https://developers.cloudflare
 
 After the tunnel connector token is saved (Step 3):
 
-1. **Settings → Network → Public subdomains**
+1. **Settings → External access → Public subdomains**
 2. Set **Public app domain** to your zone (e.g. `example.com` or `example.co.uk`).
 3. Create an API token the way Cloudflare documents ([Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)):
    - **My Profile → API Tokens** (user) or **Manage Account → Account API Tokens**
@@ -154,7 +157,7 @@ sudo chmod 600 "$CONFIG/cloudflare/tunnel.token"
 sudo chown "${PUID:-1000}:${PGID:-1000}" "$CONFIG/cloudflare/tunnel.token"
 ```
 
-Then enable in **Settings → Network** (preferred — it is saved in `amm_config.json` and survives container restarts even if compose still has `AMM_CLOUDFLARE_TUNNEL_ENABLED=false`), or set and recreate:
+Then enable in **Settings → External access** (preferred — it is saved in `amm_config.json` and survives container restarts even if compose still has `AMM_CLOUDFLARE_TUNNEL_ENABLED=false`), or set and recreate:
 
 ```bash
 AMM_CLOUDFLARE_TUNNEL_ENABLED=true
@@ -183,7 +186,7 @@ Enable the tunnel in Settings (or env) and start `aio-media-manager.service`.
 ## Check that it works
 
 1. Cloudflare: tunnel status **Healthy**
-2. AIO: Settings → Network → tunnel **connected**
+2. AIO: Settings → External access → tunnel **connected**
 3. From mobile data (or another network): open `https://media.example.com` (your hostname)
 4. Optional API check (does not return the token): `GET /api/cloudflare/tunnel/status`
 
@@ -191,7 +194,7 @@ Enable the tunnel in Settings (or env) and start `aio-media-manager.service`.
 
 ## Trusted reverse-proxy IPs
 
-**Settings → Network → Trusted reverse-proxy IPs** (`AMM_TRUSTED_PROXIES`).
+**Settings → External access → Trusted reverse-proxy IPs** (`AMM_TRUSTED_PROXIES`).
 
 This tells AIO which nearby proxies may send `X-Forwarded-*` headers (real client IP and https vs http).
 

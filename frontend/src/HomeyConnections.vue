@@ -13,7 +13,7 @@ onBeforeUnmount(() => clearTimeout(expiry))
 
 async function load() {
   const response = await apiRequest('/api/homey/devices')
-  if (!response.ok) throw new Error(await apiError(response))
+  if (!response.ok) throw new Error(await apiError(await readJson(response)))
   devices.value = (await readJson(response)).devices || []
 }
 async function invite() {
@@ -21,7 +21,7 @@ async function invite() {
   error.value = ''
   try {
     const response = await apiRequest('/api/homey/pairings', { method: 'POST' })
-    if (!response.ok) throw new Error(await apiError(response))
+    if (!response.ok) throw new Error(await apiError(await readJson(response)))
     const data = await readJson(response)
     link.value = data.pairingCode
     copied.value = false
@@ -39,7 +39,7 @@ async function revoke(id) {
   error.value = ''
   try {
     const response = await apiRequest(`/api/homey/devices/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    if (!response.ok) throw new Error(await apiError(response))
+    if (!response.ok) throw new Error(await apiError(await readJson(response)))
     await load()
   } catch (e) { error.value = e.message }
   finally { busy.value = false }

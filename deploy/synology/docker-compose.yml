@@ -1,4 +1,5 @@
 # Synology Container Manager project — one AIO container only.
+# Install and start DSM Container Manager first; let it create the docker shared folder.
 # Place this file at /volume1/docker/aio-media-manager/docker-compose.yml
 # Do not add extra services for Sonarr, Radarr, or download clients.
 
@@ -30,6 +31,11 @@ services:
       # Same parent (not two DSM shares) so *Arr can hardlink.
       # install.sh writes the real home path; replace "admin" if needed.
       - /volume1/homes/admin/aio-media-manager:/data
+      # Optional: existing shared folder on a dedicated SSD volume (not DSM SSD cache).
+      # install.sh generates these with DOWNLOAD_CACHE=/volume2/download-cache/aio-media-manager.
+      # Migrate existing staging files before enabling these mounts.
+      # - /volume2/download-cache/aio-media-manager/incomplete:/data/downloads/incomplete
+      # - /volume2/download-cache/aio-media-manager/complete:/data/downloads/complete
       # Config backups. Prefer a different volume or a Hyper Backup target folder.
       - /volume1/docker/aio-media-manager/backups:/backups
       # Read-only host /sys so Home shows the NAS's network traffic, not just this container's.

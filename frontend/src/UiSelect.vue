@@ -225,7 +225,7 @@ watch(query, () => {
       <div
         v-if="open"
         ref="menu"
-        class="ui-select-menu"
+        class="ui-select-menu glass-popover"
         :style="menuStyle"
       >
         <div v-if="searchable" class="ui-select-search-bar">
@@ -306,7 +306,7 @@ watch(query, () => {
   margin: 0;
   padding: 0.3rem 0.85rem 0.3rem 0.95rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   background: var(--bg-input);
   color: var(--text-main);
   box-shadow: inset 0 1px 0 var(--glass-highlight);
@@ -398,12 +398,6 @@ watch(query, () => {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
-  border-radius: var(--radius-glass, 26px);
-  background: var(--control-bg);
-  border: 1px solid var(--border-subtle);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
 }
 
 .ui-select-search-bar {
@@ -422,7 +416,7 @@ watch(query, () => {
   -webkit-appearance: none;
   padding: 0.4rem 0.8rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   background: var(--bg-input);
   color: var(--text-main);
   font: inherit;
@@ -460,7 +454,7 @@ watch(query, () => {
   margin: 0;
   padding: 0.35rem 0.9rem;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-main);
   font-family: inherit;

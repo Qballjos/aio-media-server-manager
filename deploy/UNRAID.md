@@ -1,154 +1,77 @@
-# Unraid
+# Unraid: install AIO step by step
 
-Install **one** AIO container. Do not also add Community Applications templates for Sonarr, Radarr, or download clients — AIO runs those inside itself.
+You will create one AIO container in Unraid. This route uses the standard SSD pool **cache** for downloading; the library stays on your regular storage disks.
 
-**Templates in this repo**
+## Before you begin
 
-| File | Purpose |
-|------|---------|
-| [`unraid/templates/aio-media-manager.xml`](unraid/templates/aio-media-manager.xml) | Docker template (ports, paths, env) |
-| [`unraid/ca_profile.xml`](unraid/ca_profile.xml) | Community Applications maintainer profile |
-| [`unraid.xml`](unraid.xml) | Older path for the same template (compatibility) |
+- Access to your Unraid server’s web interface.
+- A started array with Docker enabled.
+- A mounted SSD/NVMe pool named **cache**, with space for downloads. A pool is a group of disks shown under its own name in Unraid.
 
-## Create folders over SSH
+## 1. Check your server
 
-Enable SSH (**Settings → Management Access**), then:
+Open **Main** in Unraid. Confirm the array is started, then find the active pool **cache**.
 
-```bash
-ssh root@<unraid-ip>
-```
+If your pool has another name, or you have no SSD pool, use [Unraid: advanced](UNRAID_ADVANCED.md). Do not guess paths or format drives to follow this guide.
 
-Downloads and media live on the **user share** `aio-media-manager` (visible in Shares / the file browser). Config stays in appdata.
+**Check:** the pool is active and the **Docker** tab exists. If Docker is missing, check **Settings → Docker → Enable Docker**.
 
-```bash
-mkdir -p \
-  /mnt/user/appdata/aio-media-manager/vpn \
-  /mnt/user/backups/aio-media-manager \
-  /mnt/user/aio-media-manager/downloads \
-  /mnt/user/aio-media-manager/media
+## 2. Open Unraid’s terminal
 
-chown -R 99:100 \
-  /mnt/user/appdata/aio-media-manager \
-  /mnt/user/backups/aio-media-manager \
-  /mnt/user/aio-media-manager
-```
-
-`/mnt/user/backups/aio-media-manager` receives the configuration backups. Use a share that lives on the array (not only the cache pool), so a cache failure does not take the backups with it.
-
-TV, movies, anime, music, books, comics, complete/incomplete downloads, torrent category folders, and transcode caches are created inside these mounts on first start.
-
-`99:100` is Unraid `nobody`/`users` (PUID 99, PGID 100). If you use a custom share user, run `id thatuser` and `chown` to that UID:GID instead.
-
-For hardlinks, keep downloads and media as subfolders of **one** cache or disk path (not two `/mnt/user` FUSE shares), for example a cache-only share named `aio-media-manager`:
+Choose the **>_** terminal icon in the top bar. This command window is already on the server; you do not need an SSH connection from your laptop. Paste the following and press Enter:
 
 ```bash
-mkdir -p /mnt/cache/aio-media-manager/downloads /mnt/cache/aio-media-manager/media
-chown -R 99:100 /mnt/cache/aio-media-manager
+curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/unraid/install.sh | sh
 ```
 
-Then bind `/data` to `/mnt/cache/aio-media-manager` (same share, disk path) instead of `/mnt/user/aio-media-manager`.
+It prepares folders and the AIO template, not separate Sonarr/download containers.
 
-## Install from the template (your server)
+**Check:** the output says **Unraid template ready**. An error about existing downloads means stop and use the advanced guide before adding storage mappings.
 
-### Option A — Local user template
+## 3. Add the container
 
-1. Copy the XML onto the flash drive:
+Close the terminal and open **Docker → Add Container**. In **Template**, select **my-aio-media-manager** or **aio-media-manager**.
 
-   ```bash
-   mkdir -p /boot/config/plugins/dockerMan/templates-user
-   curl -fsSL \
-     -o /boot/config/plugins/dockerMan/templates-user/my-aio-media-manager.xml \
-     https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/unraid/templates/aio-media-manager.xml
-   ```
+Keep the generated paths. Keep **PUID = 99** and **PGID = 100**, the default user/group for this setup. Set **TZ** to your timezone, for example Europe/Amsterdam. Choose **Apply** and wait for the download.
 
-2. Docker → **Add Container** → select **aio-media-manager** (or `my-aio-media-manager`) from the Template list.
-3. Confirm paths, `PUID`/`PGID`, and `TZ`, then Apply.
-4. Open `http://<unraid-ip>:8080` and run the wizard.
+**Check:** one container named **aio-media-manager** appears with a started/running status.
 
-### Option B — Manual Add Container
+## 4. Check the download storage
 
-1. Docker → Add Container → advanced view.
-2. Repository: `ghcr.io/qballjos/aio-media-server-manager:latest`
-3. Network: `bridge` (or `host` if you want every app WebUI on the Unraid IP).
-4. Privileged: **On** (needed for qBittorrent / Prowlarr / Flaresolverr VPN isolation). With VPN on, those apps wait for a live WireGuard handshake; AIO caches their DNS through the tunnel so short hiccups do not knock Prowlarr indexers offline. Details: [DOCKER.md](DOCKER.md#optional-vpn).
-5. Extra parameters: `--cap-add=NET_ADMIN --cap-add=SYS_MODULE`
-6. Optional device: `/dev/dri` for Intel/AMD transcoding (skip if missing).
-7. Ports (TCP): publish **8080** for the manager and the child WebUIs you installed (Sonarr **8989**, Radarr **7878**, qBittorrent **8081**, SABnzbd **8085**, Jellyfin **8096**, Prowlarr **9696**, Seerr **5055**, Plex **32400**, …). Full list: [INSTALL.md](../docs/INSTALL.md#ports). Or use Network `host`.
-8. Paths:
-   - `/config` → `/mnt/user/appdata/aio-media-manager`
-   - `/data` → `/mnt/user/aio-media-manager`
-   - `/backups` → `/mnt/user/backups/aio-media-manager`
-   - `/host/sys` → `/sys` (read-only). Home's Server card then shows the server's network traffic. The template lists this as **Host sys** (advanced). Without it, the graph is only this container's traffic.
-9. Variables: `PUID=99`, `PGID=100`, `TZ=<IANA timezone>`, `AMM_DOWNLOAD_DIR=/data/downloads`, `AMM_MEDIA_DIR=/data/media`. Optional: `GITHUB_TOKEN`.
+Open **Shares → aio-download-cache**. Its **Primary storage** should be **cache** and **Secondary storage** should be **None**. Older Unraid calls this **Use cache pool: Only**.
 
-After updating the image, recreate the container so added WebUI port mappings take effect.
+Leave it alone if correct. The SSD holds downloading/unpacking work; the library and finished torrents stay on the array.
 
-## Publish to Community Applications (public store)
+**Check:** Mover will not move this working share onto the array.
 
-Community Apps does **not** host your files. You keep a public GitHub repo with templates; Lime Technology’s CA scanner indexes it after you submit.
+## 5. Open AIO
 
-### 1. Prepare a templates repository
+Click the AIO container icon and choose **WebUI**, or open **http://SERVER-IP:8080** with your actual Unraid IP.
 
-Recommended: a **dedicated public repo** (for example `Qballjos/unraid-templates`) whose root looks like:
+**Check:** the AIO account-creation screen appears. Create the administrator account and pick apps in the wizard. Do not install those same apps separately through Unraid Apps.
 
-```text
-ca_profile.xml
-templates/aio-media-manager.xml
-```
+After installation: [learn the dashboard](../docs/USAGE.md).
 
-Copy from this project:
+## 6. Copy your first film
 
-```bash
-# from a clone of aio-media-server-manager
-mkdir -p ../unraid-templates/templates
-cp deploy/unraid/ca_profile.xml ../unraid-templates/
-cp deploy/unraid/templates/aio-media-manager.xml ../unraid-templates/templates/
-```
+If you already have a private file-sharing account on Unraid, use it. Otherwise create a normal user under **Users → Add User**, with a password; do not use root for file sharing.
 
-Then:
+1. Open **Shares → aio-media-manager → SMB Security Settings**. Set Export to Yes and Security to Private, then grant your file-sharing user read/write access. Leave other users without access unless you intend to share with them.
+2. In Windows File Explorer enter `\\SERVER-IP\aio-media-manager`. On macOS use Finder → Go → Connect to Server with `smb://SERVER-IP/aio-media-manager`. Replace SERVER-IP with your Unraid IP.
+3. Sign in with your file-sharing user, open media → movies and copy one film you own.
 
-1. Create the public GitHub repo and push `main`.
-2. Edit `templates/aio-media-manager.xml` and set `<TemplateURL>` to the **raw** URL of that file in the new repo (must match the real path on `main`).
-3. Keep `<Repository>` as `ghcr.io/qballjos/aio-media-server-manager:latest` (image stays on GHCR; only the template XML lives in the templates repo).
-4. Optional: open an Unraid forum support thread and put its URL in `ca_profile.xml` `<Forum>` and the template `<Support>` tags (GitHub Issues is fine to start).
+**Check:** the file is in media/movies on the server. Continue with [your first playback](../docs/USAGE.md#first-media).
 
-You *can* submit the main app repo instead if the XML is discoverable and every app has a `<Repository>` tag, but a small dedicated templates repo is what CA maintainers usually expect.
+## If something goes wrong
 
-### 2. Submit
+| What you see | What to do |
+|---|---|
+| The template is missing | Check that preparation finished with Unraid template ready, then refresh the Docker tab. |
+| The pool is absent or has another name | Use the advanced guide for another pool or HDD-only storage. The default command stops on purpose. |
+| AIO does not open | Check container status and server IP. For a port conflict, follow the advanced guide. |
 
-1. Sign in at **[https://ca.unraid.net/submit](https://ca.unraid.net/submit)** with your Unraid / forum account.
-2. Register the **GitHub repository URL** (the templates repo).
-3. Run **Validate**, then **Scan**. Fix any reported XML issues.
-4. Wait for moderation. When approved, the app appears under the Apps tab for everyone.
+## Advanced
 
-Helpful docs:
+For custom storage, SSD options, existing installations and technical settings: [UNRAID — Advanced](UNRAID_ADVANCED.md).
 
-- [Submission help](https://ca.unraid.net/submit/help)
-- [Repository XML format](https://ca.unraid.net/submit/help/repository-xml)
-- [XML field reference](https://ca.unraid.net/submit/help/xml-field-reference)
-- [Browse catalog](https://ca.unraid.net/apps) (check for name clashes first)
-
-Do **not** use the retired `selfhosters/unRAID-CA-templates` request flow.
-
-### 3. After it is listed
-
-- Ship updates by publishing a new container image (`:latest` or semver tags). Users update via Unraid’s Docker update — you usually do **not** bump the template for every release.
-- Change the template XML only when ports, paths, or env vars change; CA re-reads `<TemplateURL>` on refresh.
-
-### Private / self-only (not the public store)
-
-To use your own GitHub templates without CA approval, append the repo URL to:
-
-```text
-/boot/config/plugins/dockerMan/template-repos
-```
-
-(one URL per line). Templates then appear under Docker → Add Container. That does **not** list the app in the public Community Applications catalog.
-
-## FUSE / hardlinks
-
-Prefer `/mnt/cache/aio-media-manager` or a single disk path for downloads and media when you care about hardlinks. Mixing `/mnt/user` (FUSE) with a disk share can break atomic moves.
-
-## Updates
-
-Change the repository tag or use Unraid's container update, then recreate so new ports and the Host sys mount apply. Images are published from `main` as `:latest` and from git tags as semver. That updates AIO. Installed apps update from **Settings → Updates** (schedules default to off).
+[Official product help: Unraid](https://docs.unraid.net/unraid-os/using-unraid-to/run-docker-containers/managing-and-customizing-containers/).

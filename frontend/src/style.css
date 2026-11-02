@@ -19,12 +19,17 @@
   --nav-bg: rgb(var(--glass-tint) / min(0.92, calc(var(--glass-alpha) + 0.2)));
   --pill-bg: rgb(255 255 255 / 0.08);
   --pill-active: rgb(255 255 255 / 0.14);
-  --modal-bg: rgb(18 22 40 / 0.9);
+  --floating-bg: rgb(var(--glass-tint) / min(0.96, calc(var(--glass-alpha) + 0.25)));
+  --modal-bg: var(--floating-bg);
   --switch-track: rgb(255 255 255 / 0.12);
-  --menu-bg: rgb(18 22 40 / 0.88);
+  --menu-bg: var(--floating-bg);
   --overlay-soft: rgb(9 13 31 / 0.55);
+  --modal-scrim: rgb(0 0 0 / 0.55);
+  --modal-backdrop-blur: calc(var(--glass-blur) * 0.25);
   --radius-glass: 26px;
   --radius-tile: 18px;
+  --radius-control: 999px;
+  --radius-inset: 14px;
   --btn-h: 2.5rem;
   /* One type scale for every screen. Sizes are rem so they follow the fluid root below. */
   --text-kicker: 0.75rem;
@@ -104,10 +109,11 @@
   --nav-bg: rgb(255 255 255 / min(0.94, calc(var(--glass-alpha) + 0.25)));
   --pill-bg: rgb(255 255 255 / 0.5);
   --pill-active: rgb(255 255 255 / 0.86);
-  --modal-bg: rgb(255 255 255 / 0.86);
+  --modal-bg: var(--floating-bg);
   --switch-track: rgb(15 23 42 / 0.1);
-  --menu-bg: rgb(255 255 255 / 0.84);
+  --menu-bg: var(--floating-bg);
   --overlay-soft: rgb(230 238 255 / 0.5);
+  --modal-scrim: rgb(15 23 42 / 0.3);
   --glass-shine: linear-gradient(
     165deg,
     rgb(255 255 255 / 0.85) 0%,
@@ -190,13 +196,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100%;
 }
 
 
 html {
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100%;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -692,8 +698,9 @@ html {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
+  background: var(--modal-scrim);
+  backdrop-filter: blur(var(--modal-backdrop-blur));
+  -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
   z-index: 100;
   display: flex;
   align-items: center;
@@ -704,10 +711,10 @@ html {
 .modal-content {
   width: 100%;
   max-width: min(840px, 100%);
-  background: var(--modal-bg);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-glass);
+  box-shadow: var(--panel-shadow);
   display: flex;
   flex-direction: column;
   max-height: min(85vh, 85dvh);
@@ -810,6 +817,9 @@ html {
 
 /* Shared controls — same values as the first-run wizard */
 .ui-field {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -831,6 +841,8 @@ html {
 select.ui-input,
 textarea.ui-input {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   padding: 0.7rem 0.9rem;
@@ -873,7 +885,7 @@ textarea.ui-input::placeholder {
 }
 
 select.ui-input {
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   min-height: var(--btn-h);
   padding-block: 0.3rem;
   padding-right: 2rem;
@@ -901,7 +913,7 @@ select.ui-input {
   margin: 0;
   padding: 0.35rem 1.1rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   background: var(--pill-bg);
   color: var(--text-main);
   box-shadow: none;
@@ -919,7 +931,8 @@ select.ui-input {
   text-decoration: none;
   text-wrap: balance;
   white-space: normal;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
   transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 
@@ -1086,7 +1099,7 @@ select.ui-input {
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   background: var(--switch-track);
   cursor: pointer;
   position: relative;
@@ -1350,4 +1363,15 @@ select.ui-input {
   .modal-header {
     padding: 12px 16px;
   }
+}
+
+/* Keep every scroll area usable without visible scrollbar tracks or gutters. */
+html,
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }

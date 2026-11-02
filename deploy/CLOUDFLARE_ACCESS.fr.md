@@ -1,5 +1,8 @@
 # Cloudflare Access (porte de connexion)
 
+!!! info "Avancé"
+    Cette page concerne une configuration technique. Elle n’est pas nécessaire pour une première installation locale. [Guides débutants](../docs/INSTALL.md).
+
 Utilisez les deux portes. Cloudflare Access est la connexion supplémentaire devant les apps *Arr, les clients de téléchargement et Seerr. Le tableau de bord AIO, Jellyfin et Plex gardent la connexion qu’ils ont déjà.
 
 Access ne remplace pas le mot de passe de Sonarr ni le compte de Seerr. Il demande seulement qui vous êtes **avant** que cette page se charge. Les adresses de votre réseau local (`http://nas-ip:8989`) passent à côté d’Access. Les appels à l’intérieur d’AIO sur `127.0.0.1` aussi.
@@ -103,7 +106,7 @@ Vous n’avez pas besoin d’une règle Block séparée. Pas de correspondance v
 
 Une fois la méthode de connexion en place, AIO crée les applications Access. AIO ne crée pas la méthode de connexion.
 
-1. **Réglages → Réseau → Sous-domaines publics**.
+1. **Réglages → Accès externe → Sous-domaines publics**.
 2. Activez **Exposer** pour les apps *Arr, les clients de téléchargement et Seerr qui doivent être sur Internet. Laissez Jellyfin, Plex et AIO hors d’Access (ils sont marqués **Connexion propre**).
 3. **Publier vers Cloudflare** d’abord, pour que les noms d’hôte existent.
 4. Sous **Adresses e-mail pour Cloudflare Access**, les adresses autorisées. Laissez la liste vide seulement si la seule méthode est Cloudflare avec **Restrict to account members**.
