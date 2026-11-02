@@ -1695,18 +1695,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="settings-page animate-fade">
-    <header class="settings-header">
-      <p class="settings-eyebrow">{{ $t('Settings') }}</p>
-      <h2 class="section-title">{{ $t(currentPage.label) }}</h2>
-      <p class="section-subtitle">{{ $t(currentPage.description) }}</p>
-    </header>
-    <div v-if="error || notice" class="settings-feedback">
-      <div v-if="error" class="ui-alert ui-alert-error">{{ error }}</div>
-      <p v-if="notice" class="share-meta" role="status">{{ notice }}</p>
-    </div>
+  <section class="settings-page glass-card animate-fade" :aria-label="$t('Settings')">
     <SettingsSidebar :section="section" />
     <div class="settings-content">
+      <header class="settings-header">
+        <h2 class="section-title">{{ $t(currentPage.label) }}</h2>
+        <p class="section-subtitle">{{ $t(currentPage.description) }}</p>
+      </header>
+      <div v-if="error || notice" class="settings-feedback">
+        <div v-if="error" class="ui-alert ui-alert-error" role="alert">{{ error }}</div>
+        <p v-if="notice" class="share-meta" role="status">{{ notice }}</p>
+      </div>
 
     <template v-if="section === 'visuals'">
       <div class="glass-card settings-card">
@@ -3063,22 +3062,38 @@ onBeforeUnmount(() => {
 <style scoped>
 .settings-page {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
-  align-items: start;
-  gap: 1.75rem;
+  grid-template-columns: 13.5rem minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
   min-width: 0;
+  min-height: 44rem;
+  overflow: visible;
 }
-.settings-content { display:flex; flex-direction:column; gap:1rem; min-width:0; width:100%; max-width:76rem; }
-.settings-header { grid-column:1 / -1; min-width:0; padding:0; overflow-wrap:anywhere; }
-.settings-feedback { grid-column:1 / -1; min-width:0; overflow-wrap:anywhere; }
+.settings-content { display:flex; flex-direction:column; gap:1.25rem; min-width:0; width:100%; padding:1.75rem; }
+.settings-header { min-width:0; padding:0 0 .25rem; text-align:left; overflow-wrap:anywhere; }
+.settings-header .section-title { font-size:var(--text-display); font-weight:600; letter-spacing:-.04em; }
+.settings-header .section-subtitle { max-width:62ch; margin:.5rem 0 0; }
+.settings-feedback { min-width:0; overflow-wrap:anywhere; }
 .settings-feedback .share-meta { margin:0; }
-.settings-eyebrow { color:var(--text-dim); font-size:.75rem; font-weight:600; margin:0 0 .5rem; }
-.settings-profile-card { max-width:calc(48rem + 3rem + 2px); }
+/* The page owns the glass. Inset forms share one quiet surface, including connection components. */
+.settings-content :deep(.settings-card) {
+  width:100%; max-width:none; min-width:0; padding:1.25rem;
+  border:1px solid var(--border-subtle); border-radius:var(--radius-tile);
+  background:var(--bg-surface); box-shadow:none; overflow:visible;
+}
+.settings-content :deep(.settings-card::before),
+.settings-content :deep(.settings-card::after) { display:none; }
+.settings-content :deep(.settings-card-head .accent-badge) { display:none; }
+.settings-content :deep(.settings-card-head h3),
+.settings-content :deep(.tv-connections-head h3) { margin:0 0 .35rem; font-size:var(--text-strong); font-weight:600; letter-spacing:-.02em; }
+.settings-content :deep(.settings-card-head p) { font-size:var(--text-body); }
+.settings-content :deep(.form-stack > button[type="submit"]) { align-self:flex-start; min-width:min(9rem,100%); }
 .settings-profile-card .settings-card-head p { max-width:48rem; }
 .settings-profile-card .account-avatar-block,
 .settings-profile-card .profile-form { width:100%; max-width:48rem; }
 .settings-profile-card .brand-asset-row { align-items:center; }
-.settings-profile-card .account-avatar-preview { width:3.5rem; height:3.5rem; }
+.settings-profile-card .account-avatar-preview { width:3.5rem; height:3.5rem; border-radius:var(--radius-inset); }
 .settings-profile-card .brand-asset-actions { flex-basis:100%; padding-left:4.5rem; }
 .settings-profile-card .brand-asset-copy { flex:1 1 0; }
 @media (min-width: 1100px) {
@@ -3088,17 +3103,16 @@ onBeforeUnmount(() => {
   .profile-form > button { grid-column:1 / -1; }
   .profile-form > button { justify-self:start; }
 }
-.settings-content :deep(.settings-card-head .accent-badge) { display:none; }
-.settings-content :deep(.form-stack > button[type="submit"]) { align-self:flex-start; min-width:min(9rem,100%); }
-@media (max-width: 1000px) {
-  .settings-page { grid-template-columns:220px minmax(0,1fr); gap:1rem; }
-}
 @media (max-width: 760px) {
-  .settings-page { grid-template-columns:minmax(0,1fr); }
-  .settings-header { padding:0; }
+  .settings-page { grid-template-columns:minmax(0,1fr); min-height:0; }
+  .settings-content { padding:1.25rem; gap:1rem; }
   .settings-profile-card .brand-asset-actions { padding-left:0; }
   .settings-content :deep(.settings-card) { padding:1rem; }
+  .settings-profile-card .brand-asset-row { align-items:flex-start; }
+  .settings-profile-card .brand-asset-actions { width:100%; }
+  .settings-profile-card .brand-asset-actions > .ui-btn { flex:1; }
 }
+@media (max-width: 400px) { .settings-content { padding:1rem; } }
 .section-title {
   font-size: var(--text-title);
   font-weight: 700;
