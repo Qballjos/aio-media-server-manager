@@ -2342,7 +2342,7 @@ onUnmounted(() => {
     <Teleport to="body">
       <div v-if="trendingDetail" class="modal-backdrop" @click.self="closeTrending">
         <div
-          class="modal-content home-title-dialog"
+          class="modal-content glass-popover home-title-dialog"
           role="dialog"
           aria-modal="true"
           aria-labelledby="home-title-heading"
@@ -2394,7 +2394,7 @@ onUnmounted(() => {
       </div>
       <div v-if="trailerPlayer" class="modal-backdrop home-trailer-backdrop" @click.self="closeTrailer">
         <div
-          class="modal-content home-trailer-dialog"
+          class="modal-content glass-popover home-trailer-dialog"
           role="dialog"
           aria-modal="true"
           aria-labelledby="home-trailer-heading"
@@ -2415,7 +2415,7 @@ onUnmounted(() => {
         </div>
       </div>
       <div v-if="requestChoice && choiceServer" class="modal-backdrop" @click.self="requestChoice = null">
-        <form class="modal-content home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
+        <form class="modal-content glass-popover home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
           <h3 id="home-request-title">{{ $t('Request') }} {{ requestChoice.item.title }}</h3>
           <p class="home-muted">{{ $t('Choose where Seerr should add it.') }}</p>
           <label v-if="requestChoice.servers.length > 1" class="home-request-field">
@@ -3644,7 +3644,7 @@ a.cal-row-link:hover {
   gap: 0.8rem;
   overflow-y: auto;
   padding-right: 0.35rem;
-  scrollbar-width: thin;
+  scrollbar-width: none;
 }
 .home-card-trending {
   --rail-chrome: 12.4rem;

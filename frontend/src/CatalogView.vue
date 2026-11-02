@@ -912,7 +912,7 @@ onUnmounted(() => {
                   >
                     {{ $t('More') }}
                   </button>
-                  <div v-if="openCardMenu === service.name" class="card-menu">
+                  <div v-if="openCardMenu === service.name" class="card-menu glass-popover">
                     <button
                       v-if="isServiceActive(service)"
                       type="button"

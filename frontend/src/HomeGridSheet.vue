@@ -129,9 +129,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
   display: grid;
   place-items: center;
   padding: 1.5rem;
-  background: rgb(0 0 0 / 0.35);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: var(--modal-scrim);
+  backdrop-filter: blur(var(--modal-backdrop-blur));
+  -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
 }
 .home-sheet {
   width: min(28rem, 100%);

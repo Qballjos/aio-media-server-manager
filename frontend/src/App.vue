@@ -507,7 +507,7 @@ onUnmounted(() => {
             <path d="m6 9 6 6 6-6" />
           </svg>
         </summary>
-        <div class="nav-account-menu glass-pill">
+        <div class="nav-account-menu glass-popover">
           <RouterLink
             v-if="wizardCompleted"
             :to="{ name: 'settings', params: { section: 'account' } }"
@@ -624,7 +624,7 @@ onUnmounted(() => {
       <div
         v-for="t in toasts"
         :key="t.id"
-        class="toast-pill animate-slide-in"
+        class="toast-pill glass-popover animate-slide-in"
         :class="'toast-' + t.type"
       >
         <span>{{ t.message }}</span>

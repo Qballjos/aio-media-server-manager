@@ -91,7 +91,7 @@ watch(
   align-items: center;
   gap: 0.4rem;
   padding: 0.35rem;
-  border-radius: 1.6rem;
+  border-radius: var(--radius-glass);
   background: var(--control-bg);
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
 }

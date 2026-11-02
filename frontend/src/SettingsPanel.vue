@@ -1695,16 +1695,17 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="settings-page animate-fade">
+    <header class="settings-header">
+      <p class="settings-eyebrow">{{ $t('Settings') }}</p>
+      <h2 class="section-title">{{ $t(currentPage.label) }}</h2>
+      <p class="section-subtitle">{{ $t(currentPage.description) }}</p>
+    </header>
+    <div v-if="error || notice" class="settings-feedback">
+      <div v-if="error" class="ui-alert ui-alert-error">{{ error }}</div>
+      <p v-if="notice" class="share-meta" role="status">{{ notice }}</p>
+    </div>
     <SettingsSidebar :section="section" />
     <div class="settings-content">
-      <header class="settings-header">
-        <p class="settings-eyebrow">{{ $t('Settings') }}</p>
-        <h2 class="section-title">{{ $t(currentPage.label) }}</h2>
-        <p class="section-subtitle">{{ $t(currentPage.description) }}</p>
-      </header>
-
-    <div v-if="error" class="ui-alert ui-alert-error">{{ error }}</div>
-    <p v-if="notice" class="share-meta">{{ notice }}</p>
 
     <template v-if="section === 'visuals'">
       <div class="glass-card settings-card">
@@ -1915,11 +1916,11 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else-if="section === 'account'">
-      <div class="glass-card settings-card">
+      <div class="glass-card settings-card settings-profile-card">
         <div class="settings-card-head">
           <span class="accent-badge">{{ $t('ACCOUNT') }}</span>
           <h3>{{ $t('Profile and security') }}</h3>
-          <p>{{ $t('Current password is required for any change. The welcome line uses your first name when it is filled in. Email is used for Seerr wiring.') }}</p>
+          <p>{{ $t('Update your personal details. Enter your current password to save changes.') }}</p>
         </div>
         <div class="brand-asset-list account-avatar-block">
           <div class="brand-asset-row">
@@ -1933,10 +1934,10 @@ onBeforeUnmount(() => {
             </div>
             <div class="brand-asset-copy">
               <strong>{{ $t('Profile image') }}</strong>
-              <span>{{ profileAvatar.help }}</span>
-              <span class="brand-asset-size">{{ $t('Required / recommended:') }} {{ profileAvatar.recommended }}</span>
+              <span>{{ $t('Use a square PNG, JPEG or WebP image, at least 128 × 128 px.') }}</span>
+              <span class="brand-asset-size">{{ $t('Recommended: 512 × 512 px') }}</span>
               <span class="share-idle">
-                {{ profileAvatar.has_avatar ? 'Custom image in use.' : 'Using your username initial.' }}
+                {{ profileAvatar.has_avatar ? $t('Custom image in use.') : $t('Using your username initial.') }}
               </span>
             </div>
             <div class="brand-asset-actions">
@@ -1961,7 +1962,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </div>
-        <form class="form-stack" @submit.prevent="saveAccount">
+        <form class="form-stack profile-form" @submit.prevent="saveAccount">
           <label class="ui-field">{{ $t('Username') }}
             <input v-model="form.username" class="ui-input" required />
           </label>
@@ -3065,21 +3066,35 @@ onBeforeUnmount(() => {
   gap: 1.75rem;
   min-width: 0;
 }
-.settings-content { display:flex; flex-direction:column; gap:1rem; min-width:0; }
-.settings-header { padding:.5rem 0 .75rem; }
+.settings-content { display:flex; flex-direction:column; gap:1rem; min-width:0; width:100%; max-width:76rem; }
+.settings-header { grid-column:1 / -1; min-width:0; padding:0; overflow-wrap:anywhere; }
+.settings-feedback { grid-column:1 / -1; min-width:0; overflow-wrap:anywhere; }
+.settings-feedback .share-meta { margin:0; }
 .settings-eyebrow { color:var(--text-dim); font-size:.75rem; font-weight:600; margin:0 0 .5rem; }
-.settings-content :deep(.glass-card) { border-radius:12px; box-shadow:none; background:rgb(var(--glass-tint) / .94); backdrop-filter:none; }
+.settings-profile-card { max-width:calc(48rem + 3rem + 2px); }
+.settings-profile-card .settings-card-head p { max-width:48rem; }
+.settings-profile-card .account-avatar-block,
+.settings-profile-card .profile-form { width:100%; max-width:48rem; }
+.settings-profile-card .brand-asset-row { align-items:center; }
+.settings-profile-card .account-avatar-preview { width:3.5rem; height:3.5rem; }
+.settings-profile-card .brand-asset-actions { flex-basis:100%; padding-left:4.5rem; }
+.settings-profile-card .brand-asset-copy { flex:1 1 0; }
+@media (min-width: 1100px) {
+  .settings-profile-card .profile-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
+  .profile-form > label:first-child,
+  .profile-form > label:nth-child(4),
+  .profile-form > button { grid-column:1 / -1; }
+  .profile-form > button { justify-self:start; }
+}
 .settings-content :deep(.settings-card-head .accent-badge) { display:none; }
-.settings-content :deep(.ui-input),
-.settings-content :deep(.ui-select-btn),
-.settings-content :deep(.ui-btn) { border-radius:8px; box-shadow:none; }
-.settings-content :deep(.form-stack > button[type="submit"]) { align-self:flex-start; min-width:9rem; }
+.settings-content :deep(.form-stack > button[type="submit"]) { align-self:flex-start; min-width:min(9rem,100%); }
 @media (max-width: 1000px) {
   .settings-page { grid-template-columns:220px minmax(0,1fr); gap:1rem; }
 }
 @media (max-width: 760px) {
   .settings-page { grid-template-columns:minmax(0,1fr); }
-  .settings-header { padding-top:.25rem; }
+  .settings-header { padding:0; }
+  .settings-profile-card .brand-asset-actions { padding-left:0; }
   .settings-content :deep(.settings-card) { padding:1rem; }
 }
 .section-title {
@@ -3097,6 +3112,7 @@ onBeforeUnmount(() => {
   padding: 1.4rem 1.5rem;
   min-width: 0;
 }
+.settings-card-head { min-width:0; overflow-wrap:anywhere; }
 .settings-card-head h3 {
   margin: 0.4rem 0 0.35rem;
   font-size: var(--text-strong);
@@ -3136,7 +3152,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  width: 100%;
   max-width: 36rem;
+  min-width: 0;
 }
 .info-grid {
   margin: 0;
@@ -3252,38 +3270,21 @@ onBeforeUnmount(() => {
   color: var(--text-main);
 }
 .setting-chip.is-on {
-  color: #047857;
-  border-color: rgba(16, 185, 129, 0.45);
-  background: rgba(16, 185, 129, 0.14);
+  color: var(--color-success-fg);
+  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
+  background: var(--color-success-bg);
 }
 .setting-chip.is-warn {
-  color: #b45309;
-  border-color: rgba(245, 158, 11, 0.45);
-  background: rgba(245, 158, 11, 0.14);
+  color: var(--color-warning-fg);
+  border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
+  background: var(--color-warning-bg);
 }
 .setting-chip.is-bad {
-  color: #b91c1c;
-  border-color: rgba(239, 68, 68, 0.45);
-  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-danger-fg);
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+  background: var(--color-danger-bg);
 }
-.setting-chip.is-off {
-  color: var(--text-muted);
-}
-[data-theme="dark"] .setting-chip.is-on {
-  color: #bbf7d0;
-  border-color: rgba(52, 211, 153, 0.35);
-  background: rgba(6, 78, 59, 0.45);
-}
-[data-theme="dark"] .setting-chip.is-warn {
-  color: #fde68a;
-  border-color: rgba(251, 191, 36, 0.35);
-  background: rgba(120, 53, 15, 0.4);
-}
-[data-theme="dark"] .setting-chip.is-bad {
-  color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.4);
-  background: rgba(127, 29, 29, 0.45);
-}
+.setting-chip.is-off { color: var(--text-muted); }
 .share-box {
   margin-top: 1rem;
 }
@@ -3331,7 +3332,7 @@ onBeforeUnmount(() => {
 .backup-progress span {
   display: block;
   height: 100%;
-  background: var(--color-primary, #f97316);
+  background: var(--color-primary);
   transition: width 0.3s ease;
 }
 .backup-upload {
@@ -3418,6 +3419,7 @@ onBeforeUnmount(() => {
   gap: 0.25rem;
   min-width: 0;
   flex: 1 1 14rem;
+  overflow-wrap: anywhere;
 }
 .brand-asset-copy strong {
   color: var(--text-heading);

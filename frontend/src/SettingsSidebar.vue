@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { filterSettingsGroups, SETTINGS_PAGES } from './settingsNavigation.js'
 const props = defineProps({ section: { type: String, required: true } })
@@ -7,6 +7,17 @@ const { t } = useI18n()
 const query = ref('')
 const expanded = ref(false)
 const mobileToggle = ref(null)
+const headerHeight = ref(0)
+let headerObserver
+onMounted(() => {
+  const header = document.querySelector('.top-nav')
+  if (!header) return
+  const measureHeader = () => { headerHeight.value = header.getBoundingClientRect().height }
+  measureHeader()
+  headerObserver = new ResizeObserver(measureHeader)
+  headerObserver.observe(header)
+})
+onBeforeUnmount(() => headerObserver?.disconnect())
 const groups = computed(() => filterSettingsGroups(query.value, t))
 const current = computed(() => SETTINGS_PAGES.find(item => item.id === props.section))
 watch(() => props.section, async () => {
@@ -33,7 +44,7 @@ const paths = {
 </script>
 
 <template>
-  <aside class="settings-sidebar">
+  <aside class="settings-sidebar glass-card" :style="{ '--settings-header-height': `${headerHeight}px` }">
     <button ref="mobileToggle" class="settings-mobile-toggle" type="button" :aria-expanded="expanded" aria-controls="settings-navigation" @click="expanded = !expanded">
       <span>{{ $t('Settings') }} / {{ $t(current?.label || 'Profile') }}</span>
       <span aria-hidden="true">{{ expanded ? '−' : '+' }}</span>
@@ -58,26 +69,28 @@ const paths = {
 </template>
 
 <style scoped>
-.settings-sidebar { position: sticky; top: 1.25rem; align-self: start; min-width: 0; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: 14px; background: rgb(var(--glass-tint) / .94); }
-.settings-navigation { max-height: calc(100dvh - 4rem); overflow-y: auto; scrollbar-width: thin; }
-.settings-search { display:flex; align-items:center; gap:.55rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:8px; background:var(--bg-input); color:var(--text-dim); margin-bottom:1.25rem; }
+.settings-sidebar { position: sticky; top: calc(var(--settings-header-height, 0px) + 1rem); align-self: start; min-width: 0; padding: 1rem; }
+.settings-navigation { max-height: calc(100dvh - var(--settings-header-height, 0px) - 4rem); overscroll-behavior-y: contain; scrollbar-gutter: auto; overflow-y: auto; scrollbar-width: none; }
+.settings-search { display:flex; align-items:center; gap:.55rem; padding:.65rem; border:1px solid var(--border-subtle); border-radius:var(--radius-tile); background:var(--bg-input); color:var(--text-dim); margin-bottom:1rem; }
 .settings-search:focus-within { outline:2px solid var(--color-primary); outline-offset:2px; }
 .settings-search svg { width:18px; height:18px; flex-shrink:0; }
 .settings-search input { width:100%; min-width:0; border:0; outline:0; background:transparent; color:var(--text-main); font:inherit; font-size:.8rem; }
 .settings-search input::placeholder { color:var(--text-dim); }
-.settings-nav-group + .settings-nav-group { margin-top:1rem; padding-top:.8rem; border-top:1px solid var(--border-subtle); }
+.settings-nav-group + .settings-nav-group { margin-top:.75rem; padding-top:.65rem; border-top:1px solid var(--border-subtle); }
 .settings-nav-group h3 { margin:0 0 .35rem; padding:0 .65rem; color:var(--text-dim); font-size:.72rem; font-weight:600; letter-spacing:.04em; }
-.settings-sidebar-link { display:flex; align-items:center; gap:.65rem; padding:.65rem; margin:.12rem 0; text-decoration:none; color:var(--text-main); font-size:.85rem; border-radius:7px; border-left:3px solid transparent; transition:background .15s; }
+.settings-sidebar-link { display:flex; align-items:center; gap:.65rem; padding:.55rem .65rem; margin:.12rem 0; text-decoration:none; color:var(--text-main); font-size:.85rem; border-radius:var(--radius-inset); border-left:3px solid transparent; transition:background .15s; }
+.settings-sidebar-link span { min-width:0; overflow-wrap:anywhere; }
 .settings-sidebar-link svg { width:19px; height:19px; flex-shrink:0; color:var(--text-muted); }
 .settings-sidebar-link:hover { background:var(--bg-surface); }
 .settings-sidebar-link.is-active { background:rgba(var(--color-primary-rgb),.14); color:var(--color-primary-text); border-left-color:var(--color-primary); font-weight:600; }
 .settings-sidebar-link.is-active svg { color:inherit; }
 .settings-search-empty { color:var(--text-muted); font-size:.85rem; padding:.65rem; }
 .settings-mobile-toggle { display:none; }
+.settings-mobile-toggle span:first-child { min-width:0; overflow-wrap:anywhere; }
 @media (max-width: 760px) {
   .settings-sidebar { position:static; padding:.75rem; }
   .settings-mobile-toggle { display:flex; align-items:center; justify-content:space-between; gap:1rem; width:100%; padding:.3rem; background:none; border:0; color:var(--text-heading); font:inherit; text-align:left; cursor:pointer; }
-  .settings-navigation { display:none; max-height:none; margin-top:1rem; }
+  .settings-navigation { display:none; max-height:none; margin-top:1rem; scrollbar-gutter:auto; }
   .settings-navigation.expanded { display:block; }
 }
 </style>

@@ -1,5 +1,10 @@
 /** English source text → [Nederlands, Deutsch, Français]. */
 export const TABLE = {
+  "Using your username initial.": ["De eerste letter van je gebruikersnaam wordt gebruikt.", "Der Anfangsbuchstabe deines Benutzernamens wird verwendet.", "L’initiale de votre nom d’utilisateur est utilisée."],
+  "Custom image in use.": ["Je eigen profielfoto wordt gebruikt.", "Dein eigenes Profilbild wird verwendet.", "Votre photo de profil est utilisée."],
+  "Recommended: 512 × 512 px": ["Aanbevolen: 512 × 512 px", "Empfohlen: 512 × 512 px", "Recommandé : 512 × 512 px"],
+  "Use a square PNG, JPEG or WebP image, at least 128 × 128 px.": ["Gebruik een vierkante PNG-, JPEG- of WebP-afbeelding van minimaal 128 × 128 px.", "Verwende ein quadratisches PNG-, JPEG- oder WebP-Bild mit mindestens 128 × 128 px.", "Utilisez une image carrée PNG, JPEG ou WebP d’au moins 128 × 128 px."],
+  "Update your personal details. Enter your current password to save changes.": ["Pas je persoonlijke gegevens aan. Voer je huidige wachtwoord in om wijzigingen op te slaan.", "Aktualisiere deine persönlichen Daten. Gib zum Speichern dein aktuelles Passwort ein.", "Modifiez vos informations personnelles. Saisissez votre mot de passe actuel pour enregistrer."],
   "Connection status will appear here.": ["De verbindingsstatus verschijnt hier.", "Der Verbindungsstatus wird hier angezeigt.", "L’état de la connexion s’affichera ici."],
   "Open Settings → VPN": ["Open Instellingen → VPN", "Einstellungen → VPN öffnen", "Ouvrir Réglages → VPN"],
   "Background and transparency": ["Achtergrond en transparantie", "Hintergrund und Transparenz", "Arrière-plan et transparence"],
