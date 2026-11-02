@@ -44,15 +44,15 @@ Can’t spare a few bucks? Drop a star on GitHub instead. It feeds the ego, and 
 See a populated dashboard in the [interactive preview](https://qballjos.github.io/aio-media-server-manager/#app-preview), using fictional sample data. The screenshots below show the real app: light on the left, dark on the right. Visuals, catalog app settings, and the other Settings sections are in the [usage guide](docs/USAGE.md#screens).
 
 <p align="center">
-  <img src="docs/screenshots/light/catalog.png" alt="Catalog with application cards and install controls, light theme" width="440" />
-  <img src="docs/screenshots/dark/catalog.png" alt="Catalog with application cards and install controls, dark theme" width="440" />
+  <img src="docs/screenshots/light/catalog.png" alt="Catalog with sidebar, app rows and Open controls, light theme" width="440" />
+  <img src="docs/screenshots/dark/catalog.png" alt="Catalog with sidebar, app rows and Open controls, dark theme" width="440" />
 </p>
 
 <p align="center"><em>Catalog — search, filters, and install for each app.</em></p>
 
 <p align="center">
-  <img src="docs/screenshots/light/settings.png" alt="Settings account page, light theme" width="440" />
-  <img src="docs/screenshots/dark/settings.png" alt="Settings account page, dark theme" width="440" />
+  <img src="docs/screenshots/light/settings.png" alt="Settings profile page with grouped navigation, light theme" width="440" />
+  <img src="docs/screenshots/dark/settings.png" alt="Settings profile page with grouped navigation, dark theme" width="440" />
 </p>
 
 <p align="center"><em>Settings — account. The other sections are in the usage guide.</em></p>

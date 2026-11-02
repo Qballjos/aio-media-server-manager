@@ -6,7 +6,7 @@
 This guide is for after AIO is installed and you can open the web UI.
 
 !!! success "Goal"
-    Finish the wizard for the apps you need, use Home day to day, and use **Open UI** on Catalog whenever you want that tool’s screen.
+    Finish the wizard for the apps you need, use Home day to day, and use **Open** on Catalog whenever you want that tool’s screen.
 
 Default address on your home network:
 
@@ -23,7 +23,7 @@ Replace the IP (and port, if you changed it).
 1. Create the **admin** account when prompted (username, **email**, password).
 2. Finish the first-run wizard: the apps you want, a Usenet server if you use one, optional VPN, and an optional Cloudflare Tunnel. The wizard installs that selection. The tunnel and the VPN start as soon as it finishes, when you turned them on.
 3. After a container recreate, the dashboard answers while apps are still starting. With VPN on, qBittorrent, Prowlarr, and Flaresolverr wait until the WireGuard handshake is up (AIO retries the VPN if the first try fails). Cloudflare Tunnel starts last, after the apps answer, so cloudflared does not log connection refused against origins that are not listening yet.
-4. Wait until **Catalog** shows those apps as **running**. Use **Open UI** for anything that still has its own account (Plex, Jellyfin, NZBGet).
+4. Wait until **Catalog** shows those apps as **running**. Use **Open** for anything that still has its own account (Plex, Jellyfin, NZBGet).
 5. Add more later from **Catalog**. You do not need every app.
 
 Start small (for example Radarr + one download client + Jellyfin), then add the rest.
@@ -71,10 +71,10 @@ Home is a grid. Phone, tablet, and desktop each keep their own layout (4, 8, and
 | Needs attention | The same checks as Settings → Notifications, with a link to fix each one |
 | Other downloads | Off by default; add it from the layout control. What SABnzbd, NZBGet, and qBittorrent downloaded that is not a film or series (music, books, games, software, archives), each with an icon for its kind |
 
-Install, start, stop, and **Open UI** live on **Catalog**. The dock at the bottom of Home opens apps that are already installed.
+Install, start, stop, and **Open** live on **Catalog**. The dock at the bottom of Home opens apps that are already installed.
 
-LAN **Open UI** usually looks like `http://YOUR-SERVER-IP:8989` (example for Sonarr).  
-If you set up Cloudflare public hostnames, **Open UI** can instead use `https://sonarr.yourdomain.com` — see [Cloudflare Tunnel](deploy/CLOUDFLARE.md).
+LAN **Open** usually looks like `http://YOUR-SERVER-IP:8989` (example for Sonarr).
+If you set up Cloudflare public hostnames, **Open** can instead use `https://sonarr.yourdomain.com` — see [Cloudflare Tunnel](deploy/CLOUDFLARE.md).
 
 ---
 
@@ -88,7 +88,7 @@ Still yours to finish:
 
 - A Plex account.
 - NeutArr's first-run setup token (below), until that account exists.
-- Signing in to Jellyfin and NZBGet. On the LAN, **Open UI** already signs in Sonarr, Radarr, Lidarr, Prowlarr, qBittorrent, SABnzbd, Bazarr, and Seerr as the manager admin. Public hostnames always show the app's own login.
+- Signing in to Jellyfin and NZBGet. On the LAN, **Open** already signs in Sonarr, Radarr, Lidarr, Prowlarr, qBittorrent, SABnzbd, Bazarr, and Seerr as the manager admin. Public hostnames always show the app's own login.
 - Seerr's admin and first-run wizard are completed for you from that shared login (through Jellyfin, or a claimed Plex).
 
 VPN, Cloudflare Tunnel, Recyclarr, NeutArr, and backups are optional.
@@ -109,17 +109,29 @@ That value is the file `/config/neutarr/.setup-token` inside the appliance (the 
 
 | Situation | What to use |
 |-----------|-------------|
-| At home on Wi‑Fi | **Open UI** → `http://IP:PORT` |
-| Away from home with Cloudflare | **Open UI** → `https://subdomain.yourdomain.com` |
+| At home on Wi‑Fi | **Open** → `http://IP:PORT` |
+| Away from home with Cloudflare | **Open** → `https://subdomain.yourdomain.com` |
 | You changed an app’s listen port | AIO updates published routes; recreate the container if LAN links still look wrong. The manager port itself is compose/env (`AMM_API_PORT`), shown on **Settings → Server and storage** |
 
-If **Open UI** fails:
+If **Open** fails:
 
 - Is the app **running** on Catalog?
 - Are you on the same network (for LAN links)?
 - For HTTPS links: is the tunnel connected and was **Publish** successful? ([Cloudflare guide](deploy/CLOUDFLARE.md))
 
 ---
+
+## Using the new catalog {#catalog-menu}
+
+Open **Catalog** at the top. The left sidebar helps you choose what to see; the apps appear on the right.
+
+Click an app’s name, icon or row to open its **app settings popup**. This does not open the app itself. The **⋯** button offers Settings, Stop, Restart, Logs, Update and Uninstall as applicable. Close the popup with × or Escape. Only save changes when you intend to change that app.
+
+**Catalog app settings** change one app. The **Settings** page in the top navigation changes AIO itself: profile, appearance, connections, backups and updates.
+
+[Using the new catalog](USAGE.md#catalog-menu).
+
+The settings page uses the same sidebar-and-content layout as the catalog. On a computer, choose a group and page on the left; the selected page appears on the right. The search field filters the menu, not the values of your settings. Scroll the sidebar to find lower groups. On a phone, open **Settings sections** and choose a page.
 
 ## Settings you will actually use
 
@@ -132,7 +144,7 @@ Names in the UI may be short labels; here is what they mean in practice.
 | **Start page** | App dock and sign-in message; widget layout is edited on Home. |
 | **VPN** | The VPN connection for supported apps. |
 | **External access** | Cloudflare Tunnel, public hostnames and trusted proxies. |
-| **App connections** | Jellyfin/Seerr keys and TV pairing. |
+| **App connections** | Jellyfin/Seerr keys, TV pairing and read-only Homey connections. |
 | **Usenet** | Usenet provider details for SABnzbd and NZBGet. |
 | **Updates** | App updates and schedules. AIO itself is updated through your NAS/Docker. |
 | **Backups** | Create, check, schedule and restore configuration backups. |
@@ -157,85 +169,85 @@ Current app interface with fictional example data. Light is on the left, dark on
 
 | Light | Dark |
 |---|---|
-| ![External access](screenshots/light/settings-remote.png) | ![External access](screenshots/dark/settings-remote.png) |
+| ![External access](screenshots/light/settings-remote.png?v=app-store-20261102) | ![External access](screenshots/dark/settings-remote.png?v=app-store-20261102) |
 
 ### App connections
 
 | Light | Dark |
 |---|---|
-| ![App connections](screenshots/light/settings-integrations.png) | ![App connections](screenshots/dark/settings-integrations.png) |
+| ![App connections](screenshots/light/settings-integrations.png?v=app-store-20261102) | ![App connections](screenshots/dark/settings-integrations.png?v=app-store-20261102) |
 
 ### About this app
 
 | Light | Dark |
 |---|---|
-| ![About this app](screenshots/light/settings-about.png) | ![About this app](screenshots/dark/settings-about.png) |
+| ![About this app](screenshots/light/settings-about.png?v=app-store-20261102) | ![About this app](screenshots/dark/settings-about.png?v=app-store-20261102) |
 
 ### Profile
 
 | Light | Dark |
 | --- | --- |
-| ![Settings account, light theme](screenshots/light/settings.png) | ![Settings account, dark theme](screenshots/dark/settings.png) |
+| ![Settings account, light theme](screenshots/light/settings.png?v=app-store-20261102) | ![Settings account, dark theme](screenshots/dark/settings.png?v=app-store-20261102) |
 
 ### Language and appearance
 
 | Light | Dark |
 | --- | --- |
-| ![Visuals, light theme](screenshots/light/settings-visuals.png) | ![Visuals, dark theme](screenshots/dark/settings-visuals.png) |
+| ![Visuals, light theme](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Visuals, dark theme](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
 
 ### Server and storage
 
 | Light | Dark |
 | --- | --- |
-| ![System settings, light theme](screenshots/light/settings-system.png) | ![System settings, dark theme](screenshots/dark/settings-system.png) |
+| ![System settings, light theme](screenshots/light/settings-system.png?v=app-store-20261102) | ![System settings, dark theme](screenshots/dark/settings-system.png?v=app-store-20261102) |
 
 ### Updates
 
 | Light | Dark |
 | --- | --- |
-| ![Updates, light theme](screenshots/light/settings-updates.png) | ![Updates, dark theme](screenshots/dark/settings-updates.png) |
+| ![Updates, light theme](screenshots/light/settings-updates.png?v=app-store-20261102) | ![Updates, dark theme](screenshots/dark/settings-updates.png?v=app-store-20261102) |
 
 ### Backups
 
 | Light | Dark |
 | --- | --- |
-| ![Backups, light theme](screenshots/light/settings-backups.png) | ![Backups, dark theme](screenshots/dark/settings-backups.png) |
+| ![Backups, light theme](screenshots/light/settings-backups.png?v=app-store-20261102) | ![Backups, dark theme](screenshots/dark/settings-backups.png?v=app-store-20261102) |
 
 ### VPN
 
 | Light | Dark |
 | --- | --- |
-| ![Network settings, light theme](screenshots/light/settings-network.png) | ![Network settings, dark theme](screenshots/dark/settings-network.png) |
+| ![Network settings, light theme](screenshots/light/settings-network.png?v=app-store-20261102) | ![Network settings, dark theme](screenshots/dark/settings-network.png?v=app-store-20261102) |
 
 ### Notifications
 
 | Light | Dark |
 | --- | --- |
-| ![Notifications, light theme](screenshots/light/settings-notifications.png) | ![Notifications, dark theme](screenshots/dark/settings-notifications.png) |
+| ![Notifications, light theme](screenshots/light/settings-notifications.png?v=app-store-20261102) | ![Notifications, dark theme](screenshots/dark/settings-notifications.png?v=app-store-20261102) |
 
 ### Usenet
 
 | Light | Dark |
 | --- | --- |
-| ![Usenet settings, light theme](screenshots/light/settings-usenet.png) | ![Usenet settings, dark theme](screenshots/dark/settings-usenet.png) |
+| ![Usenet settings, light theme](screenshots/light/settings-usenet.png?v=app-store-20261102) | ![Usenet settings, dark theme](screenshots/dark/settings-usenet.png?v=app-store-20261102) |
 
 ### Start page
 
 | Light | Dark |
 | --- | --- |
-| ![Homepage settings, light theme](screenshots/light/settings-homepage.png) | ![Homepage settings, dark theme](screenshots/dark/settings-homepage.png) |
+| ![Homepage settings, light theme](screenshots/light/settings-homepage.png?v=app-store-20261102) | ![Homepage settings, dark theme](screenshots/dark/settings-homepage.png?v=app-store-20261102) |
 
 ### Help and diagnostics
 
 | Light | Dark |
 | --- | --- |
-| ![Diagnostics, light theme](screenshots/light/settings-diagnostics.png) | ![Diagnostics, dark theme](screenshots/dark/settings-diagnostics.png) |
+| ![Diagnostics, light theme](screenshots/light/settings-diagnostics.png?v=app-store-20261102) | ![Diagnostics, dark theme](screenshots/dark/settings-diagnostics.png?v=app-store-20261102) |
 
 ### Catalog app settings
 
 | Light | Dark |
 | --- | --- |
-| ![qBittorrent catalog settings, light theme](screenshots/light/catalog-settings.png) | ![qBittorrent catalog settings, dark theme](screenshots/dark/catalog-settings.png) |
+| ![qBittorrent catalog settings, light theme](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![qBittorrent catalog settings, dark theme](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
 
 ---
 
@@ -279,6 +291,6 @@ The image does not bump those apps on its own. Read release notes on GitHub if s
 
 ## Next steps
 
-- New install checklist: [Install](INSTALL.md)  
-- Remote access: [Cloudflare Tunnel](deploy/CLOUDFLARE.md)  
+- New install checklist: [Install](INSTALL.md)
+- Remote access: [Cloudflare Tunnel](deploy/CLOUDFLARE.md)
 - Lock the door on public URLs: [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md)

@@ -6,7 +6,7 @@
 Deze gids is voor nadat AIO is geïnstalleerd en je de webinterface kunt openen.
 
 !!! success "Doel"
-    Rond de wizard af voor de apps die je nodig hebt, gebruik Start dagelijks en gebruik **Interface openen** in de catalogus wanneer je het scherm van die tool wilt.
+    Rond de wizard af voor de apps die je nodig hebt, gebruik Start dagelijks en gebruik **Open** in de catalogus wanneer je het scherm van die tool wilt.
 
 Standaardadres op je thuisnetwerk:
 
@@ -23,7 +23,7 @@ Vervang het IP (en de poort, als je die hebt gewijzigd).
 1. Maak het **beheerders**account wanneer daarom wordt gevraagd (gebruikersnaam, **e-mail**, wachtwoord).
 2. Rond de wizard van de eerste start af: de apps die je wilt, een Usenet-server als je die gebruikt, optioneel VPN en een optionele Cloudflare Tunnel. De wizard installeert die keuze. De tunnel en de VPN starten meteen als de wizard klaar is, als je ze hebt aangezet.
 3. Na het opnieuw aanmaken van de container antwoordt het dashboard terwijl apps nog starten. Met VPN aan wachten qBittorrent, Prowlarr en Flaresolverr tot de WireGuard-handshake klaar is (AIO probeert de VPN opnieuw als de eerste poging mislukt). Cloudflare Tunnel start als laatste, nadat de apps antwoorden, zodat cloudflared geen connection refused logt tegen origins die nog niet luisteren.
-4. Wacht tot **Catalogus** die apps als **actief** toont. Gebruik **Interface openen** voor alles wat nog een eigen account heeft (Plex, Jellyfin, NZBGet).
+4. Wacht tot **Catalogus** die apps als **actief** toont. Gebruik **Open** voor alles wat nog een eigen account heeft (Plex, Jellyfin, NZBGet).
 5. Voeg later meer toe vanuit **Catalogus**. Je hebt niet elke app nodig.
 
 Begin klein (bijvoorbeeld Radarr + één downloadclient + Jellyfin) en voeg de rest daarna toe.
@@ -47,7 +47,7 @@ Klik in de bewerkstand op een widget om de formaatkeuzes te openen. De × verwij
 Wijzigingen worden automatisch in je AIO-profiel opgeslagen; Klaar sluit de bewerkstand. Telefoon, tablet en desktop kunnen een eigen indeling hebben. De formaatknoppen verschijnen alleen als het venster die schermgroottes kan tonen.
 
 !!! tip "Dashboard"
-    Een lege kaart? Controleer eerst de bron-app in Catalogus. Instellingen → Hulp en diagnose → Lege widgets uitleggen kan de oorzaak tonen. Hier stel je ook het appdock in; de vormgeving verander je via Instellingen → Taal en uiterlijk.
+    Een lege kaart? Controleer eerst de bron-app in Catalogus. Instellingen → Hulp en diagnose → Lege widgets uitleggen kan de oorzaak tonen. Het appdock stel je in bij Instellingen → Startpagina; de vormgeving verander je via Instellingen → Taal en uiterlijk.
 
 Met het toetsenbord: Tab naar een widget in de bewerkstand; pijltjes verplaatsen, Shift + pijltjes wijzigen het formaat, Enter opent de formaatkeuzes en Delete verwijdert.
 
@@ -71,10 +71,10 @@ Start is een raster. Telefoon, tablet en desktop houden elk hun eigen indeling (
 | Aandacht nodig | Dezelfde controles als Instellingen → Meldingen, met een link om elk punt op te lossen |
 | Overige downloads | Standaard uit; voeg het toe via de indelingsknop. Wat SABnzbd, NZBGet en qBittorrent hebben gedownload dat geen film of serie is (muziek, boeken, games, software, archieven), elk met een icoon voor de soort |
 
-Installeren, starten, stoppen en **Interface openen** staan in **Catalogus**. De balk onderaan Start opent apps die al geïnstalleerd zijn.
+Installeren, starten, stoppen en **Open** staan in **Catalogus**. De balk onderaan Start opent apps die al geïnstalleerd zijn.
 
-**Interface openen** op het LAN ziet er meestal uit als `http://YOUR-SERVER-IP:8989` (voorbeeld voor Sonarr).  
-Als je publieke Cloudflare-hostnamen hebt ingesteld, kan **Interface openen** in plaats daarvan `https://sonarr.yourdomain.com` gebruiken — zie [Cloudflare Tunnel](deploy/CLOUDFLARE.md).
+**Open** op het LAN ziet er meestal uit als `http://YOUR-SERVER-IP:8989` (voorbeeld voor Sonarr).
+Als je publieke Cloudflare-hostnamen hebt ingesteld, kan **Open** in plaats daarvan `https://sonarr.yourdomain.com` gebruiken — zie [Cloudflare Tunnel](deploy/CLOUDFLARE.md).
 
 ---
 
@@ -88,7 +88,7 @@ Nog zelf af te maken:
 
 - Een Plex-account.
 - Het setup-token van de eerste start van NeutArr (hieronder), tot dat account bestaat.
-- Aanmelden bij Jellyfin en NZBGet. Op het LAN meldt **Interface openen** je al aan bij Sonarr, Radarr, Lidarr, Prowlarr, qBittorrent, SABnzbd, Bazarr en Seerr als de beheerder van de manager. Publieke hostnamen tonen altijd de eigen aanmelding van de app.
+- Aanmelden bij Jellyfin en NZBGet. Op het LAN meldt **Open** je al aan bij Sonarr, Radarr, Lidarr, Prowlarr, qBittorrent, SABnzbd, Bazarr en Seerr als de beheerder van de manager. Publieke hostnamen tonen altijd de eigen aanmelding van de app.
 - De beheerder en de wizard van de eerste start van Seerr worden voor je afgerond vanuit die gedeelde login (via Jellyfin, of een geclaimde Plex).
 
 VPN, Cloudflare Tunnel, Recyclarr, NeutArr en back-ups zijn optioneel.
@@ -109,17 +109,29 @@ Die waarde is het bestand `/config/neutarr/.setup-token` in het apparaat (de hos
 
 | Situatie | Wat je gebruikt |
 |-----------|-------------|
-| Thuis op wifi | **Interface openen** → `http://IP:PORT` |
-| Buiten huis met Cloudflare | **Interface openen** → `https://subdomain.yourdomain.com` |
+| Thuis op wifi | **Open** → `http://IP:PORT` |
+| Buiten huis met Cloudflare | **Open** → `https://subdomain.yourdomain.com` |
 | Je hebt de luisterpoort van een app gewijzigd | AIO werkt gepubliceerde routes bij; maak de container opnieuw aan als LAN-links er nog verkeerd uitzien. De poort van de manager zelf is compose/env (`AMM_API_PORT`), te zien bij **Instellingen → Server en opslag** |
 
-Als **Interface openen** faalt:
+Als **Open** faalt:
 
 - Is de app **actief** in de catalogus?
 - Zit je op hetzelfde netwerk (voor LAN-links)?
 - Voor HTTPS-links: is de tunnel verbonden en is **Publiceren** gelukt? ([Cloudflare-gids](deploy/CLOUDFLARE.md))
 
 ---
+
+## De nieuwe catalogus gebruiken {#catalog-menu}
+
+Open bovenaan **Catalogus**. Links kies je wat je wilt zien; rechts verschijnen de apps.
+
+Klik op de naam, het pictogram of de rij van een app om het **venster met app-instellingen** te openen. Dit opent niet de app zelf. Onder **⋯** staan onder andere Instellingen, Stoppen, Herstarten, Logs, Bijwerken en Verwijderen, afhankelijk van de appstatus. Sluit het venster met × of Escape. Sla alleen op als je die app wilt wijzigen.
+
+**App-instellingen in Catalogus** gelden voor één app. De pagina **Instellingen** bovenaan is voor AIO zelf: je profiel, uiterlijk, koppelingen, back-ups en updates.
+
+[De nieuwe catalogus gebruiken](USAGE.md#catalog-menu).
+
+Instellingen gebruikt dezelfde indeling als de catalogus: een zijmenu links en de gekozen pagina rechts. Kies links een groep en onderdeel. Het zoekveld doorzoekt het menu, niet de opgeslagen instellingen. Scroll in het zijmenu voor de onderste groepen. Op een telefoon open je **Onderdelen van instellingen** en kies je daarna een pagina.
 
 ## Instellingen die je echt gebruikt
 
@@ -132,7 +144,7 @@ Namen in de interface kunnen kort zijn; dit is wat ze in de praktijk betekenen.
 | **Startpagina** | App-balk en aanmeldtekst; de widgetindeling bewerk je op Start. |
 | **VPN** | De VPN-verbinding voor ondersteunde apps. |
 | **Externe toegang** | Cloudflare Tunnel, publieke adressen en vertrouwde proxy’s. |
-| **App-koppelingen** | Jellyfin-/Seerr-sleutels en je tv koppelen. |
+| **App-koppelingen** | Jellyfin-/Seerr-sleutels, tv-koppelingen en alleen-lezen Homey-koppelingen. |
 | **Usenet** | Providergegevens voor SABnzbd en NZBGet. |
 | **Updates** | App-updates en schema’s. AIO zelf werk je via je NAS/Docker bij. |
 | **Back-ups** | Instellingenback-ups maken, controleren, plannen en herstellen. |
@@ -157,85 +169,85 @@ De huidige app met fictieve voorbeeldgegevens. Licht staat links, donker rechts.
 
 | Light | Dark |
 |---|---|
-| ![Externe toegang](screenshots/light/settings-remote.png) | ![Externe toegang](screenshots/dark/settings-remote.png) |
+| ![Externe toegang](screenshots/light/settings-remote.png?v=app-store-20261102) | ![Externe toegang](screenshots/dark/settings-remote.png?v=app-store-20261102) |
 
 ### App-koppelingen
 
 | Light | Dark |
 |---|---|
-| ![App-koppelingen](screenshots/light/settings-integrations.png) | ![App-koppelingen](screenshots/dark/settings-integrations.png) |
+| ![App-koppelingen](screenshots/light/settings-integrations.png?v=app-store-20261102) | ![App-koppelingen](screenshots/dark/settings-integrations.png?v=app-store-20261102) |
 
 ### Over deze app
 
 | Light | Dark |
 |---|---|
-| ![Over deze app](screenshots/light/settings-about.png) | ![Over deze app](screenshots/dark/settings-about.png) |
+| ![Over deze app](screenshots/light/settings-about.png?v=app-store-20261102) | ![Over deze app](screenshots/dark/settings-about.png?v=app-store-20261102) |
 
 ### Profiel
 
 | Licht | Donker |
 | --- | --- |
-| ![Account in Instellingen, licht thema](screenshots/light/settings.png) | ![Account in Instellingen, donker thema](screenshots/dark/settings.png) |
+| ![Account in Instellingen, licht thema](screenshots/light/settings.png?v=app-store-20261102) | ![Account in Instellingen, donker thema](screenshots/dark/settings.png?v=app-store-20261102) |
 
 ### Taal en uiterlijk
 
 | Licht | Donker |
 | --- | --- |
-| ![Weergave, licht thema](screenshots/light/settings-visuals.png) | ![Weergave, donker thema](screenshots/dark/settings-visuals.png) |
+| ![Weergave, licht thema](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Weergave, donker thema](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
 
 ### Server en opslag
 
 | Licht | Donker |
 | --- | --- |
-| ![Systeeminstellingen, licht thema](screenshots/light/settings-system.png) | ![Systeeminstellingen, donker thema](screenshots/dark/settings-system.png) |
+| ![Systeeminstellingen, licht thema](screenshots/light/settings-system.png?v=app-store-20261102) | ![Systeeminstellingen, donker thema](screenshots/dark/settings-system.png?v=app-store-20261102) |
 
 ### Updates
 
 | Licht | Donker |
 | --- | --- |
-| ![Updates, licht thema](screenshots/light/settings-updates.png) | ![Updates, donker thema](screenshots/dark/settings-updates.png) |
+| ![Updates, licht thema](screenshots/light/settings-updates.png?v=app-store-20261102) | ![Updates, donker thema](screenshots/dark/settings-updates.png?v=app-store-20261102) |
 
 ### Back-ups
 
 | Licht | Donker |
 | --- | --- |
-| ![Back-ups, licht thema](screenshots/light/settings-backups.png) | ![Back-ups, donker thema](screenshots/dark/settings-backups.png) |
+| ![Back-ups, licht thema](screenshots/light/settings-backups.png?v=app-store-20261102) | ![Back-ups, donker thema](screenshots/dark/settings-backups.png?v=app-store-20261102) |
 
 ### VPN
 
 | Licht | Donker |
 | --- | --- |
-| ![Netwerkinstellingen, licht thema](screenshots/light/settings-network.png) | ![Netwerkinstellingen, donker thema](screenshots/dark/settings-network.png) |
+| ![Netwerkinstellingen, licht thema](screenshots/light/settings-network.png?v=app-store-20261102) | ![Netwerkinstellingen, donker thema](screenshots/dark/settings-network.png?v=app-store-20261102) |
 
 ### Meldingen
 
 | Licht | Donker |
 | --- | --- |
-| ![Meldingen, licht thema](screenshots/light/settings-notifications.png) | ![Meldingen, donker thema](screenshots/dark/settings-notifications.png) |
+| ![Meldingen, licht thema](screenshots/light/settings-notifications.png?v=app-store-20261102) | ![Meldingen, donker thema](screenshots/dark/settings-notifications.png?v=app-store-20261102) |
 
 ### Usenet
 
 | Licht | Donker |
 | --- | --- |
-| ![Usenet-instellingen, licht thema](screenshots/light/settings-usenet.png) | ![Usenet-instellingen, donker thema](screenshots/dark/settings-usenet.png) |
+| ![Usenet-instellingen, licht thema](screenshots/light/settings-usenet.png?v=app-store-20261102) | ![Usenet-instellingen, donker thema](screenshots/dark/settings-usenet.png?v=app-store-20261102) |
 
 ### Startpagina
 
 | Licht | Donker |
 | --- | --- |
-| ![Startpagina-instellingen, licht thema](screenshots/light/settings-homepage.png) | ![Startpagina-instellingen, donker thema](screenshots/dark/settings-homepage.png) |
+| ![Startpagina-instellingen, licht thema](screenshots/light/settings-homepage.png?v=app-store-20261102) | ![Startpagina-instellingen, donker thema](screenshots/dark/settings-homepage.png?v=app-store-20261102) |
 
 ### Hulp en diagnose
 
 | Licht | Donker |
 | --- | --- |
-| ![Diagnose, licht thema](screenshots/light/settings-diagnostics.png) | ![Diagnose, donker thema](screenshots/dark/settings-diagnostics.png) |
+| ![Diagnose, licht thema](screenshots/light/settings-diagnostics.png?v=app-store-20261102) | ![Diagnose, donker thema](screenshots/dark/settings-diagnostics.png?v=app-store-20261102) |
 
 ### App-instellingen in de catalogus
 
 | Licht | Donker |
 | --- | --- |
-| ![qBittorrent-instellingen in de catalogus, licht thema](screenshots/light/catalog-settings.png) | ![qBittorrent-instellingen in de catalogus, donker thema](screenshots/dark/catalog-settings.png) |
+| ![qBittorrent-instellingen in de catalogus, licht thema](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![qBittorrent-instellingen in de catalogus, donker thema](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
 
 ---
 
@@ -279,6 +291,6 @@ De image werkt die apps niet vanzelf bij. Lees de release-opmerkingen op GitHub 
 
 ## Volgende stappen
 
-- Checklist voor een nieuwe installatie: [Installeren](INSTALL.md)  
-- Toegang van buitenaf: [Cloudflare Tunnel](deploy/CLOUDFLARE.md)  
+- Checklist voor een nieuwe installatie: [Installeren](INSTALL.md)
+- Toegang van buitenaf: [Cloudflare Tunnel](deploy/CLOUDFLARE.md)
 - De deur op slot voor publieke URL’s: [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md)

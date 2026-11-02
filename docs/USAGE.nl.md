@@ -11,12 +11,34 @@ Maak het beheerdersaccount en doorloop de wizard. Begin bijvoorbeeld met Jellyfi
 | AIO | |
 |---|---|
 | Home / Start | Bekijk downloads, aankomende releases en serverinformatie. De widgets kun je zelf indelen. |
-| Catalogus | Installeer apps, bekijk of ze actief zijn en open een app met Interface openen / Open UI. |
+| Catalogus | Installeer apps, bekijk of ze actief zijn en open een app met Open. |
 | Instellingen | Pas het uiterlijk van AIO, je account en updates aan. Hier voeg je geen films toe aan je mediaserver. |
+
+## De nieuwe catalogus gebruiken {#catalog-menu}
+
+Open bovenaan **Catalogus**. Links kies je wat je wilt zien; rechts verschijnen de apps.
+
+| Keuze links | Wat zie je? |
+|---|---|
+| **Ontdekken** | Uitgelichte apps en de volledige catalogus. |
+| **Mijn apps** | Apps die je al hebt geïnstalleerd, ook als ze gestopt zijn. |
+| **Actief** | Alleen apps die nu draaien. |
+| **Beschikbaar** | Apps die je nog kunt installeren. |
+| **Zoeken / Categorie** | Zoek op appnaam of kies een soort app. |
+
+Boven de applijst kun je sorteren op Populariteit of A tot Z. Mis je een app? Wis de zoekopdracht en kies Ontdekken om de selectie op status of categorie weg te halen.
+
+Beginnen met Jellyfin: zoek op Jellyfin. Kies **Installeren** als de app nog ontbreekt, wacht op **Actief / Running** en klik op **Open**. Is de app geïnstalleerd maar gestopt? Kies eerst **Start**. Open opent Jellyfin in een eigen browsertabblad.
+
+Klik op de naam, het pictogram of de rij van een app om het **venster met app-instellingen** te openen. Dit opent niet de app zelf. Onder **⋯** staan onder andere Instellingen, Stoppen, Herstarten, Logs, Bijwerken en Verwijderen, afhankelijk van de appstatus. Sluit het venster met × of Escape. Sla alleen op als je die app wilt wijzigen.
+
+**App-instellingen in Catalogus** gelden voor één app. De pagina **Instellingen** bovenaan is voor AIO zelf: je profiel, uiterlijk, koppelingen, back-ups en updates.
+
+![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=app-store-20261102)
 
 ## Je weg vinden in Instellingen {#settings-menu}
 
-Open **Instellingen** bovenaan. Op een computer kies je links een pagina. Gebruik **Zoek in instellingen…** boven de lijst om iets te vinden, bijvoorbeeld “achtergrond” of “back-up”. Wis je zoekopdracht om alle pagina’s weer te zien. Op een telefoon tik je op **Instellingen / de huidige pagina** om het menu te openen.
+Instellingen gebruikt dezelfde indeling als de catalogus: een zijmenu links en de gekozen pagina rechts. Kies links een groep en onderdeel. Het zoekveld doorzoekt het menu, niet de opgeslagen instellingen. Scroll in het zijmenu voor de onderste groepen. Op een telefoon open je **Onderdelen van instellingen** en kies je daarna een pagina.
 
 | Wat wil je aanpassen? | Kies deze pagina |
 |---|---|
@@ -26,14 +48,15 @@ Open **Instellingen** bovenaan. Op een computer kies je links een pagina. Gebrui
 | Een app bijwerken | Onderhoud → **Updates** |
 | Een instellingenback-up maken | Onderhoud → **Back-ups** |
 | Ontdekken waarom een widget leeg is | Systeem → **Hulp en diagnose** |
+| API-sleutels, tv of Homey koppelen | Verbindingen → **App-koppelingen** |
 
 Het zijmenu opent alleen een pagina. Verander rechts de gewenste instelling en gebruik de knop **Opslaan** van dat onderdeel als die verschijnt. Widgets verplaats je op **Start** met de knop met vier blokjes; Startpagina-instellingen regelen de app-balk en aanmeldtekst.
 
-![Settings: grouped sidebar and search](screenshots/light/settings.png)
+![Settings: grouped sidebar and search](screenshots/light/settings.png?v=app-store-20261102)
 
 ## 3. Open je eerste app
 
-Ga naar Catalogus, zoek Jellyfin en kies Interface openen / Open UI. Rond de eigen installatie van Jellyfin af als die daarom vraagt. Vraagt Jellyfin om bibliotheekmappen? Gebruik bij de standaardinstallatie /data/media/movies voor films en /data/media/tv voor series. Dit zijn de mediamappen die de platformgids al heeft gekoppeld. Maak geen tweede kopie omdat je NAS een ander pad toont.
+Ga naar Catalogus, zoek Jellyfin en kies Open. Rond de eigen installatie van Jellyfin af als die daarom vraagt. Vraagt Jellyfin om bibliotheekmappen? Gebruik bij de standaardinstallatie /data/media/movies voor films en /data/media/tv voor series. Dit zijn de mediamappen die de platformgids al heeft gekoppeld. Maak geen tweede kopie omdat je NAS een ander pad toont.
 
 **Controle: Jellyfin opent in een eigen browsertabblad. Zonder mediabestanden is een bibliotheek leeg; dat is normaal.**
 

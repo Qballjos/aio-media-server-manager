@@ -11,12 +11,34 @@ Create the administrator account, then complete the wizard. For a small start, c
 | AIO | |
 |---|---|
 | Home | See downloads, upcoming releases and server information. You can arrange the widgets yourself. |
-| Catalog | Install apps, see whether they are running and choose Open UI to open an app. |
+| Catalog | Install apps, see whether they are running and choose Open to open an app. |
 | Settings | Change AIO’s appearance, account and updates. This is not where you add films to a media server. |
+
+## Using the new catalog {#catalog-menu}
+
+Open **Catalog** at the top. The left sidebar helps you choose what to see; the apps appear on the right.
+
+| Sidebar option | What you see |
+|---|---|
+| **Discover** | Featured apps and the complete catalog. |
+| **My apps** | Apps you have already installed, including stopped apps. |
+| **Active** | Only apps that are running. |
+| **Available** | Apps you can install. |
+| **Search / Category** | Find an app by name or choose a type of app. |
+
+Use the sort control above the app list for Popularity or A to Z. Missing an app? Clear the search and choose Discover to remove the status/category selection.
+
+To start with Jellyfin: search for Jellyfin. Choose **Install** if it is not installed, wait for **Running**, then choose **Open**. If it is installed but stopped, choose **Start** first. Open launches Jellyfin in its own browser tab.
+
+Click an app’s name, icon or row to open its **app settings popup**. This does not open the app itself. The **⋯** button offers Settings, Stop, Restart, Logs, Update and Uninstall as applicable. Close the popup with × or Escape. Only save changes when you intend to change that app.
+
+**Catalog app settings** change one app. The **Settings** page in the top navigation changes AIO itself: profile, appearance, connections, backups and updates.
+
+![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=app-store-20261102)
 
 ## Find your way around Settings {#settings-menu}
 
-Open **Settings** in the top navigation. On a computer, choose a page in the left sidebar. Use **Search settings…** above the list to find an option, for example “wallpaper” or “backup”. Clear the search to see all pages again. On a phone, tap **Settings / the current page** to open the menu.
+The settings page uses the same sidebar-and-content layout as the catalog. On a computer, choose a group and page on the left; the selected page appears on the right. The search field filters the menu, not the values of your settings. Scroll the sidebar to find lower groups. On a phone, open **Settings sections** and choose a page.
 
 | What do you want to change? | Choose this page |
 |---|---|
@@ -26,14 +48,15 @@ Open **Settings** in the top navigation. On a computer, choose a page in the lef
 | Update an app | Maintenance → **Updates** |
 | Make a settings backup | Maintenance → **Backups** |
 | Find why a widget is empty | System → **Help and diagnostics** |
+| API keys, TV or Homey connections | Connections → **App connections** |
 
 The sidebar only selects a page. Change a setting on the right and use that section’s **Save** button when shown. Arrange widgets directly on **Home**, using the four-block layout button; Start page settings control the dock and sign-in text.
 
-![Settings: grouped sidebar and search](screenshots/light/settings.png)
+![Settings: grouped sidebar and search](screenshots/light/settings.png?v=app-store-20261102)
 
 ## 3. Open your first app
 
-Choose Catalog, find Jellyfin and choose Open UI. Complete Jellyfin’s own setup if requested. When it asks for library folders, use /data/media/movies for films and /data/media/tv for shows with the default installation. Those names refer to the media folders already connected by your platform guide. Do not create another copy because your NAS shows a different folder path.
+Choose Catalog, find Jellyfin and choose Open. Complete Jellyfin’s own setup if requested. When it asks for library folders, use /data/media/movies for films and /data/media/tv for shows with the default installation. Those names refer to the media folders already connected by your platform guide. Do not create another copy because your NAS shows a different folder path.
 
 **Check: Jellyfin opens in its own browser tab. A folder without media will look empty; that is normal.**
 

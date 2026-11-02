@@ -11,12 +11,34 @@ Administratorkonto erstellen und den Assistenten abschließen. Beginne etwa mit 
 | AIO | |
 |---|---|
 | Home | Downloads, Termine und Serverdaten; Widgets lassen sich anordnen. |
-| Katalog | Apps installieren, Status prüfen und über Open UI öffnen. |
+| Katalog | Apps installieren, Status prüfen und über Öffnen öffnen. |
 | Einstellungen | Aussehen, Konto und Updates von AIO; hier werden keine Filme zu einer Medienbibliothek hinzugefügt. |
+
+## Den neuen Katalog benutzen {#catalog-menu}
+
+Öffne oben **Katalog**. Links wählst du die Ansicht, rechts erscheinen die Apps.
+
+| Auswahl links | Was wird angezeigt? |
+|---|---|
+| **Entdecken** | Empfohlene Apps und der vollständige Katalog. |
+| **Meine Apps** | Installierte Apps, auch gestoppte. |
+| **Aktiv** | Nur laufende Apps. |
+| **Verfügbar** | Apps, die du installieren kannst. |
+| **Suche / Kategorie** | Nach App-Namen suchen oder eine App-Art wählen. |
+
+Über der Liste nach Beliebtheit oder A bis Z sortieren. Fehlt eine App? Suche leeren und Entdecken wählen, um Status und Kategorie zurückzusetzen.
+
+Für Jellyfin: nach Jellyfin suchen. Falls nötig **Installieren** wählen, auf **Running** warten und **Öffnen** wählen. Eine installierte, gestoppte App zuerst **Start** wählen. Öffnen startet die App in einem eigenen Browser-Tab.
+
+Name, Symbol oder Zeile einer App öffnen das **App-Einstellungsfenster**, nicht die App selbst. **⋯** bietet je nach Status Einstellungen, Stoppen, Neustarten, Logs, Aktualisieren und Deinstallieren. Mit × oder Escape schließen. Änderungen nur bewusst speichern.
+
+**App-Einstellungen im Katalog** gelten für eine App. Die Seite **Einstellungen** oben ändert AIO selbst: Profil, Aussehen, Verbindungen, Sicherungen und Updates.
+
+![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=app-store-20261102)
 
 ## In den Einstellungen zurechtfinden {#settings-menu}
 
-Öffne oben **Einstellungen**. Am Computer wählst du links eine Seite. Mit **Einstellungen suchen…** findest du zum Beispiel Hintergrund oder Sicherungen. Lösche die Suche, um wieder alle Seiten zu sehen. Auf dem Telefon öffnest du das Menü über **Einstellungen / aktuelle Seite**.
+Einstellungen nutzt dieselbe Seitenleiste wie der Katalog: links Gruppe und Seite wählen, rechts bearbeiten. Die Suche filtert das Menü, nicht gespeicherte Werte. Für weitere Gruppen in der Seitenleiste scrollen. Auf dem Telefon **Einstellungsbereiche** öffnen und eine Seite wählen.
 
 | Was möchtest du ändern? | Diese Seite wählen |
 |---|---|
@@ -26,14 +48,15 @@ Administratorkonto erstellen und den Assistenten abschließen. Beginne etwa mit 
 | Eine App aktualisieren | Wartung → **Updates** |
 | Einstellungen sichern | Wartung → **Sicherungen** |
 | Grund für ein leeres Widget finden | System → **Hilfe und Diagnose** |
+| API-Schlüssel, TV oder Homey verbinden | Verbindungen → **App-Verbindungen** |
 
 Die Seitenleiste öffnet nur eine Seite. Ändere rechts die gewünschte Option und nutze die jeweilige Schaltfläche **Speichern**, sofern angezeigt. Widgets ordnest du direkt auf **Start** über das Symbol mit vier Blöcken an; Startseite regelt die App-Leiste und den Anmeldetext.
 
-![Settings: grouped sidebar and search](screenshots/light/settings.png)
+![Settings: grouped sidebar and search](screenshots/light/settings.png?v=app-store-20261102)
 
 ## 3. Erste App öffnen
 
-Im Katalog Jellyfin suchen und Open UI wählen. Jellyfins eigenen Assistenten gegebenenfalls abschließen. Bei der Standardinstallation sind die Bibliotheksordner /data/media/movies für Filme und /data/media/tv für Serien. Diese entsprechen den verbundenen NAS-Ordnern; wegen anderer Pfadnamen keine zweite Medienkopie erstellen.
+Im Katalog Jellyfin suchen und Öffnen wählen. Jellyfins eigenen Assistenten gegebenenfalls abschließen. Bei der Standardinstallation sind die Bibliotheksordner /data/media/movies für Filme und /data/media/tv für Serien. Diese entsprechen den verbundenen NAS-Ordnern; wegen anderer Pfadnamen keine zweite Medienkopie erstellen.
 
 **Prüfen: Jellyfin öffnet in einem eigenen Tab. Ohne Mediendateien ist die Bibliothek leer; das ist normal.**
 

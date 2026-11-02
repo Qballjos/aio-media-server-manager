@@ -6,7 +6,7 @@
 Ce guide s’adresse à vous une fois AIO installé et l’interface web ouverte.
 
 !!! success "But"
-    Terminez l’assistant pour les apps dont vous avez besoin, utilisez Accueil au quotidien, et **Ouvrir l’interface** dans le catalogue quand vous voulez l’écran de cet outil.
+    Terminez l’assistant pour les apps dont vous avez besoin, utilisez Accueil au quotidien, et **Ouvrir** dans le catalogue quand vous voulez l’écran de cet outil.
 
 Adresse par défaut sur votre réseau local :
 
@@ -23,7 +23,7 @@ Remplacez l’IP (et le port, si vous l’avez changé).
 1. Créez le compte **administrateur** quand on vous le demande (nom, **e-mail**, mot de passe).
 2. Terminez l’assistant de première exécution : les apps voulues, un serveur Usenet si vous en utilisez un, un VPN facultatif et un Cloudflare Tunnel facultatif. L’assistant installe ce choix. Le tunnel et le VPN démarrent dès que l’assistant est fini, si vous les avez activés.
 3. Après une recréation du conteneur, le tableau de bord répond pendant que les apps démarrent encore. Avec le VPN activé, qBittorrent, Prowlarr et Flaresolverr attendent que la poignée de main WireGuard soit établie (AIO réessaie le VPN si le premier essai échoue). Cloudflare Tunnel démarre en dernier, une fois que les apps répondent, pour que cloudflared ne journalise pas de connection refused vers des origines qui n’écoutent pas encore.
-4. Attendez que **Catalogue** affiche ces apps comme **actives**. Utilisez **Ouvrir l’interface** pour tout ce qui a encore un compte propre (Plex, Jellyfin, NZBGet).
+4. Attendez que **Catalogue** affiche ces apps comme **actives**. Utilisez **Ouvrir** pour tout ce qui a encore un compte propre (Plex, Jellyfin, NZBGet).
 5. Ajoutez-en plus tard depuis **Catalogue**. Vous n’avez pas besoin de chaque app.
 
 Commencez petit (par exemple Radarr + un client de téléchargement + Jellyfin), puis ajoutez le reste.
@@ -71,10 +71,10 @@ Accueil est une grille. Téléphone, tablette et bureau gardent chacun leur disp
 | À surveiller | Les mêmes contrôles que Réglages → Notifications, avec un lien pour régler chaque point |
 | Autres téléchargements | Désactivé par défaut ; ajoutez-le via le contrôle de disposition. Ce que SABnzbd, NZBGet et qBittorrent ont téléchargé et qui n’est ni un film ni une série (musique, livres, jeux, logiciels, archives), chacun avec une icône pour son type |
 
-Installer, démarrer, arrêter et **Ouvrir l’interface** se trouvent dans **Catalogue**. La barre en bas d’Accueil ouvre les apps déjà installées.
+Installer, démarrer, arrêter et **Ouvrir** se trouvent dans **Catalogue**. La barre en bas d’Accueil ouvre les apps déjà installées.
 
-**Ouvrir l’interface** sur le LAN ressemble en général à `http://YOUR-SERVER-IP:8989` (exemple Sonarr).  
-Si vous avez configuré des noms d’hôte publics Cloudflare, **Ouvrir l’interface** peut utiliser `https://sonarr.yourdomain.com` à la place — voir [Cloudflare Tunnel](deploy/CLOUDFLARE.md).
+**Ouvrir** sur le LAN ressemble en général à `http://YOUR-SERVER-IP:8989` (exemple Sonarr).
+Si vous avez configuré des noms d’hôte publics Cloudflare, **Ouvrir** peut utiliser `https://sonarr.yourdomain.com` à la place — voir [Cloudflare Tunnel](deploy/CLOUDFLARE.md).
 
 ---
 
@@ -88,7 +88,7 @@ Encore à faire vous-même :
 
 - Un compte Plex.
 - Le jeton d’installation du premier démarrage de NeutArr (ci-dessous), jusqu’à ce que ce compte existe.
-- La connexion à Jellyfin et NZBGet. Sur le LAN, **Ouvrir l’interface** vous connecte déjà à Sonarr, Radarr, Lidarr, Prowlarr, qBittorrent, SABnzbd, Bazarr et Seerr en tant qu’administrateur du gestionnaire. Les noms d’hôte publics montrent toujours la connexion propre de l’app.
+- La connexion à Jellyfin et NZBGet. Sur le LAN, **Ouvrir** vous connecte déjà à Sonarr, Radarr, Lidarr, Prowlarr, qBittorrent, SABnzbd, Bazarr et Seerr en tant qu’administrateur du gestionnaire. Les noms d’hôte publics montrent toujours la connexion propre de l’app.
 - L’administrateur et l’assistant de première exécution de Seerr sont terminés pour vous à partir de cette connexion partagée (via Jellyfin, ou un Plex revendiqué).
 
 VPN, Cloudflare Tunnel, Recyclarr, NeutArr et sauvegardes sont facultatifs.
@@ -109,17 +109,29 @@ Cette valeur est le fichier `/config/neutarr/.setup-token` dans l’appliance (l
 
 | Situation | Ce que vous utilisez |
 |-----------|-------------|
-| À la maison en wifi | **Ouvrir l’interface** → `http://IP:PORT` |
-| Hors de la maison avec Cloudflare | **Ouvrir l’interface** → `https://subdomain.yourdomain.com` |
+| À la maison en wifi | **Ouvrir** → `http://IP:PORT` |
+| Hors de la maison avec Cloudflare | **Ouvrir** → `https://subdomain.yourdomain.com` |
 | Vous avez changé le port d’écoute d’une app | AIO met à jour les routes publiées ; recréez le conteneur si les liens LAN ont encore l’air faux. Le port du gestionnaire lui-même est Compose/environnement (`AMM_API_PORT`), visible dans **Réglages → Serveur et stockage** |
 
-Si **Ouvrir l’interface** échoue :
+Si **Ouvrir** échoue :
 
 - L’app est-elle **active** dans le catalogue ?
 - Êtes-vous sur le même réseau (pour les liens LAN) ?
 - Pour les liens HTTPS : le tunnel est-il connecté et **Publier** a-t-il réussi ? ([Guide Cloudflare](deploy/CLOUDFLARE.md))
 
 ---
+
+## Utiliser le nouveau catalogue {#catalog-menu}
+
+Ouvrez **Catalogue** en haut. Choisissez la vue à gauche ; les apps apparaissent à droite.
+
+Cliquez sur le nom, l’icône ou la ligne d’une app pour ouvrir sa **fenêtre de réglages**, sans ouvrir l’app elle-même. **⋯** propose selon son état Réglages, Arrêter, Redémarrer, Journaux, Mettre à jour et Désinstaller. Fermez avec × ou Échap. Enregistrez uniquement les changements souhaités.
+
+Les **réglages d’app dans Catalogue** concernent une app. La page **Réglages** en haut concerne AIO : profil, apparence, connexions, sauvegardes et mises à jour.
+
+[Utiliser le nouveau catalogue](USAGE.md#catalog-menu).
+
+Réglages utilise la même disposition que le catalogue : groupe et page à gauche, contenu à droite. La recherche filtre le menu, pas les valeurs enregistrées. Faites défiler le menu pour voir les groupes du bas. Sur téléphone, ouvrez **Sections des réglages**, puis choisissez une page.
 
 ## Les réglages que vous utilisez vraiment
 
@@ -132,7 +144,7 @@ Les noms dans l’interface peuvent être courts ; voici ce qu’ils veulent dir
 | **Page d’accueil** | Barre d’apps et texte de connexion ; disposition des widgets sur Accueil. |
 | **VPN** | Connexion VPN des apps compatibles. |
 | **Accès externe** | Cloudflare Tunnel, adresses publiques et proxys de confiance. |
-| **Connexions des apps** | Clés Jellyfin/Seerr et association TV. |
+| **Connexions des apps** | Clés Jellyfin/Seerr, association TV et accès Homey en lecture seule. |
 | **Usenet** | Fournisseur Usenet pour SABnzbd et NZBGet. |
 | **Mises à jour** | Mises à jour des apps et planification. AIO se met à jour via le NAS/Docker. |
 | **Sauvegardes** | Créer, vérifier, planifier et restaurer les sauvegardes de configuration. |
@@ -157,85 +169,85 @@ Interface actuelle avec données fictives. Clair à gauche, sombre à droite. Ac
 
 | Light | Dark |
 |---|---|
-| ![Accès externe](screenshots/light/settings-remote.png) | ![Accès externe](screenshots/dark/settings-remote.png) |
+| ![Accès externe](screenshots/light/settings-remote.png?v=app-store-20261102) | ![Accès externe](screenshots/dark/settings-remote.png?v=app-store-20261102) |
 
 ### Connexions des apps
 
 | Light | Dark |
 |---|---|
-| ![Connexions des apps](screenshots/light/settings-integrations.png) | ![Connexions des apps](screenshots/dark/settings-integrations.png) |
+| ![Connexions des apps](screenshots/light/settings-integrations.png?v=app-store-20261102) | ![Connexions des apps](screenshots/dark/settings-integrations.png?v=app-store-20261102) |
 
 ### À propos de cette app
 
 | Light | Dark |
 |---|---|
-| ![À propos de cette app](screenshots/light/settings-about.png) | ![À propos de cette app](screenshots/dark/settings-about.png) |
+| ![À propos de cette app](screenshots/light/settings-about.png?v=app-store-20261102) | ![À propos de cette app](screenshots/dark/settings-about.png?v=app-store-20261102) |
 
 ### Profil
 
 | Clair | Sombre |
 | --- | --- |
-| ![Compte dans Réglages, thème clair](screenshots/light/settings.png) | ![Compte dans Réglages, thème sombre](screenshots/dark/settings.png) |
+| ![Compte dans Réglages, thème clair](screenshots/light/settings.png?v=app-store-20261102) | ![Compte dans Réglages, thème sombre](screenshots/dark/settings.png?v=app-store-20261102) |
 
 ### Langue et apparence
 
 | Clair | Sombre |
 | --- | --- |
-| ![Apparence, thème clair](screenshots/light/settings-visuals.png) | ![Apparence, thème sombre](screenshots/dark/settings-visuals.png) |
+| ![Apparence, thème clair](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Apparence, thème sombre](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
 
 ### Serveur et stockage
 
 | Clair | Sombre |
 | --- | --- |
-| ![Réglages système, thème clair](screenshots/light/settings-system.png) | ![Réglages système, thème sombre](screenshots/dark/settings-system.png) |
+| ![Réglages système, thème clair](screenshots/light/settings-system.png?v=app-store-20261102) | ![Réglages système, thème sombre](screenshots/dark/settings-system.png?v=app-store-20261102) |
 
 ### Mises à jour
 
 | Clair | Sombre |
 | --- | --- |
-| ![Mises à jour, thème clair](screenshots/light/settings-updates.png) | ![Mises à jour, thème sombre](screenshots/dark/settings-updates.png) |
+| ![Mises à jour, thème clair](screenshots/light/settings-updates.png?v=app-store-20261102) | ![Mises à jour, thème sombre](screenshots/dark/settings-updates.png?v=app-store-20261102) |
 
 ### Sauvegardes
 
 | Clair | Sombre |
 | --- | --- |
-| ![Sauvegardes, thème clair](screenshots/light/settings-backups.png) | ![Sauvegardes, thème sombre](screenshots/dark/settings-backups.png) |
+| ![Sauvegardes, thème clair](screenshots/light/settings-backups.png?v=app-store-20261102) | ![Sauvegardes, thème sombre](screenshots/dark/settings-backups.png?v=app-store-20261102) |
 
 ### VPN
 
 | Clair | Sombre |
 | --- | --- |
-| ![Réglages réseau, thème clair](screenshots/light/settings-network.png) | ![Réglages réseau, thème sombre](screenshots/dark/settings-network.png) |
+| ![Réglages réseau, thème clair](screenshots/light/settings-network.png?v=app-store-20261102) | ![Réglages réseau, thème sombre](screenshots/dark/settings-network.png?v=app-store-20261102) |
 
 ### Notifications
 
 | Clair | Sombre |
 | --- | --- |
-| ![Notifications, thème clair](screenshots/light/settings-notifications.png) | ![Notifications, thème sombre](screenshots/dark/settings-notifications.png) |
+| ![Notifications, thème clair](screenshots/light/settings-notifications.png?v=app-store-20261102) | ![Notifications, thème sombre](screenshots/dark/settings-notifications.png?v=app-store-20261102) |
 
 ### Usenet
 
 | Clair | Sombre |
 | --- | --- |
-| ![Réglages Usenet, thème clair](screenshots/light/settings-usenet.png) | ![Réglages Usenet, thème sombre](screenshots/dark/settings-usenet.png) |
+| ![Réglages Usenet, thème clair](screenshots/light/settings-usenet.png?v=app-store-20261102) | ![Réglages Usenet, thème sombre](screenshots/dark/settings-usenet.png?v=app-store-20261102) |
 
 ### Page d’accueil
 
 | Clair | Sombre |
 | --- | --- |
-| ![Réglages de la page d’accueil, thème clair](screenshots/light/settings-homepage.png) | ![Réglages de la page d’accueil, thème sombre](screenshots/dark/settings-homepage.png) |
+| ![Réglages de la page d’accueil, thème clair](screenshots/light/settings-homepage.png?v=app-store-20261102) | ![Réglages de la page d’accueil, thème sombre](screenshots/dark/settings-homepage.png?v=app-store-20261102) |
 
 ### Aide et diagnostic
 
 | Clair | Sombre |
 | --- | --- |
-| ![Diagnostic, thème clair](screenshots/light/settings-diagnostics.png) | ![Diagnostic, thème sombre](screenshots/dark/settings-diagnostics.png) |
+| ![Diagnostic, thème clair](screenshots/light/settings-diagnostics.png?v=app-store-20261102) | ![Diagnostic, thème sombre](screenshots/dark/settings-diagnostics.png?v=app-store-20261102) |
 
 ### Réglages d’app dans le catalogue
 
 | Clair | Sombre |
 | --- | --- |
-| ![Réglages qBittorrent dans le catalogue, thème clair](screenshots/light/catalog-settings.png) | ![Réglages qBittorrent dans le catalogue, thème sombre](screenshots/dark/catalog-settings.png) |
+| ![Réglages qBittorrent dans le catalogue, thème clair](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![Réglages qBittorrent dans le catalogue, thème sombre](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
 
 ---
 
@@ -279,6 +291,6 @@ L’image ne met pas ces apps à jour toute seule. Lisez les notes de version su
 
 ## Et ensuite
 
-- Liste pour une nouvelle installation : [Installer](INSTALL.md)  
-- Accès distant : [Cloudflare Tunnel](deploy/CLOUDFLARE.md)  
+- Liste pour une nouvelle installation : [Installer](INSTALL.md)
+- Accès distant : [Cloudflare Tunnel](deploy/CLOUDFLARE.md)
 - Fermer la porte des URL publiques : [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md)

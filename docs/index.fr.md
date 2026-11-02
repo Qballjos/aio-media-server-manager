@@ -251,10 +251,10 @@ title: AIO Media Server Manager
 </div>
 </div>
 <div class="preview-panel" id="preview-panel-catalog" role="tabpanel" aria-labelledby="preview-tab-catalog" data-panel="catalog" hidden>
-<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-preview-image="catalog" alt="Catalogue — Capture de l’application AIO" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=app-store-20261102" data-preview-image="catalog" alt="Catalogue — Capture de l’application AIO" width="1280" height="720" loading="lazy">
 </div>
 <div class="preview-panel" id="preview-panel-settings" role="tabpanel" aria-labelledby="preview-tab-settings" data-panel="settings" hidden>
-<img src="__AIO_ASSET__/screenshots/light/settings.png" data-preview-image="settings" alt="Réglages — Capture de l’application AIO" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png?v=app-store-20261102" data-preview-image="settings" alt="Réglages — Capture de l’application AIO" width="1280" height="720" loading="lazy">
 </div>
 </div>
 <p class="preview-caption">Aperçu interactif · données fictives<span aria-hidden="true"> · </span>
@@ -335,11 +335,11 @@ title: AIO Media Server Manager
 <h2>Vos outils préférés.<br>
 <span class="gradient-text">Un seul endroit pour les gérer.</span>
 </h2>
-<p>Retrouvez vos apps dans le catalogue. Installez le nécessaire, vérifiez leur état et ouvrez chaque app depuis sa carte.</p>
+<p>Choisissez Découvrir, Mes apps ou une catégorie dans le menu. Ouvrir lance l’app ; son nom ou son icône affiche ses réglages.</p>
 <a class="landing-text-link" href="USAGE.md">Découvrir le tableau de bord →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/catalog.png" data-theme-image="catalog" alt="Catalogue" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=app-store-20261102" data-theme-image="catalog" alt="Catalogue" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section feature-row reverse">
@@ -350,7 +350,7 @@ title: AIO Media Server Manager
 <a class="landing-text-link" href="USAGE.md#screens">Découvrir le tableau de bord →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/settings.png" data-theme-image="settings" alt="Réglages" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png?v=app-store-20261102" data-theme-image="settings" alt="Réglages" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section" id="install">

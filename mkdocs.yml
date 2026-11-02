@@ -42,7 +42,7 @@ theme:
     - toc.follow
 
 extra_javascript:
-  - javascripts/showcase.js
+  - javascripts/showcase.js?v=app-store-20261102
 
 extra_css:
   - stylesheets/extra.css?v=20261102-layout2

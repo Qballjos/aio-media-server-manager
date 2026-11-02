@@ -11,12 +11,34 @@ Créez le compte administrateur et terminez l’assistant. Commencez par exemple
 | AIO | |
 |---|---|
 | Home | Téléchargements, sorties et informations serveur ; les widgets sont personnalisables. |
-| Catalogue | Installer les apps, vérifier leur état et les ouvrir avec Open UI. |
+| Catalogue | Installer les apps, vérifier leur état et les ouvrir avec Ouvrir. |
 | Réglages | Apparence, compte et mises à jour AIO ; ce n’est pas ici que vous ajoutez des films à votre bibliothèque. |
+
+## Utiliser le nouveau catalogue {#catalog-menu}
+
+Ouvrez **Catalogue** en haut. Choisissez la vue à gauche ; les apps apparaissent à droite.
+
+| Choix à gauche | Contenu affiché |
+|---|---|
+| **Découvrir** | Apps mises en avant et catalogue complet. |
+| **Mes apps** | Apps déjà installées, même arrêtées. |
+| **Actif** | Uniquement les apps en cours d’exécution. |
+| **Disponible** | Apps à installer. |
+| **Recherche / Catégorie** | Chercher une app par nom ou par type. |
+
+Au-dessus de la liste, triez par popularité ou de A à Z. Une app manque ? Effacez la recherche et choisissez Découvrir pour retirer la sélection de statut ou catégorie.
+
+Pour Jellyfin : recherchez Jellyfin. Choisissez **Installer** si nécessaire, attendez **Running**, puis **Ouvrir**. Si l’app est installée mais arrêtée, choisissez d’abord **Démarrer**. Ouvrir lance l’app dans un nouvel onglet.
+
+Cliquez sur le nom, l’icône ou la ligne d’une app pour ouvrir sa **fenêtre de réglages**, sans ouvrir l’app elle-même. **⋯** propose selon son état Réglages, Arrêter, Redémarrer, Journaux, Mettre à jour et Désinstaller. Fermez avec × ou Échap. Enregistrez uniquement les changements souhaités.
+
+Les **réglages d’app dans Catalogue** concernent une app. La page **Réglages** en haut concerne AIO : profil, apparence, connexions, sauvegardes et mises à jour.
+
+![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=app-store-20261102)
 
 ## Se repérer dans les réglages {#settings-menu}
 
-Ouvrez **Réglages** en haut. Sur ordinateur, choisissez une page à gauche. Le champ de recherche au-dessus de la liste permet de trouver une option, par exemple le fond ou les sauvegardes. Effacez la recherche pour retrouver toutes les pages. Sur téléphone, touchez **Réglages / page actuelle** pour ouvrir le menu.
+Réglages utilise la même disposition que le catalogue : groupe et page à gauche, contenu à droite. La recherche filtre le menu, pas les valeurs enregistrées. Faites défiler le menu pour voir les groupes du bas. Sur téléphone, ouvrez **Sections des réglages**, puis choisissez une page.
 
 | Que voulez-vous modifier ? | Page à choisir |
 |---|---|
@@ -26,14 +48,15 @@ Ouvrez **Réglages** en haut. Sur ordinateur, choisissez une page à gauche. Le 
 | Mettre à jour une app | Maintenance → **Mises à jour** |
 | Sauvegarder les réglages | Maintenance → **Sauvegardes** |
 | Comprendre un widget vide | Système → **Aide et diagnostic** |
+| Clés d’API, TV ou Homey | Connexions → **Connexions des apps** |
 
 Le menu ouvre une page. Modifiez l’option à droite et utilisez le bouton **Enregistrer** du bloc lorsqu’il est affiché. Déplacez les widgets directement sur **Accueil** avec l’icône à quatre blocs ; Page d’accueil règle la barre d’apps et le texte de connexion.
 
-![Settings: grouped sidebar and search](screenshots/light/settings.png)
+![Settings: grouped sidebar and search](screenshots/light/settings.png?v=app-store-20261102)
 
 ## 3. Ouvrir votre première app
 
-Dans le catalogue, trouvez Jellyfin et choisissez Open UI. Terminez son propre assistant si demandé. Les dossiers par défaut sont /data/media/movies pour les films et /data/media/tv pour les séries. Ils correspondent aux dossiers NAS déjà reliés ; ne créez pas une deuxième copie à cause du nom différent.
+Dans le catalogue, trouvez Jellyfin et choisissez Ouvrir. Terminez son propre assistant si demandé. Les dossiers par défaut sont /data/media/movies pour les films et /data/media/tv pour les séries. Ils correspondent aux dossiers NAS déjà reliés ; ne créez pas une deuxième copie à cause du nom différent.
 
 **Vérification : Jellyfin s’ouvre dans un onglet séparé. Sans fichiers média, la bibliothèque est vide ; c’est normal.**
 
