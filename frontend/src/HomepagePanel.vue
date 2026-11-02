@@ -6,12 +6,18 @@ import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
 import { BP_ORDER, BREAKPOINTS, GRID_IDS, WIDGETS, collapseEmptyRows, dockHidden, firstFree, fitItem, homeEditing, homeGrid, homeGridSaves, layoutFor, resolve, restoreGrid, saveGridLayout, viewportBp } from './homeLayout.js'
+import UiSelect from './UiSelect.vue'
 import HomeEditBar from './HomeEditBar.vue'
 import HomeGrid from './HomeGrid.vue'
 import HomeGridSheet from './HomeGridSheet.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
 import { formatBytes, formatUptime } from './format.js'
+import { i18n, t } from './i18n/index.js'
+
+function i18nLocale() {
+  return i18n.global.locale.value
+}
 import { addNetSample } from './netRates.js'
 import { MOOD_COLORS, attentionMood, serverMood, storageMood } from './statusMood.js'
 import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepageDebug.js'
@@ -19,6 +25,7 @@ import { readHomepageWidgetDebug, HOMEPAGE_WIDGET_DEBUG_EVENT } from './homepage
 const props = defineProps({
   systemInfo: { type: Object, default: null },
   username: { type: String, default: '' },
+  firstName: { type: String, default: '' },
 })
 const emit = defineEmits(['manage'])
 const route = useRoute()
@@ -90,6 +97,19 @@ const searchError = ref('')
 const searchedFor = ref('')
 const notice = ref('')
 const requestBusy = ref('')
+const requestChoice = ref(null)
+const SEARCH_PROVIDER_KEY = 'amm-home-search-provider'
+const searchProvider = ref((() => {
+  try {
+    return localStorage.getItem(SEARCH_PROVIDER_KEY) === 'prowlarr' ? 'prowlarr' : 'seerr'
+  } catch (_) {
+    return 'seerr'
+  }
+})())
+const searchPlaceholder = computed(() => {
+  if (searchProvider.value === 'prowlarr') return t('Search Prowlarr indexers')
+  return snapshot.value.seerr?.available ? t('Search movies and TV to request') : t('Search Sonarr and Radarr')
+})
 const downloadsFresh = ref(false)
 const downloadPause = ref({ paused: false, resume_at: null })
 const pauseFor = ref('60')
@@ -159,14 +179,16 @@ watch(downloadSort, (value) => {
 })
 const pausedLabel = computed(() => {
   const at = downloadPause.value.resume_at
-  if (!at) return 'Paused until you resume'
-  return `Paused · resumes ${new Date(at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+  if (!at) return t('Paused until you resume')
+  const time = new Date(at * 1000).toLocaleTimeString(i18nLocale(), { hour: '2-digit', minute: '2-digit' })
+  return t('Paused · resumes {time}', { time })
 })
 const requestsFilter = ref('all')
 const trendingFilter = ref('all')
 let poll = null
 let downloadsPoll = null
 let statusPoll = null
+let otherPoll = null
 let installPoll = null
 let searchTimer = null
 
@@ -226,6 +248,7 @@ const widgetHasContent = computed(() => {
     storage: true,
     server: true,
     attention: true,
+    other: true,
   }
 })
 // Empty widgets leave Home outside edit mode, and the rows they had to themselves close up.
@@ -272,7 +295,7 @@ function removeWidget(id) {
   const before = JSON.parse(JSON.stringify(homeGrid.value))
   saveGridLayout(activeBp.value, gridLayout.value.filter((item) => item.id !== id))
   if (sheet.value?.id === id) sheet.value = null
-  showToast(`${WIDGETS[id].label} removed from ${BREAKPOINTS[activeBp.value].label}`, () => restoreGrid(before))
+  showToast(t('{name} removed from {size}', { name: t(WIDGETS[id].label), size: t(BREAKPOINTS[activeBp.value].label) }), () => restoreGrid(before))
 }
 
 function openWidget(id) {
@@ -306,25 +329,44 @@ function resizeWidget(w, h) {
 }
 
 function onArrangeKey(event) {
-  if (event.key === 'Escape' && editing.value && !sheet.value && !event.defaultPrevented) editing.value = false
+  if (event.key !== 'Escape' || event.defaultPrevented) return
+  if (requestChoice.value) {
+    requestChoice.value = null
+    return
+  }
+  if (trailerPlayer.value) {
+    closeTrailer()
+    return
+  }
+  if (trendingDetail.value) {
+    trendingDetail.value = null
+    return
+  }
+  if (searchOpen.value) {
+    closeSearch()
+    return
+  }
+  if (editing.value && !sheet.value) editing.value = false
 }
 
-const todayLabel = computed(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))
+const todayLabel = computed(() => new Date().toLocaleDateString(i18nLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))
 const greeting = computed(() => {
   const hour = new Date().getHours()
-  const part = hour < 6 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-  const name = props.username ? `, ${props.username}` : ''
-  return `${part}${name}.`
+  const part = t(hour < 6 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening')
+  const who = props.firstName.trim() || props.username
+  return who ? `${part}, ${who}.` : `${part}.`
 })
 /** One line under the greeting: what is moving and what needs a look. */
 const heroSummary = computed(() => {
   const parts = []
   const n = movingDownloads.value.length
   if (downloadPause.value.paused) parts.push(pausedLabel.value)
-  else if (n) parts.push(`${n} download${n === 1 ? '' : 's'} on the way`)
+  else if (n === 1) parts.push(t('{n} download on the way', { n }))
+  else if (n) parts.push(t('{n} downloads on the way', { n }))
   const sick = (snapshot.value.apps || []).filter((app) => app.sick).map((app) => app.display_name)
-  if (sick.length) parts.push(`${sick.join(', ')} need${sick.length === 1 ? 's' : ''} a look`)
-  if (!parts.length) parts.push(snapshot.value.apps?.length ? 'Everything is running.' : 'Nothing running yet.')
+  if (sick.length === 1) parts.push(t('{names} needs a look', { names: sick[0] }))
+  else if (sick.length) parts.push(t('{names} need a look', { names: sick.join(', ') }))
+  if (!parts.length) parts.push(snapshot.value.apps?.length ? t('Everything is running.') : t('Nothing running yet.'))
   return parts.join('. ').replace(/\.?$/, '.')
 })
 const totalSpeed = computed(() => {
@@ -401,6 +443,43 @@ function onNetHover(event) {
     if (Math.abs(point.at - at) < Math.abs(points[best].at - at)) best = i
   })
   netHoverIdx.value = best
+}
+
+/** Other downloads: what the download clients got besides films and series, asked for only while the widget is on Home. */
+const otherDownloads = ref([])
+const otherLoaded = ref(false)
+const otherWanted = computed(() => gridLayout.value.some((item) => item.id === 'other'))
+/** Per kind of download: its name and the outline icon it gets (24 × 24, stroked). */
+const OTHER_KINDS = {
+  music: ['Music', 'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0a3 3 0 0 1 6 0M21 16a3 3 0 1 1-6 0a3 3 0 0 1 6 0'],
+  book: ['Book', 'M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z'],
+  game: ['Game', 'M6 11h4M8 9v4M15 12h.01M18 10h.01M17.32 5H6.68a4 4 0 0 0-3.98 3.59l-.7 6.98A3 3 0 0 0 5 19c1 0 1.6-.5 2.1-1.1L8.5 16h7l1.4 1.9c.5.6 1.1 1.1 2.1 1.1a3 3 0 0 0 3-3.43l-.7-6.98A4 4 0 0 0 17.32 5z'],
+  disc: ['Disc image', 'M22 12a10 10 0 1 1-20 0a10 10 0 0 1 20 0M14 12a2 2 0 1 1-4 0a2 2 0 0 1 4 0'],
+  app: ['Software', 'M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8'],
+  archive: ['Archive', 'M3 4h18v4H3zM5 8v12h14V8M10 12h4'],
+  video: ['Video', 'M3 5h18v14H3zM7 5v14M17 5v14M3 9.5h4M3 14.5h4M17 9.5h4M17 14.5h4'],
+  file: ['File', 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6'],
+}
+
+function otherKind(item) {
+  return OTHER_KINDS[item.kind] || OTHER_KINDS.file
+}
+
+function otherMeta(item) {
+  const when = item.done && item.when ? new Date(item.when * 1000).toLocaleDateString(i18nLocale(), { day: 'numeric', month: 'short' }) : ''
+  return [item.size ? formatBytes(item.size) : '', item.source, item.done ? when : item.status].filter(Boolean).join(' · ')
+}
+
+async function loadOther() {
+  if (!otherWanted.value) return
+  try {
+    const res = await apiRequest('/api/homepage/other-downloads')
+    if (!res.ok) return
+    otherDownloads.value = (await readJson(res)).items || []
+    otherLoaded.value = true
+  } catch (_) {
+    /* keep the last list */
+  }
 }
 
 async function loadStatus() {
@@ -509,6 +588,8 @@ const requestItems = computed(() =>
 )
 // Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
 const trendingMore = ref([])
+const trendingDetail = ref(null)
+const trailerPlayer = ref(null)
 const trendingItems = computed(() => {
   const seen = new Set()
   return [...(snapshot.value.trending || []), ...trendingMore.value]
@@ -677,8 +758,11 @@ function formatSpeed(bps) {
   return `${Math.round(n)} B/s`
 }
 
+let searchGen = 0
+
 async function runSearch() {
   const q = query.value.trim()
+  const gen = ++searchGen
   if (q.length < 2) {
     results.value = []
     searchSeerr.value = false
@@ -687,8 +771,10 @@ async function runSearch() {
     return
   }
   searching.value = true
+  const provider = searchProvider.value === 'prowlarr' ? 'prowlarr' : 'seerr'
   try {
-    const res = await apiRequest(`/api/homepage/search?q=${encodeURIComponent(q)}`)
+    const res = await apiRequest(`/api/homepage/search?q=${encodeURIComponent(q)}&provider=${provider}`)
+    if (gen !== searchGen) return
     if (res.ok) {
       const data = await readJson(res)
       results.value = data.results || []
@@ -699,12 +785,33 @@ async function runSearch() {
       searchError.value = `Search failed (HTTP ${res.status})`
     }
   } catch (err) {
+    if (gen !== searchGen) return
     results.value = []
     searchError.value = err?.message || 'Search failed'
   } finally {
-    searchedFor.value = q
-    searching.value = false
+    if (gen === searchGen) {
+      searchedFor.value = q
+      searching.value = false
+    }
   }
+}
+
+function onProviderChange() {
+  try {
+    localStorage.setItem(SEARCH_PROVIDER_KEY, searchProvider.value)
+  } catch (_) {
+    /* the choice still applies for this visit */
+  }
+  results.value = []
+  searchedFor.value = ''
+  searchError.value = ''
+  notice.value = ''
+  if (query.value.trim().length >= 2) runSearch()
+}
+
+function resultKey(item) {
+  if (item?.source === 'prowlarr') return item.token
+  return `${item?.mediaType}-${item?.mediaId}`
 }
 
 /** Search results open over the widgets below the greeting instead of making it taller. */
@@ -716,13 +823,31 @@ const searchAnchor = computed(() => {
   return item.x + item.w / 2 > cols / 2 ? 'is-right' : 'is-left'
 })
 const searchOpen = computed(() => !!(notice.value || searchError.value || searching.value || searchedFor.value))
+const searchRoot = ref(null)
 
 function closeSearch() {
   clearTimeout(searchTimer)
+  searchGen += 1
+  searching.value = false
   results.value = []
   searchedFor.value = ''
   searchError.value = ''
   notice.value = ''
+}
+
+function clearSearchQuery() {
+  query.value = ''
+  closeSearch()
+}
+
+/** Results float over Home; a click outside the bar (and its provider menu) dismisses them. */
+function onSearchPointerDown(event) {
+  if (!searchOpen.value) return
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (searchRoot.value?.contains(target)) return
+  if (target.closest('.ui-select-menu, .modal-backdrop, .modal-content')) return
+  closeSearch()
 }
 
 const STATUS_LABELS = {
@@ -737,15 +862,205 @@ function statusLabel(item) {
   return STATUS_LABELS[item?.status] || ''
 }
 
+function closeTrending() {
+  closeTrailer()
+  trendingDetail.value = null
+}
+
+function closeTrailer() {
+  trailerPlayer.value = null
+}
+
+/** Pull a YouTube id from a watch/share/embed URL so the Trailer button can open an in-app player. */
+function youtubeIdFromUrl(url) {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase()
+    let ident = ''
+    if (host === 'youtu.be') {
+      ident = parsed.pathname.replace(/^\/+/, '').split('/')[0] || ''
+    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+      ident = parsed.searchParams.get('v') || ''
+      if (!ident && parsed.pathname.startsWith('/embed/')) {
+        ident = parsed.pathname.split('/').filter(Boolean)[1] || ''
+      }
+    }
+    return /^[A-Za-z0-9_-]{6,32}$/.test(ident) ? ident : ''
+  } catch {
+    return ''
+  }
+}
+
+function openTrailer(item) {
+  const ident = youtubeIdFromUrl(item?.trailer || trendingDetail.value?.data?.trailer)
+  if (!ident) return
+  trailerPlayer.value = {
+    title: item?.title || trendingDetail.value?.data?.title || trendingDetail.value?.item?.title || t('Trailer'),
+    embedUrl: `https://www.youtube-nocookie.com/embed/${ident}?autoplay=1&rel=0`,
+  }
+}
+
+function trendingSeed(item) {
+  return {
+    title: item.title,
+    overview: item.overview || '',
+    year: item.detail || '',
+    poster: item.poster || '',
+    voteAverage: item.voteAverage ?? null,
+    imdb: null,
+    rtCritics: null,
+    rtAudience: null,
+    trailer: '',
+    url: item.url || '',
+    status: item.status,
+    can_request: item.can_request,
+  }
+}
+
+async function openTrending(item) {
+  if (!item?.mediaId) return
+  const key = `${item.mediaType}:${item.mediaId}`
+  trendingDetail.value = { key, item, loading: !item.overview, pending: true, error: '', data: trendingSeed(item) }
+  try {
+    const res = await apiRequest(
+      `/api/homepage/title?mediaType=${encodeURIComponent(item.mediaType || '')}&mediaId=${encodeURIComponent(item.mediaId)}`,
+      { signal: AbortSignal.timeout(12000) },
+    )
+    const data = await readJson(res)
+    if (trendingDetail.value?.key !== key) return
+    if (!res.ok) {
+      trendingDetail.value = {
+        ...trendingDetail.value,
+        loading: false,
+        pending: false,
+        error: trendingDetail.value.data?.overview ? '' : apiError(data, t('Could not load this title from Seerr.')),
+      }
+      return
+    }
+    const next = { ...trendingDetail.value.data }
+    for (const [field, value] of Object.entries(data || {})) {
+      if (value == null || value === '') continue
+      next[field] = value
+    }
+    trendingDetail.value = { ...trendingDetail.value, loading: false, pending: false, error: '', data: next }
+  } catch (err) {
+    if (trendingDetail.value?.key !== key) return
+    trendingDetail.value = {
+      ...trendingDetail.value,
+      loading: false,
+      pending: false,
+      error: trendingDetail.value.data?.overview ? '' : (err.message || t('Could not load this title from Seerr.')),
+    }
+  }
+}
+
+const trendingRatings = computed(() => {
+  const data = trendingDetail.value?.data
+  if (!data) return []
+  const rows = []
+  if (data.voteAverage != null) rows.push({ label: 'TMDB', value: Number(data.voteAverage).toFixed(1) })
+  if (data.imdb != null) rows.push({ label: 'IMDb', value: Number(data.imdb).toFixed(1) })
+  if (data.rtCritics != null) rows.push({ label: t('Critics'), value: `${data.rtCritics}%` })
+  if (data.rtAudience != null) rows.push({ label: t('Audience'), value: `${data.rtAudience}%` })
+  return rows
+})
+
 function onQueryInput() {
   notice.value = ''
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(runSearch, 280)
+  const wait = searchProvider.value === 'prowlarr' ? 700 : 280
+  searchTimer = setTimeout(runSearch, wait)
 }
+
+function preferredId(options, current) {
+  const ids = (options || []).map((option) => option.id)
+  if (ids.includes(current)) return current
+  return ids[0] ?? null
+}
+
+function preferredPath(folders, current) {
+  const paths = (folders || []).map((folder) => folder.path)
+  if (paths.includes(current)) return current
+  return paths[0] || ''
+}
+
+function choiceFromServers(item, servers) {
+  const server = servers.find((one) => one.isDefault) || servers[0]
+  return {
+    item,
+    servers,
+    serverId: server.id,
+    profileId: preferredId(server.profiles, server.profileId),
+    rootFolder: preferredPath(server.folders, server.rootFolder),
+    languageProfileId: preferredId(server.languages, server.languageProfileId),
+  }
+}
+
+function onRequestServer(serverId) {
+  const choice = requestChoice.value
+  if (!choice) return
+  const server = choice.servers.find((one) => one.id === serverId)
+  if (!server) return
+  requestChoice.value = {
+    ...choice,
+    serverId: server.id,
+    profileId: preferredId(server.profiles, server.profileId),
+    rootFolder: preferredPath(server.folders, server.rootFolder),
+    languageProfileId: preferredId(server.languages, server.languageProfileId),
+  }
+}
+
+const choiceServer = computed(() => {
+  const choice = requestChoice.value
+  if (!choice) return null
+  return choice.servers.find((one) => one.id === choice.serverId) || choice.servers[0] || null
+})
 
 async function requestTitle(item) {
   if (!item?.can_request) return
-  const key = `${item.mediaType}-${item.mediaId}`
+  if (item.source === 'prowlarr') {
+    await downloadRelease(item)
+    return
+  }
+  const key = resultKey(item)
+  requestBusy.value = key
+  notice.value = ''
+  try {
+    const opt = await apiRequest(`/api/homepage/request-options?mediaType=${encodeURIComponent(item.mediaType)}`)
+    if (opt.ok) {
+      const options = await readJson(opt)
+      if (options.needsChoice && options.servers?.length) {
+        requestChoice.value = choiceFromServers(item, options.servers)
+        requestBusy.value = ''
+        return
+      }
+    }
+    await submitRequest(item)
+  } catch (err) {
+    notice.value = err.message || 'Request failed.'
+  } finally {
+    if (!requestChoice.value) requestBusy.value = ''
+  }
+}
+
+async function confirmRequest() {
+  const choice = requestChoice.value
+  const server = choiceServer.value
+  if (!choice || !server) return
+  const extra = { serverId: choice.serverId }
+  if (choice.profileId != null && server.profiles?.length) extra.profileId = choice.profileId
+  if (choice.rootFolder && server.folders?.length) extra.rootFolder = choice.rootFolder
+  if (choice.languageProfileId != null && (server.languages?.length || 0) > 1) {
+    extra.languageProfileId = choice.languageProfileId
+  }
+  const ok = await submitRequest(choice.item, extra)
+  if (ok) requestChoice.value = null
+}
+
+async function submitRequest(item, extra = {}) {
+  const key = resultKey(item)
   requestBusy.value = key
   notice.value = ''
   try {
@@ -755,6 +1070,7 @@ async function requestTitle(item) {
         mediaType: item.mediaType,
         mediaId: item.mediaId,
         seasons: item.mediaType === 'tv' ? 'all' : undefined,
+        ...extra,
       }),
     })
     const data = await readJson(res)
@@ -762,16 +1078,41 @@ async function requestTitle(item) {
       notice.value = data.detail || 'Request submitted.'
       item.status = 'requested'
       item.can_request = false
-      // Later trending pages are not in the snapshot, so mark them here.
       trendingMore.value = trendingMore.value.map((t) =>
-        `${t.mediaType}-${t.mediaId}` === key ? { ...t, status: 'requested', can_request: false } : t,
+        resultKey(t) === key ? { ...t, status: 'requested', can_request: false } : t,
       )
       loadSnapshot(true)
-    } else {
-      notice.value = apiError(data, 'Request failed.')
+      return true
     }
+    notice.value = apiError(data, 'Request failed.')
+    return false
   } catch (err) {
     notice.value = err.message || 'Request failed.'
+    return false
+  } finally {
+    requestBusy.value = ''
+  }
+}
+
+async function downloadRelease(item) {
+  const key = resultKey(item)
+  requestBusy.value = key
+  notice.value = ''
+  try {
+    const res = await apiRequest('/api/homepage/grab', {
+      method: 'POST',
+      body: JSON.stringify({ token: item.token }),
+    })
+    const data = await readJson(res)
+    if (res.ok && data.ok !== false) {
+      notice.value = data.detail || 'Sent to the download client.'
+      item.status = 'requested'
+      item.can_request = false
+      return
+    }
+    notice.value = apiError(data, 'Download failed.')
+  } catch (err) {
+    notice.value = err.message || 'Download failed.'
   } finally {
     requestBusy.value = ''
   }
@@ -828,6 +1169,9 @@ watch(
 )
 watch(statusWanted, (wanted) => {
   if (wanted) loadStatus()
+})
+watch(otherWanted, (wanted) => {
+  if (wanted) loadOther()
 })
 // A smaller screen's preview that no longer fits the window gives way to the window's own layout.
 watch(viewportBp, () => {
@@ -948,6 +1292,29 @@ function addDays(value, amount) {
 
 function eventKind(item) {
   return item?.kind || item?.source || ''
+}
+
+/** Downloaded titles open on Jellyfin or Plex. Everything else opens in Sonarr or Radarr. */
+function calendarTarget(item) {
+  if (item?.has_file && item.play_url && item.play_app) {
+    return { app: item.play_app, url: item.play_url }
+  }
+  if (item?.url && item.source) return { app: item.source, url: item.url }
+  return null
+}
+
+function calendarLinkTitle(item) {
+  const target = calendarTarget(item)
+  if (!target) return undefined
+  const app = SOURCE_NAMES[target.app] || target.app
+  return t('Open in {app}', { app })
+}
+
+function openCalendarItem(event, item) {
+  const target = calendarTarget(item)
+  if (!target) return
+  event.stopPropagation()
+  openApp(event, target.app, target.url)
 }
 
 const MEDIA_LABELS = { tv: 'Series', movie: 'Movie' }
@@ -1109,7 +1476,10 @@ function groupSameDay(rows) {
     const code = (r) => String(r.item.detail || '').split(' ')[0]
     const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
     // Downloaded only when every episode in the group is.
-    return { ...row, item: { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have } }
+    const item = { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have }
+    // A run of episodes opens the series, not the first episode.
+    if (row.have && item.series_play_url) item.play_url = item.series_play_url
+    return { ...row, item }
   })
 }
 const calendarList = computed(() => calendarListInfo.value.rows)
@@ -1168,6 +1538,7 @@ onMounted(() => {
   window.addEventListener('resize', syncCalViewToViewport)
   window.addEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.addEventListener('keydown', onArrangeKey)
+  document.addEventListener('pointerdown', onSearchPointerDown)
   loadSnapshot()
   // Defer live queues so first paint is the launcher snapshot.
   setTimeout(() => loadDownloads(), 750)
@@ -1175,6 +1546,8 @@ onMounted(() => {
   downloadsPoll = startGuardedInterval(loadDownloads, 8000)
   installPoll = startGuardedInterval(loadInstallJobs, 3000, { immediate: true })
   statusPoll = startGuardedInterval(loadStatus, 10000, { immediate: true })
+  // History changes slowly, and NZBGet sends all of it.
+  otherPoll = startGuardedInterval(loadOther, 60000, { immediate: true })
 })
 watch(
   () => route.query.debug,
@@ -1200,11 +1573,13 @@ onUnmounted(() => {
   window.removeEventListener('resize', syncCalViewToViewport)
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.removeEventListener('keydown', onArrangeKey)
+  document.removeEventListener('pointerdown', onSearchPointerDown)
   clearTimeout(toastTimer)
   if (poll) poll()
   if (downloadsPoll) downloadsPoll()
   if (installPoll) installPoll()
   if (statusPoll) statusPoll()
+  if (otherPoll) otherPoll()
   if (partialTimer) clearTimeout(partialTimer)
   clearTimeout(searchTimer)
 })
@@ -1212,7 +1587,7 @@ onUnmounted(() => {
 
 <template>
   <section class="home-shell" :class="{ 'has-floating-dock': !loading && snapshot.apps.length && !dockHidden, 'is-arranging': editing }" :style="{ '--home-dock-height': `${dockHeight}px` }">
-    <div v-if="loading" class="home-skeleton" role="status" aria-label="Loading Home">
+    <div v-if="loading" class="home-skeleton" role="status" :aria-label="$t('Loading Home')">
       <div class="home-dock glass-pill" aria-hidden="true">
         <div class="home-dock-row">
           <span v-for="n in 8" :key="n" class="home-skel home-skel-icon"></span>
@@ -1228,18 +1603,18 @@ onUnmounted(() => {
     <p v-if="snapshotError" class="home-notice">{{ snapshotError }}</p>
     <p v-if="vpnNotice" class="home-notice">
       {{ vpnNotice }}
-      <a href="#/settings/network" class="home-notice-link">Open Settings → Network</a>
+      <a href="#/settings/network" class="home-notice-link">{{ $t('Open Settings → Network') }}</a>
     </p>
 
     <div v-if="!loading && !snapshot.apps.length" class="home-empty glass-card">
-      <h3>Nothing to launch yet</h3>
-      <p>Finish setup or install apps from Catalog. This page only lists installed applications with a WebUI.</p>
-      <button type="button" class="ui-btn ui-btn-primary" @click="emit('manage')">Go to Catalog</button>
+      <h3>{{ $t('Nothing to launch yet') }}</h3>
+      <p>{{ $t('Finish setup or install apps from Catalog. This page only lists installed applications with a WebUI.') }}</p>
+      <button type="button" class="ui-btn ui-btn-primary" @click="emit('manage')">{{ $t('Go to Catalog') }}</button>
     </div>
 
     <template v-else-if="!loading">
       <Teleport to=".app-container" defer>
-      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating glass-pill" aria-label="Apps">
+      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating glass-pill" :aria-label="$t('Apps')">
         <div class="home-dock-row">
           <component
             :is="launcherOpen(app) ? 'a' : 'span'"
@@ -1281,54 +1656,81 @@ onUnmounted(() => {
       </template>
 
       <template #searchbar>
-      <section class="home-search">
+      <section ref="searchRoot" class="home-search">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-          <label class="home-sr" for="home-search">Search</label>
+          <label class="home-sr" for="home-search-provider">{{ $t('Search in') }}</label>
+          <UiSelect
+            id="home-search-provider"
+            v-model="searchProvider"
+            class="home-search-provider"
+            variant="search"
+            :aria-label="$t('Search in')"
+            :options="[
+              { value: 'seerr', label: $t('Movies & Series') },
+              { value: 'prowlarr', label: $t('Other') },
+            ]"
+            @change="onProviderChange"
+          />
+          <svg class="home-search-mark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          <label class="home-sr" for="home-search">{{ $t('Search') }}</label>
           <input
             id="home-search"
             v-model="query"
             class="home-search-input"
             type="search"
+            enterkeyhint="search"
             autocomplete="off"
-            :placeholder="snapshot.seerr.available ? 'Search movies and TV to request' : 'Search Sonarr and Radarr'"
+            :placeholder="searchPlaceholder"
             @input="onQueryInput"
             @keydown.esc="closeSearch"
           />
-          <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :disabled="searching">Search</button>
+          <button
+            v-if="query.trim()"
+            type="button"
+            class="home-search-clear"
+            :aria-label="$t('Clear search')"
+            :title="$t('Clear search')"
+            @click="clearSearchQuery"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+          <button type="submit" class="ui-btn ui-btn-primary home-search-btn" :aria-label="$t('Search')" :disabled="searching">
+            <svg class="home-search-go" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            <span>{{ $t('Search') }}</span>
+          </button>
         </form>
         <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
-        <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon home-results-close" aria-label="Close search results" title="Close" @click="closeSearch">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-        <p v-if="notice" class="home-notice">{{ notice }}</p>
-        <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
-        <p v-else-if="!snapshot.seerr.available && !notice" class="home-muted">
-          Install and start Seerr to request titles from this page.
-        </p>
-        <p v-if="searching" class="home-muted">Searching…</p>
-        <p v-else-if="searchedFor && !results.length && !searchError" class="home-muted">
-          No results for “{{ searchedFor }}”.
-        </p>
-        <ul v-if="results.length" class="home-results">
-          <li v-for="item in results" :key="`${item.source}-${item.mediaType}-${item.mediaId}`" class="home-result">
-            <img v-if="item.poster" :src="item.poster" alt="" class="home-poster" />
-            <div class="home-result-body">
-              <strong>{{ item.title }}</strong>
-              <span>{{ item.mediaType === 'tv' ? 'TV' : 'Movie' }} {{ String(item.year || '').slice(0, 4) }}</span>
-              <span v-if="statusLabel(item)" class="home-status" :class="`is-${item.status}`">{{ statusLabel(item) }}</span>
-            </div>
-            <button
-              v-if="item.can_request && searchSeerr"
-              type="button"
-              class="ui-btn ui-btn-primary"
-              :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
-              @click="requestTitle(item)"
-            >
-              {{ requestBusy === `${item.mediaType}-${item.mediaId}` ? 'Requesting…' : 'Get it now' }}
-            </button>
-          </li>
-        </ul>
+          <div class="home-results-scroll">
+            <p v-if="notice" class="home-notice">{{ notice }}</p>
+            <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
+            <p v-else-if="searchProvider === 'seerr' && !snapshot.seerr.available && !notice" class="home-muted">
+              {{ $t('Install and start Seerr to request titles from this page.') }}
+            </p>
+            <p v-if="searching" class="home-muted">{{ $t('Searching…') }}</p>
+            <p v-else-if="searchedFor && !results.length && !searchError" class="home-muted">
+              {{ $t('No results for “{query}”.', { query: searchedFor }) }}
+            </p>
+            <ul v-if="results.length" class="home-results">
+              <li v-for="item in results" :key="resultKey(item)" class="home-result">
+                <img v-if="item.poster" :src="item.poster" alt="" class="home-poster" />
+                <div class="home-result-body">
+                  <strong>{{ item.title }}</strong>
+                  <span v-if="item.source === 'prowlarr'">{{ item.detail }}</span>
+                  <span v-else>{{ item.mediaType === 'tv' ? $t('TV') : 'Movie' }} {{ String(item.year || '').slice(0, 4) }}</span>
+                  <span v-if="statusLabel(item)" class="home-status" :class="`is-${item.status}`">{{ statusLabel(item) }}</span>
+                </div>
+                <button
+                  v-if="item.can_request && (searchSeerr || item.source === 'prowlarr')"
+                  type="button"
+                  class="ui-btn ui-btn-primary"
+                  :disabled="requestBusy === resultKey(item)"
+                  @click="requestTitle(item)"
+                >
+                  {{ requestBusy === resultKey(item) ? (item.source === 'prowlarr' ? $t('Sending…') : $t('Requesting…')) : (item.source === 'prowlarr' ? $t('Download') : $t('Get it now')) }}
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
       </section>
       </template>
@@ -1336,11 +1738,11 @@ onUnmounted(() => {
       <template #recent>
         <article class="home-card glass-card">
           <div class="home-rail-head">
-            <h3>Recently added</h3>
+            <h3>{{ $t('Recently added') }}</h3>
             <div class="home-rail-tools">
               <div v-if="snapshot.recent.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous recently added" @click="scrollRail('recent', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next recently added" @click="scrollRail('recent', 1)">›</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous recently added')" @click="scrollRail('recent', -1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next recently added')" @click="scrollRail('recent', 1)">›</button>
               </div>
             </div>
           </div>
@@ -1369,7 +1771,7 @@ onUnmounted(() => {
             </div>
             <p v-if="waitingLabel('recent')" class="home-muted">{{ waitingLabel('recent') }}</p>
           </template>
-          <p v-else class="home-muted">Nothing recently added.</p>
+          <p v-else class="home-muted">{{ $t('Nothing recently added.') }}</p>
           <ul v-if="widgetDebug && notesFor('recent').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('recent')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1381,16 +1783,16 @@ onUnmounted(() => {
       <template #requests>
         <article class="home-card glass-card">
           <div class="home-rail-head">
-            <h3>Requests</h3>
+            <h3>{{ $t('Requests') }}</h3>
             <div class="home-rail-tools">
-              <div v-if="snapshot.requests.length" class="home-type-filter" role="group" aria-label="Filter requests">
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'all' }" @click="requestsFilter = 'all'">All</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">Movies</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">Series</button>
+              <div v-if="snapshot.requests.length" class="home-type-filter" role="group" :aria-label="$t('Filter requests')">
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'all' }" @click="requestsFilter = 'all'">{{ $t('All') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">{{ $t('Movies') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
               <div v-if="requestItems.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous requests" @click="scrollRail('requests', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next requests" @click="scrollRail('requests', 1)">›</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous requests')" @click="scrollRail('requests', -1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next requests')" @click="scrollRail('requests', 1)">›</button>
               </div>
             </div>
           </div>
@@ -1421,9 +1823,9 @@ onUnmounted(() => {
             <p v-if="waitingLabel('requests')" class="home-muted">{{ waitingLabel('requests') }}</p>
           </template>
           <p v-else-if="snapshot.requests.length" class="home-muted">
-            No {{ requestsFilter === 'movie' ? 'movie' : requestsFilter === 'tv' ? 'series' : '' }} requests in this filter.
+            {{ requestsFilter === 'movie' ? $t('No movie requests in this filter.') : requestsFilter === 'tv' ? $t('No series requests in this filter.') : $t('No requests in this filter.') }}
           </p>
-          <p v-else class="home-muted">No Seerr requests yet. Search above to request a title.</p>
+          <p v-else class="home-muted">{{ $t('No Seerr requests yet. Search above to request a title.') }}</p>
           <ul v-if="widgetDebug && notesFor('requests').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('requests')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1435,27 +1837,26 @@ onUnmounted(() => {
       <template #trending>
         <article class="home-card glass-card home-card-trending">
           <div class="home-rail-head">
-            <h3>Trending</h3>
+            <h3>{{ $t('Trending') }}</h3>
             <div class="home-rail-tools">
-              <div v-if="snapshot.trending.length" class="home-type-filter" role="group" aria-label="Filter trending">
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">All</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">Movies</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" @click="trendingFilter = 'tv'">Series</button>
+              <div v-if="snapshot.trending.length" class="home-type-filter" role="group" :aria-label="$t('Filter trending')">
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">{{ $t('All') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">{{ $t('Movies') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" @click="trendingFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
               <div v-if="trendingItems.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Previous trending" @click="scrollRail('trending', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" aria-label="Next trending" @click="scrollRail('trending', 1)">›</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous trending')" @click="scrollRail('trending', -1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next trending')" @click="scrollRail('trending', 1)">›</button>
               </div>
             </div>
           </div>
           <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" @scroll.passive="loadMoreTrending">
             <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
-              <a
+              <button
+                type="button"
                 class="home-tile-link"
-                :href="item.url || seerrHomeUrl || undefined"
-                :target="item.url || seerrHomeUrl ? '_blank' : undefined"
-                rel="noopener noreferrer"
-                @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
+                :aria-haspopup="item.mediaId ? 'dialog' : undefined"
+                @click="openTrending(item)"
               >
                 <span class="home-tile-art">
                   <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
@@ -1465,15 +1866,15 @@ onUnmounted(() => {
                 <span class="home-tile-title">{{ item.title }}</span>
                 <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
                 <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
-              </a>
+              </button>
               <button
                 v-if="item.can_request"
                 type="button"
                 class="ui-btn ui-btn-ghost home-tile-request"
-                :disabled="requestBusy === `${item.mediaType}-${item.mediaId}`"
+                :disabled="requestBusy === resultKey(item)"
                 @click="requestTitle(item)"
               >
-                {{ requestBusy === `${item.mediaType}-${item.mediaId}` ? 'Requesting…' : 'Request' }}
+                {{ requestBusy === resultKey(item) ? $t('Requesting…') : $t('Request') }}
               </button>
             </div>
           </div>
@@ -1484,7 +1885,7 @@ onUnmounted(() => {
             <p v-if="waitingLabel('trending')" class="home-muted">{{ waitingLabel('trending') }}</p>
           </template>
           <p v-else-if="snapshot.trending.length" class="home-muted">
-            No {{ trendingFilter === 'movie' ? 'movies' : trendingFilter === 'tv' ? 'series' : 'titles' }} in this filter.
+            {{ trendingFilter === 'movie' ? $t('No movies in this filter.') : trendingFilter === 'tv' ? $t('No series in this filter.') : $t('No titles in this filter.') }}
           </p>
           <p v-else class="home-muted">{{ snapshot.seerr?.available ? 'No trending titles right now.' : 'Trending titles appear when Seerr is running.' }}</p>
           <ul v-if="widgetDebug && notesFor('trending').length" class="home-debug">
@@ -1500,22 +1901,35 @@ onUnmounted(() => {
           <div class="cal-head">
             <h3>{{ calendarRangeLabel }}</h3>
             <div class="cal-tools">
-              <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">Today</button>
-              <select v-model="calFilter" class="ui-input cal-select" aria-label="Filter calendar">
-                <option value="all">All</option>
-                <option value="tv">TV</option>
-                <option value="movies">Movies</option>
-                <option value="missing">Not downloaded</option>
-              </select>
-              <select :value="calView" class="ui-input cal-select" aria-label="Calendar view" @change="setCalView($event.target.value)">
-                <option value="list">List</option>
-                <option value="day">Day</option>
-                <option value="week">Week</option>
-                <option value="month">Month</option>
-              </select>
+              <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">{{ $t('Today') }}</button>
+              <UiSelect
+                v-model="calFilter"
+                class="cal-select"
+                variant="inline"
+                :aria-label="$t('Filter calendar')"
+                :options="[
+                  { value: 'all', label: $t('All') },
+                  { value: 'tv', label: $t('TV') },
+                  { value: 'movies', label: $t('Movies') },
+                  { value: 'missing', label: $t('Not downloaded') },
+                ]"
+              />
+              <UiSelect
+                :model-value="calView"
+                class="cal-select"
+                variant="inline"
+                :aria-label="$t('Calendar view')"
+                :options="[
+                  { value: 'list', label: $t('List') },
+                  { value: 'day', label: $t('Day') },
+                  { value: 'week', label: $t('Week') },
+                  { value: 'month', label: $t('Month') },
+                ]"
+                @update:model-value="setCalView"
+              />
               <div class="cal-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" aria-label="Previous">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" aria-label="Next">›</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" :aria-label="$t('Previous')">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" :aria-label="$t('Next')">›</button>
               </div>
             </div>
           </div>
@@ -1524,21 +1938,31 @@ onUnmounted(() => {
             <div v-if="!calendarList.length && isPending('calendar')" aria-hidden="true">
               <span v-for="n in 4" :key="n" class="home-skel home-skel-line"></span>
             </div>
-            <p v-else-if="!calendarList.length" class="home-muted">Nothing in this range.</p>
+            <p v-else-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
             <ul v-else>
               <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
-                <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
-                <span class="cal-row-body">
-                  <span class="cal-row-title">
-                    <strong>{{ row.item.title }}</strong>
-                    <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                <component
+                  :is="calendarTarget(row.item) ? 'a' : 'div'"
+                  class="cal-row-link"
+                  :href="calendarTarget(row.item)?.url"
+                  :target="calendarTarget(row.item) ? '_blank' : undefined"
+                  rel="noopener noreferrer"
+                  :title="calendarLinkTitle(row.item)"
+                  @click="openCalendarItem($event, row.item)"
+                >
+                  <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
+                  <span class="cal-row-body">
+                    <span class="cal-row-title">
+                      <strong>{{ row.item.title }}</strong>
+                      <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                    </span>
+                    <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
                   </span>
-                  <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
-                </span>
+                </component>
               </li>
             </ul>
           </div>
-          <div v-else class="cal" :class="'cal-mode-' + calView" role="grid" aria-label="Upcoming releases calendar">
+          <div v-else class="cal" :class="'cal-mode-' + calView" role="grid" :aria-label="$t('Upcoming releases calendar')">
             <div v-if="calView === 'week'" class="cal-weekdays">
               <span v-for="day in calendarDays" :key="day.key">{{ day.weekday }} {{ day.date }}-{{ day.month }}</span>
             </div>
@@ -1561,35 +1985,36 @@ onUnmounted(() => {
                     'is-selected': day.key === selectedDayKey,
                     'is-outside': !day.inMonth,
                   }"
-                  role="button"
-                  tabindex="0"
-                  :aria-pressed="day.key === selectedDayKey"
                   @click="selectCalDay(day)"
-                  @keydown.enter.prevent="selectCalDay(day)"
-                  @keydown.space.prevent="selectCalDay(day)"
                 >
                   <span class="cal-num">{{ calView === 'week' ? day.weekday + ' ' + day.date : day.date }}</span>
                   <ul v-if="day.events.length" class="cal-events">
-                    <li
-                      v-for="(item, idx) in day.events"
-                      :key="idx"
-                      class="cal-event"
-                      :data-kind="eventKind(item)"
-                      :class="{ 'is-have': item.has_file }"
-                    >
-                      <span class="cal-event-top">
-                        <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
-                        <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
-                      </span>
-                      <strong>{{ item.title }}</strong>
-                      <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
+                    <li v-for="(item, idx) in day.events" :key="idx">
+                      <component
+                        :is="calendarTarget(item) ? 'a' : 'div'"
+                        class="cal-event"
+                        :data-kind="eventKind(item)"
+                        :class="{ 'is-have': item.has_file }"
+                        :href="calendarTarget(item)?.url"
+                        :target="calendarTarget(item) ? '_blank' : undefined"
+                        rel="noopener noreferrer"
+                        :title="calendarLinkTitle(item)"
+                        @click="openCalendarItem($event, item)"
+                      >
+                        <span class="cal-event-top">
+                          <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
+                          <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                        </span>
+                        <strong>{{ item.title }}</strong>
+                        <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
+                      </component>
                     </li>
                   </ul>
                 </div>
               </div>
             </div>
           </div>
-          <p v-if="!snapshot.calendar.length && widgetDebug" class="home-muted">Nothing on the calendar.</p>
+          <p v-if="!snapshot.calendar.length && widgetDebug" class="home-muted">{{ $t('Nothing on the calendar.') }}</p>
           <ul v-if="widgetDebug && notesFor('calendar').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('calendar')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1602,31 +2027,43 @@ onUnmounted(() => {
       <template #downloads>
         <article class="home-card glass-card home-card-downloads">
           <div class="home-widget-head">
-            <h3>Downloading</h3>
+            <h3>{{ $t('Downloading') }}</h3>
             <span v-if="movingDownloads.length && !downloadPause.paused" class="home-card-stat">{{ movingDownloads.length }}<template v-if="totalSpeed"> · {{ totalSpeed }}</template></span>
-            <select v-if="movingDownloads.length > 1" v-model="downloadSort" class="ui-input home-sort" aria-label="Sort downloads">
-              <option value="queue">Queue order</option>
-              <option value="desc">Most done first</option>
-              <option value="asc">Least done first</option>
-            </select>
+            <UiSelect
+              v-if="movingDownloads.length > 1"
+              v-model="downloadSort"
+              class="home-sort"
+              variant="inline"
+              :aria-label="$t('Sort downloads')"
+              :options="[
+                { value: 'queue', label: $t('Queue order') },
+                { value: 'desc', label: $t('Most done first') },
+                { value: 'asc', label: $t('Least done first') },
+              ]"
+            />
             <div v-if="downloadPause.paused" class="home-pause is-paused">
               <span class="home-muted">{{ pausedLabel }}</span>
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(false)">Resume all</button>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="pauseBusy" @click="setDownloadsPaused(false)">{{ $t('Resume all') }}</button>
             </div>
             <div v-else-if="snapshot.downloads.length" class="home-pause">
-              <select v-model="pauseFor" class="ui-input" aria-label="Pause for">
-                <option value="30">30 min</option>
-                <option value="60">1 hour</option>
-                <option value="180">3 hours</option>
-                <option value="until">Until I resume</option>
-              </select>
-              <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon" :disabled="pauseBusy" title="Pause all downloads" aria-label="Pause all downloads" @click="setDownloadsPaused(true)">
+              <UiSelect
+                v-model="pauseFor"
+                variant="inline"
+                :aria-label="$t('Pause for')"
+                :options="[
+                  { value: '30', label: $t('30 min') },
+                  { value: '60', label: $t('1 hour') },
+                  { value: '180', label: $t('3 hours') },
+                  { value: 'until', label: $t('Until I resume') },
+                ]"
+              />
+              <button type="button" class="ui-btn ui-btn-ghost ui-btn-icon" :disabled="pauseBusy" :title="$t('Pause all downloads')" :aria-label="$t('Pause all downloads')" @click="setDownloadsPaused(true)">
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
               </button>
             </div>
           </div>
           <div v-if="movingDownloads.length && !downloadPause.paused" class="home-dl-compact">
-            <span class="home-dl-count">{{ movingDownloads.length }}<small>active</small></span>
+            <span class="home-dl-count">{{ movingDownloads.length }}<small>{{ $t('active') }}</small></span>
             <span class="home-muted home-dl-meta">{{ totalSpeed || 'Waiting for speed' }}</span>
             <span class="home-bar"><span :style="{ width: `${downloadsProgress}%` }" /></span>
           </div>
@@ -1645,12 +2082,12 @@ onUnmounted(() => {
               </span>
             </li>
           </ul>
-          <p v-else class="home-muted">No active downloads.</p>
+          <p v-else class="home-muted">{{ $t('No active downloads.') }}</p>
           <details v-if="stuckItems.length" class="home-stuck">
-            <summary class="home-muted">Not moving: {{ stuckSummary }}</summary>
+            <summary class="home-muted">{{ $t('Not moving:') }} {{ stuckSummary }}</summary>
             <div class="home-stuck-head">
-              <span class="home-muted">Removing blocklists the release; Sonarr and Radarr search for another.</span>
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="removeBusy.size > 0" @click="removeDownloads(stuckItems, true)">Remove all</button>
+              <span class="home-muted">{{ $t('Removing blocklists the release; Sonarr and Radarr search for another.') }}</span>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="removeBusy.size > 0" @click="removeDownloads(stuckItems, true)">{{ $t('Remove all') }}</button>
             </div>
             <ul>
               <li v-for="item in stuckItems" :key="item.download_id || item.title" class="home-stuck-item">
@@ -1661,8 +2098,8 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="home-stuck-remove"
-                  :aria-label="`Remove ${item.title}`"
-                  :title="`Remove ${item.title}`"
+                  :aria-label="$t('Remove {name}', { name: item.title })"
+                  :title="$t('Remove {name}', { name: item.title })"
                   :disabled="!item.download_id || removeBusy.has(item.download_id)"
                   @click="removeDownloads([item])"
                 >
@@ -1692,7 +2129,7 @@ onUnmounted(() => {
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
                 {{ nowItem.device || (nowItem.source === 'plex' ? 'Plex' : 'Jellyfin') }}
               </span>
-              <span v-if="homeStatus.playing.length > 1" class="gh-pill">+{{ homeStatus.playing.length - 1 }} watching</span>
+              <span v-if="homeStatus.playing.length > 1" class="gh-pill">+{{ homeStatus.playing.length - 1 }} {{ $t('watching') }}</span>
             </div>
             <component
               :is="nowItem.url ? 'a' : 'div'"
@@ -1704,19 +2141,19 @@ onUnmounted(() => {
               <span v-if="nowItem.detail" class="np-sub">{{ nowItem.detail }}</span>
               <span class="np-progress"><span :style="{ width: `${nowItem.progress}%` }" /></span>
               <span class="np-foot">
-                <span>{{ nowItem.user }}<template v-if="nowItem.paused"> · Paused</template></span>
-                <span>{{ nowItem.transcoding ? 'Transcoding' : 'Direct play' }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} min left</template></span>
+                <span>{{ nowItem.user }}<template v-if="nowItem.paused"> {{ $t('· Paused') }}</template></span>
+                <span>{{ nowItem.transcoding ? $t('Transcoding') : $t('Direct play') }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} {{ $t('min left') }}</template></span>
               </span>
             </component>
           </template>
           <template v-else>
             <div class="gh-head">
-              <h3>Now playing</h3>
-              <span class="gh-status is-idle">{{ !statusLoaded ? 'Checking who is watching…' : hasMediaServer ? 'Nobody is watching' : 'Install Jellyfin or Plex' }}</span>
+              <h3>{{ $t('Now playing') }}</h3>
+              <span class="gh-status is-idle">{{ !statusLoaded ? $t('Checking who is watching…') : hasMediaServer ? $t('Nobody is watching') : $t('Install Jellyfin or Plex') }}</span>
             </div>
             <div v-if="statusLoaded && hasMediaServer" class="gh-empty">
-              <span class="gh-big">Nothing on</span>
-              <span class="gh-label">What plays on Jellyfin or Plex shows up here.</span>
+              <span class="gh-big">{{ $t('Nothing on') }}</span>
+              <span class="gh-label">{{ $t('What plays on Jellyfin or Plex shows up here.') }}</span>
             </div>
           </template>
         </article>
@@ -1724,14 +2161,14 @@ onUnmounted(() => {
       <template #storage>
         <article class="home-card glass-card home-card-storage">
           <div class="gh-head">
-            <h3>Storage</h3>
+            <h3>{{ $t('Storage') }}</h3>
             <span v-if="storageStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[storageStatus.level] }">{{ storageStatus.text }}</span>
             <span v-else class="gh-status is-idle">{{ statusLoaded ? 'No data folders found' : 'Checking disks…' }}</span>
           </div>
           <template v-if="fullestVolume">
             <div class="gh-figure">
-              <span class="gh-big">{{ fullestFree[0] }}<small>{{ fullestFree[1] }} free</small></span>
-              <span class="gh-label">of {{ formatBytes(fullestVolume.total) }} · {{ Math.round(fullestVolume.percent) }}% used</span>
+              <span class="gh-big">{{ fullestFree[0] }}<small>{{ fullestFree[1] }} {{ $t('free') }}</small></span>
+              <span class="gh-label">{{ $t('of') }} {{ formatBytes(fullestVolume.total) }} · {{ Math.round(fullestVolume.percent) }}{{ $t('% used') }}</span>
             </div>
             <span class="gh-meter" :class="`is-${storageStatus.level}`"><span :style="{ width: `${fullestVolume.percent}%` }" /></span>
             <div class="gh-pills">
@@ -1767,29 +2204,29 @@ onUnmounted(() => {
             <span class="sv-end is-up" :style="{ left: `${netChart.end.x}%`, top: `${netChart.end.up}%` }" aria-hidden="true"></span>
           </div>
           <div class="gh-head">
-            <h3>Server</h3>
+            <h3>{{ $t('Server') }}</h3>
             <span v-if="serverStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[serverStatus.level] }">{{ serverStatus.text }}</span>
-            <span v-else class="gh-status is-idle">Reading the server…</span>
+            <span v-else class="gh-status is-idle">{{ $t('Reading the server…') }}</span>
           </div>
           <template v-if="homeStatus.server">
             <div class="sv-figures">
               <div class="gh-figure">
                 <span class="gh-big">{{ Math.round(homeStatus.server.cpu_percent) }}<small>%</small></span>
-                <span class="gh-label">CPU</span>
+                <span class="gh-label">{{ $t('CPU') }}</span>
               </div>
               <div class="gh-figure">
                 <span class="gh-big">{{ Math.round(homeStatus.server.memory_percent) }}<small>%</small></span>
-                <span class="gh-label">Memory<span class="sv-mem-bytes"> · {{ formatBytes(homeStatus.server.memory_used) }} of {{ formatBytes(homeStatus.server.memory_total) }}</span></span>
+                <span class="gh-label">{{ $t('Memory') }}<span class="sv-mem-bytes"> · {{ formatBytes(homeStatus.server.memory_used) }} {{ $t('of') }} {{ formatBytes(homeStatus.server.memory_total) }}</span></span>
               </div>
               <div class="gh-figure sv-net-figure">
                 <span class="gh-big">{{ netParts(netShown?.rxRate)[0] }}<small>{{ netParts(netShown?.rxRate)[1] }} <b class="sv-key">↓</b></small></span>
-                <span class="gh-label">{{ netAgo || 'Network' }}<template v-if="netShown"> · <b class="sv-key is-up">↑</b> {{ netRate(netShown.txRate) }}</template></span>
+                <span class="gh-label">{{ netAgo || $t('Network') }}<template v-if="netShown"> · <b class="sv-key is-up">↑</b> {{ netRate(netShown.txRate) }}</template></span>
               </div>
             </div>
             <div class="gh-pills sv-pills">
               <span class="gh-pill">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" /></svg>
-                {{ homeStatus.server.cpu_count }} cores
+                {{ homeStatus.server.cpu_count }} {{ $t('cores') }}
               </span>
               <span v-if="homeStatus.server.temperature != null" class="gh-pill">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0z" /></svg>
@@ -1806,9 +2243,9 @@ onUnmounted(() => {
       <template #attention>
         <article class="home-card glass-card home-card-attention">
           <div class="gh-head">
-            <h3>Needs attention</h3>
+            <h3>{{ $t('Needs attention') }}</h3>
             <span v-if="statusLoaded" class="gh-status" :style="{ '--dot': MOOD_COLORS[attentionStatus.level] }">{{ attentionStatus.text }}</span>
-            <span v-else class="gh-status is-idle">Checking…</span>
+            <span v-else class="gh-status is-idle">{{ $t('Checking…') }}</span>
           </div>
           <div class="home-card-body">
             <ol v-if="homeStatus.attention.length" class="at-timeline">
@@ -1824,9 +2261,35 @@ onUnmounted(() => {
               </li>
             </ol>
             <div v-else-if="statusLoaded" class="gh-empty">
-              <span class="gh-big">All clear</span>
-              <span class="gh-label">Apps, VPN, tunnel, updates and disks look fine.</span>
+              <span class="gh-big">{{ $t('All clear') }}</span>
+              <span class="gh-label">{{ $t('Apps, VPN, tunnel, updates and disks look fine.') }}</span>
             </div>
+          </div>
+        </article>
+      </template>
+      <template #other>
+        <article class="home-card glass-card home-card-other">
+          <div class="home-widget-head">
+            <h3>{{ $t('Other downloads') }}</h3>
+            <span v-if="otherDownloads.length" class="home-card-stat">{{ otherDownloads.length }}</span>
+          </div>
+          <div class="home-card-body">
+            <ul v-if="otherDownloads.length" class="od-list">
+              <li v-for="item in otherDownloads" :key="`${item.source}:${item.id}`" class="od-item">
+                <span class="od-icon" :title="$t(otherKind(item)[0])">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" :aria-label="$t(otherKind(item)[0])">
+                    <path :d="otherKind(item)[1]" />
+                  </svg>
+                </span>
+                <span class="od-text">
+                  <strong :title="item.title">{{ item.title }}</strong>
+                  <span class="home-muted home-dl-meta">{{ otherMeta(item) }}</span>
+                </span>
+                <span v-if="!item.done" class="home-dl-pct font-mono">{{ item.progress }}%</span>
+              </li>
+            </ul>
+            <p v-else-if="otherLoaded" class="home-muted">{{ $t('Nothing besides films and series.') }}</p>
+            <p v-else class="home-muted">{{ $t('Checking the download clients…') }}</p>
           </div>
         </article>
       </template>
@@ -1859,15 +2322,14 @@ onUnmounted(() => {
         @close="sheet = null"
       />
       <p v-if="!showWidgets" class="home-muted">
-        Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.
-        Turn on Widget debug in Settings → Diagnostics to see why a source is skipped or failing.
+        {{ $t('Calendar, downloads, recently added, trending, and requests appear after Sonarr, Radarr, download clients, Jellyfin, Plex, or Seerr are running.') }}
+        {{ $t('Turn on Widget debug in Settings → Diagnostics to see why a source is skipped or failing.') }}
       </p>
     </template>
     <article v-if="!loading && widgetDebug" class="home-widget glass-card home-debug-panel">
-      <h3>Widget debug</h3>
+      <h3>{{ $t('Widget debug') }}</h3>
       <p class="home-muted">
-        Per-source status for Home. API keys are never shown. Toggle this under
-        Settings → Diagnostics, or add <code>?debug=1</code> to the URL.
+        {{ $t('Per-source status for Home. API keys are never shown. Toggle this under Settings → Diagnostics, or add') }} <code>?debug=1</code> {{ $t('to the URL.') }}
       </p>
       <ul v-if="widgetNotes.length" class="home-debug">
         <li v-for="(note, idx) in widgetNotes" :key="idx">
@@ -1875,8 +2337,125 @@ onUnmounted(() => {
           <span>{{ note.widget }} / {{ note.source }} — {{ note.detail }}</span>
         </li>
       </ul>
-      <p v-else class="home-muted">No widget sources reported yet. Reload Home.</p>
+      <p v-else class="home-muted">{{ $t('No widget sources reported yet. Reload Home.') }}</p>
     </article>
+    <Teleport to="body">
+      <div v-if="trendingDetail" class="modal-backdrop" @click.self="closeTrending">
+        <div
+          class="modal-content home-title-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-title-heading"
+        >
+          <div class="home-title-head">
+            <h3 id="home-title-heading">{{ trendingDetail.data?.title || trendingDetail.item.title }}</h3>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="closeTrending">{{ $t('Close') }}</button>
+          </div>
+          <p v-if="trendingDetail.error" class="home-notice home-notice-error">{{ trendingDetail.error }}</p>
+          <div v-else class="home-title-body">
+            <img v-if="trendingDetail.data?.poster || trendingDetail.item.poster" :src="trendingDetail.data?.poster || trendingDetail.item.poster" alt="" class="home-title-poster" />
+            <div>
+              <p class="home-title-meta">
+                <span v-if="mediaKind(trendingDetail.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(trendingDetail.item)] }}</span>
+                <span>{{ trendingDetail.data?.year || trendingDetail.item.detail }}</span>
+                <span v-if="statusLabel(trendingDetail.data || trendingDetail.item)">{{ statusLabel(trendingDetail.data || trendingDetail.item) }}</span>
+              </p>
+              <p v-if="trendingDetail.data?.overview" class="home-title-overview">{{ trendingDetail.data.overview }}</p>
+              <p v-else-if="trendingDetail.loading" class="home-muted">{{ $t('Loading title…') }}</p>
+              <p v-else class="home-title-overview home-muted">{{ $t('No overview from Seerr.') }}</p>
+              <ul v-if="trendingRatings.length" class="home-title-ratings" :aria-label="$t('Ratings')">
+                <li v-for="row in trendingRatings" :key="row.label"><span>{{ row.label }}</span> {{ row.value }}</li>
+              </ul>
+              <p v-else-if="!trendingDetail.pending" class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
+              <div class="home-request-actions">
+                <button
+                  v-if="trendingDetail.data?.trailer && youtubeIdFromUrl(trendingDetail.data.trailer)"
+                  type="button"
+                  class="ui-btn ui-btn-primary"
+                  @click="openTrailer(trendingDetail.data)"
+                >{{ $t('Trailer') }}</button>
+                <button
+                  v-if="trendingDetail.item.can_request"
+                  type="button"
+                  class="ui-btn"
+                  :disabled="requestBusy === resultKey(trendingDetail.item)"
+                  @click="requestTitle(trendingDetail.item)"
+                >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t('Request') }}</button>
+                <button
+                  v-if="trendingDetail.data?.url"
+                  type="button"
+                  class="ui-btn ui-btn-ghost"
+                  @click="openApp($event, 'seerr', trendingDetail.data.url)"
+                >{{ $t('Open in Seerr') }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="trailerPlayer" class="modal-backdrop home-trailer-backdrop" @click.self="closeTrailer">
+        <div
+          class="modal-content home-trailer-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-trailer-heading"
+        >
+          <div class="home-title-head">
+            <h3 id="home-trailer-heading">{{ trailerPlayer.title }}</h3>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="closeTrailer">{{ $t('Close') }}</button>
+          </div>
+          <div class="home-trailer-frame">
+            <iframe
+              :src="trailerPlayer.embedUrl"
+              :title="trailerPlayer.title"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+              referrerpolicy="strict-origin-when-cross-origin"
+            ></iframe>
+          </div>
+        </div>
+      </div>
+      <div v-if="requestChoice && choiceServer" class="modal-backdrop" @click.self="requestChoice = null">
+        <form class="modal-content home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
+          <h3 id="home-request-title">{{ $t('Request') }} {{ requestChoice.item.title }}</h3>
+          <p class="home-muted">{{ $t('Choose where Seerr should add it.') }}</p>
+          <label v-if="requestChoice.servers.length > 1" class="home-request-field">
+            {{ $t('Server') }}
+            <UiSelect
+              :model-value="requestChoice.serverId"
+              :options="requestChoice.servers.map((server) => ({ value: server.id, label: server.name + (server.is4k ? ' (4K)' : '') }))"
+              @update:model-value="onRequestServer"
+            />
+          </label>
+          <label v-if="choiceServer.profiles.length > 1" class="home-request-field">
+            {{ $t('Quality profile') }}
+            <UiSelect
+              v-model="requestChoice.profileId"
+              :options="choiceServer.profiles.map((profile) => ({ value: profile.id, label: profile.name }))"
+            />
+          </label>
+          <label v-if="choiceServer.folders.length > 1" class="home-request-field">
+            {{ $t('Folder') }}
+            <UiSelect
+              v-model="requestChoice.rootFolder"
+              :options="choiceServer.folders.map((folder) => ({ value: folder.path, label: folder.path }))"
+            />
+          </label>
+          <label v-if="choiceServer.languages.length > 1" class="home-request-field">
+            {{ $t('Language profile') }}
+            <UiSelect
+              v-model="requestChoice.languageProfileId"
+              :options="choiceServer.languages.map((language) => ({ value: language.id, label: language.name }))"
+            />
+          </label>
+          <div class="home-request-actions">
+            <button type="button" class="ui-btn" @click="requestChoice = null">{{ $t('Cancel') }}</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="requestBusy === resultKey(requestChoice.item)">
+              {{ requestBusy === resultKey(requestChoice.item) ? $t('Requesting…') : $t('Request') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -1934,7 +2513,7 @@ onUnmounted(() => {
 }
 .home-muted {
   color: var(--text-muted);
-  font-size: 0.92rem;
+  font-size: var(--text-body);
 }
 .home-empty {
   padding: 1.5rem;
@@ -2049,7 +2628,7 @@ onUnmounted(() => {
 .home-dock-notes {
   margin: 0;
   padding: 0 0.6rem 0.2rem;
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   text-align: center;
 }
@@ -2070,7 +2649,7 @@ onUnmounted(() => {
   container-type: size;
 }
 .home-hero-date {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2088,7 +2667,7 @@ onUnmounted(() => {
 }
 .home-hero-sub {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-ui);
   color: var(--text-main);
   text-shadow: var(--wallpaper-text-shadow);
 }
@@ -2098,63 +2677,120 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
   container-type: inline-size;
 }
 .home-search-pill {
   background: var(--control-bg);
   width: 100%;
-  max-width: 620px;
+  max-width: 720px;
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  height: 3.5rem;
-  padding: 0 0.5rem 0 1.25rem;
+  height: min(3.5rem, 100%);
+  padding: 0 0.5rem 0 0;
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  overflow: hidden;
 }
-.home-search-pill svg {
+.home-search-provider {
+  align-self: stretch;
+  flex: 0 1 12.4rem;
+  width: 12.4rem;
+  max-width: 12.4rem;
+  min-width: 0;
+  border-right: 1px solid var(--border-subtle);
+}
+.home-search-mark {
   flex: 0 0 auto;
   color: var(--text-muted);
 }
+.home-search-go {
+  display: none;
+}
 .home-search-input {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 1rem;
+  /* 16px keeps iOS from zooming the page when the field is focused. */
+  font-size: var(--text-ui);
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
+}
+.home-search-input::-webkit-search-decoration,
+.home-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
 }
 .home-search-input::placeholder {
   color: var(--text-dim);
 }
+.home-search-clear {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.home-search-clear:hover,
+.home-search-clear:focus-visible {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--text-main) 10%, transparent);
+  outline: none;
+}
+.home-search-clear svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
 .home-search-btn {
-  min-height: 2.6rem;
+  flex: 0 0 auto;
+  max-height: calc(100% - 0.35rem);
+  min-height: 0;
+  height: min(2.6rem, calc(100% - 0.35rem));
   padding: 0 1.1rem;
+}
+/* Clear takes a slot in the pill; give the field room before the worded Search button collapses. */
+.home-search-pill:has(.home-search-clear) {
+  gap: 0.45rem;
+}
+.home-search-pill:has(.home-search-clear) .home-search-provider {
+  flex-basis: 11rem;
+  max-width: min(11rem, 42%);
 }
 .home-hero-results {
   position: absolute;
-  top: calc(100% + 0.5rem);
+  top: calc(50% + min(1.75rem, 50%) - 1px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
+  /* Prefer the search widget’s width; grow toward 28rem only while it still fits the window. */
   width: min(720px, max(100%, min(28rem, calc(100vw - 2rem))));
+  max-width: min(720px, calc(100vw - 1.5rem));
+  padding: 0;
+  text-align: left;
+  box-sizing: border-box;
+}
+.home-results-scroll {
   max-height: min(60vh, 34rem);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 1rem 1.1rem;
-  text-align: left;
   display: grid;
   gap: 0.5rem;
-}
-.home-results-close {
-  justify-self: end;
-  margin: -0.4rem -0.5rem -0.6rem 0;
-}
-.home-results-close svg {
-  width: 16px;
-  height: 16px;
 }
 .home-hero-results.is-left {
   left: 0;
@@ -2170,14 +2806,197 @@ onUnmounted(() => {
     display: none;
   }
 }
-/* A small search bar searches on Enter; the button would leave no room to type. */
-@container (max-width: 300px) {
+/* A phone-width bar keeps the field typeable. The worded button becomes an icon; Enter still submits.
+   640px covers half-width search widgets once the clear control is visible. */
+@container (max-width: 640px) {
   .home-search-pill {
-    padding-left: 1rem;
+    gap: 0.4rem;
+    padding-right: 0.3rem;
   }
-  .home-search-btn {
+  .home-search-provider {
+    flex: 0 1 10.4rem;
+    width: auto;
+    max-width: min(10.4rem, 46%);
+    --ui-select-font: 0.92rem;
+    --ui-select-pad: 0.7rem;
+  }
+  .home-search-pill:has(.home-search-clear) .home-search-provider {
+    flex-basis: 8.6rem;
+    max-width: min(8.6rem, 36%);
+  }
+  .home-search-mark {
     display: none;
   }
+  .home-search-clear {
+    width: 1.55rem;
+    height: 1.55rem;
+  }
+  .home-search-clear svg {
+    width: 0.85rem;
+    height: 0.85rem;
+  }
+  .home-search-go {
+    display: block;
+    flex: 0 0 auto;
+  }
+  .home-search-btn {
+    width: min(2.55rem, calc(100% - 0.35rem));
+    min-width: 0;
+    height: min(2.55rem, calc(100% - 0.35rem));
+    aspect-ratio: 1;
+    padding: 0;
+  }
+  .home-search-btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .home-hero-results,
+  .home-hero-results.is-left,
+  .home-hero-results.is-right {
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    transform: none;
+  }
+}
+@container (max-width: 360px) {
+  .home-search-provider {
+    max-width: min(7.2rem, 40%);
+    --ui-select-pad: 0.55rem;
+  }
+  .home-search-pill:has(.home-search-clear) .home-search-provider {
+    max-width: min(6.2rem, 32%);
+  }
+  .home-search-clear {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+}
+@container (max-width: 280px) {
+  .home-search-provider {
+    max-width: min(5.6rem, 38%);
+    --ui-select-pad: 0.45rem;
+  }
+  .home-search-pill:has(.home-search-clear) .home-search-provider {
+    max-width: min(5rem, 30%);
+  }
+}
+.home-request-dialog {
+  max-width: 28rem;
+  padding: 1.15rem 1.25rem 1.2rem;
+  gap: 0.75rem;
+}
+.home-title-dialog {
+  max-width: 40rem;
+  padding: 1.1rem 1.2rem 1.2rem;
+  gap: 0.85rem;
+  overflow: auto;
+}
+.home-title-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.home-title-head h3 {
+  margin: 0;
+}
+.home-title-body {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.home-title-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.home-title-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-body);
+}
+.home-title-overview {
+  margin: 0.55rem 0 0;
+  line-height: 1.45;
+}
+.home-title-ratings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-title-ratings li {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: var(--text-kicker);
+}
+.home-title-ratings span {
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+.home-title-dialog .home-request-actions {
+  margin-top: 0.9rem;
+}
+.home-trailer-backdrop {
+  z-index: 110;
+}
+.home-trailer-dialog {
+  width: min(56rem, calc(100vw - 1.5rem));
+  max-width: none;
+  padding: 1rem 1.1rem 1.15rem;
+  gap: 0.75rem;
+}
+.home-trailer-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--border-subtle);
+}
+.home-trailer-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+@media (max-width: 640px) {
+  .home-title-body {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+  }
+}
+.home-request-dialog h3 {
+  margin: 0;
+}
+.home-request-field {
+  display: grid;
+  gap: 0.3rem;
+  font-size: var(--text-body);
+}
+.home-request-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 .home-sr {
   position: absolute;
@@ -2188,7 +3007,7 @@ onUnmounted(() => {
 }
 .home-notice {
   color: var(--color-info);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
 }
 .home-notice-error {
   color: var(--color-danger, #f87171);
@@ -2218,14 +3037,14 @@ onUnmounted(() => {
 }
 .home-result-body span {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--text-body);
 }
 .home-result-body .home-status {
   justify-self: start;
   margin-top: 0.2rem;
   padding: 0.05rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   border: 1px solid currentColor;
 }
@@ -2271,10 +3090,15 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.5rem 0.75rem;
   flex-wrap: wrap;
+  min-width: 0;
+}
+.home-rail-head h3,
+.home-widget-head h3 {
+  min-width: 0;
 }
 .home-card h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
   font-weight: 800;
   letter-spacing: -0.01em;
 }
@@ -2321,7 +3145,7 @@ onUnmounted(() => {
   min-width: var(--btn-h);
   padding: 0;
   border-radius: 50%;
-  font-size: 1.15rem;
+  font-size: var(--text-strong);
 }
 .home-rail {
   flex: 1 1 auto;
@@ -2365,6 +3189,14 @@ onUnmounted(() => {
   text-decoration: none;
   min-width: 0;
   flex: 1 1 auto;
+}
+button.home-tile-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
 }
 .home-tile-request {
   width: 100%;
@@ -2418,12 +3250,12 @@ onUnmounted(() => {
 .home-tile-fallback {
   display: grid;
   place-items: center;
-  font-size: 1.4rem;
+  font-size: var(--text-title);
   font-weight: 700;
   color: var(--text-muted);
 }
 .home-tile-title {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   font-weight: 700;
   line-height: 1.2;
   height: calc(1.2em * 2);
@@ -2435,7 +3267,7 @@ onUnmounted(() => {
   word-break: break-word;
 }
 .home-tile-meta {
-  font-size: 0.74rem;
+  font-size: var(--text-kicker);
   line-height: 1.25;
   height: 1.25em;
   color: var(--text-muted);
@@ -2467,7 +3299,8 @@ onUnmounted(() => {
 }
 .cal-head h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-ui);
+  min-width: 0;
 }
 .cal-nav,
 .cal-tools,
@@ -2484,6 +3317,26 @@ onUnmounted(() => {
 .cal-select {
   width: auto;
   min-width: 9rem;
+  max-width: 100%;
+}
+@container (max-width: 520px) {
+  .home-card-calendar .cal-head h3 {
+    flex: 1 1 100%;
+  }
+  .home-card-calendar .cal-tools {
+    width: 100%;
+  }
+  .home-card-calendar .cal-select {
+    flex: 1 1 calc(50% - 0.4rem);
+    min-width: 0;
+  }
+  .cal-day {
+    min-height: 4.75rem;
+    padding: 0.28rem 0.28rem 0.35rem;
+  }
+  .cal-event {
+    padding: 0.2rem 0.28rem;
+  }
 }
 .cal-views .ui-btn.is-active {
   border-color: rgba(var(--color-primary-rgb), 0.45);
@@ -2503,6 +3356,7 @@ onUnmounted(() => {
 }
 .cal-mode-week {
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -2511,30 +3365,32 @@ onUnmounted(() => {
   width: 0;
   height: 0;
 }
+/* Wide calendar cards fill the widget; narrow ones scroll sideways instead of crushing the seven days.
+   Tied to the card (container), not the browser window — a small calendar on a big screen still scrolls. */
 .cal-mode-week .cal-weekdays,
-.cal-mode-week .cal-week {
-  min-width: min(56rem, 100%);
+.cal-mode-week .cal-week,
+.cal-weeks.is-week .cal-week {
+  min-width: 0;
+  width: 100%;
+}
+@container (max-width: 860px) {
+  .cal-mode-week .cal-weekdays,
+  .cal-mode-week .cal-week,
+  .cal-weeks.is-week .cal-week {
+    width: auto;
+    min-width: 56rem;
+  }
 }
 .cal-weeks.is-week .cal-week,
 .cal-weeks.is-day .cal-week {
   overflow-x: visible;
-}
-.cal-weeks.is-week .cal-week {
-  min-width: min(56rem, 100%);
-}
-@media (min-width: 1280px) {
-  .cal-mode-week .cal-weekdays,
-  .cal-mode-week .cal-week,
-  .cal-weeks.is-week .cal-week {
-    min-width: 0;
-  }
 }
 .cal-weeks.is-day .cal-week {
   grid-template-columns: 1fr;
   min-width: 0;
 }
 .cal-weekdays span {
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -2586,7 +3442,7 @@ onUnmounted(() => {
   background: color-mix(in srgb, rgba(var(--color-primary-rgb), 0.16) 55%, var(--bg-surface-elevated, var(--bg-card)));
 }
 .cal-num {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -2612,12 +3468,22 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--bg-input) 78%, transparent);
   min-width: 0;
   border-left: 3px solid var(--color-warning, #f59e0b);
+  color: inherit;
+  text-decoration: none;
+}
+a.cal-event,
+a.cal-row-link {
+  cursor: pointer;
+}
+a.cal-event:hover,
+a.cal-row-link:hover {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 .cal-event.is-have {
   border-left-color: var(--color-success, #10b981);
 }
 .cal-event-time {
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-family: var(--font-mono);
   color: var(--color-warning, #f59e0b);
 }
@@ -2625,11 +3491,11 @@ onUnmounted(() => {
   color: var(--color-success, #10b981);
 }
 .cal-event strong {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   line-height: 1.2;
 }
 .cal-event-detail {
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
@@ -2685,8 +3551,17 @@ onUnmounted(() => {
 .home-card li.cal-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   min-width: 0;
+}
+.cal-row-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 12px;
 }
 .cal-chip {
   flex: 0 0 2.75rem;
@@ -2696,13 +3571,13 @@ onUnmounted(() => {
   border-radius: 12px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  font-size: 0.64rem;
+  font-size: var(--text-kicker);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: 0.04em;
 }
 .cal-chip strong {
-  font-size: 0.9rem;
+  font-size: var(--text-body);
 }
 .cal-row.is-today .cal-chip {
   background: var(--color-primary-button);
@@ -2714,14 +3589,14 @@ onUnmounted(() => {
   min-width: 0;
 }
 .cal-row-body strong {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cal-row-meta {
-  font-size: 0.74rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -2741,6 +3616,22 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+/* Phone layouts are full-width cards; trim chrome so more of the widget stays on screen.
+   (Padding is on the container itself, so this has to follow the viewport — not @container.) */
+@media (max-width: 719px) {
+  .home-card {
+    padding: 1rem 0.95rem 0.95rem;
+    gap: 0.65rem;
+  }
+}
+@container (max-width: 320px) {
+  .home-card h3 {
+    font-size: var(--text-ui);
+  }
+  .home-type-filter .ui-btn {
+    padding: 0 0.55rem;
+  }
 }
 .home-card > :is(.home-rail-head, .home-widget-head, .cal-head) {
   flex: 0 0 auto;
@@ -2763,17 +3654,16 @@ onUnmounted(() => {
   gap: 0.4rem 0.6rem;
 }
 .home-card .cal-head h3 {
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
 }
 .home-card .ui-input {
   width: auto;
 }
 .home-card .cal-select {
   min-width: 0;
-  padding-left: 0.9rem;
 }
 .home-card-stat {
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   color: var(--color-success-fg);
 }
@@ -2824,7 +3714,7 @@ onUnmounted(() => {
 }
 .home-dl-count small {
   margin-left: 0.4rem;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 600;
   letter-spacing: 0;
   color: var(--text-muted);
@@ -2845,7 +3735,7 @@ onUnmounted(() => {
   gap: 0.6rem;
 }
 .home-dl-row strong {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 700;
   min-width: 0;
   white-space: nowrap;
@@ -2854,14 +3744,14 @@ onUnmounted(() => {
 }
 .home-dl-pct {
   flex: 0 0 auto;
-  font-size: 0.76rem;
+  font-size: var(--text-kicker);
   color: var(--text-muted);
 }
 .home-dl-meta {
-  font-size: 0.74rem;
+  font-size: var(--text-kicker);
 }
 .home-when {
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   color: var(--color-info);
   font-family: var(--font-mono);
 }
@@ -2887,7 +3777,7 @@ onUnmounted(() => {
 }
 .home-stuck summary {
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -2898,7 +3788,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.5rem 0.75rem;
   margin: 0.6rem 0;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
 }
 .home-card .home-stuck-item {
   display: flex;
@@ -2910,7 +3800,7 @@ onUnmounted(() => {
   display: grid;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
 }
 .home-stuck-remove {
   flex: 0 0 auto;
@@ -2947,13 +3837,13 @@ onUnmounted(() => {
   display: flex;
   gap: 0.5rem;
   align-items: flex-start;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .home-debug-state {
   flex: 0 0 auto;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: var(--text-kicker);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 0.1rem 0.35rem;
@@ -2979,7 +3869,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.86rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .gh-status::before {
@@ -3006,6 +3896,9 @@ onUnmounted(() => {
   color: var(--text-heading);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .gh-big small {
   margin-left: 0.2em;
@@ -3016,7 +3909,7 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 .gh-label {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -3038,7 +3931,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--pill-bg);
   border: 1px solid var(--border-subtle);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -3123,7 +4016,7 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 .np-sub {
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -3153,7 +4046,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
 }
@@ -3277,6 +4170,43 @@ onUnmounted(() => {
     gap: 0.5rem;
   }
 }
+/* Other downloads: one row each, an icon for what kind of file it is. */
+.home-card-other .od-item {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.65rem;
+}
+.od-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.6rem;
+  background: rgba(var(--color-primary-rgb), 0.14);
+  color: var(--color-primary);
+}
+.od-icon svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.od-text {
+  display: grid;
+  min-width: 0;
+}
+.od-text strong {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@container (min-width: 760px) {
+  .home-card-other .od-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+  }
+}
+
 /* Needs attention: a timeline; each row opens where to fix it. */
 .at-timeline {
   position: relative;
@@ -3333,7 +4263,7 @@ onUnmounted(() => {
   gap: 0.1rem;
 }
 .at-text strong {
-  font-size: 0.95rem;
+  font-size: var(--text-body);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -3341,7 +4271,7 @@ onUnmounted(() => {
 }
 .at-kind {
   flex: 0 0 auto;
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .gh-empty {

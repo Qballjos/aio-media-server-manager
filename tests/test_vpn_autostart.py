@@ -107,3 +107,22 @@ def test_wizard_execute_starts_cloudflare_tunnel_before_the_vpn(monkeypatch):
     client = TestClient(create_app())
     assert client.post("/api/wizard/execute").status_code == 200
     assert order == ["cloudflare", "vpn"]
+
+
+async def test_boot_starts_cloudflare_tunnel_after_apps_answer(monkeypatch):
+    from core.cloudflare_tunnel import cloudflare_tunnel
+
+    order = []
+
+    async def fake_healthy(plugin, timeout=0):
+        order.append(plugin)
+        return True
+
+    async def fake_tunnel_start():
+        order.append("cloudflare")
+        return {"status": "started"}
+
+    monkeypatch.setattr(lifecycle, "_wait_healthy", fake_healthy)
+    monkeypatch.setattr(cloudflare_tunnel, "start", fake_tunnel_start)
+    await lifecycle.start_cloudflare_tunnel_last(["sonarr", "radarr"])
+    assert order == ["sonarr", "radarr", "cloudflare"]

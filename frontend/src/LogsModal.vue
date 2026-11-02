@@ -174,32 +174,32 @@ onUnmounted(() => {
             <input
               type="text"
               v-model="logFilter"
-              placeholder="Search logs…"
+              :placeholder="$t('Search logs…')"
               class="ui-input font-mono log-search"
             />
             <label class="toggle-control font-mono">
               <input type="checkbox" v-model="logOnlyErrors" />
-              <span>Errors only</span>
+              <span>{{ $t('Errors only') }}</span>
             </label>
             <label class="toggle-control font-mono">
               <input type="checkbox" v-model="autoScrollLogs" />
-              <span>Auto-scroll</span>
+              <span>{{ $t('Auto-scroll') }}</span>
             </label>
-            <button @click="downloadLogs(app?.name)" class="btn-icon" title="Download logs">
+            <button @click="downloadLogs(app?.name)" class="btn-icon" :title="$t('Download logs')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
             </button>
-            <button @click="fetchLogs(app?.name)" class="btn-icon" title="Refresh">
+            <button @click="fetchLogs(app?.name)" class="btn-icon" :title="$t('Refresh')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ 'spin-anim': logLoading }">
                 <polyline points="23 4 23 10 17 10"></polyline>
                 <polyline points="1 20 1 14 7 14"></polyline>
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
               </svg>
             </button>
-            <button @click="closeLogs" class="btn-icon btn-close" title="Close">
+            <button @click="closeLogs" class="btn-icon btn-close" :title="$t('Close')">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -210,9 +210,9 @@ onUnmounted(() => {
 
         <div class="log-console font-mono" ref="logContainerRef">
           <div v-if="filteredLogLines.length === 0" class="log-empty">
-            <span v-if="logLoading">Loading logs…</span>
-            <span v-else-if="logLines.length > 0">No logs match this filter.</span>
-            <span v-else>No logs yet for this app.</span>
+            <span v-if="logLoading">{{ $t('Loading logs…') }}</span>
+            <span v-else-if="logLines.length > 0">{{ $t('No logs match this filter.') }}</span>
+            <span v-else>{{ $t('No logs yet for this app.') }}</span>
           </div>
           <div
             v-for="(line, idx) in filteredLogLines"

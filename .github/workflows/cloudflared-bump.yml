@@ -1,0 +1,86 @@
+name: Bump cloudflared
+
+# cloudflared is pinned in the Dockerfile (not floating :latest). When Cloudflare
+# publishes a new release, bump the pin on beta and dispatch Nightly — GITHUB_TOKEN
+# pushes do not re-trigger push workflows, so an explicit dispatch is required.
+
+on:
+  schedule:
+    - cron: "25 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: cloudflared-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump pin on beta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: beta
+          # Needed so the following push can update beta.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve versions
+        id: versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          current="$(sed -n 's/^ARG CLOUDFLARED_VERSION=//p' Dockerfile | head -1)"
+          if [ -z "${current}" ]; then
+            echo "CLOUDFLARED_VERSION pin missing from Dockerfile" >&2
+            exit 1
+          fi
+          latest="$(gh api repos/cloudflare/cloudflared/releases/latest --jq .tag_name)"
+          latest="${latest#v}"
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+          echo "latest=${latest}" >> "$GITHUB_OUTPUT"
+          if [ "${current}" = "${latest}" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "cloudflared is already ${current}"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "bumping cloudflared ${current} → ${latest}"
+          fi
+
+      - name: Update Dockerfile pin
+        if: steps.versions.outputs.changed == 'true'
+        env:
+          CURRENT: ${{ steps.versions.outputs.current }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+        run: |
+          set -euo pipefail
+          sed -i "s/^ARG CLOUDFLARED_VERSION=${CURRENT}/ARG CLOUDFLARED_VERSION=${LATEST}/" Dockerfile
+          grep -F "ARG CLOUDFLARED_VERSION=${LATEST}" Dockerfile
+
+      - name: Commit and push
+        if: steps.versions.outputs.changed == 'true'
+        env:
+          LATEST: ${{ steps.versions.outputs.latest }}
+          CURRENT: ${{ steps.versions.outputs.current }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Dockerfile
+          git commit -m "Bump cloudflared to ${LATEST}." \
+            -m "Was ${CURRENT}; rebuild Nightly so the appliance tunnel connector stays current."
+          git push origin HEAD:beta
+
+      - name: Dispatch Nightly rebuild
+        if: steps.versions.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Token pushes do not start push-triggered workflows; kick Nightly explicitly.
+          gh workflow run nightly.yml --ref beta
+          echo "Dispatched Nightly on beta for cloudflared ${{ steps.versions.outputs.latest }}"

@@ -1,8 +1,8 @@
 """
 core/integrations/prowlarr.py — Prowlarr v1 REST API Client.
 
-Registers Sonarr and Radarr as sync applications in Prowlarr,
-so indexers configured in Prowlarr automatically push to Sonarr and Radarr.
+Registers Sonarr, Radarr, and Lidarr as sync applications, and adds the
+installed download clients, so Prowlarr can test indexers and push them to *Arr.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterable, Optional
 import requests
 
 from core.install_jobs import set_wiring_progress
+from core.integrations.arr_app import post_servarr_download_client
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,8 @@ SEED_DEFAULTS = {
     "torrentBaseSettings.packSeedTime": 10080,
 }
 FLARESOLVERR_TAG = "flaresolverr"
+# Prowlarr's own default. Grabs from Prowlarr land here, not in an *Arr library.
+PROWLARR_DOWNLOAD_CATEGORY = "prowlarr"
 _CLOUDFLARE_MARKERS = ("cloudflare", "flaresolverr")
 _MIN_PUBLIC_DEFINITIONS = 20  # fewer means Prowlarr has not downloaded its Cardigann catalog yet
 
@@ -214,6 +217,111 @@ class ProwlarrClient:
             if self._put(f"/indexer/{indexer['id']}?forceSave=true", indexer):
                 tagged.append(str(indexer["name"]))
         return tagged
+
+    def get_download_clients(self) -> list[dict[str, Any]]:
+        try:
+            resp = requests.get(f"{self.base_url}/downloadclient", headers=self._headers(), timeout=5.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data if isinstance(data, list) else []
+        except Exception as exc:
+            logger.debug("Prowlarr get_download_clients error: %s", exc)
+        return []
+
+    def add_sabnzbd_client(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8085,
+        api_key: str = "",
+        category: str = PROWLARR_DOWNLOAD_CATEGORY,
+        username: str = "",
+        password: str = "",
+    ) -> bool:
+        if any(item.get("implementation") == "Sabnzbd" for item in self.get_download_clients()):
+            logger.info("Prowlarr SABnzbd download client already registered.")
+            return True
+        return self._post_download_client(
+            "SABnzbd (AMM)",
+            "Sabnzbd",
+            "SabnzbdSettings",
+            [
+                {"name": "host", "value": host},
+                {"name": "port", "value": int(port) or 8085},
+                {"name": "apiKey", "value": api_key},
+                {"name": "username", "value": username},
+                {"name": "password", "value": password},
+                {"name": "useSsl", "value": False},
+                {"name": "urlBase", "value": ""},
+                {"name": "category", "value": category},
+            ],
+        )
+
+    def add_nzbget_client(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 6789,
+        username: str = "nzbget",
+        password: str = "tegbzn6789",
+        category: str = PROWLARR_DOWNLOAD_CATEGORY,
+    ) -> bool:
+        if any(item.get("implementation") == "Nzbget" for item in self.get_download_clients()):
+            logger.info("Prowlarr NZBGet download client already registered.")
+            return True
+        return self._post_download_client(
+            "NZBGet (AMM)",
+            "Nzbget",
+            "NzbgetSettings",
+            [
+                {"name": "host", "value": host},
+                {"name": "port", "value": int(port) or 6789},
+                {"name": "username", "value": username},
+                {"name": "password", "value": password},
+                {"name": "useSsl", "value": False},
+                {"name": "category", "value": category},
+            ],
+        )
+
+    def add_qbittorrent_client(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8081,
+        username: str = "admin",
+        password: str = "adminadmin",
+        category: str = PROWLARR_DOWNLOAD_CATEGORY,
+    ) -> bool:
+        if any(item.get("implementation") == "QBittorrent" for item in self.get_download_clients()):
+            logger.info("Prowlarr qBittorrent download client already registered.")
+            return True
+        return self._post_download_client(
+            "qBittorrent (AMM)",
+            "QBittorrent",
+            "QBittorrentSettings",
+            [
+                {"name": "host", "value": host},
+                {"name": "port", "value": int(port) or 8081},
+                {"name": "username", "value": username},
+                {"name": "password", "value": password},
+                {"name": "useSsl", "value": False},
+                {"name": "category", "value": category},
+            ],
+        )
+
+    def _post_download_client(
+        self,
+        name: str,
+        implementation: str,
+        config_contract: str,
+        fields: list[dict[str, Any]],
+    ) -> bool:
+        return post_servarr_download_client(
+            self.base_url,
+            self._headers(),
+            name=name,
+            implementation=implementation,
+            config_contract=config_contract,
+            fields=fields,
+            label="Prowlarr",
+        )
 
     def get_applications(self) -> list[dict[str, Any]]:
         try:

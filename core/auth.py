@@ -31,6 +31,7 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 JWT_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_BYTES = 72
+MAX_PERSON_NAME = 80
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 10
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
@@ -44,6 +45,17 @@ def normalize_email(value: str) -> str:
             detail="A valid email address is required.",
         )
     return email.lower()
+
+
+def normalize_person_name(value: str | None) -> str:
+    """Collapse whitespace. An empty result clears the stored name."""
+    name = " ".join(str(value or "").split())
+    if len(name) > MAX_PERSON_NAME:
+        raise HTTPException(
+            status_code=_UNPROCESSABLE,
+            detail="Name is too long.",
+        )
+    return name
 
 
 @dataclass
@@ -124,6 +136,12 @@ class AuthManager:
     def email(self) -> str:
         return str(self._read_auth().get("email") or "").strip()
 
+    def first_name(self) -> str:
+        return str(self._read_auth().get("first_name") or "").strip()
+
+    def last_name(self) -> str:
+        return str(self._read_auth().get("last_name") or "").strip()
+
     def create_admin(self, username: str, password: str, email: str = "") -> None:
         if not self.setup_required():
             raise HTTPException(
@@ -181,6 +199,8 @@ class AuthManager:
         email: str | None = None,
         new_username: str | None = None,
         new_password: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
     ) -> dict[str, Any]:
         if not self.verify_password(current_username, current_password):
             raise HTTPException(
@@ -192,12 +212,21 @@ class AuthManager:
         data["username"] = username
         if email is not None:
             data["email"] = normalize_email(email)
+        if first_name is not None:
+            data["first_name"] = normalize_person_name(first_name)
+        if last_name is not None:
+            data["last_name"] = normalize_person_name(last_name)
         if new_password:
             self._validate_password(new_password)
             hashed = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt())
             data["password_hash"] = hashed.decode("utf-8")
         self._write_auth(data)
-        return {"username": username, "email": str(data.get("email") or "")}
+        return {
+            "username": username,
+            "email": str(data.get("email") or ""),
+            "first_name": str(data.get("first_name") or ""),
+            "last_name": str(data.get("last_name") or ""),
+        }
 
     def set_session_cookies(self, response: Response, token: str) -> str:
         csrf = secrets.token_urlsafe(32)

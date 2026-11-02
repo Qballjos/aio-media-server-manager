@@ -37,6 +37,7 @@ _SONARR_WEB_2160P = "d1498e7d189fbe6c7110ceaabb7473e6"
 _SONARR_ANIME_REMUX_1080P = "20e0fc959f1f1704bed501f23bdae76f"
 _RADARR_HD_BLURAY_WEB = "d1d67249d3890e49bc12e275d989a7e9"
 _RADARR_UHD_BLURAY_WEB = "64fb5f9858489bdac2af690e27c8f42f"
+_RADARR_ANIME_REMUX_1080P = "722b624f9af1e492284c4bc842153a38"
 
 def _sonarr_all_sources_block(resolution: str) -> str:
     """WEB, Bluray and HDTV in one group: all are accepted and none replaces another just for its
@@ -119,14 +120,8 @@ def _sonarr_older_tv_scores(guide_profiles: set[str]) -> str:
 PROFILE_OPTIONS = (
     {
         "id": "sonarr_web_1080p",
-        "label": "Sonarr WEB-1080p",
+        "label": "Sonarr Web-1080p",
         "guide": "https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles/#web-1080p",
-        "default": True,
-    },
-    {
-        "id": "sonarr_all_sources",
-        "label": "Sonarr WEB profiles: also accept Bluray and HDTV",
-        "guide": "https://recyclarr.dev/wiki/yaml/config-reference/quality-profiles/",
         "default": True,
     },
     {
@@ -151,6 +146,12 @@ PROFILE_OPTIONS = (
         "id": "radarr_hd",
         "label": "Radarr HD Bluray + WEB",
         "guide": "https://trash-guides.info/Radarr/radarr-setup-quality-profiles/#hd-bluray-web",
+        "default": True,
+    },
+    {
+        "id": "radarr_anime",
+        "label": "Radarr Anime Remux-1080p",
+        "guide": "https://trash-guides.info/Radarr/radarr-setup-quality-profiles-anime/",
         "default": True,
     },
     {
@@ -249,6 +250,8 @@ def load_prefs(config_dir: Path) -> dict[str, Any]:
         try:
             loaded = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(loaded, dict):
+                # Bluray and HDTV are part of the Web profiles now, not their own switch.
+                loaded.pop("sonarr_all_sources", None)
                 data.update(loaded)
         except json.JSONDecodeError:
             pass
@@ -593,7 +596,7 @@ def _render_yaml(
     # split and then skipped (exit 0, no Processing). One instance per *Arr, many profiles.
     sonarr_profiles: list[tuple[str, str]] = []
     if prefs.get("sonarr_web_1080p"):
-        sonarr_profiles.append((_SONARR_WEB_1080P, "WEB-1080p"))
+        sonarr_profiles.append((_SONARR_WEB_1080P, "Web-1080p"))
     if prefs.get("sonarr_web_2160p"):
         sonarr_profiles.append((_SONARR_WEB_2160P, "WEB-2160p"))
     if prefs.get("sonarr_anime"):
@@ -603,16 +606,22 @@ def _render_yaml(
         if prefs.get("sonarr_web_1080p") or prefs.get("sonarr_web_2160p") or prefs.get("sonarr_older_tv")
         else "anime"
     )
-    sonarr_overrides: dict[str, str] = {}
-    if prefs.get("sonarr_all_sources"):
-        sonarr_overrides[_SONARR_WEB_1080P] = _sonarr_all_sources_block("1080p")
-        sonarr_overrides[_SONARR_WEB_2160P] = _sonarr_all_sources_block("2160p")
+    # WEB, Bluray and HDTV belong to the Web profiles themselves.
+    sonarr_overrides = {
+        _SONARR_WEB_1080P: _sonarr_all_sources_block("1080p"),
+        _SONARR_WEB_2160P: _sonarr_all_sources_block("2160p"),
+    }
     older_tv = bool(prefs.get("sonarr_older_tv"))
     radarr_profiles: list[tuple[str, str]] = []
     if prefs.get("radarr_hd"):
         radarr_profiles.append((_RADARR_HD_BLURAY_WEB, "HD Bluray + WEB"))
     if prefs.get("radarr_uhd"):
         radarr_profiles.append((_RADARR_UHD_BLURAY_WEB, "UHD Bluray + WEB"))
+    if prefs.get("radarr_anime"):
+        radarr_profiles.append((_RADARR_ANIME_REMUX_1080P, "[Anime] Remux-1080p"))
+    # One quality-size table per Radarr. Movie sizes stay when a movie profile is on; anime sizes
+    # are used only when the anime profile is the only one selected.
+    radarr_qdef = "movie" if prefs.get("radarr_hd") or prefs.get("radarr_uhd") else "anime"
     parts = [
         "# yaml-language-server: $schema=https://schemas.recyclarr.dev/v8/config-schema.json",
         f"# {MANAGED_MARK} — official Recyclarr v8 / TRaSH Guides templates.",
@@ -644,7 +653,7 @@ def _render_yaml(
                 name="movies",
                 url=radarr_url,
                 key=radarr_key,
-                qdef="movie",
+                qdef=radarr_qdef,
                 profiles=radarr_profiles,
                 naming=_naming_block("radarr", naming),
             )

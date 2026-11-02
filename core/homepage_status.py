@@ -326,6 +326,15 @@ def _safe(part: str, build: Callable[[], Any], fallback: Any) -> Any:
         return fallback
 
 
+def _boot_time() -> float:
+    """Host boot time, or 0 when the OS blocks the call (sandbox, locked-down containers)."""
+    try:
+        return float(psutil.boot_time())
+    except Exception as exc:
+        logger.debug("Host boot time is unavailable: %s", exc)
+        return 0.0
+
+
 def homepage_status(host: str, scheme: str = "http") -> dict[str, Any]:
     paths = {"Config": settings.config_dir, "Downloads": settings.download_dir, "Media": settings.media_dir}
     volumes = _safe("storage", lambda: storage_volumes(paths), [])
@@ -336,7 +345,7 @@ def homepage_status(host: str, scheme: str = "http") -> dict[str, Any]:
 
     return {
         "playing": _safe("playing", lambda: now_playing(host, scheme), []),
-        "server": _safe("server", lambda: server_summary(collect_metrics(), psutil.boot_time(), time.time()), None),
+        "server": _safe("server", lambda: server_summary(collect_metrics(), _boot_time(), time.time()), None),
         "storage": volumes,
         "attention": _safe("attention", attention, []),
     }

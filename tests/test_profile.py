@@ -238,3 +238,18 @@ def test_home_grid_is_kept_on_the_profile(tmp_path: Path, monkeypatch):
     assert client.get("/api/auth/status").json()["homepage_grid"] == saved.json()["homepage_grid"]
     # The grid lives next to the old order, which stays as it was.
     assert client.get("/api/auth/me", headers=headers).json()["homepage_layout"] == []
+
+
+def test_locale_is_saved_on_the_profile(tmp_path: Path, monkeypatch):
+    client, cfg = _client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    assert client.get("/api/auth/me", headers=headers).json()["locale"] == ""
+
+    saved = client.patch("/api/auth/visuals", json={"locale": "nl"}, headers=headers)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["locale"] == "nl"
+    assert client.get("/api/auth/status").json()["locale"] == "nl"
+    assert '"locale": "nl"' in (cfg.config_dir / "profile" / "profile.json").read_text(encoding="utf-8")
+
+    rejected = client.patch("/api/auth/visuals", json={"locale": "es"}, headers=headers)
+    assert rejected.status_code == 422

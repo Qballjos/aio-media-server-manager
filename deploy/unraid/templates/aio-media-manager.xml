@@ -15,11 +15,11 @@
   <Description>
     [b]AIO Media Server Manager[/b] is a single appliance for the *Arr stack.[br][br]
     Install [b]only this container[/b]. Do not also install Community Applications templates for Sonarr, Radarr, qBittorrent, etc. — those apps are started from the Catalog inside the manager.[br][br]
-    [b]Before first start[/b] create host folders (SSH as root):[br]
-    [code]mkdir -p /mnt/user/appdata/aio-media-manager/vpn /mnt/user/backups/aio-media-manager /mnt/user/aio-media-manager/{downloads,media}
-chown -R 99:100 /mnt/user/appdata/aio-media-manager /mnt/user/backups/aio-media-manager /mnt/user/aio-media-manager[/code][br][br]
+    [b]Before first start[/b], prepare a mounted SSD/NVMe pool and install the local template (SSH as root):[br]
+    [code]curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/unraid/install.sh | sh[/code][br]
+    The default pool is /mnt/cache. Set CACHE_ROOT=/mnt/your-pool for a different pool. Incomplete downloads and Usenet unpacking use the pool; finished torrents and imported media stay on the array. Existing downloads require migration before adding these mounts.[br][br]
     Open [b]http://TOWER:8080[/b] and complete the wizard.[br][br]
-    Privileged mode plus NET_ADMIN/SYS_MODULE are required for optional WireGuard torrent isolation. For hardlinks, prefer a single disk/cache path for the Data mount (not two FUSE shares). Docs: https://github.com/Qballjos/aio-media-server-manager/blob/main/deploy/UNRAID.md
+    Privileged mode plus NET_ADMIN/SYS_MODULE are required for optional WireGuard torrent isolation. SSD staging and array media are different filesystems: imports copy files. Completed torrents remain under the Data mount for seeding. Docs: https://github.com/Qballjos/aio-media-server-manager/blob/main/deploy/UNRAID.md
   </Description>
   <Category>MediaServer:Video MediaApp:Video Downloaders:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
@@ -27,7 +27,7 @@ chown -R 99:100 /mnt/user/appdata/aio-media-manager /mnt/user/backups/aio-media-
   <Icon>https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/frontend/public/logo-aio-media-manager.png</Icon>
   <Readme>https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/UNRAID.md</Readme>
   <ExtraParams>--cap-add=NET_ADMIN --cap-add=SYS_MODULE</ExtraParams>
-  <Requires>Create appdata, data, and backups folders before first start (see Description). Privileged container for VPN isolation.</Requires>
+  <Requires>Run deploy/unraid/install.sh with a mounted SSD/NVMe pool before first start (see Description). Privileged container for VPN isolation.</Requires>
   <Config Name="Manager WebUI" Target="8080" Default="8080" Mode="tcp" Description="AIO Media Server Manager UI" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
   <Config Name="qBittorrent" Target="8081" Default="8081" Mode="tcp" Description="qBittorrent WebUI (VueTorrent by default)" Type="Port" Display="always" Required="false" Mask="false">8081</Config>
   <Config Name="Shelfmark" Target="8084" Default="8084" Mode="tcp" Description="Shelfmark WebUI" Type="Port" Display="advanced" Required="false" Mask="false">8084</Config>
@@ -45,7 +45,9 @@ chown -R 99:100 /mnt/user/appdata/aio-media-manager /mnt/user/backups/aio-media-
   <Config Name="NeutArr" Target="9705" Default="9705" Mode="tcp" Description="NeutArr WebUI" Type="Port" Display="advanced" Required="false" Mask="false">9705</Config>
   <Config Name="Plex" Target="32400" Default="32400" Mode="tcp" Description="Plex Media Server" Type="Port" Display="always" Required="false" Mask="false">32400</Config>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/aio-media-manager" Mode="rw" Description="App settings, VPN profile, and child-app config" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/aio-media-manager</Config>
-  <Config Name="Data" Target="/data" Default="/mnt/user/aio-media-manager" Mode="rw" Description="User share for downloads/ and media/ (same filesystem for hardlinks). Prefer /mnt/cache/... or a single disk path when possible." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/aio-media-manager</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/aio-media-manager" Mode="rw" Description="Array user share for media and finished torrents. Incomplete and completed Usenet staging use the separate SSD mounts." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/aio-media-manager</Config>
+  <Config Name="Incomplete downloads (SSD pool)" Target="/data/downloads/incomplete" Default="/mnt/cache/aio-download-cache/incomplete" Mode="rw" Description="SSD/NVMe pool for active Usenet and torrent downloads. Run deploy/unraid/install.sh first; change cache to your pool name. Migrate existing files before applying." Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/aio-download-cache/incomplete</Config>
+  <Config Name="Completed Usenet downloads (SSD pool)" Target="/data/downloads/complete" Default="/mnt/cache/aio-download-cache/complete" Mode="rw" Description="SSD/NVMe unpacking and completed Usenet staging. Media is imported onto the array; finished torrents remain under /data/downloads/torrents." Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/aio-download-cache/complete</Config>
   <Config Name="Backups" Target="/backups" Default="/mnt/user/backups/aio-media-manager" Mode="rw" Description="Configuration backups. Prefer array storage, not cache-only." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/backups/aio-media-manager</Config>
   <Config Name="Host sys" Target="/host/sys" Default="/sys" Mode="ro" Description="Read-only host /sys so Home shows the server's network traffic, not just this container's." Type="Path" Display="advanced" Required="false" Mask="false">/sys</Config>
   <Config Name="Intel/AMD GPU" Target="/dev/dri" Default="" Mode="rw" Description="Optional. Map host /dev/dri for hardware transcoding. Leave empty if the device does not exist." Type="Device" Display="advanced" Required="false" Mask="false"/>

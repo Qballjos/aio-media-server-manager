@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 from core.appliance_update import (
     APPLIANCE_DOCKER_WORKFLOW,
     APPLIANCE_IMAGE,
+    APPLIANCE_NIGHTLY_IMAGE,
+    APPLIANCE_NIGHTLY_WORKFLOW,
     APPLIANCE_NAME,
     _same_commit,
     check_appliance_image,
@@ -92,3 +94,41 @@ def test_no_docker_runs_is_not_an_update(monkeypatch):
     payload = check_appliance_image(github)
     assert payload["update_available"] is False
     assert "No successful Docker" in (payload.get("detail") or "")
+    assert "main" in (payload.get("detail") or "")
+
+
+def test_nightly_checks_nightly_not_main(monkeypatch):
+    monkeypatch.setenv("AMM_GIT_SHA", "aaaaaaaaaaaaaaaa")
+    monkeypatch.setenv("AMM_VERSION", "0.3.0-nightly")
+    github = MagicMock()
+    github.latest_workflow_run_sha.return_value = "bbbbbbbbbbbbbbbb"
+    github.compare_commits.return_value = {"status": "ahead"}
+    payload = check_appliance_image(github)
+    github.latest_workflow_run_sha.assert_called_once_with(
+        "Qballjos/aio-media-server-manager",
+        APPLIANCE_NIGHTLY_WORKFLOW,
+        branch="beta",
+        status="success",
+    )
+    assert payload["channel"] == "nightly"
+    assert payload["update_available"] is True
+    assert APPLIANCE_NIGHTLY_IMAGE in payload["apply_hint"]
+    assert ":latest" not in payload["apply_hint"]
+
+
+def test_main_does_not_check_nightly(monkeypatch):
+    monkeypatch.setenv("AMM_GIT_SHA", "aaaaaaaaaaaaaaaa")
+    monkeypatch.setenv("AMM_VERSION", "0.3.0")
+    github = MagicMock()
+    github.latest_workflow_run_sha.return_value = "bbbbbbbbbbbbbbbb"
+    github.compare_commits.return_value = {"status": "ahead"}
+    payload = check_appliance_image(github)
+    github.latest_workflow_run_sha.assert_called_once_with(
+        "Qballjos/aio-media-server-manager",
+        APPLIANCE_DOCKER_WORKFLOW,
+        branch="main",
+        status="success",
+    )
+    assert payload["channel"] == "main"
+    assert APPLIANCE_IMAGE in payload["apply_hint"]
+    assert ":nightly" not in payload["apply_hint"]

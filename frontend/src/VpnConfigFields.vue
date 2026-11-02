@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import UiSelect from './UiSelect.vue'
 
 const props = defineProps({
   protocol: { type: String, default: 'wireguard' },
@@ -37,31 +38,35 @@ function onFile(event) {
 <template>
   <div class="vpn-config-fields">
     <label class="ui-field">
-      <span>Protocol</span>
-      <select class="ui-input" :value="protocol" @change="emit('update:protocol', $event.target.value)">
-        <option value="wireguard">WireGuard</option>
-        <option value="openvpn">OpenVPN</option>
-      </select>
+      <span>{{ $t('Protocol') }}</span>
+      <UiSelect
+        :model-value="protocol"
+        :options="[
+          { value: 'wireguard', label: $t('WireGuard') },
+          { value: 'openvpn', label: $t('OpenVPN') },
+        ]"
+        @update:model-value="emit('update:protocol', $event)"
+      />
     </label>
-    <p class="vpn-hint">Upload a provider profile or paste it. It is stored as {{ protocol === 'openvpn' ? 'client.ovpn' : 'wg0.conf' }} under the config VPN folder unless you set a path.</p>
-    <p v-if="hasConfig" class="vpn-hint">A config file is already saved{{ path ? ` at ${path}` : '' }}.</p>
+    <p class="vpn-hint">{{ $t('Upload a provider profile or paste it. It is stored as') }} {{ protocol === 'openvpn' ? 'client.ovpn' : 'wg0.conf' }} {{ $t('under the config VPN folder unless you set a path.') }}</p>
+    <p v-if="hasConfig" class="vpn-hint">{{ $t('A config file is already saved') }}{{ path ? ` at ${path}` : '' }}.</p>
     <label class="ui-field">
-      <span>Upload config</span>
+      <span>{{ $t('Upload config') }}</span>
       <input ref="fileInput" class="vpn-file" type="file" accept=".conf,.ovpn,.txt,text/plain" @change="onFile" />
     </label>
     <p v-if="fileError" class="vpn-hint">{{ fileError }}</p>
     <label class="ui-field">
-      <span>Paste config</span>
+      <span>{{ $t('Paste config') }}</span>
       <textarea
         class="ui-input font-mono"
         rows="8"
         :value="text"
-        :placeholder="hasConfig ? 'Leave blank to keep the saved file' : protocol === 'openvpn' ? 'client\ndev tun\nremote …' : '[Interface]\nPrivateKey = …\nAddress = …\n\n[Peer]\n…'"
+        :placeholder="hasConfig ? $t('Leave blank to keep the saved file') : protocol === 'openvpn' ? 'client\ndev tun\nremote …' : '[Interface]\nPrivateKey = …\nAddress = …\n\n[Peer]\n…'"
         @input="emit('update:text', $event.target.value)"
       />
     </label>
     <label class="ui-field">
-      <span>Save as (optional)</span>
+      <span>{{ $t('Save as (optional)') }}</span>
       <input
         class="ui-input font-mono"
         :value="path"
@@ -80,12 +85,12 @@ function onFile(event) {
 }
 .vpn-file {
   color: var(--text-main);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
 }
 .vpn-hint {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   line-height: 1.4;
 }
 </style>

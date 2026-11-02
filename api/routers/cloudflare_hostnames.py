@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from core.auth import auth_manager
+from core.cloudflare_access import access_status, apply_access, load_access_state
 from core.cloudflare_api import (
     CloudflareApiError,
     api_token_configured,
@@ -18,7 +19,7 @@ from core.cloudflare_api import (
 )
 from core.cloudflare_api import planned_routes
 from core.homepage import clear_homepage_snapshot_cache
-from core.public_hostnames import PublicHostnameError, load_hostnames, save_hostnames
+from core.public_hostnames import ACCESS_GATE_APPS, PublicHostnameError, load_hostnames, save_hostnames
 from core.cloudflare_tunnel import cloudflare_tunnel
 from core.settings import settings
 
@@ -41,6 +42,35 @@ def _sync_after_hostname_change() -> None:
         pass
 
 
+async def _apply_access_for_published(result: dict[str, Any], host_map: dict[str, Any] | None) -> dict[str, Any]:
+    """Put Cloudflare Access on every exposed gated app, including NeutArr.
+
+    Publishing the subdomain is what makes the hostname public. Access follows
+    that same step when a login method already exists in Zero Trust. A missing
+    login method leaves the tunnel publish in place and says why Access did not.
+    """
+    published = {str(row.get("name") or "") for row in result.get("published") or []}
+    removed = {str(name) for name in result.get("removed") or []}
+    stored_apps = load_access_state().get("apps") or {}
+    touched = published | removed | {str(name) for name in stored_apps}
+    if not touched & set(ACCESS_GATE_APPS):
+        return result
+    try:
+        access = await apply_access(hostnames=host_map)
+    except CloudflareApiError as exc:
+        result["access_error"] = str(exc)
+        result["warning"] = "Published hostnames are reachable from the internet. Cloudflare Access was not updated: " + str(exc)
+        return result
+    applied = access.get("applied") or []
+    result["access"] = {"applied": applied, "removed": access.get("removed") or []}
+    if applied:
+        result["warning"] = (
+            "Cloudflare Access covers the exposed *Arr apps, download clients, Seerr, and NeutArr. "
+            "DNS CNAMEs for disabled apps are left in place."
+        )
+    return result
+
+
 def _ensure_authenticated(request: Request) -> None:
     if not auth_manager.setup_required():
         auth_manager.authenticate_request(request)
@@ -58,6 +88,12 @@ class HostnamesPut(BaseModel):
 
 
 class PublishBody(BaseModel):
+    hostnames: Optional[dict[str, HostnameEntry]] = None
+    public_app_base_domain: Optional[str] = None
+
+
+class AccessBody(BaseModel):
+    emails: Optional[str | list[str]] = None
     hostnames: Optional[dict[str, HostnameEntry]] = None
     public_app_base_domain: Optional[str] = None
 
@@ -148,8 +184,47 @@ async def publish(request: Request, body: PublishBody | None = None) -> dict[str
         result = await publish_hostnames(hostnames=host_map)
     except CloudflareApiError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    result = await _apply_access_for_published(result, host_map)
     clear_homepage_snapshot_cache()
     _sync_after_hostname_change()
+    return result
+
+
+def _apply_base_domain(value: Optional[str]) -> None:
+    if value is None:
+        return
+    domain = value.strip().strip(".").lower()
+    if domain and ("://" in domain or "/" in domain):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="public_app_base_domain is a DNS zone only (e.g. example.com), not a URL.",
+        )
+    settings.public_app_base_domain = domain
+    settings.save()
+
+
+@router.get("/access")
+async def get_access(request: Request) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    return await access_status()
+
+
+@router.post("/access")
+async def post_access(request: Request, body: AccessBody | None = None) -> dict[str, Any]:
+    _ensure_authenticated(request)
+    body = body or AccessBody()
+    _apply_base_domain(body.public_app_base_domain)
+    host_map = _entries_as_dict(body.hostnames)
+    if host_map is not None:
+        try:
+            host_map = save_hostnames(host_map)
+        except PublicHostnameError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    try:
+        result = await apply_access(emails=body.emails, hostnames=host_map)
+    except CloudflareApiError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    clear_homepage_snapshot_cache()
     return result
 
 

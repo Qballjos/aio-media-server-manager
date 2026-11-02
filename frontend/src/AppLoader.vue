@@ -1,6 +1,6 @@
 <script setup>
-/** Full-page loading state: the brand logo on a glass orb inside a spinning accent ring. */
-import { brandLogoUrl } from './branding.js'
+/** Full-page loading state: the header icon on a glass orb inside a spinning accent ring. */
+import { brandHeaderUrl } from './branding.js'
 
 defineProps({
   /** Read out by screen readers; nothing is shown as text. */
@@ -12,7 +12,7 @@ defineProps({
   <div class="app-loader" role="status" :aria-label="label">
     <span class="app-loader-ring" aria-hidden="true"></span>
     <span class="app-loader-orb" aria-hidden="true">
-      <img :src="brandLogoUrl" alt="" />
+      <img :src="brandHeaderUrl" alt="" />
     </span>
   </div>
 </template>

@@ -9,6 +9,9 @@ import { versionLabel } from './statusChips.js'
 import { formatUptime } from './format.js'
 import { dockHidden, setDockHidden } from './homeLayout.js'
 import VpnConfigFields from './VpnConfigFields.vue'
+import UiSelect from './UiSelect.vue'
+import { timezoneChoices } from './timezones.js'
+import LanguageSelect from './LanguageSelect.vue'
 import {
   canPromptInstall,
   isIosDevice,
@@ -79,6 +82,8 @@ const uploading = ref(false)
 let stopJobPollFn = null
 const form = ref({
   username: '',
+  first_name: '',
+  last_name: '',
   email: '',
   current_password: '',
   new_password: '',
@@ -113,6 +118,7 @@ const form = ref({
   accent_color: DEFAULT_ACCENT,
   login_message: '',
 })
+const timezoneOptions = computed(() => timezoneChoices(form.value.timezone))
 const branding = ref({
   title: 'AIO Media Server Manager',
   accent_color: DEFAULT_ACCENT,
@@ -135,6 +141,9 @@ const tunnelLive = ref({})
 const hostnameRoutes = ref([])
 const apiTokenConfigured = ref(false)
 const hostnameBusy = ref(false)
+const accessEmails = ref('')
+const accessIdps = ref([])
+const accessIdpError = ref('')
 const hostnameMeta = ref({
   tunnel_id: '',
   tunnel_account_id: '',
@@ -574,8 +583,23 @@ async function refreshHostnames() {
     if (data.public_app_base_domain != null) {
       form.value.public_app_base_domain = data.public_app_base_domain || ''
     }
+    await refreshAccess()
   } catch (err) {
     console.error('Hostname list error:', err)
+  }
+}
+
+async function refreshAccess() {
+  try {
+    const res = await apiRequest('/api/cloudflare/access')
+    if (!res.ok) return
+    const data = await readJson(res)
+    const joined = (data.emails || []).join('\n')
+    if (!accessEmails.value.trim()) accessEmails.value = joined
+    accessIdps.value = data.identity_providers || []
+    accessIdpError.value = data.idp_error || ''
+  } catch (err) {
+    console.error('Access status error:', err)
   }
 }
 
@@ -703,6 +727,79 @@ async function publishHostnames() {
     notice.value = `${bits.join('; ')}.${data.warning ? ` ${data.warning}` : ''}`
   } catch (err) {
     error.value = err?.message || 'Publish to Cloudflare failed.'
+  } finally {
+    hostnameBusy.value = false
+  }
+}
+
+async function addCloudflareAccess() {
+  const gated = (hostnameRoutes.value || []).filter((row) => row.enabled && row.access_gate)
+  if (!gated.length) {
+    error.value = 'Turn on Expose for at least one *Arr app, download client, Seerr, or NeutArr.'
+    notice.value = ''
+    return
+  }
+  const preview = gated
+    .map((row) => previewHostnameUrl(row))
+    .filter((url) => url && url !== '—')
+    .join('\n')
+  const okConfirm = window.confirm(
+    [
+      `Add Cloudflare Access for ${gated.length} hostname${gated.length === 1 ? '' : 's'}?`,
+      preview ? `\n${preview}` : '',
+      '\nJellyfin, Plex, and this dashboard stay on their own login.',
+      'Publish the tunnel first if these names are not public yet.',
+      'Turning Expose off and running this again removes only the Access apps AIO created.',
+    ].join('\n'),
+  )
+  if (!okConfirm) return
+  hostnameBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    if (form.value.cloudflare_api_token) {
+      const saveRes = await apiRequest('/api/cloudflare/hostnames', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hostnames: hostnamePayload(),
+          public_app_base_domain: form.value.public_app_base_domain,
+          cloudflare_api_token: form.value.cloudflare_api_token,
+        }),
+      })
+      const saveData = await readJson(saveRes)
+      if (!saveRes.ok) {
+        error.value = apiError(saveData, 'Could not save API token before adding Access.')
+        return
+      }
+      form.value.cloudflare_api_token = ''
+      apiTokenConfigured.value = !!saveData.api_token_configured
+    }
+    const res = await apiRequest('/api/cloudflare/hostnames/access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        emails: accessEmails.value,
+        hostnames: hostnamePayload(),
+        public_app_base_domain: form.value.public_app_base_domain,
+      }),
+    })
+    const data = await readJson(res)
+    if (!res.ok) {
+      error.value = apiError(data, 'Could not add Cloudflare Access.')
+      return
+    }
+    accessEmails.value = (data.emails || []).join('\n')
+    accessIdps.value = data.identity_providers || accessIdps.value
+    accessIdpError.value = ''
+    await refreshHostnames()
+    const applied = (data.applied || []).length
+    const removed = (data.removed || []).length
+    const bits = [`Cloudflare Access is on ${applied} hostname${applied === 1 ? '' : 's'}`]
+    if (removed) bits.push(`removed ${removed} Access app${removed === 1 ? '' : 's'} AIO created`)
+    notice.value = `${bits.join('; ')}.`
+  } catch (err) {
+    error.value = err?.message || 'Could not add Cloudflare Access.'
   } finally {
     hostnameBusy.value = false
   }
@@ -841,6 +938,8 @@ async function loadAll() {
     if (meRes.ok) {
       const me = await readJson(meRes)
       form.value.username = me.username || 'admin'
+      form.value.first_name = me.first_name || ''
+      form.value.last_name = me.last_name || ''
       form.value.email = me.email || ''
       applyProfileAvatar(me)
       applyVisualsFromProfile(me)
@@ -1150,6 +1249,8 @@ async function saveAccount() {
     const body = {
       current_password: form.value.current_password,
       username: form.value.username,
+      first_name: form.value.first_name,
+      last_name: form.value.last_name,
       email: form.value.email
     }
     if (form.value.new_password) body.new_password = form.value.new_password
@@ -1589,12 +1690,12 @@ onBeforeUnmount(() => {
   <section class="settings-page animate-fade">
     <div class="settings-header">
       <div>
-        <h2 class="section-title">Settings</h2>
-        <p class="section-subtitle">Manage this appliance after first-run. Bind mounts and the manager port stay in compose/env.</p>
+        <h2 class="section-title">{{ $t('Settings') }}</h2>
+        <p class="section-subtitle">{{ $t('Manage this appliance after first-run. Bind mounts and the manager port stay in compose/env.') }}</p>
       </div>
     </div>
 
-    <nav class="settings-nav" aria-label="Settings sections">
+    <nav class="settings-nav" :aria-label="$t('Settings sections')">
       <RouterLink
         v-for="item in SETTINGS_NAV"
         :key="item[0]"
@@ -1602,7 +1703,7 @@ onBeforeUnmount(() => {
         class="settings-nav-btn"
         :class="{ active: section === item[0] }"
       >
-        {{ item[1] }}
+        {{ $t(item[1]) }}
       </RouterLink>
     </nav>
 
@@ -1612,11 +1713,19 @@ onBeforeUnmount(() => {
     <template v-if="section === 'visuals'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <span class="accent-badge">THEMES</span>
-          <h3>Themes</h3>
-          <p>A wallpaper, day or night, an accent colour and the glass tuning in one go — or make your own: upload an image and set the accent below. Everything can be fine-tuned afterwards.</p>
+          <span class="accent-badge">{{ $t('LANGUAGE') }}</span>
+          <h3>{{ $t('Language') }}</h3>
+          <p>{{ $t('Choose French, German, English or Dutch. Saved on your profile for every browser on this appliance.') }}</p>
         </div>
-        <div class="theme-gallery" :class="{ 'is-expanded': themesExpanded }" role="group" aria-label="Themes">
+        <LanguageSelect persist />
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <span class="accent-badge">{{ $t('THEMES') }}</span>
+          <h3>{{ $t('Themes') }}</h3>
+          <p>{{ $t('A wallpaper, day or night, an accent colour and the glass tuning in one go — or make your own: upload an image and set the accent below. Everything can be fine-tuned afterwards.') }}</p>
+        </div>
+        <div class="theme-gallery" :class="{ 'is-expanded': themesExpanded }" role="group" :aria-label="$t('Themes')">
           <button
             v-for="theme in THEMES"
             :key="theme.id"
@@ -1633,7 +1742,7 @@ onBeforeUnmount(() => {
                 <span v-for="(dot, idx) in themeDots(theme)" :key="idx" :style="{ background: dot }"></span>
               </span>
             </span>
-            <span class="theme-card-name">{{ themeBusy === theme.id ? 'Applying…' : theme.name }}</span>
+            <span class="theme-card-name">{{ themeBusy === theme.id ? $t('Applying…') : theme.name }}</span>
           </button>
           <div class="theme-card theme-card-custom" :class="{ 'is-active': wallpaperPreference === 'personal' }">
             <button
@@ -1642,18 +1751,18 @@ onBeforeUnmount(() => {
               :style="customArt"
               :disabled="!!themeBusy || wallpaperBusy"
               :aria-pressed="wallpaperPreference === 'personal'"
-              :aria-label="wallpaperImage ? 'Use your own image' : 'Upload your own image'"
+              :aria-label="wallpaperImage ? $t('Use your own image') : $t('Upload your own image')"
               @click="wallpaperImage ? chooseWallpaper('personal') : wallpaperFileInput?.click()"
             >
-              <span v-if="!wallpaperImage" class="theme-card-empty">+ Upload an image</span>
+              <span v-if="!wallpaperImage" class="theme-card-empty">{{ $t('+ Upload an image') }}</span>
               <span v-else class="theme-card-dots" aria-hidden="true">
                 <span v-for="(dot, idx) in [form.accent_color, '#121628', '#ffffff', '#f59e0b']" :key="idx" :style="{ background: dot }"></span>
               </span>
             </button>
-            <span class="theme-card-name">Your own</span>
+            <span class="theme-card-name">{{ $t('Your own') }}</span>
             <span class="theme-card-actions">
               <label class="ui-btn ui-btn-ghost wallpaper-file-btn" :aria-disabled="wallpaperBusy">
-                {{ wallpaperBusy ? 'Saving…' : (wallpaperImage ? 'Replace' : 'Upload') }}
+                {{ wallpaperBusy ? $t('Saving…') : (wallpaperImage ? $t('Replace') : $t('Upload')) }}
                 <input
                   ref="wallpaperFileInput"
                   type="file"
@@ -1662,19 +1771,19 @@ onBeforeUnmount(() => {
                   @change="onWallpaperFileChange"
                 />
               </label>
-              <button v-if="wallpaperImage" type="button" class="ui-btn ui-btn-ghost" :disabled="wallpaperBusy" @click="removeWallpaperImage">Remove</button>
+              <button v-if="wallpaperImage" type="button" class="ui-btn ui-btn-ghost" :disabled="wallpaperBusy" @click="removeWallpaperImage">{{ $t('Remove') }}</button>
             </span>
           </div>
         </div>
         <button type="button" class="ui-btn ui-btn-ghost theme-gallery-more" :aria-expanded="themesExpanded" @click="themesExpanded = !themesExpanded">
-          {{ themesExpanded ? 'Show fewer themes' : `Show all ${THEMES.length} themes` }}
+          {{ themesExpanded ? $t('Show fewer themes') : $t('Show all {count} themes', { count: THEMES.length }) }}
         </button>
         <div class="theme-accent">
           <div class="theme-accent-copy">
-            <strong>Accent colour</strong>
-            <span>Buttons, switches and active states — part of your own theme, saved for every browser on this appliance.</span>
+            <strong>{{ $t('Accent colour') }}</strong>
+            <span>{{ $t('Buttons, switches and active states — part of your own theme, saved for every browser on this appliance.') }}</span>
           </div>
-          <div class="accent-presets" role="group" aria-label="Accent presets">
+          <div class="accent-presets" role="group" :aria-label="$t('Accent presets')">
             <button
               v-for="item in ACCENT_PRESETS"
               :key="item[0]"
@@ -1682,32 +1791,32 @@ onBeforeUnmount(() => {
               class="accent-preset"
               :class="{ 'is-active': form.accent_color === item[0] }"
               :style="{ '--preset': item[0] }"
-              :title="item[1]"
-              :aria-label="item[1]"
+              :title="$t(item[1])"
+              :aria-label="$t(item[1])"
               @click="saveAccentColor(item[0])"
             ></button>
           </div>
           <div class="accent-picker">
-            <label class="accent-swatch-input" title="Pick a color">
+            <label class="accent-swatch-input" :title="$t('Pick a color')">
               <input v-model="form.accent_color" type="color" @change="saveAccentColor(form.accent_color)" />
             </label>
             <label class="ui-field accent-hex-field">Hex
               <input v-model="form.accent_color" class="ui-input font-mono" maxlength="7" placeholder="#0a6cff" @change="saveAccentColor(form.accent_color)" />
             </label>
             <button type="button" class="ui-btn ui-btn-primary" :disabled="saving" @click="saveAccentColor(form.accent_color)">
-              {{ saving ? 'Saving…' : 'Save accent' }}
+              {{ saving ? $t('Saving…') : $t('Save accent') }}
             </button>
-            <button v-if="branding.accent_custom" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="resetAccentColor">Reset</button>
+            <button v-if="branding.accent_custom" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="resetAccentColor">{{ $t('Reset') }}</button>
           </div>
         </div>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <span class="accent-badge">THEME</span>
-          <h3>Color mode</h3>
-          <p>Dark, light, or follow the system preference. Saved on your profile for every browser on this appliance.</p>
+          <span class="accent-badge">{{ $t('THEME') }}</span>
+          <h3>{{ $t('Color mode') }}</h3>
+          <p>{{ $t('Dark, light, or follow the system preference. Saved on your profile for every browser on this appliance.') }}</p>
         </div>
-        <div class="theme-picker" role="group" aria-label="Color theme">
+        <div class="theme-picker" role="group" :aria-label="$t('Color theme')">
           <button
             v-for="item in THEME_OPTIONS"
             :key="item[0]"
@@ -1717,20 +1826,20 @@ onBeforeUnmount(() => {
             :aria-pressed="themePreference === item[0]"
             @click="chooseTheme(item[0])"
           >
-            {{ item[1] }}
+            {{ $t(item[1]) }}
           </button>
         </div>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <span class="accent-badge">GLASS</span>
-          <h3>Glass</h3>
-          <p>How clear, how soft and how deep the panels feel. Changes show as you drag and are saved on your profile.</p>
+          <span class="accent-badge">{{ $t('GLASS') }}</span>
+          <h3>{{ $t('Glass') }}</h3>
+          <p>{{ $t('How clear, how soft and how deep the panels feel. Changes show as you drag and are saved on your profile.') }}</p>
         </div>
         <div class="glass-sliders">
           <label v-for="row in GLASS_SLIDERS" :key="row.key" class="glass-slider">
             <span class="glass-slider-head">
-              <span>{{ row.label }}</span>
+              <span>{{ $t(row.label) }}</span>
               <output class="font-mono">{{ row.fmt(row.get()) }}</output>
             </span>
             <input
@@ -1741,21 +1850,21 @@ onBeforeUnmount(() => {
               :value="row.get()"
               @input="tuneGlass(row, $event.target.value)"
             />
-            <span class="glass-slider-hint">{{ row.hint }}</span>
+            <span class="glass-slider-hint">{{ $t(row.hint) }}</span>
           </label>
         </div>
         <div class="wallpaper-personal-actions">
-          <button type="button" class="ui-btn ui-btn-ghost" @click="resetGlass">Reset to defaults</button>
+          <button type="button" class="ui-btn ui-btn-ghost" @click="resetGlass">{{ $t('Reset to defaults') }}</button>
         </div>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <span class="accent-badge">BRANDING</span>
-          <h3>Name and icons</h3>
-          <p>Rename the header title and replace the header icon, login logo, and favicon. Images are stored on this appliance.</p>
+          <span class="accent-badge">{{ $t('BRANDING') }}</span>
+          <h3>{{ $t('Name and icons') }}</h3>
+          <p>{{ $t('Rename the header title and replace the header icon, login logo, and favicon. Images are stored on this appliance.') }}</p>
         </div>
         <form class="form-stack" @submit.prevent="saveBrandTitle">
-          <label class="ui-field">Header title
+          <label class="ui-field">{{ $t('Header title') }}
             <input
               v-model="form.brand_title"
               class="ui-input"
@@ -1765,7 +1874,7 @@ onBeforeUnmount(() => {
             />
           </label>
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">
-            {{ saving ? 'Saving…' : 'Save title' }}
+            {{ saving ? $t('Saving…') : $t('Save title') }}
           </button>
         </form>
         <div class="brand-asset-list">
@@ -1774,16 +1883,16 @@ onBeforeUnmount(() => {
             :key="key"
             class="brand-asset-row"
           >
-            <img :src="slot.url" :alt="slot.label" class="brand-asset-preview" />
+            <img :src="slot.url" :alt="slot.label" class="brand-asset-preview" :class="{ 'is-logo': key === 'logo' }" />
             <div class="brand-asset-copy">
               <strong>{{ slot.label }}</strong>
               <span>{{ slot.help }}</span>
-              <span class="brand-asset-size">Required / recommended: {{ slot.recommended }}</span>
+              <span class="brand-asset-size">{{ $t('Required / recommended:') }} {{ slot.recommended }}</span>
               <span class="share-idle">{{ slot.custom ? 'Custom image in use.' : 'Built-in placeholder — upload to replace.' }}</span>
             </div>
             <div class="brand-asset-actions">
               <label class="ui-btn ui-btn-ghost brand-upload-btn">
-                {{ brandUploading === key ? 'Uploading…' : 'Upload' }}
+                {{ brandUploading === key ? 'Uploading…' : $t('Upload') }}
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif,image/x-icon,.ico"
@@ -1798,12 +1907,12 @@ onBeforeUnmount(() => {
                 :disabled="brandUploading === key"
                 @click="resetBrandSlot(key)"
               >
-                Reset
+                {{ $t('Reset') }}
               </button>
             </div>
           </div>
           <p v-if="!Object.keys(branding.slots || {}).length" class="share-idle">
-            Loading branding options…
+            {{ $t('Loading branding options…') }}
           </p>
         </div>
       </div>
@@ -1812,9 +1921,9 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'account'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <span class="accent-badge">ACCOUNT</span>
-          <h3>Administrator</h3>
-          <p>Current password is required for any change. Email is used for Seerr wiring.</p>
+          <span class="accent-badge">{{ $t('ACCOUNT') }}</span>
+          <h3>{{ $t('Administrator') }}</h3>
+          <p>{{ $t('Current password is required for any change. The welcome line uses your first name when it is filled in. Email is used for Seerr wiring.') }}</p>
         </div>
         <div class="brand-asset-list account-avatar-block">
           <div class="brand-asset-row">
@@ -1827,16 +1936,16 @@ onBeforeUnmount(() => {
               <span v-else>{{ (form.username || 'A').charAt(0).toUpperCase() }}</span>
             </div>
             <div class="brand-asset-copy">
-              <strong>Profile image</strong>
+              <strong>{{ $t('Profile image') }}</strong>
               <span>{{ profileAvatar.help }}</span>
-              <span class="brand-asset-size">Required / recommended: {{ profileAvatar.recommended }}</span>
+              <span class="brand-asset-size">{{ $t('Required / recommended:') }} {{ profileAvatar.recommended }}</span>
               <span class="share-idle">
                 {{ profileAvatar.has_avatar ? 'Custom image in use.' : 'Using your username initial.' }}
               </span>
             </div>
             <div class="brand-asset-actions">
               <label class="ui-btn ui-btn-ghost brand-upload-btn">
-                {{ avatarUploading ? 'Uploading…' : 'Upload' }}
+                {{ avatarUploading ? 'Uploading…' : $t('Upload') }}
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif"
@@ -1851,33 +1960,39 @@ onBeforeUnmount(() => {
                 :disabled="avatarUploading"
                 @click="resetProfileAvatar"
               >
-                Remove
+                {{ $t('Remove') }}
               </button>
             </div>
           </div>
         </div>
         <form class="form-stack" @submit.prevent="saveAccount">
-          <label class="ui-field">Username
+          <label class="ui-field">{{ $t('Username') }}
             <input v-model="form.username" class="ui-input" required />
           </label>
-          <label class="ui-field">Email
+          <label class="ui-field">{{ $t('First name') }}
+            <input v-model="form.first_name" class="ui-input" maxlength="80" autocomplete="given-name" />
+          </label>
+          <label class="ui-field">{{ $t('Last name') }}
+            <input v-model="form.last_name" class="ui-input" maxlength="80" autocomplete="family-name" />
+          </label>
+          <label class="ui-field">{{ $t('Email') }}
             <input v-model="form.email" type="email" class="ui-input" required />
           </label>
-          <label class="ui-field">Current password
+          <label class="ui-field">{{ $t('Current password') }}
             <input v-model="form.current_password" type="password" class="ui-input" required autocomplete="current-password" />
           </label>
-          <label class="ui-field">New password (optional)
+          <label class="ui-field">{{ $t('New password (optional)') }}
             <input v-model="form.new_password" type="password" class="ui-input" minlength="8" autocomplete="new-password" />
           </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save account' }}</button>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save account') }}</button>
         </form>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Install on this device</h3>
-          <p>Add the manager to the home screen like a phone or tablet app.</p>
+          <h3>{{ $t('Install on this device') }}</h3>
+          <p>{{ $t('Add the manager to the home screen like a phone or tablet app.') }}</p>
         </div>
-        <p v-if="pwaStandalone" class="share-idle">This browser is already running as an installed app.</p>
+        <p v-if="pwaStandalone" class="share-idle">{{ $t('This browser is already running as an installed app.') }}</p>
         <template v-else>
           <button
             v-if="pwaCanInstall"
@@ -1885,54 +2000,75 @@ onBeforeUnmount(() => {
             class="ui-btn ui-btn-primary"
             @click="installPwaFromSettings"
           >
-            Install app
+            {{ $t('Install app') }}
           </button>
           <p v-else-if="pwaIos" class="share-idle">
-            iPhone/iPad: open this page in Safari, tap Share, then Add to Home Screen.
+            {{ $t('iPhone/iPad: open this page in Safari, tap Share, then Add to Home Screen.') }}
           </p>
           <p v-else class="share-idle">
-            Chrome or Edge: menu → Install app / Add to Home Screen.
-            Android’s install prompt needs HTTPS (Cloudflare Tunnel or a reverse proxy).
-            On a plain LAN HTTP URL, use the browser menu if Install is offered.
+            {{ $t('Chrome or Edge: menu → Install app / Add to Home Screen. Android’s install prompt needs HTTPS (Cloudflare Tunnel or a reverse proxy). On a plain LAN HTTP URL, use the browser menu if Install is offered.') }}
           </p>
         </template>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>{{ $t('Donate') }}</h3>
+          <p>{{ $t('🤖 AI writes some code. I break it. We fix it together.') }}</p>
+        </div>
+        <p class="share-idle">{{ $t('Can’t spare a few bucks? Drop a star on GitHub instead. It feeds the ego, and that’s almost as good.') }}</p>
+        <div class="account-donate-actions">
+          <a
+            class="ui-btn"
+            href="https://www.paypal.com/donate/?business=P8CTXW8ER3PBY&no_recurring=0&item_name=Sponsor+My+Next+Bug&currency_code=EUR"
+            target="_blank"
+            rel="noopener noreferrer"
+          >{{ $t('PayPal') }}</a>
+          <a
+            class="ui-btn"
+            href="https://ko-fi.com/qballjos"
+            target="_blank"
+            rel="noopener noreferrer"
+          >{{ $t('Ko-fi') }}</a>
+        </div>
       </div>
     </template>
 
     <template v-else-if="section === 'system'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Clock and logs</h3>
-          <p>Timezone for backups, updates, and logs. Log level applies immediately.</p>
+          <h3>{{ $t('Clock and logs') }}</h3>
+          <p>{{ $t('Timezone for backups, updates, and logs. Log level applies immediately.') }}</p>
         </div>
         <form class="form-stack" @submit.prevent="patchSettings({ timezone: form.timezone, log_level: form.log_level })">
-          <label class="ui-field">Timezone
-            <input v-model="form.timezone" class="ui-input font-mono" list="tz-list" />
-            <datalist id="tz-list">
-              <option value="UTC" />
-              <option value="Europe/Amsterdam" />
-              <option value="Europe/London" />
-              <option value="America/New_York" />
-              <option value="America/Los_Angeles" />
-              <option value="Australia/Sydney" />
-            </datalist>
+          <label class="ui-field">{{ $t('Timezone') }}
+            <UiSelect
+              v-model="form.timezone"
+              searchable
+              :search-placeholder="$t('Search')"
+              :empty-label="$t('No matches')"
+              :aria-label="$t('Timezone')"
+              :options="timezoneOptions"
+            />
           </label>
-          <label class="ui-field">Log level
-            <select v-model="form.log_level" class="ui-input">
-              <option>DEBUG</option>
-              <option>INFO</option>
-              <option>WARNING</option>
-              <option>ERROR</option>
-            </select>
+          <label class="ui-field">{{ $t('Log level') }}
+            <UiSelect
+              v-model="form.log_level"
+              :options="[
+                { value: 'DEBUG', label: 'DEBUG' },
+                { value: 'INFO', label: 'INFO' },
+                { value: 'WARNING', label: 'WARNING' },
+                { value: 'ERROR', label: 'ERROR' },
+              ]"
+            />
           </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save</button>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save') }}</button>
         </form>
-        <p class="share-idle">Manager listen address {{ snapshot.api_host }}:{{ snapshot.api_port }} is compose/env only.</p>
+        <p class="share-idle">{{ $t('Manager listen address') }} {{ snapshot.api_host }}:{{ snapshot.api_port }} {{ $t('is compose/env only.') }}</p>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>File ownership</h3>
-          <p>Saving PUID/PGID restarts running apps so new files stay owned correctly.</p>
+          <h3>{{ $t('File ownership') }}</h3>
+          <p>{{ $t('Saving PUID/PGID restarts running apps so new files stay owned correctly.') }}</p>
         </div>
         <form class="form-stack" @submit.prevent="patchSettings({ puid: Number(form.puid), pgid: Number(form.pgid) })">
           <label class="ui-field">PUID
@@ -1941,69 +2077,66 @@ onBeforeUnmount(() => {
           <label class="ui-field">PGID
             <input v-model.number="form.pgid" type="number" min="1" class="ui-input font-mono" required />
           </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save and restart apps</button>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save and restart apps') }}</button>
         </form>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <span class="accent-badge">HOST</span>
-          <h3>System info</h3>
-          <p>Read-only. Changing bind mounts is a host/compose job; this UI does not remount disks.</p>
+          <span class="accent-badge">{{ $t('HOST') }}</span>
+          <h3>{{ $t('System info') }}</h3>
+          <p>{{ $t('Read-only. Changing bind mounts is a host/compose job; this UI does not remount disks.') }}</p>
         </div>
         <dl class="info-grid">
           <div>
-            <dt>Version</dt>
+            <dt>{{ $t('Version') }}</dt>
             <dd class="font-mono" :title="buildSha ? `Build ${buildSha}` : undefined">{{ versionText || '—' }}</dd>
           </div>
           <div>
-            <dt>Architecture</dt>
+            <dt>{{ $t('Architecture') }}</dt>
             <dd class="font-mono">{{ hostArch ? hostArch.toUpperCase() : '—' }}</dd>
           </div>
           <div>
-            <dt>CPU</dt>
+            <dt>{{ $t('CPU') }}</dt>
             <dd class="font-mono">
-              {{ metrics.cpu_count || '—' }} cores
-              · {{ metrics.cpu_percent != null ? Math.round(metrics.cpu_percent) + '%' : '—' }}
+              {{ metrics.cpu_count || '—' }} {{ $t('cores ·') }} {{ metrics.cpu_percent != null ? Math.round(metrics.cpu_percent) + '%' : '—' }}
             </dd>
           </div>
           <div>
-            <dt>Memory</dt>
+            <dt>{{ $t('Memory') }}</dt>
             <dd class="font-mono">
               {{ formatBytes((metrics.memory?.total || 0) - (metrics.memory?.available || 0)) }}
               / {{ formatBytes(metrics.memory?.total) }}
             </dd>
           </div>
           <div>
-            <dt>Disk</dt>
+            <dt>{{ $t('Disk') }}</dt>
             <dd class="font-mono">
               <template v-if="metrics.disk?.total">
-                {{ formatBytes(metrics.disk.used) }} used
-                · {{ formatBytes(diskRemaining) }} free
-                / {{ formatBytes(metrics.disk.total) }}
+                {{ formatBytes(metrics.disk.used) }} {{ $t('used ·') }} {{ formatBytes(diskRemaining) }} {{ $t('free /') }} {{ formatBytes(metrics.disk.total) }}
                 <span v-if="metrics.disk.percent != null"> ({{ Math.round(metrics.disk.percent) }}%)</span>
               </template>
               <template v-else>—</template>
             </dd>
           </div>
           <div>
-            <dt>Hardlinks</dt>
+            <dt>{{ $t('Hardlinks') }}</dt>
             <dd>{{ hardlinks == null ? '—' : hardlinks ? 'Supported between downloads and media' : 'Not available — *Arr will copy' }}</dd>
           </div>
           <div>
-            <dt>Transcoding</dt>
+            <dt>{{ $t('Transcoding') }}</dt>
             <dd>{{ transcoding.available ? 'Hardware GPU available' : 'Software only' }}</dd>
           </div>
         </dl>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Storage paths</h3>
-          <p>Filesystem format and capacity for config, downloads, and media. Edit mounts in docker-compose, not here.</p>
+          <h3>{{ $t('Storage paths') }}</h3>
+          <p>{{ $t('Filesystem format and capacity for config, downloads, and media. Edit mounts in docker-compose, not here.') }}</p>
         </div>
         <div class="storage-table-wrap">
           <table class="storage-table">
             <thead>
-              <tr><th>Path</th><th>Format</th><th>Capacity</th></tr>
+              <tr><th>{{ $t('Path') }}</th><th>{{ $t('Format') }}</th><th>{{ $t('Capacity') }}</th></tr>
             </thead>
             <tbody>
               <tr v-for="row in storageRows" :key="row.label">
@@ -2017,7 +2150,7 @@ onBeforeUnmount(() => {
                 </td>
               </tr>
               <tr v-if="!storageRows.length">
-                <td colspan="3" class="share-idle">Storage details unavailable. Check that config, downloads, and media mounts are readable, then reload Settings.</td>
+                <td colspan="3" class="share-idle">{{ $t('Storage details unavailable. Check that config, downloads, and media mounts are readable, then reload Settings.') }}</td>
               </tr>
             </tbody>
           </table>
@@ -2028,18 +2161,18 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'updates'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Updates</h3>
-          <p>Check GitHub in the host timezone (System). Apply can stay off (header notice only) or match the check schedule. Catalog apps can be applied in-place. A newer appliance image is notified only — pull and recreate on the host.</p>
+          <h3>{{ $t('Updates') }}</h3>
+          <p>{{ $t('Check GitHub in the host timezone (System). Apply can stay off (header notice only) or match the check schedule. Catalog apps can be applied in-place. A newer appliance image is notified only — pull and recreate on the host.') }}</p>
         </div>
         <p class="share-meta" v-if="snapshot.updates">
-          Last check {{ formatWhen(snapshot.updates.last_check_at) }}
-          · last apply {{ formatWhen(snapshot.updates.last_apply_at) }}
-          · {{ (snapshot.updates.available || []).length }} waiting
-          <span v-if="snapshot.updates.paused"> · paused ({{ snapshot.updates.paused_reason }})</span>
+          {{ $t('Last check') }} {{ formatWhen(snapshot.updates.last_check_at) }}
+          {{ $t('· last apply') }} {{ formatWhen(snapshot.updates.last_apply_at) }}
+          · {{ (snapshot.updates.available || []).length }} {{ $t('waiting') }}
+          <span v-if="snapshot.updates.paused"> {{ $t('· paused (') }}{{ snapshot.updates.paused_reason }})</span>
         </p>
         <p class="share-meta" v-if="snapshot.updates?.appliance">
-          Appliance {{ snapshot.updates.appliance.installed_version }}
-          <span v-if="!snapshot.updates.appliance.running_sha"> · local build (no image SHA)</span>
+          {{ $t('Appliance') }} {{ snapshot.updates.appliance.installed_version }}
+          <span v-if="!snapshot.updates.appliance.running_sha"> {{ $t('· local build (no image SHA)') }}</span>
         </p>
         <form class="form-stack" @submit.prevent="patchSettings({
           update_check_schedule: form.update_check_schedule,
@@ -2048,48 +2181,57 @@ onBeforeUnmount(() => {
           update_weekday: Number(form.update_weekday),
           update_day_of_month: Number(form.update_day_of_month)
         })">
-          <label class="ui-field">Check schedule
-            <select v-model="form.update_check_schedule" class="ui-input">
-              <option value="off">Off</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+          <label class="ui-field">{{ $t('Check schedule') }}
+            <UiSelect
+              v-model="form.update_check_schedule"
+              :options="[
+                { value: 'off', label: $t('Off') },
+                { value: 'daily', label: $t('Daily') },
+                { value: 'weekly', label: $t('Weekly') },
+                { value: 'monthly', label: $t('Monthly') },
+              ]"
+            />
           </label>
-          <label class="ui-field">Apply schedule
-            <select v-model="form.update_apply_schedule" class="ui-input">
-              <option value="off">Off (notify only)</option>
-              <option value="same">Same as check</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+          <label class="ui-field">{{ $t('Apply schedule') }}
+            <UiSelect
+              v-model="form.update_apply_schedule"
+              :options="[
+                { value: 'off', label: $t('Off (notify only)') },
+                { value: 'same', label: $t('Same as check') },
+                { value: 'daily', label: $t('Daily') },
+                { value: 'weekly', label: $t('Weekly') },
+                { value: 'monthly', label: $t('Monthly') },
+              ]"
+            />
           </label>
-          <label class="ui-field">Time of day
+          <label class="ui-field">{{ $t('Time of day') }}
             <input v-model="form.update_time" type="time" class="ui-input font-mono" />
           </label>
-          <label v-if="form.update_check_schedule === 'weekly' || form.update_apply_schedule === 'weekly'" class="ui-field">Weekday
-            <select v-model.number="form.update_weekday" class="ui-input">
-              <option :value="0">Monday</option>
-              <option :value="1">Tuesday</option>
-              <option :value="2">Wednesday</option>
-              <option :value="3">Thursday</option>
-              <option :value="4">Friday</option>
-              <option :value="5">Saturday</option>
-              <option :value="6">Sunday</option>
-            </select>
+          <label v-if="form.update_check_schedule === 'weekly' || form.update_apply_schedule === 'weekly'" class="ui-field">{{ $t('Weekday') }}
+            <UiSelect
+              v-model="form.update_weekday"
+              :options="[
+                { value: 0, label: $t('Monday') },
+                { value: 1, label: $t('Tuesday') },
+                { value: 2, label: $t('Wednesday') },
+                { value: 3, label: $t('Thursday') },
+                { value: 4, label: $t('Friday') },
+                { value: 5, label: $t('Saturday') },
+                { value: 6, label: $t('Sunday') },
+              ]"
+            />
           </label>
-          <label v-if="form.update_check_schedule === 'monthly' || form.update_apply_schedule === 'monthly'" class="ui-field">Day of month
+          <label v-if="form.update_check_schedule === 'monthly' || form.update_apply_schedule === 'monthly'" class="ui-field">{{ $t('Day of month') }}
             <input v-model.number="form.update_day_of_month" type="number" min="1" max="28" class="ui-input font-mono" />
           </label>
           <div class="share-row">
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save schedule</button>
-            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="runUpdateCheck">Check now</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save schedule') }}</button>
+            <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="runUpdateCheck">{{ $t('Check now') }}</button>
           </div>
         </form>
         <div v-if="catalogUpdates.length > 1" class="share-row update-all-row">
           <button type="button" class="ui-btn ui-btn-primary" :disabled="!!updatingApp || !!updateAllProgress || saving" @click="updateAllApps">
-            Update all ({{ catalogUpdates.length }})
+            {{ $t('Update all (') }}{{ catalogUpdates.length }})
           </button>
           <span v-if="updateAllProgress" class="share-meta" role="status">{{ updateAllProgress }}</span>
         </div>
@@ -2104,7 +2246,7 @@ onBeforeUnmount(() => {
               </span>
             </div>
             <div v-if="item.kind !== 'appliance'" class="share-row">
-              <a class="ui-btn ui-btn-ghost" :href="`#/catalog?q=${encodeURIComponent(item.name)}`">Open in Catalog</a>
+              <a class="ui-btn ui-btn-ghost" :href="`#/catalog?q=${encodeURIComponent(item.name)}`">{{ $t('Open in Catalog') }}</a>
               <button type="button" class="ui-btn ui-btn-primary" :disabled="!!updatingApp || !!updateAllProgress" @click="updateOneApp(item)">
                 {{ updatingApp === item.name ? 'Updating…' : 'Update' }}
               </button>
@@ -2114,15 +2256,15 @@ onBeforeUnmount(() => {
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>GitHub token</h3>
-          <p>Optional. Catalog installs and scheduled update checks stay under the authenticated rate limit.</p>
+          <h3>{{ $t('GitHub token') }}</h3>
+          <p>{{ $t('Optional. Catalog installs and scheduled update checks stay under the authenticated rate limit.') }}</p>
         </div>
         <p class="share-meta">{{ githubConfigured ? 'A token is saved.' : 'No token configured.' }}</p>
         <form class="form-stack" @submit.prevent="patchSettings({ github_token: form.github_token })">
-          <label class="ui-field">Personal access token (blank clears it)
+          <label class="ui-field">{{ $t('Personal access token (blank clears it)') }}
             <input v-model="form.github_token" type="password" class="ui-input font-mono" autocomplete="off" />
           </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save token</button>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save token') }}</button>
         </form>
       </div>
     </template>
@@ -2130,20 +2272,19 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'backups'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Backups</h3>
+          <h3>{{ $t('Backups') }}</h3>
           <p>
-            Manager settings, secrets, app config and databases. Media, downloads, caches, logs and artwork
-            caches are never included. Databases are copied safely while apps keep running.
+            {{ $t('Manager settings, secrets, app config and databases. Media, downloads, caches, logs and artwork caches are never included. Databases are copied safely while apps keep running.') }}
           </p>
         </div>
         <p class="share-meta">
-          Stored in <span class="font-mono">{{ backupInfo.backup_dir || snapshot.backup_dir }}</span>
-          · last backup {{ formatWhen(backupInfo.schedule?.last_backup_at) }}
-          <span v-if="backupInfo.schedule?.last_error" class="backup-warn"> · last attempt failed: {{ backupInfo.schedule.last_error }}</span>
+          {{ $t('Stored in') }} <span class="font-mono">{{ backupInfo.backup_dir || snapshot.backup_dir }}</span>
+          {{ $t('· last backup') }} {{ formatWhen(backupInfo.schedule?.last_backup_at) }}
+          <span v-if="backupInfo.schedule?.last_error" class="backup-warn"> {{ $t('· last attempt failed:') }} {{ backupInfo.schedule.last_error }}</span>
         </p>
         <p v-if="backupOnConfigVolume" class="settings-hint">
-          Backups sit on the same volume as /config. Map a separate disk or NAS share to <code>/backups</code>
-          (or set <code>AMM_BACKUP_DIR</code>) so a failed disk does not take the backups with it, or download them regularly.
+          {{ $t('Backups sit on the same volume as /config. Map a separate disk or NAS share to') }} <code>/backups</code>
+          {{ $t('(or set') }} <code>AMM_BACKUP_DIR</code>{{ $t(') so a failed disk does not take the backups with it, or download them regularly.') }}
         </p>
 
         <div v-if="backupJob && (backupJobRunning || backupJob.status === 'error')" class="backup-job">
@@ -2160,37 +2301,43 @@ onBeforeUnmount(() => {
           backup_weekday: Number(form.backup_weekday),
           backup_day_of_month: Number(form.backup_day_of_month)
         })">
-          <label class="ui-field">Automatic backups
-            <select v-model="form.backup_schedule" class="ui-input">
-              <option value="off">Off</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+          <label class="ui-field">{{ $t('Automatic backups') }}
+            <UiSelect
+              v-model="form.backup_schedule"
+              :options="[
+                { value: 'off', label: $t('Off') },
+                { value: 'daily', label: $t('Daily') },
+                { value: 'weekly', label: $t('Weekly') },
+                { value: 'monthly', label: $t('Monthly') },
+              ]"
+            />
           </label>
-          <label v-if="form.backup_schedule !== 'off'" class="ui-field">Time of day
+          <label v-if="form.backup_schedule !== 'off'" class="ui-field">{{ $t('Time of day') }}
             <input v-model="form.backup_time" type="time" class="ui-input font-mono" />
           </label>
-          <label v-if="form.backup_schedule === 'weekly'" class="ui-field">Weekday
-            <select v-model.number="form.backup_weekday" class="ui-input">
-              <option :value="0">Monday</option>
-              <option :value="1">Tuesday</option>
-              <option :value="2">Wednesday</option>
-              <option :value="3">Thursday</option>
-              <option :value="4">Friday</option>
-              <option :value="5">Saturday</option>
-              <option :value="6">Sunday</option>
-            </select>
+          <label v-if="form.backup_schedule === 'weekly'" class="ui-field">{{ $t('Weekday') }}
+            <UiSelect
+              v-model="form.backup_weekday"
+              :options="[
+                { value: 0, label: $t('Monday') },
+                { value: 1, label: $t('Tuesday') },
+                { value: 2, label: $t('Wednesday') },
+                { value: 3, label: $t('Thursday') },
+                { value: 4, label: $t('Friday') },
+                { value: 5, label: $t('Saturday') },
+                { value: 6, label: $t('Sunday') },
+              ]"
+            />
           </label>
-          <label v-if="form.backup_schedule === 'monthly'" class="ui-field">Day of month
+          <label v-if="form.backup_schedule === 'monthly'" class="ui-field">{{ $t('Day of month') }}
             <input v-model.number="form.backup_day_of_month" type="number" min="1" max="28" class="ui-input font-mono" />
           </label>
-          <label class="ui-field">Keep last N backups
+          <label class="ui-field">{{ $t('Keep last N backups') }}
             <input v-model.number="form.backup_retention" type="number" min="1" max="90" class="ui-input font-mono" />
           </label>
           <div class="share-row">
-            <button type="submit" class="ui-btn ui-btn-ghost" :disabled="saving">Save</button>
-            <button type="button" class="ui-btn ui-btn-primary" :disabled="backupJobRunning" @click="createBackup">Backup now</button>
+            <button type="submit" class="ui-btn ui-btn-ghost" :disabled="saving">{{ $t('Save') }}</button>
+            <button type="button" class="ui-btn ui-btn-primary" :disabled="backupJobRunning" @click="createBackup">{{ $t('Backup now') }}</button>
             <label class="ui-btn ui-btn-ghost backup-upload" :class="{ 'is-disabled': uploading || backupJobRunning }">
               {{ uploading ? 'Uploading…' : 'Upload backup' }}
               <input type="file" accept=".tar.gz,.tgz,application/gzip" :disabled="uploading || backupJobRunning" @change="uploadBackup" />
@@ -2199,15 +2346,14 @@ onBeforeUnmount(() => {
         </form>
 
         <div v-if="restoreTarget" class="backup-restore glass-card">
-          <strong>Restore from <span class="font-mono">{{ restoreTarget.name }}</span></strong>
+          <strong>{{ $t('Restore from') }} <span class="font-mono">{{ restoreTarget.name }}</span></strong>
           <p class="settings-hint">
-            Pick everything or only some apps. The current state is backed up first, affected apps are stopped
-            during the restore and started again afterwards.
+            {{ $t('Pick everything or only some apps. The current state is backed up first, affected apps are stopped during the restore and started again afterwards.') }}
           </p>
           <div class="backup-sections">
             <label class="backup-chip">
               <input type="checkbox" :checked="restoreTarget.selected.includes('all')" @change="toggleRestoreSection('all')" />
-              Everything
+              {{ $t('Everything') }}
             </label>
             <label v-for="item in restoreTarget.sections" :key="item" class="backup-chip">
               <input
@@ -2219,8 +2365,8 @@ onBeforeUnmount(() => {
             </label>
           </div>
           <div class="share-row">
-            <button type="button" class="ui-btn ui-btn-primary" @click="confirmRestore">Restore</button>
-            <button type="button" class="ui-btn ui-btn-ghost" @click="restoreTarget = null">Cancel</button>
+            <button type="button" class="ui-btn ui-btn-primary" @click="confirmRestore">{{ $t('Restore') }}</button>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="restoreTarget = null">{{ $t('Cancel') }}</button>
           </div>
         </div>
 
@@ -2231,21 +2377,21 @@ onBeforeUnmount(() => {
               <span class="path-line">
                 {{ backupKindLabel(item) }} · {{ formatWhen(item.created_at) }} · {{ formatBytes(item.size_bytes) }}
                 <template v-if="item.file_count"> · {{ item.file_count }} files</template>
-                <template v-if="item.location === 'legacy'"> · old location</template>
-                <template v-if="item.format < 2"> · old format</template>
+                <template v-if="item.location === 'legacy'"> {{ $t('· old location') }}</template>
+                <template v-if="item.format < 2"> {{ $t('· old format') }}</template>
               </span>
               <span v-if="item.warnings.length" class="path-line backup-warn" :title="item.warnings.join('\n')">
-                {{ item.warnings.length }} warning(s): {{ item.warnings[0] }}
+                {{ item.warnings.length }} {{ $t('warning(s):') }} {{ item.warnings[0] }}
               </span>
             </div>
             <div class="share-row">
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="openRestore(item.name)">Restore</button>
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="verifyBackup(item.name)">Verify</button>
-              <button type="button" class="ui-btn ui-btn-ghost" @click="downloadBackup(item.name)">Download</button>
-              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="deleteBackup(item.name)">Delete</button>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="openRestore(item.name)">{{ $t('Restore') }}</button>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="verifyBackup(item.name)">{{ $t('Verify') }}</button>
+              <button type="button" class="ui-btn ui-btn-ghost" @click="downloadBackup(item.name)">{{ $t('Download') }}</button>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="backupJobRunning" @click="deleteBackup(item.name)">{{ $t('Delete') }}</button>
             </div>
           </li>
-          <li v-if="!backups.length" class="share-idle">No backups yet.</li>
+          <li v-if="!backups.length" class="share-idle">{{ $t('No backups yet.') }}</li>
         </ul>
       </div>
     </template>
@@ -2253,14 +2399,14 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'network'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>VPN</h3>
-          <p>qBittorrent, Prowlarr, and Flaresolverr. Usenet always bypasses the tunnel.</p>
+          <h3>{{ $t('VPN') }}</h3>
+          <p>{{ $t('qBittorrent, Prowlarr, and Flaresolverr. Usenet always bypasses the tunnel.') }}</p>
         </div>
         <p class="share-meta">{{ vpnLive.enabled ? 'VPN is on' : 'VPN is off' }}{{ vpnLive.provider ? ` · ${vpnLive.provider}` : '' }}{{ vpnLive.protocol ? ` · ${vpnLive.protocol}` : '' }}</p>
         <div class="setting-status">
-          <span class="setting-chip" :class="vpnLive.enabled ? 'is-on' : 'is-off'">{{ vpnLive.enabled ? 'Enabled' : 'Off' }}</span>
+          <span class="setting-chip" :class="vpnLive.enabled ? 'is-on' : 'is-off'">{{ vpnLive.enabled ? 'Enabled' : $t('Off') }}</span>
           <span class="setting-chip" :class="vpnLive.config_present ? 'is-on' : 'is-warn'">{{ vpnLive.config_present ? 'Config saved' : 'No config' }}</span>
-          <span class="setting-chip" :class="vpnLive.tunnel_up ? 'is-on' : (vpnLive.enabled ? 'is-bad' : 'is-off')">{{ vpnLive.tunnel_up ? 'Tunnel up' : 'Tunnel down' }}</span>
+          <span class="setting-chip" :class="vpnLive.tunnel_up ? 'is-on' : (vpnLive.enabled ? 'is-bad' : 'is-off')">{{ vpnLive.tunnel_up ? 'Tunnel up' : $t('Tunnel down') }}</span>
         </div>
         <p v-if="vpnLive.config_present" class="share-meta font-mono">{{ vpnLive.config_path }}</p>
         <div class="share-row" style="margin: 0.75rem 0 1rem;">
@@ -2269,25 +2415,25 @@ onBeforeUnmount(() => {
             class="ui-btn ui-btn-primary"
             :disabled="saving || vpnBusy || !vpnLive.config_present || !!vpnLive.tunnel_up"
             @click="controlVpn('start')"
-          >{{ vpnBusy ? 'Working…' : 'Start' }}</button>
+          >{{ vpnBusy ? 'Working…' : $t('Start') }}</button>
           <button
             type="button"
             class="ui-btn ui-btn-ghost"
             :disabled="saving || vpnBusy || (!vpnLive.tunnel_up && !vpnLive.enabled)"
             @click="controlVpn('stop')"
-          >Stop</button>
+          >{{ $t('Stop') }}</button>
           <button
             type="button"
             class="ui-btn ui-btn-ghost"
             :disabled="saving || vpnBusy || !vpnLive.config_present"
             @click="controlVpn('restart')"
-          >Restart</button>
+          >{{ $t('Restart') }}</button>
         </div>
         <form class="form-stack" @submit.prevent="saveVpn">
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
-              <strong>Enable VPN</strong>
-              <span>On: kill switch — qBittorrent, Prowlarr, and Flaresolverr only run when the tunnel is up. Off: those apps can start on the house network. Use Start / Stop / Restart for the tunnel.</span>
+              <strong>{{ $t('Enable VPN') }}</strong>
+              <span>{{ $t('On: kill switch — qBittorrent, Prowlarr, and Flaresolverr only run when the tunnel is up. Off: those apps can start on the house network. Use Start / Stop / Restart for the tunnel.') }}</span>
             </div>
             <button
               type="button"
@@ -2300,10 +2446,11 @@ onBeforeUnmount(() => {
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
-          <label class="ui-field">Provider
-            <select v-model="form.vpn_provider" class="ui-input">
-              <option v-for="p in (vpnLive.supported_providers || ['privadovpn','custom'])" :key="p" :value="p">{{ p }}</option>
-            </select>
+          <label class="ui-field">{{ $t('Provider') }}
+            <UiSelect
+              v-model="form.vpn_provider"
+              :options="(vpnLive.supported_providers || ['privadovpn', 'custom']).map((p) => ({ value: p, label: p }))"
+            />
           </label>
           <VpnConfigFields
             v-model:protocol="form.vpn_protocol"
@@ -2311,22 +2458,20 @@ onBeforeUnmount(() => {
             v-model:text="form.vpn_config_text"
             :has-config="!!vpnLive.config_present"
           />
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save VPN</button>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save VPN') }}</button>
         </form>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>Cloudflare Tunnel</h3>
           <p>
-            In Cloudflare: Networking → Tunnels → create a Cloudflared tunnel → copy only the
-            <code>eyJ…</code> token from the install command (do not run that command on this NAS).
-            Paste it below, enable the tunnel, and Save. Token is stored on disk and never shown again.
-            Full walkthrough: project file <code>deploy/CLOUDFLARE.md</code>.
+            {{ $t('In Cloudflare: Networking → Tunnels → create a Cloudflared tunnel → copy only the') }}
+            <code>eyJ…</code> {{ $t('token from the install command (do not run that command on this NAS). Paste it below, enable the tunnel, and Save. Token is stored on disk and never shown again. Full walkthrough: project file') }} <code>deploy/CLOUDFLARE.md</code>.
           </p>
         </div>
         <div class="setting-status" aria-live="polite">
           <span class="setting-chip" :class="tunnelLive.enabled ? 'is-on' : 'is-off'">
-            {{ tunnelLive.enabled ? 'Enabled' : 'Off' }}
+            {{ tunnelLive.enabled ? 'Enabled' : $t('Off') }}
           </span>
           <span
             class="setting-chip"
@@ -2338,62 +2483,56 @@ onBeforeUnmount(() => {
             class="setting-chip"
             :class="tunnelLive.connected ? 'is-on' : (tunnelLive.enabled ? (tunnelLive.running ? 'is-warn' : 'is-bad') : 'is-off')"
           >
-            {{ tunnelLive.connected ? 'Tunnel up' : (tunnelLive.running ? 'Connecting…' : 'Tunnel down') }}
+            {{ tunnelLive.connected ? 'Tunnel up' : (tunnelLive.running ? 'Connecting…' : $t('Tunnel down')) }}
           </span>
           <span class="setting-chip" :class="tunnelLive.binary_present ? 'is-on' : 'is-bad'">
             {{ tunnelLive.binary_present ? 'cloudflared ready' : 'cloudflared missing' }}
           </span>
         </div>
         <p class="ui-alert ui-alert-warning">
-          Run a tunnel token on one server only. If another server (say, the one this replaces) still runs it, Cloudflare
-          splits visitors between both and every login ends in "Session expired". Give a new server its own tunnel.
+          {{ $t('Run a tunnel token on one server only. If another server (say, the one this replaces) still runs it, Cloudflare splits visitors between both and every login ends in "Session expired". Give a new server its own tunnel.') }}
         </p>
         <p class="share-meta">{{ tunnelLive.summary || 'Status loads when you open Network.' }}</p>
         <p v-if="tunnelLive.token_saved || tunnelLive.token_present" class="share-meta font-mono">
-          Stored at {{ tunnelLive.token_file || '/config/cloudflare/tunnel.token' }}
+          {{ $t('Stored at') }} {{ tunnelLive.token_file || '/config/cloudflare/tunnel.token' }}
         </p>
         <form class="form-stack" @submit.prevent="saveCloudflare">
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
-              <strong>Enable tunnel</strong>
-              <span>Requires cloudflared in the image and a tunnel token.</span>
+              <strong>{{ $t('Enable tunnel') }}</strong>
+              <span>{{ $t('Requires cloudflared in the image and a tunnel token.') }}</span>
             </div>
             <button type="button" class="ui-switch" role="switch" :aria-checked="form.cloudflare_tunnel_enabled ? 'true' : 'false'" @click="form.cloudflare_tunnel_enabled = !form.cloudflare_tunnel_enabled">
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
           <label class="ui-field">
-            Tunnel token
+            {{ $t('Tunnel token') }}
             <span class="ui-field-hint">
               {{ (tunnelLive.token_saved || tunnelLive.token_present)
-                ? 'A token is already saved. Leave blank to keep it, or paste a new eyJ… token to replace it.'
-                : 'Paste the eyJ… connector token from Cloudflare (base64 credentials, not your API token). Stored on disk and never shown again.' }}
+                ? $t('A token is already saved. Leave blank to keep it, or paste a new eyJ… token to replace it.')
+                : $t('Paste the eyJ… connector token from Cloudflare (base64 credentials, not your API token). Stored on disk and never shown again.') }}
             </span>
             <input
               v-model="form.cloudflare_tunnel_token"
               type="password"
               class="ui-input font-mono"
               autocomplete="off"
-              :placeholder="(tunnelLive.token_saved || tunnelLive.token_present) ? '•••• token saved — paste to replace' : 'eyJ…'"
+              :placeholder="(tunnelLive.token_saved || tunnelLive.token_present) ? $t('•••• token saved — paste to replace') : 'eyJ…'"
             />
           </label>
-          <label class="ui-field">Trusted reverse-proxy IPs
+          <label class="ui-field">{{ $t('Trusted reverse-proxy IPs') }}
             <span class="ui-field-hint">
-              Leave empty for LAN-only or Cloudflare Tunnel (tunnel auto-trusts 127.0.0.1).
-              Only list IPs/CIDRs of a reverse proxy you run in front of this app (nginx, Caddy, …).
-              Comma-separated. Do not use Cloudflare edge IPs here.
+              {{ $t('Leave empty for LAN-only or Cloudflare Tunnel (tunnel auto-trusts 127.0.0.1). Only list IPs/CIDRs of a reverse proxy you run in front of this app (nginx, Caddy, …). Comma-separated. Do not use Cloudflare edge IPs here.') }}
             </span>
             <input v-model="form.trusted_proxies" class="ui-input font-mono" placeholder="172.17.0.1,10.0.0.0/8" />
           </label>
-          <label class="ui-field">Public app domain (Open UI over tunnel)
+          <label class="ui-field">{{ $t('Public app domain (Open UI over tunnel)') }}
             <span class="ui-field-hint">
-              DNS zone for Catalog Open UI when you use HTTPS / Cloudflare, e.g. <code>example.com</code>
+              {{ $t('DNS zone for Catalog Open UI when you use HTTPS / Cloudflare, e.g.') }} <code>example.com</code>
               or <code>example.co.uk</code>
-              → links become <code>https://sonarr.example.com</code>.
-              Leave empty to derive from the current host
-              (<code>media.example.com</code> → <code>example.com</code>,
-              <code>media.example.co.uk</code> → <code>example.co.uk</code>).
-              LAN IP access still uses <code>http://nas-ip:port</code>.
+              {{ $t('→ links become') }} <code>https://sonarr.example.com</code>{{ $t('. Leave empty to derive from the current host (') }}<code>media.example.com</code> → <code>example.com</code>,
+              <code>media.example.co.uk</code> → <code>example.co.uk</code>{{ $t('). LAN IP access still uses') }} <code>http://nas-ip:port</code>.
             </span>
             <input
               v-model="form.public_app_base_domain"
@@ -2402,17 +2541,14 @@ onBeforeUnmount(() => {
               autocomplete="off"
             />
           </label>
-          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save</button>
+          <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save') }}</button>
         </form>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Public subdomains</h3>
+          <h3>{{ $t('Public subdomains') }}</h3>
           <p>
-            Choose a subdomain per app for Catalog <strong>Open UI</strong> and Home widget links
-            (for example <code>tv</code> → <code>https://tv.example.com</code>).
-            With a Cloudflare API token, <strong>Publish to Cloudflare</strong> creates the published
-            application (hostname → <code>http://127.0.0.1:port</code>) and DNS CNAME for you.
+            {{ $t('Choose a subdomain per app for Catalog') }} <strong>{{ $t('Open UI') }}</strong> {{ $t('and Home widget links (for example') }} <code>tv</code> → <code>https://tv.example.com</code>{{ $t('). With a Cloudflare API token,') }} <strong>{{ $t('Publish to Cloudflare') }}</strong> {{ $t('creates the published application (hostname →') }} <code>http://127.0.0.1:port</code>{{ $t(') and DNS CNAME for you.') }}
           </p>
         </div>
         <div class="setting-status" aria-live="polite">
@@ -2425,25 +2561,20 @@ onBeforeUnmount(() => {
         </div>
         <p v-if="hostnameMeta.tunnel_decode_error" class="share-meta">{{ hostnameMeta.tunnel_decode_error }}</p>
         <p v-else-if="publicTunnelChip.label === 'Cloudflare tunnel needed'" class="share-meta">
-          Enable <strong>Cloudflare Tunnel</strong> above and paste the <code>eyJ…</code> connector token
-          (not the API token). Publish needs a running tunnel plus an API token.
+          {{ $t('Enable') }} <strong>Cloudflare Tunnel</strong> {{ $t('above and paste the') }} <code>eyJ…</code> {{ $t('connector token (not the API token). Publish needs a running tunnel plus an API token.') }}
         </p>
         <form class="form-stack" @submit.prevent="saveHostnames">
           <label class="ui-field">
-            Cloudflare API token
+            {{ $t('Cloudflare API token') }}
             <span class="ui-field-hint">
-              Used by Publish to Cloudflare. Different from the tunnel <code>eyJ…</code> token
-              and from the Global API Key. Create under
+              {{ $t('Used by Publish to Cloudflare. Different from the tunnel') }} <code>eyJ…</code> {{ $t('token and from the Global API Key. Create under') }}
               <a
                 href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/"
                 target="_blank"
                 rel="noopener noreferrer"
-              >My Profile → API Tokens</a>
-              (or Manage Account → Account API Tokens): Create Token →
-              <strong>Edit zone DNS</strong> template → keep Zone → DNS → Edit on your zone →
-              add Account → Cloudflare Tunnel → Edit → Create Token.
-              If you see <strong>Invalid access token</strong>, clear the saved token and paste a new API Token.
-              Leave blank to keep a saved token.
+              >{{ $t('My Profile → API Tokens') }}</a>
+              {{ $t('(or Manage Account → Account API Tokens): Create Token →') }}
+              <strong>{{ $t('Edit zone DNS') }}</strong> {{ $t('template → keep Zone → DNS → Edit on your zone → add Account → Cloudflare Tunnel → Edit → Create Token. If you see') }} <strong>{{ $t('Invalid access token') }}</strong>{{ $t(', clear the saved token and paste a new API Token. Leave blank to keep a saved token.') }}
             </span>
             <input
               v-model="form.cloudflare_api_token"
@@ -2452,17 +2583,17 @@ onBeforeUnmount(() => {
               autocomplete="new-password"
               data-1p-ignore
               data-lpignore="true"
-              :placeholder="apiTokenConfigured ? '•••• token saved — paste to replace' : 'Cloudflare API token'"
+              :placeholder="apiTokenConfigured ? $t('•••• token saved — paste to replace') : $t('Cloudflare API token')"
             />
           </label>
           <div class="hostname-table-wrap">
             <table class="storage-table hostname-table">
               <thead>
                 <tr>
-                  <th>Expose</th>
+                  <th>{{ $t('Expose') }}</th>
                   <th>App</th>
-                  <th>Subdomain</th>
-                  <th>Public URL</th>
+                  <th>{{ $t('Subdomain') }}</th>
+                  <th>{{ $t('Public URL') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2473,7 +2604,7 @@ onBeforeUnmount(() => {
                       class="ui-switch"
                       role="switch"
                       :aria-checked="row.enabled ? 'true' : 'false'"
-                      :aria-label="`Expose ${row.display_name}`"
+                      :aria-label="$t('Expose {name}', { name: row.display_name })"
                       @click="row.enabled = !row.enabled"
                     >
                       <span class="ui-switch-thumb"></span>
@@ -2481,7 +2612,7 @@ onBeforeUnmount(() => {
                   </td>
                   <td>
                     <strong>{{ row.display_name }}</strong>
-                    <span class="path-line">{{ row.name }} · port {{ row.port }}{{ row.installed ? '' : ' · not installed' }}</span>
+                    <span class="path-line">{{ row.name }} {{ $t('· port') }} {{ row.port }}{{ row.installed ? '' : $t(' · not installed') }}{{ row.access_gate ? ' · ' + $t('Cloudflare Access') : ' · ' + $t('Own login') }}</span>
                   </td>
                   <td>
                     <input
@@ -2494,14 +2625,14 @@ onBeforeUnmount(() => {
                   <td class="font-mono hostname-preview">{{ previewHostnameUrl(row) }}</td>
                 </tr>
                 <tr v-if="!hostnameRoutes.length">
-                  <td colspan="4" class="share-idle">No apps listed yet — reload Settings or check Catalog.</td>
+                  <td colspan="4" class="share-idle">{{ $t('No apps listed yet — reload Settings or check Catalog.') }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div class="share-row">
             <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving || hostnameBusy">
-              Save subdomains
+              {{ $t('Save subdomains') }}
             </button>
             <button
               type="button"
@@ -2509,7 +2640,7 @@ onBeforeUnmount(() => {
               :disabled="saving || hostnameBusy || (!apiTokenConfigured && !form.cloudflare_api_token)"
               @click="publishHostnames"
             >
-              Publish to Cloudflare
+              {{ $t('Publish to Cloudflare') }}
             </button>
             <button
               v-if="apiTokenConfigured"
@@ -2518,18 +2649,43 @@ onBeforeUnmount(() => {
               :disabled="saving || hostnameBusy"
               @click="clearCloudflareApiToken"
             >
-              Clear API token
+              {{ $t('Clear API token') }}
+            </button>
+          </div>
+          <label class="ui-field">
+            {{ $t('Cloudflare Access emails') }}
+            <span class="ui-field-hint">
+              {{ $t('Add Cloudflare Access puts a login gate on the exposed *Arr apps, download clients, Seerr, and NeutArr, using a login method you already created in Zero Trust. Jellyfin, Plex, and this dashboard keep their own login. List the email addresses that may enter, separated by commas or new lines. Leave this empty only when the only login method is Cloudflare with Restrict to account members.') }}
+              <span v-if="accessIdps.length">
+                {{ $t('Login methods found:') }}
+                {{ accessIdps.map((row) => row.name || row.type).join(', ') }}.
+              </span>
+              <span v-else-if="accessIdpError">{{ accessIdpError }}</span>
+            </span>
+            <textarea
+              v-model="accessEmails"
+              class="ui-input font-mono"
+              rows="3"
+              autocomplete="off"
+              placeholder="name@example.com"
+            ></textarea>
+          </label>
+          <div class="share-row">
+            <button
+              type="button"
+              class="ui-btn ui-btn-primary"
+              :disabled="saving || hostnameBusy || (!apiTokenConfigured && !form.cloudflare_api_token)"
+              @click="addCloudflareAccess"
+            >
+              {{ $t('Add Cloudflare Access') }}
             </button>
           </div>
           <p class="share-meta">
-            <strong>Save</strong> updates Catalog Open UI and Home widget links in AIO.
-            <strong>Publish to Cloudflare</strong> writes enabled hostnames into your tunnel
-            (published applications) and creates proxied DNS CNAMEs under the public app domain.
-            Changing an exposed app’s listen port updates the tunnel service when an API token is saved.
-            Disabling an app and publishing removes its ingress hostname; the DNS CNAME may remain
-            (tunnel 404). LAN browsing still uses <code>http://nas-ip:port</code>.
-            For zones like <code>example.co.uk</code>, set Public app domain to that full zone.
-            Secure public hostnames with <code>deploy/CLOUDFLARE_ACCESS.md</code>.
+            {{ $t('The API token also needs Access: Apps and Policies Write, and Access: Organizations, Identity Providers, and Groups Read. Publish the tunnel before adding Access. AIO does not create the login method itself.') }}
+          </p>
+          <p class="share-meta">
+            <strong>{{ $t('Save') }}</strong> {{ $t('updates Catalog Open UI and Home widget links in AIO.') }}
+            <strong>{{ $t('Publish to Cloudflare') }}</strong> {{ $t('writes enabled hostnames into your tunnel (published applications) and creates proxied DNS CNAMEs under the public app domain. Changing an exposed app’s listen port updates the tunnel service when an API token is saved. Disabling an app and publishing removes its ingress hostname; the DNS CNAME may remain (tunnel 404). LAN browsing still uses') }} <code>http://nas-ip:port</code>{{ $t('. For zones like') }} <code>example.co.uk</code>{{ $t(', set Public app domain to that full zone. Secure public hostnames with') }} <code>deploy/CLOUDFLARE_ACCESS.md</code>.
           </p>
         </form>
       </div>
@@ -2538,13 +2694,13 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'notifications'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Discord</h3>
-          <p>Messages go to a Discord channel through a webhook: in Discord open the channel's settings → Integrations → Webhooks → New Webhook, and copy its URL.</p>
+          <h3>{{ $t('Discord') }}</h3>
+          <p>{{ $t("Messages go to a Discord channel through a webhook: in Discord open the channel's settings → Integrations → Webhooks → New Webhook, and copy its URL.") }}</p>
         </div>
         <form class="form-stack" @submit.prevent="saveNotifications()">
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
-              <strong>Send to Discord</strong>
+              <strong>{{ $t('Send to Discord') }}</strong>
               <span>{{ notif?.discord.webhook_saved ? 'A webhook is saved.' : 'No webhook saved yet.' }}</span>
             </div>
             <button
@@ -2557,34 +2713,34 @@ onBeforeUnmount(() => {
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
-          <label class="ui-field">Webhook URL
+          <label class="ui-field">{{ $t('Webhook URL') }}
             <input
               v-model="notifForm.discord.webhook_url"
               class="ui-input font-mono"
               type="password"
               autocomplete="off"
-              :placeholder="notif?.discord.webhook_saved ? 'Saved — leave blank to keep' : 'https://discord.com/api/webhooks/…'"
+              :placeholder="notif?.discord.webhook_saved ? $t('Saved — leave blank to keep') : 'https://discord.com/api/webhooks/…'"
             />
           </label>
           <div class="notif-actions">
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save') }}</button>
             <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('discord')">
-              {{ notifTesting === 'discord' ? 'Sending…' : 'Send a test' }}
+              {{ notifTesting === 'discord' ? $t('Sending…') : 'Send a test' }}
             </button>
-            <button v-if="notif?.discord.webhook_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removeWebhook: true })">Remove webhook</button>
+            <button v-if="notif?.discord.webhook_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removeWebhook: true })">{{ $t('Remove webhook') }}</button>
           </div>
         </form>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>E-mail</h3>
-          <p>Messages go out through your own mail server or provider (SMTP). Gmail and Outlook need an app password.</p>
+          <h3>{{ $t('E-mail') }}</h3>
+          <p>{{ $t('Messages go out through your own mail server or provider (SMTP). Gmail and Outlook need an app password.') }}</p>
         </div>
         <form class="form-stack" @submit.prevent="saveNotifications()">
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
-              <strong>Send e-mail</strong>
-              <span>To every address under To.</span>
+              <strong>{{ $t('Send e-mail') }}</strong>
+              <span>{{ $t('To every address under To.') }}</span>
             </div>
             <button
               type="button"
@@ -2597,53 +2753,56 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <div class="usenet-pair">
-            <label class="ui-field">SMTP server
+            <label class="ui-field">{{ $t('SMTP server') }}
               <input v-model.trim="notifForm.email.host" class="ui-input font-mono" placeholder="smtp.example.com" autocomplete="off" />
             </label>
-            <label class="ui-field">Port
+            <label class="ui-field">{{ $t('Port') }}
               <input v-model.number="notifForm.email.port" class="ui-input font-mono" type="number" min="1" max="65535" />
             </label>
           </div>
-          <label class="ui-field">Security
-            <select v-model="notifForm.email.security" class="ui-input">
-              <option value="starttls">STARTTLS (usually port 587)</option>
-              <option value="ssl">SSL/TLS (usually port 465)</option>
-              <option value="none">None (local relay only)</option>
-            </select>
+          <label class="ui-field">{{ $t('Security') }}
+            <UiSelect
+              v-model="notifForm.email.security"
+              :options="[
+                { value: 'starttls', label: $t('STARTTLS (usually port 587)') },
+                { value: 'ssl', label: $t('SSL/TLS (usually port 465)') },
+                { value: 'none', label: $t('None (local relay only)') },
+              ]"
+            />
           </label>
           <div class="usenet-pair">
-            <label class="ui-field">Username
+            <label class="ui-field">{{ $t('Username') }}
               <input v-model.trim="notifForm.email.username" class="ui-input font-mono" autocomplete="off" />
             </label>
-            <label class="ui-field">Password
+            <label class="ui-field">{{ $t('Password') }}
               <input
                 v-model="notifForm.email.password"
                 class="ui-input"
                 type="password"
                 autocomplete="new-password"
-                :placeholder="notif?.email.password_saved ? 'Saved — leave blank to keep' : ''"
+                :placeholder="notif?.email.password_saved ? $t('Saved — leave blank to keep') : ''"
               />
             </label>
           </div>
-          <label class="ui-field">From
-            <input v-model.trim="notifForm.email.sender" class="ui-input font-mono" placeholder="Defaults to the username" autocomplete="off" />
+          <label class="ui-field">{{ $t('From') }}
+            <input v-model.trim="notifForm.email.sender" class="ui-input font-mono" :placeholder="$t('Defaults to the username')" autocomplete="off" />
           </label>
           <label class="ui-field">To
             <input v-model="notifForm.email.recipients" class="ui-input font-mono" placeholder="you@example.com, family@example.com" autocomplete="off" />
           </label>
           <div class="notif-actions">
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save') }}</button>
             <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('email')">
-              {{ notifTesting === 'email' ? 'Sending…' : 'Send a test' }}
+              {{ notifTesting === 'email' ? $t('Sending…') : 'Send a test' }}
             </button>
-            <button v-if="notif?.email.password_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removePassword: true })">Remove password</button>
+            <button v-if="notif?.email.password_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removePassword: true })">{{ $t('Remove password') }}</button>
           </div>
         </form>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>What to send</h3>
-          <p>Checked every minute. Each problem is sent once, and again when it is solved.</p>
+          <h3>{{ $t('What to send') }}</h3>
+          <p>{{ $t('Checked every minute. Each problem is sent once, and again when it is solved.') }}</p>
         </div>
         <div class="form-stack">
           <div v-for="(label, key) in notif?.event_labels || {}" :key="key" class="ui-switch-row">
@@ -2669,44 +2828,44 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'usenet'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Usenet provider</h3>
-          <p>The news server from your Usenet provider. Saving sends it to SABnzbd and NZBGet. Usenet downloads never use the VPN.</p>
+          <h3>{{ $t('Usenet provider') }}</h3>
+          <p>{{ $t('The news server from your Usenet provider. Saving sends it to SABnzbd and NZBGet. Usenet downloads never use the VPN.') }}</p>
         </div>
         <div class="setting-status">
           <span class="setting-chip" :class="usenet.server ? 'is-on' : 'is-off'">{{ usenet.server ? 'Server saved' : 'No server yet' }}</span>
-          <span v-for="name in usenetClientNames" :key="name" class="setting-chip is-on">Sends to {{ name }}</span>
-          <span v-if="!usenetClientNames.length" class="setting-chip is-warn">No SABnzbd or NZBGet installed</span>
+          <span v-for="name in usenetClientNames" :key="name" class="setting-chip is-on">{{ $t('Sends to') }} {{ name }}</span>
+          <span v-if="!usenetClientNames.length" class="setting-chip is-warn">{{ $t('No SABnzbd or NZBGet installed') }}</span>
         </div>
         <form class="form-stack" @submit.prevent="saveUsenet">
-          <label class="ui-field">Server
+          <label class="ui-field">{{ $t('Server') }}
             <input v-model.trim="usenetForm.host" class="ui-input font-mono" placeholder="news.example.com" autocomplete="off" required />
           </label>
           <div class="usenet-pair">
-            <label class="ui-field">Port
+            <label class="ui-field">{{ $t('Port') }}
               <input v-model.number="usenetForm.port" class="ui-input font-mono" type="number" min="1" max="65535" />
             </label>
-            <label class="ui-field">Connections
+            <label class="ui-field">{{ $t('Connections') }}
               <input v-model.number="usenetForm.connections" class="ui-input font-mono" type="number" min="1" max="100" />
             </label>
           </div>
           <div class="usenet-pair">
-            <label class="ui-field">Username
+            <label class="ui-field">{{ $t('Username') }}
               <input v-model.trim="usenetForm.username" class="ui-input font-mono" autocomplete="off" />
             </label>
-            <label class="ui-field">Password
+            <label class="ui-field">{{ $t('Password') }}
               <input
                 v-model="usenetForm.password"
                 class="ui-input"
                 type="password"
                 autocomplete="new-password"
-                :placeholder="usenet.server?.has_password ? 'Saved — leave blank to keep' : ''"
+                :placeholder="usenet.server?.has_password ? $t('Saved — leave blank to keep') : ''"
               />
             </label>
           </div>
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
               <strong>SSL / TLS</strong>
-              <span>Encrypt the connection to the news server. Most providers use port 563 with SSL.</span>
+              <span>{{ $t('Encrypt the connection to the news server. Most providers use port 563 with SSL.') }}</span>
             </div>
             <button
               type="button"
@@ -2719,11 +2878,10 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving || !usenetForm.host">
-            {{ saving ? 'Saving…' : 'Save Usenet server' }}
+            {{ saving ? $t('Saving…') : $t('Save Usenet server') }}
           </button>
           <p class="settings-hint">
-            NZB indexers such as NZBgeek or Usenet Crawler are added in Prowlarr → Indexers, as Generic Newznab with the site's API key.
-            Prowlarr shares them with Sonarr and Radarr.
+            {{ $t("NZB indexers such as NZBgeek or Usenet Crawler are added in Prowlarr → Indexers, as Generic Newznab with the site's API key. Prowlarr shares them with Sonarr and Radarr.") }}
           </p>
         </form>
       </div>
@@ -2731,39 +2889,39 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'homepage'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Login message</h3>
-          <p>Shown on the sign-in screen under the logo. Leave it empty to hide the line.</p>
+          <h3>{{ $t('Login message') }}</h3>
+          <p>{{ $t('Shown on the sign-in screen under the logo. Leave it empty to hide the line.') }}</p>
         </div>
         <form class="form-stack" @submit.prevent="saveLoginMessage">
-          <label class="ui-field">Personal message
+          <label class="ui-field">{{ $t('Personal message') }}
             <textarea
               v-model="form.login_message"
               class="ui-input"
               maxlength="280"
               rows="3"
-              placeholder="Welcome home"
+              :placeholder="$t('Welcome home')"
             />
           </label>
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">
-            {{ saving ? 'Saving…' : 'Save message' }}
+            {{ saving ? $t('Saving…') : $t('Save message') }}
           </button>
         </form>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>App dock</h3>
-          <p>The row of app icons at the bottom of Home. Arrange the rest of Home with the layout button in the page tabs.</p>
+          <h3>{{ $t('App dock') }}</h3>
+          <p>{{ $t('The row of app icons at the bottom of Home. Arrange the rest of Home with the layout button in the page tabs.') }}</p>
         </div>
         <div class="ui-switch-row">
           <div class="ui-switch-copy">
-            <strong>Show the app dock on Home</strong>
-            <span>Saved on your profile, for every screen size.</span>
+            <strong>{{ $t('Show the app dock on Home') }}</strong>
+            <span>{{ $t('Saved on your profile, for every screen size.') }}</span>
           </div>
           <button
             type="button"
             class="ui-switch"
             role="switch"
-            aria-label="Show the app dock on Home"
+            :aria-label="$t('Show the app dock on Home')"
             :aria-checked="dockHidden ? 'false' : 'true'"
             @click="toggleHomeDock"
           >
@@ -2773,10 +2931,9 @@ onBeforeUnmount(() => {
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Jellyfin API key</h3>
+          <h3>{{ $t('Jellyfin API key') }}</h3>
           <p>
-            Home → Recently added uses this key. Create one in Jellyfin Dashboard → API Keys
-            (or paste the access token). Paste a new key to replace it.
+            {{ $t('Home → Recently added uses this key. Create one in Jellyfin Dashboard → API Keys (or paste the access token). Paste a new key to replace it.') }}
           </p>
         </div>
         <div class="setting-status">
@@ -2784,27 +2941,26 @@ onBeforeUnmount(() => {
         </div>
         <p class="share-meta">{{ jellyfinKey.detail || (jellyfinKey.configured ? 'A Jellyfin API key is saved.' : 'No Jellyfin API key saved yet.') }}</p>
         <form class="form-stack" @submit.prevent="saveHomepageKey('jellyfin_api_key')">
-          <label class="ui-field">API key
+          <label class="ui-field">{{ $t('API key') }}
             <input
               v-model="form.jellyfin_api_key"
               type="password"
               class="ui-input font-mono"
               autocomplete="off"
-              :placeholder="jellyfinKey.configured ? 'Saved — paste a new key to replace' : 'Paste API key'"
+              :placeholder="jellyfinKey.configured ? $t('Saved — paste a new key to replace') : $t('Paste API key')"
             />
           </label>
           <div class="share-row">
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
-            <button v-if="jellyfinKey.configured" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="clearHomepageKey('jellyfin_api_key')">Clear key</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save API key') }}</button>
+            <button v-if="jellyfinKey.configured" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="clearHomepageKey('jellyfin_api_key')">{{ $t('Clear key') }}</button>
           </div>
         </form>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Seerr API key</h3>
+          <h3>{{ $t('Seerr API key') }}</h3>
           <p>
-            Home search and requests use this key. The manager reads it from Seerr's settings.json when it can;
-            otherwise copy it from Seerr Settings → General. Paste a new key to replace it.
+            {{ $t("Home search and requests use this key. The manager reads it from Seerr's settings.json when it can; otherwise copy it from Seerr Settings → General. Paste a new key to replace it.") }}
           </p>
         </div>
         <div class="setting-status">
@@ -2812,18 +2968,18 @@ onBeforeUnmount(() => {
         </div>
         <p class="share-meta">{{ seerrKey.detail || (seerrKey.configured ? 'A Seerr API key is saved.' : 'No Seerr API key saved yet.') }}</p>
         <form class="form-stack" @submit.prevent="saveHomepageKey('seerr_api_key')">
-          <label class="ui-field">API key
+          <label class="ui-field">{{ $t('API key') }}
             <input
               v-model="form.seerr_api_key"
               type="password"
               class="ui-input font-mono"
               autocomplete="off"
-              :placeholder="seerrKey.configured ? 'Saved — paste a new key to replace' : 'Paste API key'"
+              :placeholder="seerrKey.configured ? $t('Saved — paste a new key to replace') : $t('Paste API key')"
             />
           </label>
           <div class="share-row">
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">Save API key</button>
-            <button v-if="seerrKey.configured" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="clearHomepageKey('seerr_api_key')">Clear key</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ $t('Save API key') }}</button>
+            <button v-if="seerrKey.configured" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="clearHomepageKey('seerr_api_key')">{{ $t('Clear key') }}</button>
           </div>
         </form>
       </div>
@@ -2832,16 +2988,15 @@ onBeforeUnmount(() => {
     <template v-else-if="section === 'diagnostics'">
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Widget debug</h3>
+          <h3>{{ $t('Widget debug') }}</h3>
           <p>
-            Show empty calendar, downloads, and recently added tiles plus per-source skip notes.
-            Saved on your profile. API keys are never shown.
+            {{ $t('Show empty calendar, downloads, and recently added tiles plus per-source skip notes. Saved on your profile. API keys are never shown.') }}
           </p>
         </div>
         <div class="ui-switch-row">
           <div class="ui-switch-copy">
-            <strong>Explain empty widgets</strong>
-            <span>When on, Home explains why a widget is empty or failing. You can also add <code>?debug=1</code> to the Home URL.</span>
+            <strong>{{ $t('Explain empty widgets') }}</strong>
+            <span>{{ $t('When on, Home explains why a widget is empty or failing. You can also add') }} <code>?debug=1</code> {{ $t('to the Home URL.') }}</span>
           </div>
           <button
             type="button"
@@ -2856,17 +3011,15 @@ onBeforeUnmount(() => {
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Support share</h3>
+          <h3>{{ $t('Support share') }}</h3>
           <p>
-            Capture recent errors behind a time-limited URL for support. Secrets are redacted.
-            The link expires after {{ share.ttl_hours || 24 }} hours. Host dumps and process logs
-            use the same switch, except from localhost which is always allowed for troubleshooting.
+            {{ $t('Capture recent errors behind a time-limited URL for support. Secrets are redacted. The link expires after') }} {{ share.ttl_hours || 24 }} {{ $t('hours. Host dumps and process logs use the same switch, except from localhost which is always allowed for troubleshooting.') }}
           </p>
         </div>
         <div class="ui-switch-row">
           <div class="ui-switch-copy">
-            <strong>Support share URL</strong>
-            <span>When on, a time-limited link is available for support.</span>
+            <strong>{{ $t('Support share URL') }}</strong>
+            <span>{{ $t('When on, a time-limited link is available for support.') }}</span>
           </div>
           <button
             type="button"
@@ -2880,18 +3033,18 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <div v-if="share.active && share.url" class="share-box">
-          <label class="ui-field" for="debug-share-url">Share URL</label>
+          <label class="ui-field" for="debug-share-url">{{ $t('Share URL') }}</label>
           <div class="share-row">
             <input id="debug-share-url" class="ui-input font-mono" :value="share.url" readonly />
             <button type="button" class="ui-btn ui-btn-ghost" @click="copyUrl">{{ copied ? 'Copied' : 'Copy' }}</button>
           </div>
-          <p class="share-meta font-mono">Expires {{ formatExpiry(share.expires_at) }}</p>
+          <p class="share-meta font-mono">{{ $t('Expires') }} {{ formatExpiry(share.expires_at) }}</p>
         </div>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
-          <h3>Recent errors</h3>
-          <p>Last captured ERROR+ events. Shown from localhost, or while Support share is on.</p>
+          <h3>{{ $t('Recent errors') }}</h3>
+          <p>{{ $t('Last captured ERROR+ events. Shown from localhost, or while Support share is on.') }}</p>
         </div>
         <div v-if="!errors.length" class="share-idle">{{ share.active ? 'No errors captured since startup.' : 'Turn on Support share, or open Settings from localhost, to view captured errors.' }}</div>
         <pre v-else class="error-log font-mono">{{ errors.map(e => `[${e.timestamp}] ${e.level} ${e.source}\n${e.message}`).join('\n\n') }}</pre>
@@ -2915,13 +3068,13 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
 }
 .section-title {
-  font-size: 1.25rem;
+  font-size: var(--text-title);
   font-weight: 700;
   margin: 0;
   color: var(--text-heading);
 }
 .section-subtitle {
-  font-size: 0.82rem;
+  font-size: var(--text-body);
   color: var(--text-dim);
   margin: 0.2rem 0 0;
 }
@@ -2936,7 +3089,7 @@ onBeforeUnmount(() => {
 }
 .settings-card-head h3 {
   margin: 0.4rem 0 0.35rem;
-  font-size: 1.05rem;
+  font-size: var(--text-strong);
   color: var(--text-heading);
 }
 .settings-card-head p {
@@ -2946,7 +3099,7 @@ onBeforeUnmount(() => {
 }
 .accent-badge {
   display: inline-block;
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 0.2rem 0.5rem;
@@ -2990,7 +3143,7 @@ onBeforeUnmount(() => {
 }
 .info-grid dt {
   color: var(--text-dim);
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2998,7 +3151,7 @@ onBeforeUnmount(() => {
 .info-grid dd {
   margin: 0.3rem 0 0;
   color: var(--text-main);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   overflow-wrap: anywhere;
 }
 .storage-table-wrap {
@@ -3008,12 +3161,12 @@ onBeforeUnmount(() => {
 .storage-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: var(--text-body);
 }
 .storage-table th {
   text-align: left;
   color: var(--text-dim);
-  font-size: 0.68rem;
+  font-size: var(--text-kicker);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0.4rem 0.6rem 0.65rem;
@@ -3034,7 +3187,7 @@ onBeforeUnmount(() => {
 .path-line {
   display: block;
   color: var(--text-dim);
-  font-size: 0.75rem;
+  font-size: var(--text-kicker);
   overflow-wrap: anywhere;
 }
 .hostname-table-wrap {
@@ -3050,7 +3203,7 @@ onBeforeUnmount(() => {
   max-width: 12rem;
 }
 .hostname-preview {
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
@@ -3066,7 +3219,7 @@ onBeforeUnmount(() => {
 .share-meta,
 .share-idle {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   margin-top: 0.55rem;
 }
 .setting-status {
@@ -3078,7 +3231,7 @@ onBeforeUnmount(() => {
 .setting-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 0.72rem;
+  font-size: var(--text-kicker);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3204,7 +3357,7 @@ onBeforeUnmount(() => {
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   text-transform: capitalize;
 }
 .error-log {
@@ -3215,7 +3368,7 @@ onBeforeUnmount(() => {
   max-height: 360px;
   overflow: auto;
   white-space: pre-wrap;
-  font-size: 0.78rem;
+  font-size: var(--text-kicker);
   color: var(--text-main);
 }
 .brand-asset-list {
@@ -3235,13 +3388,19 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-subtle);
 }
 .brand-asset-preview {
-  width: 56px;
-  height: 56px;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: 12px;
   object-fit: cover;
-  background: transparent;
+  background: var(--bg-input);
   border: none;
   flex-shrink: 0;
+}
+.brand-asset-preview.is-logo {
+  width: 10.5rem;
+  height: 3.5rem;
+  object-fit: contain;
+  object-position: center;
 }
 .brand-asset-copy {
   display: flex;
@@ -3252,11 +3411,11 @@ onBeforeUnmount(() => {
 }
 .brand-asset-copy strong {
   color: var(--text-heading);
-  font-size: 0.92rem;
+  font-size: var(--text-body);
 }
 .brand-asset-copy span {
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--text-body);
   line-height: 1.4;
 }
 .brand-asset-size {
@@ -3272,6 +3431,12 @@ onBeforeUnmount(() => {
 .account-avatar-block {
   margin-bottom: 1.25rem;
 }
+.account-donate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
 .account-avatar-preview {
   width: 4.5rem;
   height: 4.5rem;
@@ -3284,7 +3449,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 1.5rem;
+  font-size: var(--text-display);
   line-height: 1;
 }
 .account-avatar-preview img {
@@ -3316,10 +3481,10 @@ onBeforeUnmount(() => {
   gap: 0.15rem;
 }
 .theme-accent-copy strong {
-  font-size: 0.95rem;
+  font-size: var(--text-body);
 }
 .theme-accent-copy span {
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   color: var(--text-muted);
 }
 .accent-picker {

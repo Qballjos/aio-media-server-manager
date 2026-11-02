@@ -15,6 +15,8 @@ from core.settings import settings
 logger = logging.getLogger(__name__)
 
 JELLYFIN_LINUX_REPO = "https://repo.jellyfin.org/files/server/linux"
+JELLYFIN_FFMPEG_PATH = Path("/usr/lib/jellyfin-ffmpeg/ffmpeg")
+JELLYFIN_FFMPEG_DRI = Path("/usr/lib/jellyfin-ffmpeg/lib/dri")
 _ARCH_MAP = {"x86_64": "amd64", "arm64": "arm64"}
 _ARCHIVE_RE = re.compile(
     r"jellyfin_([0-9][0-9A-Za-z.\-]*)-(amd64|arm64)\.tar\.(xz|gz)",
@@ -70,12 +72,17 @@ class JellyfinApp(BaseApplication):
         logs = settings.config_dir / "logs" / "jellyfin"
         cache.mkdir(parents=True, exist_ok=True)
         logs.mkdir(parents=True, exist_ok=True)
-        return {
+        env = {
             "JELLYFIN_DATA_DIR": str(self.data_dir),
             "JELLYFIN_CONFIG_DIR": str(self.config_dir),
             "JELLYFIN_LOG_DIR": str(logs),
             "JELLYFIN_CACHE_DIR": str(cache),
         }
+        if JELLYFIN_FFMPEG_PATH.is_file():
+            env["JELLYFIN_FFMPEG"] = str(JELLYFIN_FFMPEG_PATH)
+            if JELLYFIN_FFMPEG_DRI.is_dir():
+                env["LIBVA_DRIVERS_PATH"] = str(JELLYFIN_FFMPEG_DRI)
+        return env
 
     def apply_listen_port(self, port: int) -> None:
         super().apply_listen_port(port)
@@ -83,6 +90,8 @@ class JellyfinApp(BaseApplication):
 
     def post_install(self) -> None:
         self._write_http_port(self.port)
+        self._ensure_encoder_path()
+        self._ensure_known_proxies()
         self.prepare_browser_login()
 
     def prepare_browser_login(self) -> bool:
@@ -141,8 +150,94 @@ class JellyfinApp(BaseApplication):
         )
         return path
 
+    def _ensure_encoder_path(self) -> None:
+        """Point Jellyfin at jellyfin-ffmpeg when the appliance ships it (Intel Arc QSV)."""
+        if not JELLYFIN_FFMPEG_PATH.is_file():
+            return
+        ffmpeg = str(JELLYFIN_FFMPEG_PATH)
+        path = self.config_dir / "encoding.xml"
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        if not path.is_file():
+            path.write_text(
+                '<?xml version="1.0" encoding="utf-8"?>\n'
+                "<EncodingOptions>\n"
+                f"  <EncoderAppPath>{ffmpeg}</EncoderAppPath>\n"
+                f"  <EncoderAppPathDisplay>{ffmpeg}</EncoderAppPathDisplay>\n"
+                "</EncodingOptions>\n",
+                encoding="utf-8",
+            )
+            return
+        text = path.read_text(encoding="utf-8")
+        updated = text
+        for tag in ("EncoderAppPath", "EncoderAppPathDisplay"):
+            if re.search(rf"<{tag}>", updated, flags=re.IGNORECASE):
+                updated, _ = re.subn(
+                    rf"(<{tag}>)(.*?)(</{tag}>)",
+                    rf"\g<1>{ffmpeg}\g<3>",
+                    updated,
+                    count=1,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+            else:
+                updated = re.sub(
+                    r"</EncodingOptions>",
+                    f"  <{tag}>{ffmpeg}</{tag}>\n</EncodingOptions>",
+                    updated,
+                    count=1,
+                    flags=re.IGNORECASE,
+                )
+        if updated != text:
+            path.write_text(updated, encoding="utf-8")
+
+    def _ensure_known_proxies(self) -> None:
+        """Trust localhost so X-Forwarded-For from the CF origin shim is honored."""
+        path = self.config_dir / "network.xml"
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        proxies = ("127.0.0.1", "::1")
+        if not path.is_file():
+            body = "\n".join(f"    <string>{ip}</string>" for ip in proxies)
+            path.write_text(
+                '<?xml version="1.0" encoding="utf-8"?>\n'
+                "<NetworkConfiguration>\n"
+                "  <KnownProxies>\n"
+                f"{body}\n"
+                "  </KnownProxies>\n"
+                "</NetworkConfiguration>\n",
+                encoding="utf-8",
+            )
+            return
+        text = path.read_text(encoding="utf-8")
+        if "<KnownProxies" not in text:
+            updated = re.sub(
+                r"</NetworkConfiguration>",
+                "  <KnownProxies>\n"
+                + "\n".join(f"    <string>{ip}</string>" for ip in proxies)
+                + "\n  </KnownProxies>\n</NetworkConfiguration>",
+                text,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+            if updated != text:
+                path.write_text(updated, encoding="utf-8")
+            return
+        updated = text
+        for ip in proxies:
+            if re.search(rf"<string>\s*{re.escape(ip)}\s*</string>", updated, flags=re.IGNORECASE):
+                continue
+            updated = re.sub(
+                r"(<KnownProxies>)",
+                rf"\1\n    <string>{ip}</string>",
+                updated,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        if updated != text:
+            path.write_text(updated, encoding="utf-8")
+
     def build_start_command(self, executable: Path) -> list[str]:
         self._write_http_port(self.port)
+        self._ensure_encoder_path()
+        self._ensure_known_proxies()
         cmd = [
             str(executable),
             "--datadir",

@@ -1,7 +1,7 @@
 """
 api/routers/health.py — Health check endpoint.
 
-GET /health  →  {"status": "ok", "version": "0.1.0"}
+GET /health  →  {"status": "ok", "version": "<app version>"}
 """
 
 from __future__ import annotations

@@ -22,6 +22,7 @@ from core.installer.arch import (
     is_arch_neutral_asset,
     score_asset_match,
 )
+from core.version import app_version
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class GitHubReleaseClient:
     def _get_headers(self) -> dict[str, str]:
         headers = {
             "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "AIO-Media-Server-Manager/0.1.0",
+            "User-Agent": f"AIO-Media-Server-Manager/{app_version()}",
         }
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"

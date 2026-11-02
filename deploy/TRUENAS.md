@@ -55,11 +55,11 @@ If user home is not enabled, create it under Credentials → Users, or set `DATA
    - `/mnt/tank/backups/aio-media-manager` → `/backups`
    - `/sys` → `/host/sys` (read-only), so Home's Server card shows the server's network traffic. Without it, the graph is only this container's traffic.
 5. Environment: `PUID` / `PGID` = the UID/GID you used with `chown`, plus `TZ`, `AMM_DOWNLOAD_DIR=/data/downloads` and `AMM_MEDIA_DIR=/data/media`. Optional `GITHUB_TOKEN` for GitHub rate limits (or Settings → Updates after first-run).
-6. Privileged / `NET_ADMIN` if you enable qBittorrent VPN.
+6. Privileged / `NET_ADMIN` if you enable VPN for qBittorrent, Prowlarr, and Flaresolverr. Those apps wait for a live tunnel; DNS for them is cached through the tunnel (Usenet stays off it). Details: [DOCKER.md](DOCKER.md#optional-vpn).
 7. GPU: pass `/dev/dri` (Intel/AMD) or NVIDIA runtime when transcoding.
 
 The manager UI is `http://<truenas-ip>:8080`. Recreate the custom app after an image update so newly published ports apply.
 
 ## Updates
 
-TrueNAS will pull a newer `:latest` when you update the app. Pin a semver tag (`:0.1.0`) if you want slower upgrades once git tags exist. That updates AIO. Installed apps update from **Settings → Updates** (schedules default to off).
+TrueNAS will pull a newer `:latest` when you update the app. Pin a semver tag (`:0.3.0`) if you want slower upgrades once git tags exist. That updates AIO. Installed apps update from **Settings → Updates** (schedules default to off).

@@ -28,6 +28,7 @@ from core.integrations.sabnzbd import SABnzbdClient, write_bootstrap_ini
 from core.integrations.seerr import SeerrClient
 from core.integrations.sonarr import SonarrClient
 from core.integrations.engine import IntegrationEngine, WIRE_AFTER_INSTALL, _register_download_clients
+from core.vpn import TORRENT_BRIDGE_HOST
 
 
 def test_credentials_discovery(tmp_path: Path):
@@ -390,6 +391,17 @@ def test_downloaders_for_arr_uses_running_apps():
         assert engine._downloaders_for_arr(sab_key=None) == ["qbittorrent"]
 
 
+def test_prowlarr_reaches_usenet_over_the_vpn_bridge():
+    engine = IntegrationEngine()
+    with patch("core.integrations.engine.vpn_manager.uses_netns_isolation", return_value=False):
+        assert engine._prowlarr_client_host("sabnzbd") == "127.0.0.1"
+        assert engine._prowlarr_client_host("qbittorrent") == "127.0.0.1"
+    with patch("core.integrations.engine.vpn_manager.uses_netns_isolation", return_value=True):
+        assert engine._prowlarr_client_host("sabnzbd") == TORRENT_BRIDGE_HOST
+        assert engine._prowlarr_client_host("nzbget") == TORRENT_BRIDGE_HOST
+        assert engine._prowlarr_client_host("qbittorrent") == "127.0.0.1"
+
+
 @patch("requests.get")
 @patch("requests.post")
 def test_sonarr_adds_download_client_with_force_save(mock_post, mock_get):
@@ -605,6 +617,83 @@ def test_prowlarr_client(mock_post, mock_get):
     assert client.add_flaresolverr() is True
 
 
+@patch("requests.get")
+@patch("requests.post")
+def test_prowlarr_adds_download_clients(mock_post, mock_get):
+    def fake_get(url, *args, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        if url.endswith("/downloadclient/schema"):
+            resp.json.return_value = [
+                {
+                    "implementation": "Sabnzbd",
+                    "protocol": "usenet",
+                    "priority": 1,
+                    "fields": [
+                        {"name": "host", "value": "localhost"},
+                        {"name": "port", "value": 8080},
+                        {"name": "apiKey", "value": ""},
+                        {"name": "category", "value": "prowlarr"},
+                    ],
+                },
+                {
+                    "implementation": "QBittorrent",
+                    "protocol": "torrent",
+                    "priority": 1,
+                    "fields": [
+                        {"name": "host", "value": "localhost"},
+                        {"name": "port", "value": 8080},
+                        {"name": "username", "value": ""},
+                        {"name": "password", "value": ""},
+                        {"name": "category", "value": "prowlarr"},
+                    ],
+                },
+                {
+                    "implementation": "Nzbget",
+                    "protocol": "usenet",
+                    "priority": 1,
+                    "fields": [
+                        {"name": "host", "value": "localhost"},
+                        {"name": "port", "value": 6789},
+                        {"name": "username", "value": ""},
+                        {"name": "password", "value": ""},
+                        {"name": "category", "value": "prowlarr"},
+                    ],
+                },
+            ]
+        else:
+            resp.json.return_value = []
+        return resp
+
+    mock_get.side_effect = fake_get
+    mock_post.return_value.status_code = 201
+    client = ProwlarrClient(api_key="prowlarr_key_123")
+    assert client.add_sabnzbd_client(host="10.200.200.1", port=8085, api_key="sab_key", username="amm", password="pw") is True
+    assert client.add_qbittorrent_client(port=8081, username="amm", password="pw") is True
+    assert client.add_nzbget_client(host="10.200.200.1", port=6789, username="nzb", password="secret") is True
+    posted = [call.kwargs["json"] for call in mock_post.call_args_list]
+    assert [item["implementation"] for item in posted] == ["Sabnzbd", "QBittorrent", "Nzbget"]
+    assert all(call.kwargs["params"] == {"forceSave": "true"} for call in mock_post.call_args_list)
+    sab_fields = {item["name"]: item.get("value") for item in posted[0]["fields"]}
+    qb_fields = {item["name"]: item.get("value") for item in posted[1]["fields"]}
+    assert sab_fields["host"] == "10.200.200.1"
+    assert sab_fields["apiKey"] == "sab_key"
+    assert sab_fields["category"] == "prowlarr"
+    assert qb_fields["host"] == "127.0.0.1"
+    assert qb_fields["port"] == 8081
+    assert posted[1]["protocol"] == "torrent"
+
+
+@patch("requests.get")
+@patch("requests.post")
+def test_prowlarr_skips_download_client_that_already_exists(mock_post, mock_get):
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = [{"implementation": "QBittorrent", "name": "qBittorrent"}]
+    client = ProwlarrClient(api_key="k")
+    assert client.add_qbittorrent_client() is True
+    mock_post.assert_not_called()
+
+
 def test_seerr_client():
     http = MagicMock()
     get_resp = MagicMock()
@@ -767,6 +856,7 @@ def test_optimization_hooks(tmp_path: Path):
     assert "d1498e7d189fbe6c7110ceaabb7473e6" not in rec_text
     assert "trash_id: 72dae194fc92bf828f32cde7744e51a1" in rec_text
     assert "trash_id: d1d67249d3890e49bc12e275d989a7e9" in rec_text
+    assert "trash_id: 722b624f9af1e492284c4bc842153a38" in rec_text
     assert "reset_unmatched_scores" in rec_text
     assert rec_text.count("custom_format_groups:") == 1  # only the older tv shows scores
     assert "plex-imdb" in rec_text
@@ -784,3 +874,35 @@ def test_optimization_hooks(tmp_path: Path):
     assert "hourly_cap" in sonarr_hunt
     assert "http://127.0.0.1:8989" in sonarr_hunt
     assert (tmp_path / "neutarr" / "lidarr.json").is_file()
+
+
+def test_neutarr_wiring_fills_empty_default_instance(tmp_path: Path):
+    root = tmp_path / "neutarr"
+    root.mkdir()
+    (root / "sonarr.json").write_text(
+        '{"instances":[{"name":"Default","api_url":"","api_key":"","enabled":false}],"sleep_duration":1200}\n',
+        encoding="utf-8",
+    )
+    (root / "radarr.json").write_text(
+        '{"instances":[{"name":"Radarr (AMM)","api_url":"http://127.0.0.1:7878","api_key":"kept","enabled":true}]}\n',
+        encoding="utf-8",
+    )
+    write_neutarr_config(
+        root,
+        sonarr_url="http://127.0.0.1:8989",
+        sonarr_key="sonarr-key",
+        radarr_url="http://127.0.0.1:7878",
+        radarr_key="radarr-key",
+    )
+    sonarr = json.loads((root / "sonarr.json").read_text(encoding="utf-8"))
+    assert sonarr["instances"] == [
+        {
+            "name": "Sonarr (AMM)",
+            "api_url": "http://127.0.0.1:8989",
+            "api_key": "sonarr-key",
+            "enabled": True,
+        }
+    ]
+    assert sonarr["sleep_duration"] == 1200
+    radarr = json.loads((root / "radarr.json").read_text(encoding="utf-8"))
+    assert radarr["instances"][0]["api_key"] == "kept"

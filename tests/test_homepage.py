@@ -15,11 +15,15 @@ from api.app import create_app
 from core.auth import auth_manager
 from core.homepage import (
     calendar_fetch_span,
+    homepage_title,
     clear_homepage_snapshot_cache,
     collapse_recent_series,
     homepage_downloads,
     homepage_recent,
+    clear_prowlarr_grab_cache,
+    homepage_prowlarr_grab,
     homepage_request,
+    homepage_request_options,
     homepage_search,
     homepage_snapshot,
     homepage_trending,
@@ -60,8 +64,10 @@ class FakeCatalog:
 @pytest.fixture(autouse=True)
 def _clear_homepage_cache():
     clear_homepage_snapshot_cache()
+    clear_prowlarr_grab_cache()
     yield
     clear_homepage_snapshot_cache()
+    clear_prowlarr_grab_cache()
 
 
 def test_calendar_fetch_span_covers_adjacent_months():
@@ -322,7 +328,7 @@ def test_homepage_calendar_from_sonarr(tmp_path):
                         "episodeNumber": 2,
                         "airDateUtc": "2026-09-24T20:00:00Z",
                         "hasFile": False,
-                        "series": {"title": "Example Show"},
+                        "series": {"title": "Example Show", "titleSlug": "example-show", "tvdbId": 10},
                     }
                 ],
                 None,
@@ -336,9 +342,102 @@ def test_homepage_calendar_from_sonarr(tmp_path):
     assert snap["calendar"][0]["has_file"] is False
     assert snap["calendar"][0]["when"].startswith("2026-09-24T20:00:00")
     assert snap["calendar"][0]["source"] == "sonarr"
+    assert snap["calendar"][0]["url"].endswith("/series/example-show")
+    assert "play_url" not in snap["calendar"][0]
     sonarr_note = next(item for item in snap["widgets"] if item["source"] == "sonarr")
     assert sonarr_note["state"] == "ok"
     assert sonarr_note["count"] == 1
+
+
+def test_homepage_calendar_opens_downloaded_title_on_jellyfin(tmp_path):
+    catalog = FakeCatalog(
+        [
+            _plugin("sonarr", 8989, tmp_path),
+            _plugin("radarr", 7878, tmp_path),
+            _plugin("jellyfin", 8096, tmp_path, category="media"),
+        ]
+    )
+
+    def fetch(url, **_kwargs):
+        if ":8989" in url:
+            return (
+                [
+                    {
+                        "title": "Pilot",
+                        "seasonNumber": 1,
+                        "episodeNumber": 2,
+                        "tvdbId": 99,
+                        "airDateUtc": "2026-09-24T20:00:00Z",
+                        "hasFile": True,
+                        "series": {"title": "Example Show", "titleSlug": "example-show", "tvdbId": 10},
+                    }
+                ],
+                None,
+            )
+        if ":7878" in url:
+            return (
+                [
+                    {
+                        "title": "Dune",
+                        "year": 2021,
+                        "titleSlug": "dune-2021",
+                        "tmdbId": 438631,
+                        "hasFile": True,
+                        "digitalRelease": "2026-09-24T00:00:00Z",
+                    }
+                ],
+                None,
+            )
+        if "/Items" in url:
+            return (
+                {
+                    "Items": [
+                        {
+                            "Id": "ep1",
+                            "Type": "Episode",
+                            "SeriesId": "show1",
+                            "SeriesName": "Example Show",
+                            "ParentIndexNumber": 1,
+                            "IndexNumber": 2,
+                            "ProviderIds": {"Tvdb": "99"},
+                        },
+                        {
+                            "Id": "mov1",
+                            "Type": "Movie",
+                            "Name": "Dune",
+                            "ProductionYear": 2021,
+                            "ProviderIds": {"Tmdb": "438631"},
+                        },
+                    ]
+                },
+                None,
+            )
+        return (None, "unexpected")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"sonarr", "radarr", "jellyfin"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fetch),
+    ):
+        snap = homepage_snapshot("host.local", force=True)
+    by_source = {item["source"]: item for item in snap["calendar"]}
+    episode = by_source["sonarr"]
+    assert episode["url"].endswith("/series/example-show")
+    assert episode["play_app"] == "jellyfin"
+    assert "id=ep1" in episode["play_url"]
+    assert "id=show1" in episode["series_play_url"]
+    movie = by_source["radarr"]
+    assert movie["url"].endswith("/movie/dune-2021")
+    assert movie["play_app"] == "jellyfin"
+    assert "id=mov1" in movie["play_url"]
+
+
+def test_calendar_plex_guid_ids_skip_series_paths():
+    from core.homepage import _plex_guid_ids
+
+    assert _plex_guid_ids({"Guid": [{"id": "tvdb://99"}, {"id": "tmdb://5"}]}) == {"tvdb": 99, "tmdb": 5}
+    assert _plex_guid_ids({"guid": "plex://episode/abc", "Guid": [{"id": "tvdb://12/1/2"}]}) == {}
 
 
 def test_homepage_jellyfin_recent_has_poster_proxy(tmp_path):
@@ -583,6 +682,9 @@ def test_homepage_seerr_trending_row(tmp_path):
                             "title": "Trending Hit",
                             "posterPath": "/t.jpg",
                             "releaseDate": "2026-01-15",
+                            "overview": "A court herbalist solves mysteries.",
+                            "voteAverage": 8.2,
+                            "voteCount": 400,
                             "mediaInfo": {"status": 1},
                         },
                         {
@@ -614,6 +716,8 @@ def test_homepage_seerr_trending_row(tmp_path):
     assert snap["trending"][0]["detail"] == "2026"
     assert snap["trending"][0]["can_request"] is True
     assert snap["trending"][0]["mediaId"] == 99
+    assert snap["trending"][0]["overview"] == "A court herbalist solves mysteries."
+    assert snap["trending"][0]["voteAverage"] == 8.2
     assert "image.tmdb.org" in snap["trending"][0]["poster"]
     assert snap["trending"][1]["title"] == "Hot Show"
     assert snap["trending"][1]["can_request"] is False
@@ -646,6 +750,94 @@ def test_homepage_trending_fetches_the_asked_page(tmp_path):
         patch("core.homepage._fetch_json", return_value=(None, "HTTP 500")),
     ):
         assert homepage_trending("nas.local", 8)["error"] == "HTTP 500"
+
+
+def test_homepage_title_uses_seerr_overview_ratings_and_trailer(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+
+    def fake_fetch(url, **_kwargs):
+        if url.endswith("/ratings"):
+            return (
+                {
+                    "rt": {"criticsScore": 91, "audienceScore": 84},
+                    "imdb": {"criticsScore": 7.8, "url": "https://www.imdb.com/title/tt1/"},
+                },
+                None,
+            )
+        if url.endswith("/movie/99"):
+            return (
+                {
+                    "title": "Trending Hit",
+                    "overview": "A short  overview\nof the film.",
+                    "releaseDate": "2026-01-15",
+                    "posterPath": "/t.jpg",
+                    "voteAverage": 7.43,
+                    "voteCount": 1200,
+                    "mediaInfo": {"status": 1},
+                    "relatedVideos": [
+                        {"site": "YouTube", "key": "teaser01abc", "type": "Teaser", "name": "Teaser"},
+                        {"site": "YouTube", "key": "clip0000001", "type": "Clip", "name": "Clip"},
+                        {"site": "YouTube", "key": "trailer0001", "type": "Trailer", "name": "Trailer"},
+                        {"site": "YouTube", "key": "official001", "type": "Trailer", "name": "Official Trailer"},
+                        {"site": "Vimeo", "key": "999", "type": "Trailer", "name": "Official Trailer", "url": "https://vimeo.com/999"},
+                    ],
+                },
+                None,
+            )
+        return (None, "unexpected")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        detail = homepage_title("nas.local", "http", "movie", 99)
+    assert detail["ok"] is True
+    assert detail["title"] == "Trending Hit"
+    assert detail["overview"] == "A short overview of the film."
+    assert detail["year"] == "2026"
+    assert detail["voteAverage"] == 7.4
+    assert detail["imdb"] == 7.8
+    assert detail["rtCritics"] == 91
+    assert detail["rtAudience"] == 84
+    assert detail["trailer"] == "https://www.youtube.com/watch?v=official001"
+    assert detail["poster"].endswith("/w342/t.jpg")
+    assert detail["can_request"] is True
+    assert detail["url"].endswith("/movie/99")
+
+
+def test_homepage_title_keeps_tmdb_score_when_ratings_fail(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+
+    def fake_fetch(url, **_kwargs):
+        if url.endswith("/ratings"):
+            return (None, "HTTP 404")
+        return (
+            {
+                "name": "Hot Show",
+                "overview": "Weekly.",
+                "firstAirDate": "2025-05-01",
+                "voteAverage": 8,
+                "voteCount": 10,
+                "mediaInfo": {"status": 5},
+                "relatedVideos": [{"url": "https://www.youtube.com/watch?v=fromurl01", "type": "Trailer", "name": "Trailer"}],
+            },
+            None,
+        )
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        detail = homepage_title("host.local", "http", "tv", 7)
+    assert detail["imdb"] is None
+    assert detail["rtCritics"] is None
+    assert detail["voteAverage"] == 8.0
+    assert detail["trailer"] == "https://www.youtube.com/watch?v=fromurl01"
+    assert detail["can_request"] is False
 
 
 def test_homepage_recent_pages_through_jellyfin_titles(tmp_path):
@@ -783,6 +975,125 @@ def test_jellyfin_auth_header_carries_token():
     headers = jellyfin_auth_headers("abc123")
     assert 'Token="abc123"' in headers["Authorization"]
     assert headers["X-Emby-Token"] == "abc123"
+
+
+def test_homepage_search_prowlarr_hides_download_urls(tmp_path):
+    catalog = FakeCatalog([_plugin("prowlarr", 9696, tmp_path)])
+    release = {
+        "guid": "abc",
+        "indexerId": 3,
+        "indexer": "Knaben",
+        "title": "Some.Album.2024.FLAC",
+        "size": 900_000_000,
+        "protocol": "torrent",
+        "seeders": 12,
+        "downloadUrl": "magnet:?xt=urn:btih:secret",
+    }
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"prowlarr"}),
+        patch("core.homepage._fetch_json", return_value=([release], None)),
+    ):
+        data = homepage_search("host", "album", "prowlarr")
+    assert data["provider"] == "prowlarr"
+    assert data["error"] is None
+    assert data["results"][0]["title"] == "Some.Album.2024.FLAC"
+    assert "Knaben" in data["results"][0]["detail"]
+    assert "secret" not in str(data["results"])
+    assert "downloadUrl" not in data["results"][0]
+    token = data["results"][0]["token"]
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"prowlarr"}),
+        patch("core.homepage.requests.post") as posted,
+    ):
+        posted.return_value.status_code = 200
+        posted.return_value.json.return_value = {}
+        grabbed = homepage_prowlarr_grab(token)
+    assert grabbed["ok"] is True
+    sent = posted.call_args.kwargs["json"]
+    assert sent["guid"] == "abc"
+    assert sent["downloadUrl"].startswith("magnet:")
+
+
+def test_homepage_prowlarr_grab_expired_token():
+    assert homepage_prowlarr_grab("not-a-real-token")["ok"] is False
+
+
+def test_request_options_when_a_movie_has_several_folders(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+
+    def fake_fetch(url, **kwargs):
+        if url.endswith("/service/radarr"):
+            return (
+                [{"id": 1, "name": "Radarr", "isDefault": True, "activeProfileId": 6, "activeDirectory": "/movies"}],
+                None,
+            )
+        if url.endswith("/service/radarr/1"):
+            return (
+                {
+                    "profiles": [{"id": 6, "name": "HD-1080p"}, {"id": 7, "name": "Ultra-HD"}],
+                    "rootFolders": [{"id": 1, "path": "/movies"}, {"id": 2, "path": "/kids"}],
+                },
+                None,
+            )
+        return (None, "HTTP 404")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        options = homepage_request_options("movie")
+    assert options["needsChoice"] is True
+    assert options["servers"][0]["folders"] == [{"path": "/movies"}, {"path": "/kids"}]
+    assert [profile["name"] for profile in options["servers"][0]["profiles"]] == ["HD-1080p", "Ultra-HD"]
+
+
+def test_request_options_skip_popup_for_one_folder_and_profile(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+
+    def fake_fetch(url, **kwargs):
+        if url.endswith("/service/radarr"):
+            return ([{"id": 1, "name": "Radarr", "isDefault": True, "activeProfileId": 6, "activeDirectory": "/movies"}], None)
+        if url.endswith("/service/radarr/1"):
+            return (
+                {"profiles": [{"id": 6, "name": "HD-1080p"}], "rootFolders": [{"id": 1, "path": "/movies"}]},
+                None,
+            )
+        return (None, "HTTP 404")
+
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage._fetch_json", side_effect=fake_fetch),
+    ):
+        options = homepage_request_options("movie")
+    assert options["needsChoice"] is False
+
+
+def test_homepage_request_sends_chosen_folder_and_profile(tmp_path):
+    catalog = FakeCatalog([_plugin("seerr", 5055, tmp_path)])
+    with (
+        patch("core.homepage.ApplicationCatalog", return_value=catalog),
+        patch("core.homepage._running_names", return_value={"seerr"}),
+        patch("core.homepage.get_application_api_key", return_value="k"),
+        patch("core.homepage.requests.post") as posted,
+        patch("core.homepage.clear_homepage_snapshot_cache"),
+    ):
+        posted.return_value.status_code = 201
+        posted.return_value.json.return_value = {}
+        result = homepage_request(
+            {"mediaType": "movie", "mediaId": 42, "serverId": 1, "profileId": 7, "rootFolder": "/kids"}
+        )
+    assert result["ok"] is True
+    sent = posted.call_args.kwargs["json"]
+    assert sent["profileId"] == 7
+    assert sent["rootFolder"] == "/kids"
+    assert sent["serverId"] == 1
+    assert sent["mediaId"] == 42
 
 
 def test_homepage_request_without_seerr(tmp_path):

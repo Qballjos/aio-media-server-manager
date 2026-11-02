@@ -160,8 +160,8 @@ test('bpForWidth follows the existing breakpoints', () => {
   assert.equal(bpForWidth(1200), 'desktop')
 })
 
-test('the status widgets wait in Add widget instead of joining an existing Home', () => {
-  for (const id of ['playing', 'storage', 'server', 'attention']) {
+test('the newer widgets wait in Add widget instead of joining an existing Home', () => {
+  for (const id of ['playing', 'storage', 'server', 'attention', 'other']) {
     assert.ok(GRID_IDS.includes(id), `${id} is a widget`)
     assert.ok(!LEGACY_IDS.includes(id), `${id} is not part of the old Home`)
     assert.equal(fromLegacy({ order: ['search', id] }).some((item) => item.id === id), false)

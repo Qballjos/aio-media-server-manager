@@ -5,6 +5,10 @@ Run AIO as **one** Container Manager **project**. Do not add extra services or s
 **Image:** `ghcr.io/qballjos/aio-media-server-manager:latest`  
 Your DSM needs to run `linux/amd64` or `linux/arm64` images.
 
+## Install Container Manager first
+
+In **DSM Package Center**, install **Container Manager**, finish its setup, and start it. Let DSM create the `docker` shared folder; do not create `/volume1/docker` manually before installing the package. The script checks the package, Docker engine, and existing `${VOLUME}/docker` folder before creating folders or migrating files. If DSM installed the shared folder on another volume, set `VOLUME` to that volume.
+
 ## Create folders and the project (SSH)
 
 Enable SSH (**Control Panel → Terminal & SNMP → Enable SSH service**), then:
@@ -13,7 +17,7 @@ Enable SSH (**Control Panel → Terminal & SNMP → Enable SSH service**), then:
 ssh admin@<nas-ip>
 ```
 
-The install script creates `/volume1/docker/aio-media-manager` (with `config/` and `backups/`) and a data tree in the **DSM user home** (`File Station → Home → aio-media-manager` with `downloads/` and `media/`). That path is a real user home, so DSM can browse it. A raw `/volume1/data` folder is not a shared folder and does not show up in File Station; re-running the script moves that tree into home if it still exists. Downloads and media stay one bind (`/data`) so *Arr can hardlink. Config backups go to the `/backups` mount; include that folder in a Hyper Backup task, or point `BACKUPS=` at another volume.
+The install script creates `/volume1/docker/aio-media-manager` (with `config/` and `backups/`) and a data tree in the **DSM user home** (`File Station → Home → aio-media-manager` with `downloads/` and `media/`). That path is a real user home, so DSM can browse it. A raw `/volume1/data` folder is not a shared folder and does not show up in File Station; re-running the script moves that tree into home if it still exists. By default downloads and media stay in one bind (`/data`); hardlinks require the same filesystem. Optional SSD staging adds two nested mounts, described below. Config backups go to the `/backups` mount; include that folder in a Hyper Backup task, or point `BACKUPS=` at another volume.
 
 User Home Service must be on (Control Panel → User & Group → Advanced). SSH as the DSM user whose Home should hold the libraries, or set `HOME_USER=`.
 
@@ -50,6 +54,22 @@ sudo DATA=/volume1/media/aio-media-manager \
 The generated file is `/volume1/docker/aio-media-manager/docker-compose.yml` (no `build:` key — Container Manager pulls GHCR). A static copy lives in [`synology/docker-compose.yml`](synology/docker-compose.yml).
 
 If GHCR is private: `sudo docker login ghcr.io` before starting the project.
+
+## Optional SSD download workspace
+
+For faster downloads and unpacking, use an **existing shared folder on a dedicated SSD storage volume**, for example `download-cache` on `/volume2`. Create the volume and shared folder in DSM Storage Manager / Control Panel first, on hardware that supports SSD storage pools. The installer does not format drives or turn SSD cache devices into storage volumes.
+
+```bash
+sudo DOWNLOAD_CACHE=/volume2/download-cache/aio-media-manager \
+     PUID=1026 PGID=100 \
+     sh -c 'curl -fsSL https://raw.githubusercontent.com/Qballjos/aio-media-server-manager/main/deploy/synology/install.sh | sh'
+```
+
+The script creates `incomplete/` and `complete/` inside that location and mounts them at `/data/downloads/incomplete` and `/data/downloads/complete`. This accelerates active Usenet/torrent downloads and Usenet unpacking. Finished torrents remain under the normal `DATA/downloads/torrents` location for seeding, and imported media remains under `DATA/media`. SSD-to-HDD imports copy files rather than hardlinking across volumes. The normal HDD-only layout remains available by omitting `DOWNLOAD_CACHE` on a new setup.
+
+DSM **SSD cache** is managed transparently by DSM and has no directory to bind into a container. Synology says its benefits are limited for large sequential reads/writes, so adding SSD cache does not guarantee faster downloads. A dedicated SSD volume makes staging placement explicit. See [Synology SSD cache guidance](https://kb.synology.com/en-global/DSM/help/DSM/StorageManager/genericssdcache).
+
+Keep enough free SSD space for concurrent downloads and extraction (compressed plus extracted data), and set each downloader's minimum-free-space threshold. No automatic HDD overflow is provided. For an existing installation, stop AIO and copy/verify the staging files before adding the mounts; the installer refuses to hide populated staging directories. When re-running setup, pass the same `DOWNLOAD_CACHE` value so existing mounts are preserved.
 
 ## Import in Container Manager
 
@@ -92,7 +112,7 @@ sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
 # scp wg0.conf into that directory
 ```
 
-Set `AMM_VPN_ENABLED=true` in the project compose, then start the project again. While VPN is on, Prowlarr and qBittorrent cannot use the house WAN: they only leave through the tunnel, and they stay stopped if the tunnel is down. Synology’s kernel often has no WireGuard module; the appliance image includes **wireguard-go** as a fallback and creates `/dev/net/tun` when it is missing. That only works if the project stays `privileged: true` (the install script sets this). Recreate the container after pulling a current image, then save VPN in **Settings → Network**. OpenVPN uses the same device node and also needs privileged mode.
+Set `AMM_VPN_ENABLED=true` in the project compose, then start the project again. While VPN is on, Prowlarr, qBittorrent, and Flaresolverr cannot use the house WAN: they only leave through the tunnel. If the tunnel is down at boot, they wait; AIO retries the VPN and starts them when the handshake is back. A local DNS cache for those apps (bound to the tunnel) reduces indexer failures from short DNS timeouts. Synology’s kernel often has no WireGuard module; the appliance image includes **wireguard-go** as a fallback and creates `/dev/net/tun` when it is missing. That only works if the project stays `privileged: true` (the install script sets this). Recreate the container after pulling a current image, then save VPN in **Settings → Network**. OpenVPN uses the same device node and also needs privileged mode. On DSM, Synology ACL can block the VPN app uid (910) after `chown`; if those apps cannot write their config folders, clear the ACL on the host path as the logs describe.
 
 ## Cloudflare Tunnel
 

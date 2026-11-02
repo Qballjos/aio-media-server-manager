@@ -16,6 +16,7 @@ def probe_transcoding() -> dict[str, Any]:
     intel_qsv = _module_loaded("i915")
     amd = Path("/dev/kfd").exists() or _module_loaded("amdgpu")
     available = vaapi or nvidia or intel_qsv or amd
+    jellyfin_ffmpeg = Path("/usr/lib/jellyfin-ffmpeg/ffmpeg")
     return {
         "available": available,
         "vaapi": vaapi,
@@ -26,6 +27,7 @@ def probe_transcoding() -> dict[str, Any]:
         "render_nodes": render_nodes,
         "cards": cards,
         "ffmpeg": which("ffmpeg"),
+        "jellyfin_ffmpeg": str(jellyfin_ffmpeg) if jellyfin_ffmpeg.is_file() else None,
         "notes": _notes(available, vaapi, nvidia),
     }
 
