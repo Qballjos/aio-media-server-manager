@@ -24,6 +24,13 @@ copy_localized "${ROOT}/docs" index "${OUT}"
 copy_localized "${ROOT}/docs" INSTALL "${OUT}"
 copy_localized "${ROOT}/docs" USAGE "${OUT}"
 
+if [[ -d "${ROOT}/docs/assets" ]]; then
+  cp -R "${ROOT}/docs/assets/." "${OUT}/assets/"
+fi
+if [[ -d "${ROOT}/docs/javascripts" ]]; then
+  mkdir -p "${OUT}/javascripts"
+  cp -R "${ROOT}/docs/javascripts/." "${OUT}/javascripts/"
+fi
 if [[ -d "${ROOT}/docs/stylesheets" ]]; then
   cp -R "${ROOT}/docs/stylesheets/." "${OUT}/stylesheets/"
 fi

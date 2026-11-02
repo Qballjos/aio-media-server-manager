@@ -27,6 +27,28 @@ Fangen Sie klein an (zum Beispiel Radarr + ein Download-Client + Jellyfin) und e
 
 ---
 
+## Widgets auf Home anordnen {#customize-home}
+
+<div class="widget-visual-guide" role="group" aria-label="Widgets auf Home anordnen">
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>Der Layoutknopf</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>Wähle auf Home das Symbol mit vier Blöcken neben den Seitentabs. Griffe und eine Bearbeitungsleiste erscheinen.</p></div>
+<div class="widget-visual-step"><span class="visual-number">2</span><strong>Verschieben: Griff ziehen</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Downloads</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Größe: diese Ecke ziehen</p></div>
+<div class="widget-visual-step"><span class="visual-number">3</span><strong>Widget auswählen</strong><div class="visual-toolbar"><span>＋ Widget hinzufügen</span><span>Fertig</span></div><p>Wähle Widget hinzufügen, dann Diese Größe oder Jede Größe und das Widget. Änderungen werden automatisch gespeichert; beende mit Fertig.</p></div>
+</div>
+
+[Interaktive Demo ausprobieren](index.md#app-preview){ .md-button .md-button--primary }
+
+Hier sind die echten Bedienelemente erklärt; die Website-Demo nutzt Beispieldaten und vereinfachte Bewegungen.
+
+Klicke im Editor ein Widget an, um Größen auszuwählen. × entfernt es aus der gewählten Bildschirmgröße; mit Rückgängig kannst du eine falsche Entfernung sofort zurücknehmen.
+
+Änderungen werden automatisch im AIO-Profil gespeichert; Fertig beendet den Editor. Handy, Tablet und Desktop können eigene Layouts haben. Größenknöpfe erscheinen nur, wenn das Fenster diese Vorschau zeigen kann.
+
+!!! tip "Dashboard"
+    Bei leeren Karten zuerst die Quell-App im Katalog prüfen. Einstellungen → Homepage → Explain empty widgets zeigt mögliche Gründe. Dort liegt auch die Dock-Einstellung; das Aussehen änderst du unter Visuals.
+
+Mit Tastatur: Tab zum Widget, Pfeile verschieben, Shift + Pfeile ändern die Größe, Enter öffnet Größen und Delete entfernt es.
+
+
 ## Start
 
 Start ist ein Raster. Telefon, Tablet und Desktop behalten jeweils ihr eigenes Layout (4, 8 und 12 Spalten). Die Layout-Schaltfläche auf dem Start-Reiter verschiebt, vergrößert, fügt hinzu und entfernt Widgets. **Einstellungen → Startseite** blendet die App-Leiste ein oder aus, setzt den Anmeldetext und speichert einen Jellyfin- oder Seerr-API-Schlüssel, wenn Start ihn nicht selbst lesen kann.
@@ -57,7 +79,7 @@ Wenn Sie öffentliche Cloudflare-Hostnamen eingerichtet haben, kann **Oberfläch
 
 Sobald eine App gesund ist — oder wenn Sie **Auto-Verknüpfen** klicken — setzt AIO Download-Ordner und Kategorien, Stammordner und Download-Clients in Sonarr, Radarr und Lidarr, Prowlarr-Sync, Seerr, die Bazarr-Verknüpfung und die Startkonfigurationen von Recyclarr und NeutArr. **Einstellungen → Usenet** speichert den Newsserver und schickt ihn an SABnzbd und NZBGet. Prowlarr bekommt außerdem einen Startsatz öffentlicher Indexer. Entfernen Sie, was Sie nicht wollen; sie werden nicht wieder hinzugefügt.
 
-Lassen Sie **Downloads** und **Medien** auf demselben Volume, damit fertige Dateien **Hardlinks** nutzen können.
+SSD-Staging und HDD-Bibliothek werden unterstützt; Importe dazwischen kopieren Dateien. Hardlinks erfordern dasselbe Dateisystem.
 
 Noch selbst zu erledigen:
 
