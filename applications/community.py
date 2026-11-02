@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
@@ -51,7 +53,27 @@ class FlaresolverrApp(SimpleApplication):
     def build_start_command(self, executable: Path) -> list[str]:
         from core.vpn import vpn_manager
 
+        self._prepare_runtime_permissions(executable.parent)
         return vpn_manager.wrap_isolated_command(super().build_start_command(executable))
+
+    @staticmethod
+    def _prepare_runtime_permissions(runtime: Path) -> None:
+        # PyInstaller imports enumerate lib-dynload. Traverse-only permissions
+        # (0711) break imports when the VPN UID differs from the install owner.
+        # Repair parents before walking children, and never follow symlinks.
+        def ensure_mode(path: Path, required: int) -> None:
+            mode = path.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                return
+            if mode & required != required:
+                path.chmod(stat.S_IMODE(mode) | required)
+
+        ensure_mode(runtime, 0o555)
+        for root, dirs, files in os.walk(runtime, followlinks=False):
+            for name in dirs:
+                ensure_mode(Path(root) / name, 0o555)
+            for name in files:
+                ensure_mode(Path(root) / name, 0o444)
 
 
 class GrimmoryApp(SimpleApplication):
