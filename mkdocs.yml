@@ -45,7 +45,7 @@ extra_javascript:
   - javascripts/showcase.js
 
 extra_css:
-  - stylesheets/extra.css
+  - stylesheets/extra.css?v=20261102-layout2
 
 plugins:
   - search
