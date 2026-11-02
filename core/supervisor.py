@@ -304,6 +304,13 @@ class ProcessSupervisor:
         if spec.env:
             process_env.update(spec.env)
 
+        if spec.name == "plex":
+            from applications.plex import cleanup_stale_plex_pid
+
+            support_dir = process_env.get("PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR")
+            if support_dir:
+                cleanup_stale_plex_pid(Path(support_dir))
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *spec.cmd,

@@ -137,3 +137,64 @@ def test_plex_install_calls_post_install(tmp_path: Path, monkeypatch):
     # Symlinks created by post_install
     assert (app.install_dir / "Resources" / "cacert.pem").is_file()
     assert (app.install_dir / "Plex Media Server").is_file()
+
+
+@pytest.mark.parametrize("process_state", ["missing", "alive", "denied"])
+def test_plex_stale_pid_cleanup(tmp_path, monkeypatch, process_state):
+    from applications.plex import cleanup_stale_plex_pid
+
+    support = tmp_path / "Plex Media Server"
+    support.mkdir()
+    pid_file = support / "plexmediaserver.pid"
+    pid_file.write_text("424242\n")
+
+    def probe(pid, sig):
+        assert (pid, sig) == (424242, 0)
+        if process_state == "missing":
+            raise ProcessLookupError()
+        if process_state == "denied":
+            raise PermissionError()
+
+    monkeypatch.setattr(os, "kill", probe)
+    cleanup_stale_plex_pid(tmp_path)
+    assert pid_file.exists() == (process_state != "missing")
+
+
+@pytest.mark.parametrize("contents", ["", "broken", "0", "-1"])
+def test_plex_invalid_pid_is_preserved(tmp_path, monkeypatch, contents):
+    from applications.plex import cleanup_stale_plex_pid
+
+    support = tmp_path / "Plex Media Server"
+    support.mkdir()
+    pid_file = support / "plexmediaserver.pid"
+    pid_file.write_text(contents)
+    cleanup_stale_plex_pid(tmp_path)
+    assert pid_file.read_text() == contents
+
+
+@pytest.mark.asyncio
+async def test_plex_supervisor_cleans_pid_on_every_start(tmp_path):
+    import sys
+    from core.supervisor import ProcessSupervisor, RestartPolicy
+
+    support = tmp_path / "Plex Media Server"
+    support.mkdir()
+    pid_file = support / "plexmediaserver.pid"
+    supervisor = ProcessSupervisor.get()
+    try:
+        for _ in range(2):
+            # A reaped child gives us a PID known to have exited.
+            import subprocess
+            child = subprocess.Popen([sys.executable, "-c", "pass"])
+            child.wait()
+            pid_file.write_text(str(child.pid))
+            await supervisor.start(
+                "plex", [sys.executable, "-c", "import time; time.sleep(30)"],
+                env={"PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR": str(tmp_path)},
+                restart_policy=RestartPolicy.NEVER,
+                log_dir=tmp_path / "logs",
+            )
+            assert not pid_file.exists()
+            await supervisor.stop("plex", timeout=2)
+    finally:
+        await supervisor.stop("plex", timeout=2)

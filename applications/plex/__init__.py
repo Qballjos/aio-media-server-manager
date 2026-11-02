@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from pathlib import Path
 
 import requests
@@ -16,6 +17,29 @@ _PLEX_LINUX_BUILD = {
     "x86_64": "linux-x86_64",
     "arm64": "linux-aarch64",
 }
+
+logger = logging.getLogger(__name__)
+
+
+def cleanup_stale_plex_pid(support_dir: Path) -> None:
+    """Remove Plex's PID file only when its process is known to be gone."""
+    pid_file = support_dir / "Plex Media Server" / "plexmediaserver.pid"
+    try:
+        contents = pid_file.read_text()
+        pid = int(contents.strip())
+        if pid <= 0:
+            return
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            # Do not remove a file replaced by another Plex startup.
+            if pid_file.read_text() == contents:
+                pid_file.unlink()
+                logger.info("Removed stale Plex PID file %s (PID %d)", pid_file, pid)
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError) as exc:
+        logger.warning("Leaving Plex PID file %s unchanged: %s", pid_file, exc)
 
 
 def plex_linux_build(host_arch: str | None = None) -> str:
