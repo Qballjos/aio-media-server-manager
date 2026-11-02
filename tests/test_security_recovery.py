@@ -58,7 +58,7 @@ def test_recovery_token_is_explicit_and_limited(tmp_path, monkeypatch):
         backups._ensure_authenticated(request(headers=headers))
 
 
-@pytest.mark.parametrize("kind", ["traversal", "absolute", "symlink"])
+@pytest.mark.parametrize("kind", ["traversal", "absolute", "symlink", "absolute_tmp", "absolute_cache", "absolute_logs"])
 def test_restore_rejects_unsafe_paths_before_sidecar_deletion(tmp_path, kind):
     cfg = Settings(config_dir=tmp_path / "config", backup_dir=tmp_path / "backups")
     cfg.config_dir.mkdir()
@@ -68,6 +68,7 @@ def test_restore_rejects_unsafe_paths_before_sidecar_deletion(tmp_path, kind):
     victim = outside / "db.sqlite-wal"
     victim.write_text("preserve")
     names = {"traversal": "../outside/db.sqlite", "absolute": str(outside / "db.sqlite"), "symlink": "link/db.sqlite"}
+    names.update({f"absolute_{directory}": f"/{directory}/outside/db.sqlite" for directory in ("tmp", "cache", "logs")})
     if kind == "symlink":
         (cfg.config_dir / "link").symlink_to(outside, target_is_directory=True)
     archive = cfg.backup_dir / "amm-unsafe.tar.gz"

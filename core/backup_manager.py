@@ -449,13 +449,14 @@ class BackupManager:
             for member in tar.getmembers():
                 if member.name == MANIFEST_NAME or not (member.isfile() or member.isdir()):
                     continue
+                # Validate before filtering: excluded paths can still be unsafe.
+                _restore_target(dest, member)
                 rel = member.name[2:] if member.name.startswith("./") else member.name
                 if not rel or rel == "." or self.is_excluded(rel, is_dir=member.isdir(), excluded_top=excluded_top):
                     continue
                 section = self.section_for(rel, mapping)
                 if wanted is not None and section not in wanted:
                     continue
-                _restore_target(dest, member)
                 members.append((member, section))
             total = len(members)
             for index, (member, section) in enumerate(members, start=1):
