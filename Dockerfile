@@ -15,7 +15,7 @@ FROM node:22-bookworm-slim AS nodebin
 
 FROM eclipse-temurin:25-jre-noble AS jre
 
-FROM python:3.13-slim-bookworm AS py313
+FROM python:3.15-slim-bookworm AS py313
 
 # Userspace WireGuard for NAS kernels that have no wireguard module (typical on Synology).
 # wg-quick falls back to this binary when `ip link add type wireguard` fails (exit 127 otherwise).
@@ -28,7 +28,7 @@ RUN git -c advice.detachedHead=false clone --depth 1 --branch 0.0.20250522 https
     && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
         go build -trimpath -ldflags="-s -w" -o /wireguard-go .
 
-FROM python:3.14-slim-bookworm
+FROM python:3.15-slim-bookworm
 ARG TARGETARCH
 ARG AMM_VERSION=0.4.1
 ARG AMM_GIT_SHA=
