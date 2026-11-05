@@ -64,6 +64,8 @@ docker compose up -d --force-recreate
 
 Le conteneur ne peut pas remplacer sa propre image. Réglages → Mises à jour signale une installation `:nightly` seulement quand `:nightly` a bougé, et une installation `:latest` seulement quand `:latest` a bougé. Vous tirez toujours ce tag sur l’hôte. Les apps installées (Sonarr, Seerr et le reste) se mettent à jour depuis **Réglages → Mises à jour**, une par une ou toutes à la fois. Ces planifications sont désactivées par défaut. Recréer le conteneur ne les fait pas avancer.
 
+Les images publiées lisent leur version et leur commit dans leurs propres métadonnées de build. D’anciennes valeurs `AMM_VERSION` ou `AMM_GIT_SHA` conservées dans Compose ne peuvent plus remplacer cette identité ni provoquer une fausse notification. Une installation depuis les sources sans métadonnées d’image utilise toujours ces variables.
+
 **Ancien Compose qui ne publiait que le port 8080 ?** Copiez la liste `ports:` actuelle de ce dépôt et recréez, sinon les liens **Ouvrir l’interface** des apps enfants échouent sur le LAN.
 
 **Ajouter `/backups` plus tard :** créez le dossier hôte, ajoutez `- /path/to/backups:/backups` sous `volumes:`, recréez. Les anciennes sauvegardes sous `/config/backups` restent restaurables jusqu’à ce que vous les retiriez.

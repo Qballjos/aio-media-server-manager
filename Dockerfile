@@ -203,6 +203,18 @@ COPY packaging/nginx/jellyfin-cf-origin.conf.template /etc/aio/nginx/jellyfin-cf
 COPY main.py ./
 COPY --from=frontend /ui/dist ./frontend/dist
 
+# Keep image identity independent of environment overrides retained by updaters.
+RUN python - <<'PY'
+import os
+from pathlib import Path
+
+Path("core/_build.py").write_text(
+    f"VERSION = {os.environ['AMM_VERSION']!r}\n"
+    f"GIT_SHA = {os.environ['AMM_GIT_SHA']!r}\n",
+    encoding="utf-8",
+)
+PY
+
 VOLUME ["/config", "/data", "/downloads", "/media"]
 EXPOSE 8080
 CMD ["python", "main.py"]
