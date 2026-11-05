@@ -6,6 +6,7 @@
 frontend/dist
 **/__pycache__
 **/*.pyc
+core/_build.py
 .env
 config
 downloads

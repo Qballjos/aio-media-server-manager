@@ -76,6 +76,7 @@ Thumbs.db
 # ===========================
 # Runtime artefacts
 # ===========================
+core/_build.py
 /config/
 /data/
 /backups/
