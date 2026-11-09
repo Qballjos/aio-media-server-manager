@@ -86,6 +86,8 @@ docker compose up -d --force-recreate
 
 The container cannot replace its own image. Settings → Updates notifies a `:nightly` install only when `:nightly` moves, and a `:latest` install only when `:latest` moves. You still pull that tag on the host. Installed apps (Sonarr, Seerr, and the rest) update from **Settings → Updates**, one at a time or all at once. Those schedules default to off. Recreating the container does not bump them.
 
+Published images read their version and commit from build metadata inside the image. Old `AMM_VERSION` or `AMM_GIT_SHA` values retained in Compose cannot override that identity or cause a false update notification. Source checkouts without image metadata still accept those variables.
+
 **Older compose that only published port 8080?** Copy the current `ports:` list from this repo and recreate, or child **Open UI** links will fail on the LAN.
 
 **Adding `/backups` later:** create the host folder, add `- /path/to/backups:/backups` under `volumes:`, recreate. Old backups under `/config/backups` stay restorable until you remove them.

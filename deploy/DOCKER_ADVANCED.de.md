@@ -64,6 +64,8 @@ docker compose up -d --force-recreate
 
 Der Container kann sein eigenes Image nicht ersetzen. Einstellungen → Updates meldet eine `:nightly`-Installation nur, wenn `:nightly` sich verschoben hat, und eine `:latest`-Installation nur, wenn `:latest` sich verschoben hat. Holen tun Sie weiter diesen Tag auf dem Host. Installierte Apps (Sonarr, Seerr und der Rest) aktualisieren Sie unter **Einstellungen → Updates**, einzeln oder alle auf einmal. Diese Zeitpläne sind standardmäßig aus. Den Container neu zu erstellen hebt sie nicht an.
 
+Veröffentlichte Images lesen Version und Commit aus ihren eigenen Build-Metadaten. Alte `AMM_VERSION`- oder `AMM_GIT_SHA`-Werte in Compose können diese Identität nicht überschreiben oder eine falsche Update-Meldung auslösen. Bei einer Quellcode-Installation ohne Image-Metadaten werden diese Variablen weiterhin verwendet.
+
 **Ältere Compose-Datei, die nur Port 8080 veröffentlicht hat?** Kopieren Sie die aktuelle `ports:`-Liste aus diesem Repo und erstellen Sie neu, sonst scheitern die **Oberfläche öffnen**-Links der Kind-Apps im LAN.
 
 **`/backups` später ergänzen:** Host-Ordner anlegen, `- /path/to/backups:/backups` unter `volumes:` eintragen und neu erstellen. Alte Sicherungen unter `/config/backups` bleiben wiederherstellbar, bis Sie sie entfernen.

@@ -64,6 +64,8 @@ docker compose up -d --force-recreate
 
 De container kan zijn eigen image niet vervangen. Instellingen → Updates meldt een `:nightly`-installatie alleen wanneer `:nightly` is verschoven, en een `:latest`-installatie alleen wanneer `:latest` is verschoven. Ophalen doe je nog steeds die tag op de host. Geïnstalleerde apps (Sonarr, Seerr en de rest) werk je bij via **Instellingen → Updates**, één voor één of allemaal tegelijk. Die schema’s staan standaard uit. De container opnieuw aanmaken werkt ze niet bij.
 
+Gepubliceerde images lezen hun versie en commit uit buildgegevens in het image. Oude waarden voor `AMM_VERSION` of `AMM_GIT_SHA` in Compose kunnen die identiteit niet overschrijven of een onterechte updatemelding veroorzaken. Een broncode-installatie zonder imagegegevens accepteert deze variabelen nog wel.
+
 **Ouder compose-bestand dat alleen poort 8080 publiceerde?** Kopieer de huidige `ports:`-lijst uit deze repo en maak opnieuw aan, anders falen de **Interface openen**-links van kind-apps op het LAN.
 
 **`/backups` later toevoegen:** maak de hostmap, voeg `- /path/to/backups:/backups` toe onder `volumes:` en maak opnieuw aan. Oude back-ups onder `/config/backups` blijven herstelbaar tot je ze verwijdert.
