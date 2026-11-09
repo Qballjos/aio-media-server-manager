@@ -1713,7 +1713,7 @@ a.status-pill {
   }
 
   .nav-tabs .metric-pill:not(.nav-edit-btn) {
-    padding-inline: 0.75rem;
+    padding-inline: clamp(0.4rem, 2vw, 0.75rem);
   }
 
   .nav-metrics-authenticated {
