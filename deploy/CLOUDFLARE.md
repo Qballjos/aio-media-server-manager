@@ -114,6 +114,7 @@ Typical service targets (inside AIO):
 | `sonarr.example.com` | `http://127.0.0.1:8989` |
 | `prowlarr.example.com` | `http://127.0.0.1:9696` |
 | `neutarr.example.com` | `http://127.0.0.1:9705` |
+| `cleanuparr.example.com` | `http://127.0.0.1:11011` |
 | `plex.example.com` | `http://127.0.0.1:32400` |
 
 Flaresolverr and Recyclarr are not offered as public hostnames. Recyclarr is a command-line sync. Flaresolverr is used inside the appliance by Prowlarr. More ports: [Install → Ports](../docs/INSTALL.md#ports).

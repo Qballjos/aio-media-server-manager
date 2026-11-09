@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/applications", tags=["Applications"])
 
 catalog = ApplicationCatalog(app_settings=settings)
-API_KEY_APPS = frozenset({"jellyfin", "seerr"})
+API_KEY_APPS = frozenset({"jellyfin", "seerr", "cleanuparr"})
 updater = ApplicationUpdater(app_settings=settings)
 
 
@@ -148,6 +148,26 @@ async def app_session(name: str, request: Request) -> JSONResponse:
             "detail": "Automatic Jellyfin sign-in is unavailable. Sign in directly in Jellyfin.",
         })
     same_host = (urlparse(target).hostname or "") == (request.url.hostname or "")
+    if plugin.name == "cleanuparr":
+        # Unlike status/settings, this authenticated endpoint hands a browser its session.
+        auth_manager.authenticate_request(request)
+        if same_host:
+            from core.integrations.cleanuparr import CleanuparrClient, CleanuparrError
+            from core.shared_credentials import shared_admin_credentials
+
+            creds = shared_admin_credentials()
+            try:
+                ready = await asyncio.to_thread(plugin.prepare_browser_login)
+                if not ready or not creds:
+                    raise CleanuparrError("Open Cleanuparr to complete its sign-in.")
+                tokens = await asyncio.to_thread(CleanuparrClient(port=plugin.port).login, *creds)
+                return JSONResponse({"url": f"{target.rstrip('/')}/aio-login.html", "signed_in": False,
+                                     "handoff": "cleanuparr-session", "tokens": tokens},
+                                    headers={"Cache-Control": "no-store"})
+            except (CleanuparrError, OSError):
+                return JSONResponse({"url": target, "signed_in": False,
+                                     "detail": "Automatic Cleanuparr sign-in is unavailable. Sign in directly in Cleanuparr."},
+                                    headers={"Cache-Control": "no-store"})
     jar = None
     if same_host:
         plex_dir = catalog.get("plex").config_dir if catalog.has("plex") else None
@@ -377,6 +397,12 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
         notes.append(
             "Paste the API key from Seerr Settings → General if homepage search and requests cannot find it automatically."
         )
+    elif plugin.name == "cleanuparr":
+        notes.append(
+            "AIO connects Sonarr, Radarr, Lidarr, qBittorrent and SABnzbd automatically. "
+            "Cleanuparr uses your AIO login. New setups start in dry-run; review rules in Cleanuparr before enabling deletions. "
+            "NZBGet is not supported by Cleanuparr."
+        )
     elif plugin.manifest.daemon:
         notes.append(
             "Open UI uses http://<host>:<port> on LAN, or https://<subdomain>.<domain> over Cloudflare. "
@@ -549,7 +575,7 @@ async def patch_application_settings(
         if plugin.name not in API_KEY_APPS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="API key can only be saved for Jellyfin or Seerr.",
+                detail="API key can only be saved for Jellyfin, Seerr or Cleanuparr.",
             )
         from core.crypto import secret_store
         from core.integrations.credentials import set_application_api_key

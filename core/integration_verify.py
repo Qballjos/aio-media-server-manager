@@ -76,4 +76,14 @@ def verify_integrations(cfg=None, catalog=None):
                 add("seerr", f"Requests: {name}", bool(ok), "Default request target is configured" if ok else "Default request target is missing or differs")
         except (requests.RequestException, ValueError, TypeError):
             add("seerr", "Read configuration", False, "Seerr could not be read; complete its sign-in and check its API key")
+    if "cleanuparr" in installed:
+        from core.integrations.cleanuparr import CleanuparrError, verify_cleanuparr
+        try:
+            results = verify_cleanuparr(catalog)
+            for name, ok in results:
+                add("cleanuparr", name, ok, "Connection matches" if ok else "Connection is missing, disabled or configured differently")
+            if not results:
+                add("cleanuparr", "Connected applications", False, "Install a supported Arr application or download client, then run Auto-Wire")
+        except (CleanuparrError, ValueError, TypeError, KeyError):
+            add("cleanuparr", "Read configuration", False, "Cleanuparr could not be read; check its status and saved API key")
     return {"checked_at": time.time(), "ok": bool(checks) and all(c["status"] == "pass" for c in checks), "checks": checks}

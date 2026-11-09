@@ -306,3 +306,35 @@ De image werkt die apps niet vanzelf bij. Lees de release-opmerkingen op GitHub 
 - Checklist voor een nieuwe installatie: [Installeren](INSTALL.md)
 - Toegang van buitenaf: [Cloudflare Tunnel](deploy/CLOUDFLARE.md)
 - De deur op slot voor publieke URL’s: [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md)
+
+### Cleanuparr
+
+Installeer **Cleanuparr** via Catalogus of selecteer de app bij de optionele wizard-apps. AIO beheert de app als proces op Linux amd64/arm64, op poort **11011**, met configuratie in `/config/cleanuparr`. Voeg bij bestaande Compose-installaties `11011:11011` toe en maak de AIO-container opnieuw aan. De test- en GPU-overlays nemen deze poort over.
+
+Auto-Wire maakt bij een nieuwe installatie de AIO-beheerder aan en koppelt geïnstalleerde Sonarr, Radarr, Lidarr, qBittorrent en SABnzbd met hun ingestelde poorten en aanmeldgegevens. Cleanuparr ondersteunt NZBGet niet. Nieuwe installaties starten in **dry-run** voordat koppelingen worden toegevoegd. AIO schakelt conservatieve wachtrij- en malwarecontroles in dry-run in, maar laat het opruimen van afgeronde downloads en proactief zoeken uit. Controleer de regels voordat je verwijderen toestaat en voorkom overlappende zoektaken met NeutArr. Bestaande externe koppelingen, uitgeschakelde keuzes en opruimregels blijven behouden.
+
+**Open UI** meldt de gedeelde beheerder aan op dezelfde LAN-host; openbare subdomeinen en accounts met 2FA behouden hun eigen aanmelding. Wachtwoorden en API-sleutels blijven op de server en sessietokens komen niet in URL’s. Heeft Cleanuparr al een ander account, voltooi dan de setup en bewaar de API-sleutel via **Catalogus → Cleanuparr → Instellingen**. Voer daarna Auto-Wire uit. AIO neemt geen onbekend onvoltooid account over.
+
+**Koppelingen controleren** leest de opgeslagen adressen zonder ze te wijzigen. Updates, backups, selectief herstellen en verwijderen volgen de standaard appbediening. Verwijderen behoudt standaard de configuratie en verwijdert nooit mediabibliotheken. Pas bij een poortwijziging ook de Docker-poortkoppeling aan. Voer na het wijzigen van de AIO-beheerder Auto-Wire uit om de aanmelding te synchroniseren.
+
+#### Standaardprofiel voor nieuwe installaties
+
+Dit zijn conservatieve **AIO-keuzes**, gebaseerd op de officiële documentatie. Het zijn geen universeel voorgeschreven waarden. Het profiel wordt eenmalig ingesteld wanneer AIO het account aanmaakt. Bestaande accounts en latere wijzigingen blijven behouden.
+
+| Instelling | AIO-standaard |
+| --- | --- |
+| Dry-run | Aan; controleer eerst de gesimuleerde resultaten |
+| Internetcontrole | Aan, via HTTPS naar GitHub en Cloudflare; certificaatcontrole aan |
+| Queue Cleaner | Elke 5 minuten |
+| Vastgelopen publieke torrents | 12 meldingen, ongeveer 1 uur; teller reset bij voortgang; private torrents overslaan |
+| Mislukte imports | 6 meldingen, ongeveer 30 minuten; alleen specifieke inhouds-/releasefouten |
+| Importbeveiliging | Private torrents en ontbrekende clientitems overslaan; geforceerd importeren uit |
+| Metadata-, clientfout- en traagheidsregels | Uit; geen aannames over snelheid of schijfproblemen |
+| Malware Blocker | Elke minuut; officiële permissieve blacklist voor Sonarr/Radarr, niet voor muziek |
+| Malwareverwijdering | Private torrents overslaan; niet de hele torrent verwijderen vanwege één geblokkeerd bestand |
+| Download Cleaner | Uit; geen automatisch verwijderen op seedratio of weesbestanden |
+| Seeker | Alleen vervangende zoekopdrachten, elke 10 minuten; proactief zoeken uit |
+
+De importpatronen zijn `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing` en `Unable to parse`. Uitpakken, onvoldoende schijfruimte en onjuiste padkoppelingen vallen daar niet onder. De globale metadataregel blijft uit om private torrents te beschermen. AIO verandert geen qBittorrent-uitsluitingen buiten Cleanuparrs dry-run om.
+
+Bronnen: [Queue Cleaner](https://cleanuparr.github.io/docs/configuration/queue-cleaner/), [Malware Blocker](https://cleanuparr.github.io/docs/configuration/malware-blocker/), [General](https://cleanuparr.github.io/docs/configuration/general/), [Seeker](https://cleanuparr.github.io/docs/configuration/seeker/). API-velden gecontroleerd voor Cleanuparr v2.11.0; de online documentatie kan nieuwere velden beschrijven.

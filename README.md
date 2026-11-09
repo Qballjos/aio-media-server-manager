@@ -100,7 +100,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 ## Application catalog
 
-Sixteen applications are defined. Install only what you select. Entries that cannot run on the current architecture are omitted from the catalog and the wizard.
+Seventeen applications are defined. Install only what you select. Entries that cannot run on the current architecture are omitted from the catalog and the wizard.
 
 | Role | Applications |
 |------|----------------|
@@ -112,6 +112,7 @@ Sixteen applications are defined. Install only what you select. Entries that can
 | Books | Grimmory |
 | Subtitles | Bazarr |
 | Profiles | Recyclarr, NeutArr |
+| Maintenance | Cleanuparr |
 
 Each catalog card includes a help control that opens that project's official documentation.
 
@@ -209,3 +210,5 @@ Report vulnerabilities through [GitHub private advisories](https://github.com/Qb
 ## Homey dashboard integration
 
 Homey can pair with AIO using a five-minute, one-use code from **Settings → App connections → Homey connections**. Each connection gets its own revocable, read-only dashboard credential. No admin password, TV credential or media-server key is exported. The companion Homey app shows server status, Now playing and Recently added widgets. See [Homey protocol and setup](docs/homey.md).
+
+**Cleanuparr.** Optional cleanup app on port 11011. Auto-Wire sets the shared AIO account and connects installed Sonarr/Radarr/Lidarr, qBittorrent and SABnzbd. New setups start in dry-run with conservative queue and malware checks, private-torrent protection and internet connectivity checks. Seeding/orphan cleanup and proactive searches stay off. Review simulated results before allowing deletions. See [Cleanuparr setup and defaults](docs/USAGE_ADVANCED.md#cleanuparr).

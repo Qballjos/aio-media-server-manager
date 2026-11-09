@@ -114,6 +114,7 @@ Gebruikelijke servicedoelen (in AIO):
 | `sonarr.example.com` | `http://127.0.0.1:8989` |
 | `prowlarr.example.com` | `http://127.0.0.1:9696` |
 | `neutarr.example.com` | `http://127.0.0.1:9705` |
+| `cleanuparr.example.com` | `http://127.0.0.1:11011` |
 | `plex.example.com` | `http://127.0.0.1:32400` |
 
 Flaresolverr en Recyclarr worden niet als publieke hostnamen aangeboden. Recyclarr is een opdrachtregel-sync. Flaresolverr wordt in het apparaat door Prowlarr gebruikt. Meer poorten: [Installeren → Poorten](../docs/INSTALL.md#ports).

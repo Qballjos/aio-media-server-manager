@@ -228,6 +228,7 @@ def test_catalog_help_urls_and_icons():
         "jellyfin": "jellyfin.svg",
         "lidarr": "lidarr.svg",
         "neutarr": "neutarr.svg",
+        "cleanuparr": "cleanuparr.svg",
         "nzbget": "nzbget.svg",
         "plex": "plex.svg",
         "prowlarr": "prowlarr.svg",

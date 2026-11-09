@@ -193,6 +193,7 @@ services:
       - "8989:8989"
       - "9696:9696"
       - "9705:9705"
+      - "11011:11011"    # Cleanuparr
       - "32400:32400"
     volumes:
       - ${PROJECT}/config:/config

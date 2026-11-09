@@ -10,6 +10,7 @@ from typing import Iterable
 from weakref import WeakSet
 
 from applications.base import BaseApplication
+from applications.cleanuparr import CleanuparrApp
 from applications.extended import (
     BazarrApp,
     LidarrApp,
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 _LIVE_CATALOGS: WeakSet[ApplicationCatalog] = WeakSet()
 
-# Sixteen catalog plugins. Do not add apps here without an explicit product decision.
+# Catalog plugins. Do not add apps here without an explicit product decision.
 PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
     ProwlarrApp,
     SonarrApp,
@@ -53,6 +54,7 @@ PLUGIN_CLASSES: tuple[type[BaseApplication], ...] = (
     FlaresolverrApp,
     GrimmoryApp,
     ShelfmarkApp,
+    CleanuparrApp,
 )
 
 

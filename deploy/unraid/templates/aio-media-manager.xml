@@ -43,6 +43,7 @@
   <Config Name="Sonarr" Target="8989" Default="8989" Mode="tcp" Description="Sonarr WebUI" Type="Port" Display="always" Required="false" Mask="false">8989</Config>
   <Config Name="Prowlarr" Target="9696" Default="9696" Mode="tcp" Description="Prowlarr WebUI" Type="Port" Display="always" Required="false" Mask="false">9696</Config>
   <Config Name="NeutArr" Target="9705" Default="9705" Mode="tcp" Description="NeutArr WebUI" Type="Port" Display="advanced" Required="false" Mask="false">9705</Config>
+  <Config Name="Cleanuparr" Target="11011" Default="11011" Mode="tcp" Description="Cleanuparr WebUI" Type="Port" Display="advanced" Required="false" Mask="false">11011</Config>
   <Config Name="Plex" Target="32400" Default="32400" Mode="tcp" Description="Plex Media Server" Type="Port" Display="always" Required="false" Mask="false">32400</Config>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/aio-media-manager" Mode="rw" Description="App settings, VPN profile, and child-app config" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/aio-media-manager</Config>
   <Config Name="Data" Target="/data" Default="/mnt/user/aio-media-manager" Mode="rw" Description="Array user share for media and finished torrents. Incomplete and completed Usenet staging use the separate SSD mounts." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/aio-media-manager</Config>

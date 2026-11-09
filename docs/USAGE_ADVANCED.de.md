@@ -306,3 +306,35 @@ Das Image aktualisiert diese Apps nicht von allein. Lesen Sie die Release-Hinwei
 - Checkliste für eine neue Installation: [Installieren](INSTALL.md)
 - Fernzugriff: [Cloudflare Tunnel](deploy/CLOUDFLARE.md)
 - Die Tür für öffentliche URLs schließen: [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md)
+
+### Cleanuparr
+
+**Cleanuparr** ist eine optionale Katalog-/Assistenten-App für Linux amd64/arm64, Port **11011**, Konfiguration `/config/cleanuparr`. Bestehende Compose-Installationen benötigen `11011:11011` und einen neu erstellten AIO-Container. Test- und GPU-Overlays übernehmen die Portzuordnung.
+
+Auto-Wire erstellt bei einer neuen Installation den AIO-Administrator und verbindet installierte Sonarr-, Radarr-, Lidarr-, qBittorrent- und SABnzbd-Apps mit ihren eingestellten Ports und Zugangsdaten. NZBGet wird von Cleanuparr nicht unterstützt. Neue Installationen starten vor dem Verbinden im **Testmodus (dry-run)**. AIO aktiviert vorsichtige Warteschlangen- und Malware-Prüfungen im Testmodus; die Bereinigung abgeschlossener Downloads und proaktive Suchen bleiben aus. Prüfen Sie die Regeln vor dem Löschen und vermeiden Sie doppelte Suchpläne mit NeutArr. Andere Verbindungen, deaktivierte Einträge und Bereinigungsregeln bleiben erhalten.
+
+**Open UI** meldet den gemeinsamen Administrator auf demselben LAN-Host an; öffentliche Subdomains und Konten mit 2FA behalten ihre Anmeldung. Passwörter und API-Schlüssel bleiben serverseitig; Sitzungstoken stehen nie in URLs. Bei einem vorhandenen anderen Konto Einrichtung abschließen, den API-Schlüssel unter **Katalog → Cleanuparr → Einstellungen** speichern und Auto-Wire ausführen. AIO übernimmt keine fremden unvollständigen Konten.
+
+Verbindungsprüfung, Updates, Backups, selektive Wiederherstellung und Deinstallation verwenden die vorhandenen Funktionen. Die Deinstallation behält standardmäßig die Konfiguration und löscht keine Medienbibliotheken. Bei Portänderungen auch Docker anpassen; nach Änderungen am AIO-Konto Auto-Wire erneut ausführen.
+
+#### Standardprofil für neue Installationen
+
+Diese vorsichtigen **AIO-Vorgaben** basieren auf der offiziellen Dokumentation; sie sind keine allgemeingültigen Herstellerempfehlungen. Das Profil wird einmal bei der Kontoerstellung gesetzt. Vorhandene Konten und spätere Änderungen bleiben erhalten.
+
+| Einstellung | AIO-Standard |
+| --- | --- |
+| Testmodus (dry-run) | Ein; simulierte Ergebnisse zuerst prüfen |
+| Internetprüfung / TLS | HTTPS zu GitHub und Cloudflare; Zertifikatsprüfung ein |
+| Queue Cleaner | Alle 5 Minuten |
+| Blockierte öffentliche Torrents | 12 Strikes, etwa 1 Stunde; Zurücksetzen bei Fortschritt; private Torrents überspringen |
+| Fehlgeschlagene Imports | 6 Strikes, etwa 30 Minuten; nur bestimmte Inhalts-/Releasefehler |
+| Importschutz | Private Torrents und fehlende Client-Einträge überspringen; erzwungener Import aus |
+| Metadaten-, Clientfehler- und Geschwindigkeitsregeln | Aus |
+| Malware Blocker | Jede Minute; offizielle permissive Blacklist für Sonarr/Radarr, nicht für Musik |
+| Malware-Löschung | Private Torrents überspringen; nicht wegen einer gesperrten Datei den ganzen Torrent löschen |
+| Download Cleaner | Aus; keine Seedratio- oder Dateibereinigung |
+| Seeker | Reaktive Ersatzsuchen alle 10 Minuten; proaktive Suche aus |
+
+Importmuster: `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing`, `Unable to parse`. Temporäre Entpack-, Speicherplatz- und Pfadprobleme sind nicht enthalten. Die globale Metadatenregel bleibt zum Schutz privater Torrents aus. qBittorrent-Ausschlüsse werden nicht außerhalb des Testmodus geändert.
+
+Quellen: [Queue Cleaner](https://cleanuparr.github.io/docs/configuration/queue-cleaner/), [Malware Blocker](https://cleanuparr.github.io/docs/configuration/malware-blocker/), [General](https://cleanuparr.github.io/docs/configuration/general/), [Seeker](https://cleanuparr.github.io/docs/configuration/seeker/). API-Felder für Cleanuparr v2.11.0 geprüft; die Online-Dokumentation kann neuere Felder beschreiben.

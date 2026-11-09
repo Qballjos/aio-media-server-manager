@@ -41,6 +41,28 @@ async function assertFitsViewport(page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
 }
 
+test('Cleanuparr appears in the catalog with setup guidance and a private recovery key field', async ({ page }, testInfo) => {
+  const flow = new SetupFlow(page)
+  await flow.complete()
+  await page.goto('/#/catalog')
+  await page.getByPlaceholder('Search apps…').fill('Cleanuparr')
+  const app = page.locator('.catalog-store-app').filter({ hasText: 'Cleanuparr' })
+  await expect(app).toHaveCount(1)
+  const icon = app.locator('img')
+  await expect.poll(() => icon.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true)
+  await page.getByRole('button', { name: 'Settings for Cleanuparr', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText(/New setups start in dry-run/)).toBeVisible()
+  await expect(dialog.getByLabel('Cleanuparr API key', { exact: true })).toHaveAttribute('type', 'password')
+  await expect(dialog.getByRole('spinbutton')).toHaveValue('11011')
+  await assertFitsViewport(page)
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate(value => document.documentElement.setAttribute('data-theme', value), theme)
+    await page.screenshot({ path: testInfo.outputPath(`cleanuparr-settings-${theme}.png`), fullPage: true })
+  }
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click()
+})
+
 test('first installation → connection verification → request → download → library', async ({ page }) => {
   const flow = new SetupFlow(page)
   await flow.complete()

@@ -147,6 +147,16 @@ def apply_shared_local_logins(
             )
         )
 
+    if installed("cleanuparr"):
+        from core.integrations.cleanuparr import CleanuparrClient, CleanuparrError
+
+        progress("cleanuparr")
+        try:
+            CleanuparrClient(port=port_for("cleanuparr", 11011)).ensure_admin(username, password)
+            steps.append(_step("cleanuparr", "set_shared_login", True, username))
+        except CleanuparrError as exc:
+            steps.append(_step("cleanuparr", "set_shared_login", False, str(exc)))
+
     return steps
 
 

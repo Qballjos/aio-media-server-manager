@@ -37,6 +37,7 @@ def test_phase4_catalog_plugins(catalog: ApplicationCatalog):
         "flaresolverr",
         "grimmory",
         "shelfmark",
+        "cleanuparr",
     }
     assert expected.issubset(names)
     assert catalog.get("recyclarr").manifest.daemon is False
@@ -45,7 +46,6 @@ def test_phase4_catalog_plugins(catalog: ApplicationCatalog):
     assert "mylar3" not in names
     assert "unpackerr" not in names
     assert "tautulli" not in names
-    assert "cleanuparr" not in names
     assert "maintainerr" not in names
     assert "autobrr" not in names
     assert "kometa" not in names

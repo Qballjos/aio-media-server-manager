@@ -201,7 +201,7 @@ async function saveAppSettings() {
     if (settingsApp.value.name === 'qbittorrent') {
       payload.vuetorrent = !!settingsForm.value.vuetorrent
     }
-    if (['jellyfin', 'seerr'].includes(settingsApp.value.name) && String(settingsForm.value.apiKey || '').trim()) {
+    if (['jellyfin', 'seerr', 'cleanuparr'].includes(settingsApp.value.name) && String(settingsForm.value.apiKey || '').trim()) {
       payload.api_key = String(settingsForm.value.apiKey).trim()
     }
     const res = await apiRequest(`/api/applications/${settingsApp.value.name}/settings`, {
@@ -443,9 +443,12 @@ watch(
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
-          <div v-if="settingsApp.name === 'jellyfin' || settingsApp.name === 'seerr'" class="ui-field-block">
+          <ul v-if="settingsApp.name === 'cleanuparr' && settingsMeta?.notes?.length" class="app-settings-notes">
+            <li v-for="note in settingsMeta.notes" :key="note">{{ $t(note) }}</li>
+          </ul>
+          <div v-if="['jellyfin', 'seerr', 'cleanuparr'].includes(settingsApp.name)" class="ui-field-block">
             <label class="ui-field">
-              {{ settingsApp.name === 'seerr' ? 'Seerr' : 'Jellyfin' }} {{ $t('API key') }}
+              {{ settingsMeta?.display_name || settingsApp.name }} {{ $t('API key') }}
               <input
                 v-model="settingsForm.apiKey"
                 class="ui-input font-mono"
@@ -453,12 +456,12 @@ watch(
                 autocomplete="off"
                 :placeholder="settingsMeta?.api_key_configured
                   ? $t('Saved — paste a new key to replace')
-                  : (settingsApp.name === 'seerr' ? $t('Settings → General → API Key') : $t('Dashboard → API Keys'))"
+                  : (settingsApp.name === 'cleanuparr' ? $t('Account → API Key') : settingsApp.name === 'seerr' ? $t('Settings → General → API Key') : $t('Dashboard → API Keys'))"
               />
             </label>
             <p class="settings-hint">
               {{ $t('Optional. Saved keys are used for') }}
-              {{ settingsApp.name === 'seerr' ? $t('Home search and requests') : $t('Recently added') }}{{ $t('. Leave empty to keep the current key.') }}
+              {{ settingsApp.name === 'cleanuparr' ? $t('Automatic app connections') : settingsApp.name === 'seerr' ? $t('Home search and requests') : $t('Recently added') }}{{ $t('. Leave empty to keep the current key.') }}
             </p>
           </div>
           <div v-if="settingsApp.name === 'qbittorrent'" class="ui-switch-row">
@@ -499,8 +502,8 @@ watch(
             <div><dt>{{ $t('Install') }}</dt><dd>{{ settingsMeta.install_dir }}</dd></div>
             <div><dt>{{ $t('Health') }}</dt><dd>{{ settingsMeta.health_url }}</dd></div>
           </dl>
-          <ul v-if="settingsMeta?.notes?.length" class="app-settings-notes">
-            <li v-for="note in settingsMeta.notes" :key="note">{{ note }}</li>
+          <ul v-if="settingsApp.name !== 'cleanuparr' && settingsMeta?.notes?.length" class="app-settings-notes">
+            <li v-for="note in settingsMeta.notes" :key="note">{{ $t(note) }}</li>
           </ul>
           </template>
           </div>
