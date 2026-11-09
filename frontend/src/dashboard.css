@@ -83,7 +83,14 @@
   padding: 0 0.85rem;
 }
 
-.nav-tools .nav-edit-btn {
+.nav-tabs-divider {
+  width: 1px;
+  height: 1.3rem;
+  margin: 0 0.15rem;
+  background: var(--border-strong);
+}
+
+.nav-tabs .nav-edit-btn {
   width: 2.15rem;
   min-width: 2.15rem;
   padding: 0;
@@ -95,7 +102,7 @@
   height: 1.05rem;
 }
 
-.metric-pill.nav-edit-btn.is-active {
+.nav-tabs .metric-pill.nav-edit-btn.is-active {
   background: var(--color-primary-button, var(--color-primary));
   color: var(--color-primary-contrast);
 }
@@ -1703,6 +1710,10 @@ a.status-pill {
   .nav-tabs .metric-pill {
     min-height: 2.5rem;
     height: 2.5rem;
+  }
+
+  .nav-tabs .metric-pill:not(.nav-edit-btn) {
+    padding-inline: 0.75rem;
   }
 
   .nav-metrics-authenticated {

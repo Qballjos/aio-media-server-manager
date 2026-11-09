@@ -615,10 +615,13 @@
 .hg.is-editing :is(.home-rail-tools, .home-rail-nav, .cal-nav, .cal-tools, .home-widget-head > :not(h3)) {
   visibility: hidden;
 }
-.hg.is-editing :is(.home-hero, .home-search) {
-  border-radius: var(--radius-glass);
-  outline: 1px dashed var(--border-strong);
-  outline-offset: -1px;
+/* Share panel insets without changing the grid's measured outer geometry. */
+.hg :is(.home-card, .home-hero, .home-search) {
+  padding: var(--hg-padding);
+}
+/* Search suggestions must remain free to extend beyond their grid cell. */
+.hg .home-search {
+  overflow: visible;
 }
 /* Section heads: a bold title left, links and round buttons right. */
 .home-rail-head,

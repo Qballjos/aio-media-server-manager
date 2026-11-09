@@ -1370,7 +1370,7 @@ onUnmounted(() => {
         @open="openWidget"
       >
       <template #greeting>
-      <section class="home-hero">
+      <section class="home-hero glass-card">
         <span class="home-hero-date">{{ todayLabel }}</span>
         <h2 class="home-hero-title">{{ greeting }}</h2>
         <p class="home-hero-sub">{{ heroSummary }}</p>
@@ -1378,7 +1378,7 @@ onUnmounted(() => {
       </template>
 
       <template #searchbar>
-      <section ref="searchRoot" class="home-search">
+      <section ref="searchRoot" class="home-search glass-card">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
           <label class="home-sr" for="home-search-provider">{{ $t('Search in') }}</label>
           <UiSelect

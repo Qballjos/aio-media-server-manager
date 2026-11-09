@@ -452,13 +452,11 @@ onUnmounted(() => {
         >
           {{ $t('Settings') }}
         </RouterLink>
-      </nav>
-
-      <div class="nav-tools">
-        <template v-if="authStatus.authenticated && wizardCompleted && currentView === 'home'">
+        <template v-if="currentView === 'home'">
+          <span class="nav-tabs-divider" aria-hidden="true"></span>
           <button
             type="button"
-            class="metric-pill metric-pill-action nav-edit-btn glass-pill"
+            class="metric-pill metric-pill-action nav-edit-btn"
             :class="{ 'is-active': homeEditing }"
             :aria-pressed="homeEditing"
             :title="homeEditing ? $t('Done arranging Home') : $t('Edit the Home layout')"
@@ -469,6 +467,9 @@ onUnmounted(() => {
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
           </button>
         </template>
+      </nav>
+
+      <div class="nav-tools">
 
         <div class="nav-metrics" :class="{ 'nav-metrics-authenticated': authStatus.authenticated }">
           <RouterLink
