@@ -13,6 +13,7 @@ import {
   fitItem,
   fromLegacy,
   normalizeLayout,
+  normalizeMediaLayout,
   resolve,
 } from '../src/homeGrid.js'
 
@@ -176,4 +177,32 @@ test('every widget starts at a size it allows, on every screen size', () => {
       assert.deepEqual(fitItem({ id, x: 0, y: 0, w, h }, cols), { id, x: 0, y: 0, w, h }, `${id} on ${bp}`)
     }
   }
+})
+
+test('recent, requests and trending share default sizes and presets', () => {
+  for (const bp of Object.keys(BREAKPOINTS)) {
+    assert.deepEqual(WIDGETS.recent.size[bp], WIDGETS.requests.size[bp])
+    assert.deepEqual(WIDGETS.recent.size[bp], WIDGETS.trending.size[bp])
+  }
+  assert.deepEqual(WIDGETS.recent.presets, WIDGETS.requests.presets)
+  assert.deepEqual(WIDGETS.recent.presets, WIDGETS.trending.presets)
+})
+
+test('media layout migration updates old defaults without changing custom sizes', () => {
+  const out = byId(normalizeMediaLayout([
+    { id: 'recent', x: 0, y: 0, w: 12, h: 3 },
+    { id: 'requests', x: 0, y: 3, w: 6, h: 3 },
+    { id: 'trending', x: 6, y: 3, w: 6, h: 4 },
+    { id: 'calendar', x: 0, y: 8, w: 12, h: 4 },
+  ], 'desktop'))
+  for (const id of ['recent', 'requests', 'trending']) assert.deepEqual([out[id].w, out[id].h], [6, 3])
+
+  const custom = byId(normalizeMediaLayout([
+    { id: 'recent', x: 0, y: 0, w: 8, h: 3 },
+    { id: 'requests', x: 0, y: 3, w: 6, h: 3 },
+    { id: 'trending', x: 6, y: 3, w: 6, h: 4 },
+  ], 'desktop'))
+  assert.deepEqual([custom.recent.w, custom.recent.h], [8, 3])
+  assert.deepEqual([custom.requests.w, custom.requests.h], [6, 3])
+  assert.deepEqual([custom.trending.w, custom.trending.h], [6, 3])
 })

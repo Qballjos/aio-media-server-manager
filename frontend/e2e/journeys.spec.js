@@ -256,6 +256,39 @@ test('calendar colors use the app source unless the item is available', async ({
   expect(listColors.available).toBe(colors.success)
 })
 
+test('media widgets and posters share dimensions and service status uses one dot', async ({ page }, testInfo) => {
+  const flow = new SetupFlow(page)
+  await flow.complete()
+  await page.request.post('/_test/media-widgets')
+  await page.request.post('/_test/service-status')
+  await page.reload()
+
+  const widgets = ['recent', 'requests', 'trending'].map((id) => page.locator(`.hg-item[data-widget="${id}"]`))
+  for (const widget of widgets) {
+    await expect(widget).toBeVisible()
+    await expect(widget.locator('.home-tile')).toHaveCount(2)
+  }
+  const bounds = await Promise.all(widgets.map((widget) => widget.boundingBox()))
+  for (const value of ['width', 'height']) {
+    expect(Math.abs(bounds[0][value] - bounds[1][value])).toBeLessThan(1)
+    expect(Math.abs(bounds[1][value] - bounds[2][value])).toBeLessThan(1)
+  }
+  await page.screenshot({ path: testInfo.outputPath('media-widgets.png'), fullPage: true })
+  const posters = await Promise.all(widgets.map((widget) => widget.locator('.home-tile-poster').first().boundingBox()))
+  for (const value of ['width', 'height']) {
+    expect(Math.abs(posters[0][value] - posters[1][value])).toBeLessThan(1)
+    expect(Math.abs(posters[1][value] - posters[2][value])).toBeLessThan(1)
+  }
+
+  const status = page.locator('.nav-account-status')
+  await expect(status.locator('.status-dot')).toHaveCount(1)
+  await expect(status.locator('.status-chip')).toHaveAttribute('data-tone', 'ok')
+  await page.request.post('/_test/service-status-down')
+  await page.reload()
+  await expect(status.locator('.status-dot')).toHaveCount(1)
+  await expect(status.locator('.status-chip')).toHaveAttribute('data-tone', 'bad')
+})
+
 test('Home grid keeps pointer drag, resize and keyboard controls with glass styling', async ({ page }, testInfo) => {
   await new SetupFlow(page).complete()
   await page.getByRole('button', { name: 'Edit the Home layout', exact: true }).click()

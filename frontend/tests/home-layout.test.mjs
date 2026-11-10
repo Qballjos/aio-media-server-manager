@@ -35,6 +35,16 @@ test('arranging one screen size keeps desktop and leaves the others derived', ()
   assert.deepEqual(home.homeGrid.value, {})
 })
 
+test('legacy media widgets default to shared dimensions', () => {
+  home.homeGrid.value = {}
+  home.homeLayout.value = ['recent', 'requests', 'trending']
+  home.homeSizes.value = {}
+  home.homeHidden.value = []
+  const defaults = Object.fromEntries(home.layoutFor('desktop').map((item) => [item.id, item]))
+  for (const id of ['recent', 'requests', 'trending']) assert.deepEqual([defaults[id].w, defaults[id].h], [6, 3])
+  home.homeGrid.value = {}
+})
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 test('grid saves reach the server one at a time and in order', async () => {

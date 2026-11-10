@@ -17,11 +17,11 @@ export function bpForWidth(width) {
 export const WIDGETS = {
   greeting: { label: 'Greeting', min: [2, 1], max: [12, 3], size: { desktop: [12, 1], tablet: [8, 1], phone: [4, 1] }, presets: [[4, 1, 'Small'], [6, 1, 'Half'], [12, 1, 'Slim'], [12, 2, 'Large']] },
   searchbar: { label: 'Search', min: [2, 1], max: [12, 1], size: { desktop: [12, 1], tablet: [8, 1], phone: [4, 1] }, presets: [[3, 1, 'Small'], [6, 1, 'Half'], [12, 1, 'Full']] },
-  recent: { label: 'Recently added', min: [3, 3], max: [12, 6], size: { desktop: [12, 3], tablet: [8, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [8, 3, 'Wide'], [12, 3, 'Full'], [12, 4, 'Tall']] },
+  recent: { label: 'Recently added', min: [3, 3], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [6, 3, 'Half'], [12, 3, 'Full']] },
   calendar: { label: 'Calendar', min: [3, 3], max: [12, 8], size: { desktop: [12, 4], tablet: [8, 4], phone: [4, 5] }, presets: [[4, 4, 'Agenda'], [12, 4, 'Week'], [12, 6, 'Large']] },
   downloads: { label: 'Downloading', min: [2, 2], max: [12, 8], size: { desktop: [4, 4], tablet: [4, 4], phone: [4, 4] }, presets: [[2, 2, 'Counter'], [4, 4, 'List'], [6, 4, 'Wide']] },
   requests: { label: 'Requests', min: [3, 3], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [6, 3, 'Half'], [12, 3, 'Full']] },
-  trending: { label: 'Trending', min: [3, 4], max: [12, 6], size: { desktop: [6, 4], tablet: [4, 4], phone: [4, 4] }, presets: [[4, 4, 'Small'], [6, 4, 'Half'], [12, 4, 'Full']] },
+  trending: { label: 'Trending', min: [3, 3], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [6, 3, 'Half'], [12, 3, 'Full']] },
   playing: { label: 'Now playing', min: [3, 2], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 2, 'Small'], [6, 3, 'List'], [12, 4, 'Large']] },
   storage: { label: 'Storage', min: [2, 2], max: [12, 4], size: { desktop: [4, 2], tablet: [4, 2], phone: [4, 2] }, presets: [[2, 2, 'Counter'], [4, 2, 'List'], [6, 3, 'Wide']] },
   server: { label: 'Server', min: [2, 2], max: [8, 4], size: { desktop: [4, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[2, 2, 'Counter'], [4, 3, 'Standard'], [8, 3, 'Wide']] },
@@ -130,6 +130,23 @@ export function normalizeLayout(list, bp) {
     placed.push(placed.some((other) => collides(other, item)) ? { ...item, ...firstFree(placed, item.w, item.h, cols) } : item)
   }
   return placed
+}
+
+const PREVIOUS_MEDIA_SIZES = {
+  recent: { desktop: [12, 3], tablet: [8, 3], phone: [4, 3] },
+  requests: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] },
+  trending: { desktop: [6, 4], tablet: [4, 4], phone: [4, 4] },
+}
+
+/** Update untouched media widget defaults while preserving custom sizes. */
+export function normalizeMediaLayout(list, bp) {
+  const saved = normalizeLayout(list, bp).map((item) => {
+    const previous = PREVIOUS_MEDIA_SIZES[item.id]?.[bp]
+    if (!previous || item.w !== previous[0] || item.h !== previous[1]) return item
+    const [w, h] = WIDGETS[item.id].size[bp]
+    return { ...item, w, h }
+  })
+  return normalizeLayout(saved, bp)
 }
 
 const LEGACY_SPANS = [4, 6, 12]

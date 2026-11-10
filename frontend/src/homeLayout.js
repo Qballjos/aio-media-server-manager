@@ -2,7 +2,7 @@
 
 import { computed, ref } from 'vue'
 import { apiRequest } from './api.js'
-import { BP_ORDER, bpForWidth, deriveLayout, fromLegacy, normalizeLayout } from './homeGrid.js'
+import { BP_ORDER, bpForWidth, deriveLayout, fromLegacy, normalizeLayout, normalizeMediaLayout, WIDGETS } from './homeGrid.js'
 
 // HomepagePanel takes everything layout-related from here.
 export { BREAKPOINTS, BP_ORDER, GRID_IDS, WIDGETS, collapseEmptyRows, firstFree, fitItem, resolve } from './homeGrid.js'
@@ -23,6 +23,7 @@ const HIDDEN_KEY = 'amm-home-hidden'
 const SIZES_KEY = 'amm-home-sizes'
 const GRID_KEY = 'amm-home-grid'
 const SPANS = [4, 6, 12]
+const MEDIA_WIDGETS = ['recent', 'requests', 'trending']
 
 /** Known ids in the saved order, then any block the saved order does not mention yet. */
 function complete(list) {
@@ -48,7 +49,9 @@ function grid(obj) {
   const out = {}
   if (!obj || typeof obj !== 'object') return out
   for (const bp of BP_ORDER) {
-    if (Array.isArray(obj[bp])) out[bp] = normalizeLayout(obj[bp], bp)
+    if (Array.isArray(obj[bp])) {
+      out[bp] = normalizeMediaLayout(obj[bp], bp)
+    }
   }
   return out
 }
@@ -124,7 +127,13 @@ async function patch(body) {
 
 /** Desktop as arranged, or as the old order-and-width Home looked. */
 function desktopBase() {
-  return homeGrid.value.desktop || normalizeLayout(fromLegacy({ order: homeLayout.value, sizes: homeSizes.value, hidden: homeHidden.value }), 'desktop')
+  if (homeGrid.value.desktop) return homeGrid.value.desktop
+  const legacy = normalizeLayout(fromLegacy({ order: homeLayout.value, sizes: homeSizes.value, hidden: homeHidden.value }), 'desktop')
+  return normalizeLayout(legacy.map((item) => {
+    if (!MEDIA_WIDGETS.includes(item.id) || homeSizes.value[item.id]) return item
+    const [w, h] = WIDGETS[item.id].size.desktop
+    return { ...item, w, h }
+  }), 'desktop')
 }
 
 /** The layout for a screen size: as arranged there, or derived from desktop until someone arranges it. */

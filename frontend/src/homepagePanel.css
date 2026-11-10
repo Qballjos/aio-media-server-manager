@@ -1206,9 +1206,6 @@ a.cal-row-link:hover {
   padding-right: 0.35rem;
   scrollbar-width: none;
 }
-.home-card-trending {
-  --rail-chrome: 12.4rem;
-}
 .home-card .cal-head {
   margin: 0;
   gap: 0.4rem 0.6rem;

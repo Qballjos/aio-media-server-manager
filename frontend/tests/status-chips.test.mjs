@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { tunnelChip, versionLabel, vpnChip } from '../src/statusChips.js'
+import { combinedServiceStatus, tunnelChip, versionLabel, vpnChip } from '../src/statusChips.js'
 
 test('VPN chip appears only when the VPN is switched on and says when it is down', () => {
   assert.equal(vpnChip({ enabled: false, tunnel_up: false }), null)
@@ -24,6 +24,18 @@ test('tunnel chip distinguishes connected, connecting and stopped', () => {
   assert.equal(stopped.label, 'Tunnel down')
   assert.equal(stopped.tone, 'bad')
   assert.match(stopped.title, /token missing/)
+})
+
+test('combined service status reports one healthy or failed indicator', () => {
+  assert.equal(combinedServiceStatus([]), null)
+  assert.deepEqual(combinedServiceStatus([
+    { tone: 'ok', title: 'VPN connected' },
+    { tone: 'ok', title: 'Cloudflare Tunnel connected' },
+  ]), { tone: 'ok', title: 'VPN connected. Cloudflare Tunnel connected' })
+  assert.equal(combinedServiceStatus([
+    { tone: 'ok', title: 'VPN connected' },
+    { tone: 'warn', title: 'Cloudflare Tunnel connecting' },
+  ]).tone, 'bad')
 })
 
 test('version label shows the release and the short build commit', () => {

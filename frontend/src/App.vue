@@ -22,7 +22,7 @@ import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInsta
 import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
 import { migrateLocalVisualsIfNeeded, saveLocaleToProfile } from './visualsProfile.js'
 import { lockThemeToSystem, unlockTheme } from './theme.js'
-import { tunnelChip, vpnChip } from './statusChips.js'
+import { combinedServiceStatus, tunnelChip, vpnChip } from './statusChips.js'
 
 const SettingsPanel = defineAsyncComponent(() => import('./SettingsPanel.vue'))
 const HomepagePanel = defineAsyncComponent(() => import('./HomepagePanel.vue'))
@@ -84,6 +84,7 @@ const statusChips = computed(() =>
     .filter(([, chip]) => chip)
     .map(([key, chip]) => ({ key, ...chip })),
 )
+const accountStatus = computed(() => combinedServiceStatus(statusChips.value))
 const availableUpdates = computed(() => updateStatus.value.available || [])
 const showUpdatesPill = computed(
   () =>
@@ -495,8 +496,8 @@ onUnmounted(() => {
 
         <details v-if="authStatus.authenticated" class="nav-account" @keydown.esc="$event.currentTarget.removeAttribute('open')">
           <summary class="glass-pill" :aria-label="`${authStatus.username} account. ${wizardCompleted ? statusChips.map(chip => chip.title).join('. ') : ''}`">
-            <span v-if="wizardCompleted && statusChips.length" class="nav-account-status">
-              <span v-for="chip in statusChips" :key="chip.key" class="status-chip" :data-tone="chip.tone === 'ok' ? 'ok' : 'bad'" :title="chip.title">
+            <span v-if="wizardCompleted && accountStatus" class="nav-account-status">
+              <span class="status-chip" :data-tone="accountStatus.tone" :title="accountStatus.title">
                 <span class="status-dot" aria-hidden="true"></span>
               </span>
             </span>
