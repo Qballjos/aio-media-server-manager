@@ -1447,7 +1447,7 @@ onUnmounted(() => {
             </p>
             <ul v-if="results.length" class="home-results">
               <li v-for="item in results" :key="resultKey(item)" class="home-result">
-                <img v-if="item.poster" :src="item.poster" alt="" class="home-poster" />
+                <img v-if="item.poster" :src="item.poster" loading="lazy" decoding="async" alt="" class="home-poster" />
                 <div class="home-result-body">
                   <strong>{{ item.title }}</strong>
                   <span v-if="item.source === 'prowlarr'">{{ item.detail }}</span>
@@ -1492,7 +1492,7 @@ onUnmounted(() => {
               @click="item.url && openApp($event, item.source || 'jellyfin', item.url)"
             >
               <span class="home-tile-art">
-                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                <img v-if="item.poster" :src="item.poster" loading="lazy" decoding="async" alt="" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
                 <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
               </span>
@@ -1542,7 +1542,7 @@ onUnmounted(() => {
               @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
             >
               <span class="home-tile-art">
-                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                <img v-if="item.poster" :src="item.poster" loading="lazy" decoding="async" alt="" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
                 <span class="home-status-dot" :class="requestStatusDot(item).cls" :title="requestStatusDot(item).label" role="img" :aria-label="requestStatusDot(item).label"></span>
                 <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
@@ -1571,24 +1571,24 @@ onUnmounted(() => {
       </template>
       <template #trending>
         <article class="home-card glass-card home-card-trending">
-          <div class="home-rail-head">
+          <div class="home-rail-head home-trending-head">
             <h3>{{ $t('Trending') }}</h3>
-            <div class="home-rail-tools">
+            <div v-if="snapshot.trending.length" class="home-trending-toggle">
+              <span id="trending-hide-status-label">{{ $t('Hide requested or available titles') }}</span>
+              <button
+                type="button"
+                class="ui-switch"
+                role="switch"
+                aria-labelledby="trending-hide-status-label"
+                :aria-checked="hideRequestedTrending ? 'true' : 'false'"
+                @click="hideRequestedTrending = !hideRequestedTrending"
+              ><span class="ui-switch-thumb"></span></button>
+            </div>
+            <div class="home-rail-tools home-trending-tools">
               <div v-if="snapshot.trending.length" class="home-type-filter" role="group" :aria-label="$t('Filter trending')">
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">{{ $t('All') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">{{ $t('Movies') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" @click="trendingFilter = 'tv'">{{ $t('Series') }}</button>
-              </div>
-              <div v-if="snapshot.trending.length" class="home-trending-toggle">
-                <span id="trending-hide-status-label">{{ $t('Hide requested or available titles') }}</span>
-                <button
-                  type="button"
-                  class="ui-switch"
-                  role="switch"
-                  aria-labelledby="trending-hide-status-label"
-                  :aria-checked="hideRequestedTrending ? 'true' : 'false'"
-                  @click="hideRequestedTrending = !hideRequestedTrending"
-                ><span class="ui-switch-thumb"></span></button>
               </div>
               <div v-if="trendingItems.length" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous trending')" @click="scrollRail('trending', -1)">‹</button>
@@ -1605,7 +1605,7 @@ onUnmounted(() => {
                 @click="openTrending(item)"
               >
                 <span class="home-tile-art">
-                  <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                  <img v-if="item.poster" :src="item.poster" loading="lazy" decoding="async" alt="" class="home-tile-poster" />
                   <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
                   <span
                     v-if="trendingStatusDot(item)"
@@ -1868,7 +1868,7 @@ onUnmounted(() => {
       <template #playing>
         <article class="home-card glass-card home-card-playing" :class="{ 'has-art': nowItem?.poster }">
           <template v-if="nowItem">
-            <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" alt="" aria-hidden="true" />
+            <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" loading="lazy" decoding="async" alt="" aria-hidden="true" />
             <span v-if="nowItem.poster" class="np-shade" aria-hidden="true"></span>
             <div class="np-top">
               <span class="gh-pill">
@@ -2099,7 +2099,7 @@ onUnmounted(() => {
           </div>
           <p v-if="trendingDetail.error" class="home-notice home-notice-error">{{ trendingDetail.error }}</p>
           <div v-else class="home-title-body">
-            <img v-if="trendingDetail.data?.poster || trendingDetail.item.poster" :src="trendingDetail.data?.poster || trendingDetail.item.poster" alt="" class="home-title-poster" />
+            <img v-if="trendingDetail.data?.poster || trendingDetail.item.poster" :src="trendingDetail.data?.poster || trendingDetail.item.poster" loading="lazy" decoding="async" alt="" class="home-title-poster" />
             <div>
               <p class="home-title-meta">
                 <span v-if="mediaKind(trendingDetail.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(trendingDetail.item)] }}</span>

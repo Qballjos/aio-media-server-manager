@@ -676,12 +676,25 @@
   gap: 0.35rem;
 }
 .home-trending-toggle {
+  grid-area: toggle;
   display: flex;
   align-items: center;
   gap: 0.4rem;
   color: var(--text-muted);
   font-size: var(--text-kicker);
   white-space: nowrap;
+}
+.home-trending-head {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  grid-template-areas: "title toggle tools";
+}
+.home-trending-head > h3 {
+  grid-area: title;
+}
+.home-trending-tools {
+  grid-area: tools;
+  min-width: 0;
 }
 .home-trending-toggle .ui-switch {
   width: 40px;
@@ -698,6 +711,17 @@
 @container (max-width: 400px) {
   .home-rail-nav {
     display: none;
+  }
+  .home-trending-head {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "tools" "toggle";
+    justify-items: start;
+  }
+  .home-trending-tools {
+    justify-content: flex-start;
+  }
+  .home-trending-toggle {
+    white-space: normal;
   }
 }
 .cal-nav-btn {

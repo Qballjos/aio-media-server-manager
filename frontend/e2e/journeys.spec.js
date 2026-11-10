@@ -246,10 +246,27 @@ test('trending filter hides and restores requested and available titles', async 
   await page.reload()
   const trending = page.locator('.home-card-trending')
   const toggle = trending.getByRole('switch', { name: 'Hide requested or available titles' })
+  const heading = trending.getByRole('heading', { name: 'Trending' })
+  const filters = trending.locator('.home-type-filter')
   const tiles = trending.locator('.home-tile-trending')
   const tile = (title) => tiles.filter({ hasText: title })
 
   await expect(tiles).toHaveCount(4)
+  const headingBox = await heading.boundingBox()
+  const filterBox = await filters.boundingBox()
+  const toggleBox = await toggle.boundingBox()
+  const cardBox = await trending.boundingBox()
+  expect(headingBox).not.toBeNull()
+  expect(filterBox).not.toBeNull()
+  expect(toggleBox).not.toBeNull()
+  expect(cardBox).not.toBeNull()
+  if (page.viewportSize().width <= 600) {
+    expect(filterBox.y).toBeGreaterThanOrEqual(headingBox.y + headingBox.height)
+    expect(toggleBox.y).toBeGreaterThanOrEqual(filterBox.y + filterBox.height)
+  } else {
+    expect(toggleBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width)
+  }
+  expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
   await expect(tiles).toHaveCount(2)
