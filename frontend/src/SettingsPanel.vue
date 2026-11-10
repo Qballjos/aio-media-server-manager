@@ -38,6 +38,7 @@ import {
 } from './background.js'
 import { GLASS_DEFAULTS, GLASS_RANGES, applyGlass, glass } from './glass.js'
 import { THEMES } from './themes.js'
+import { DISPLAY_SIZES, displaySize, setDisplaySize } from './displaySize.js'
 import {
   saveThemeToProfile,
   saveWallpaperToProfile,
@@ -1587,6 +1588,20 @@ onBeforeUnmount(() => {
             {{ $t(item[1]) }}
           </button>
         </div>
+      </div>
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <h3>{{ $t('Display size') }}</h3>
+          <p>{{ $t('Adjust text and spacing. Applies immediately and is saved only in this browser.') }}</p>
+        </div>
+        <div class="theme-picker" role="group" :aria-label="$t('Display size')">
+          <button v-for="item in DISPLAY_SIZES" :key="item.value" type="button" class="theme-option"
+            :class="{ 'is-active': displaySize === item.value }" :aria-pressed="displaySize === item.value"
+            @click="setDisplaySize(item.value)">
+            {{ $t(item.label) }} · {{ Math.round(item.scale * 100) }}%
+          </button>
+        </div>
+        <button type="button" class="ui-btn ui-btn-ghost" :disabled="displaySize === 'standard'" @click="setDisplaySize('standard')">{{ $t('Reset') }}</button>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">

@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import { setImmediate } from 'node:timers/promises'
 import test from 'node:test'
-import { ref, nextTick } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 
 function panel(file, exports, apiRequest) {
   const source = readFileSync(new URL(`../src/${file}.vue`, import.meta.url), 'utf8')
   const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*\n/gm, '')
   return runInNewContext(`${script}\n;({${exports.join(',')}})`, {
-    ref, nextTick, apiRequest, readJson: async response => response.data,
+    computed, ref, nextTick, apiRequest, readJson: async response => response.data,
     apiError: data => data.detail || 'Request failed',
     defineExpose: () => {}, onMounted: () => {}, onUnmounted: () => {},
     setInterval: () => 1, clearInterval: () => {},

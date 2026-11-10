@@ -1,11 +1,7 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WizardPanel from './WizardPanel.vue'
-import SettingsPanel from './SettingsPanel.vue'
-import HomepagePanel from './HomepagePanel.vue'
-import AuthScreens from './AuthScreens.vue'
-import CatalogView from './CatalogView.vue'
 import LogsModal from './LogsModal.vue'
 import HealthModal from './HealthModal.vue'
 import AppSettingsModal from './AppSettingsModal.vue'
@@ -27,6 +23,11 @@ import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
 import { migrateLocalVisualsIfNeeded, saveLocaleToProfile } from './visualsProfile.js'
 import { lockThemeToSystem, unlockTheme } from './theme.js'
 import { tunnelChip, vpnChip } from './statusChips.js'
+
+const SettingsPanel = defineAsyncComponent(() => import('./SettingsPanel.vue'))
+const HomepagePanel = defineAsyncComponent(() => import('./HomepagePanel.vue'))
+const CatalogView = defineAsyncComponent(() => import('./CatalogView.vue'))
+const AuthScreens = defineAsyncComponent(() => import('./AuthScreens.vue'))
 
 const { toasts, showToast } = useToasts()
 const showPwaInstall = ref(false)
@@ -495,9 +496,8 @@ onUnmounted(() => {
         <details v-if="authStatus.authenticated" class="nav-account" @keydown.esc="$event.currentTarget.removeAttribute('open')">
           <summary class="glass-pill" :aria-label="`${authStatus.username} account. ${wizardCompleted ? statusChips.map(chip => chip.title).join('. ') : ''}`">
             <span v-if="wizardCompleted && statusChips.length" class="nav-account-status">
-              <span v-for="chip in statusChips" :key="chip.key" class="status-chip" :data-tone="chip.tone" :title="chip.title">
+              <span v-for="chip in statusChips" :key="chip.key" class="status-chip" :data-tone="chip.tone === 'ok' ? 'ok' : 'bad'" :title="chip.title">
                 <span class="status-dot" aria-hidden="true"></span>
-                <span>{{ chip.label }}</span>
               </span>
             </span>
             <span class="user-avatar" aria-hidden="true">

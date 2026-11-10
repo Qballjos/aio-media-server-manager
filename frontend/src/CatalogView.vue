@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
 import { catalogQueryFromState, catalogStateFromQuery, sameCatalogQuery } from './catalogQuery.js'
@@ -190,6 +190,26 @@ const featuredPaused = ref(false)
 const featuredHovered = ref(false)
 const featuredFocused = ref(false)
 let featuredTimer = null
+let featuredTouch = null
+let featuredSwiped = false
+function startFeaturedSwipe(event) {
+  featuredSwiped = false
+  if (event.pointerType === 'touch') featuredTouch = { x: event.clientX, y: event.clientY }
+}
+function endFeaturedSwipe(event) {
+  if (!featuredTouch) return
+  const dx = event.clientX - featuredTouch.x
+  const dy = event.clientY - featuredTouch.y
+  featuredTouch = null
+  if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy)) {
+    featuredSwiped = true
+    moveFeatured(dx < 0 ? 1 : -1)
+  }
+}
+function openFeatured() {
+  if (featuredSwiped) { featuredSwiped = false; return }
+  openAppSettings(featuredService.value)
+}
 const featuredPosition = computed(() => featuredIndex.value % (combinedServices.value.length || 1))
 const featuredService = computed(() => combinedServices.value[featuredPosition.value])
 const showDiscovery = computed(() => discoverSelected.value && !catalogSearchInput.value.trim())
@@ -364,6 +384,7 @@ async function updateApp(name) {
     showToast(`Error updating ${name}: ${err.message}`, 'error')
   } finally {
     delete actionLoading.value[name]
+    await activity.value?.refresh()
   }
 }
 
@@ -431,8 +452,11 @@ function isServiceActive(service) {
   return service.state === 'running' || service.state === 'healthy'
 }
 
-function toggleCardMenu(name) {
+async function toggleCardMenu(name, event) {
+  const wrap = event.currentTarget.parentElement
   openCardMenu.value = openCardMenu.value === name ? '' : name
+  await nextTick()
+  wrap.querySelector('.card-menu')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
 
 function closeCardMenu() {
@@ -483,7 +507,6 @@ onUnmounted(() => {
 
 <template>
   <PreflightReview ref="preflightReview" />
-  <InstallationActivity ref="activity" @retry="retryJob" @logs="openLogs" />
         <div
           v-if="vpnUnprotected"
           class="alert-banner alert-error"
@@ -543,11 +566,13 @@ onUnmounted(() => {
     <div class="catalog-store-main">
       <header class="catalog-store-heading">
         <h2>{{ catalogHeading }}</h2>
+      <InstallationActivity ref="activity" @retry="retryJob" @logs="openLogs" />
       </header>
       <section v-if="showDiscovery && featuredService" class="catalog-feature-carousel" :aria-label="$t('Featured apps')"
         aria-roledescription="carousel" @mouseenter="featuredHovered = true" @mouseleave="featuredHovered = false"
         @focusin="featuredFocused = true" @focusout="featuredFocused = !!($event.relatedTarget && $event.currentTarget.contains($event.relatedTarget))">
-      <button type="button" class="catalog-feature" @click="openAppSettings(featuredService)">
+      <button type="button" class="catalog-feature" @click="openFeatured"
+        @pointerdown="startFeaturedSwipe" @pointerup="endFeaturedSwipe" @pointercancel="featuredTouch = null">
         <span :key="featuredService.name" class="catalog-feature-copy">
           <span class="catalog-feature-kicker">{{ categoryLabel(featuredService.category) }}</span>
           <strong>{{ featuredService.displayName }}</strong>
@@ -613,7 +638,7 @@ onUnmounted(() => {
             </button>
             <div class="card-menu-wrap" @click.stop @keydown.esc.stop="closeCardMenu">
               <button type="button" class="catalog-app-more" :aria-label="t('More actions for {name}', { name: service.displayName })"
-                :aria-expanded="openCardMenu === service.name" @click="toggleCardMenu(service.name)">⋯</button>
+                :aria-expanded="openCardMenu === service.name" @click="toggleCardMenu(service.name, $event)">⋯</button>
               <div v-if="openCardMenu === service.name" class="card-menu glass-popover">
                 <button type="button" @click="openAppSettings(service)">{{ $t('Settings') }}</button>
                 <template v-if="service.installed">
@@ -667,7 +692,7 @@ onUnmounted(() => {
 .catalog-store-health small { color: var(--text-dim); font-size: var(--text-kicker); }
 .catalog-store-health.is-warning { color: var(--color-warning-fg); }
 .catalog-store-main { min-width: 0; padding: 1.75rem; }
-.catalog-store-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+.catalog-store-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
 .catalog-store-heading h2 { font-size: var(--text-display); letter-spacing: -0.04em; }
 .catalog-feature { display: grid; grid-template-columns: minmax(0, 1fr) 8rem; align-items: center; gap: 1.5rem; width: 100%; padding: 1.75rem; border: 1px solid var(--border-strong); border-radius: var(--radius-tile); background: linear-gradient(125deg, rgb(var(--color-primary-rgb) / 0.19), transparent), var(--bg-surface); color: var(--text-main); text-align: left; cursor: pointer; font: inherit; }
 .catalog-feature-carousel { position: relative; }
@@ -729,6 +754,12 @@ onUnmounted(() => {
   .catalog-store-nav button > span, .catalog-store-nav button > small { display: none; }
   .catalog-store-main { padding: 1.25rem; }
   .catalog-feature { grid-template-columns: minmax(0, 1fr) 4rem; padding: 1.25rem 1.25rem 3.75rem; gap: 0.75rem; }
+  .catalog-feature { touch-action: pan-y; }
+  .catalog-feature-dot { display: none; }
+  .catalog-feature-controls { display: flex; justify-content: center; gap: 0.75rem; }
+  .catalog-feature-arrow, .catalog-feature-pause { width: 44px; height: 44px; }
+  .catalog-feature-arrow svg, .catalog-feature-pause svg { width: 1rem; height: 1rem; }
+  .catalog-app-actions .card-menu { left: auto; right: 0; width: max-content; min-width: 10.5rem; max-width: calc(100vw - 2rem); max-height: calc(100dvh - 2rem); overflow-y: auto; }
   .catalog-feature img { width: 4rem; height: 4rem; }
   .catalog-collections { grid-template-columns: minmax(0, 1fr); }
 }

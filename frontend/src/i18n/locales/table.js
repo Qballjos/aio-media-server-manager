@@ -1,5 +1,12 @@
 /** English source text → [Nederlands, Deutsch, Français]. */
 export const TABLE = {
+  'Display size': ['Weergavegrootte', 'Anzeigegröße', 'Taille d’affichage'],
+  'Adjust text and spacing. Applies immediately and is saved only in this browser.': ['Pas tekst en tussenruimte aan. Werkt direct en wordt alleen in deze browser bewaard.', 'Text und Abstände anpassen. Wird sofort angewendet und nur in diesem Browser gespeichert.', 'Ajustez le texte et les espacements. Application immédiate, enregistrée uniquement dans ce navigateur.'],
+  'Compact': ['Compact', 'Kompakt', 'Compact'],
+  'Small': ['Klein', 'Klein', 'Petit'],
+  'Standard': ['Standaard', 'Standard', 'Standard'],
+  'Large': ['Groot', 'Groß', 'Grand'],
+
   "Cleans stalled and unwanted downloads in Sonarr, Radarr and Lidarr.": ["Ruimt vastgelopen en ongewenste downloads op in Sonarr, Radarr en Lidarr.", "Bereinigt blockierte und unerwünschte Downloads in Sonarr, Radarr und Lidarr.", "Nettoie les téléchargements bloqués et indésirables dans Sonarr, Radarr et Lidarr."],
   "Account → API Key": ["Account → API-sleutel", "Konto → API-Schlüssel", "Compte → Clé API"],
   "Automatic app connections": ["Automatische appkoppelingen", "Automatische App-Verbindungen", "Connexions automatiques aux applications"],

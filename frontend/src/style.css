@@ -212,7 +212,7 @@ html {
   text-size-adjust: 100%;
   /* 16px on iPhone (keeps focused fields from zooming), about 17px on iPad,
      18px on a MacBook, and 19px on a large display. */
-  font-size: clamp(16px, 14.5px + 0.28vw, 19px);
+  font-size: calc(clamp(16px, 14.5px + 0.28vw, 19px) * var(--display-scale, 1));
 }
 
 /* Background gradient blur glow */
@@ -1378,4 +1378,10 @@ html,
   display: none;
   width: 0;
   height: 0;
+}
+
+/* Compact display sizes retain usable touch controls and mobile text fields. */
+@media (pointer: coarse) {
+  .app-container :is(.ui-btn, .metric-pill-action, .theme-option, .ui-input, .ui-select-btn) { min-height: 44px; }
+  .app-container :is(input, textarea, select, .ui-input) { font-size: max(16px, var(--text-body)); }
 }

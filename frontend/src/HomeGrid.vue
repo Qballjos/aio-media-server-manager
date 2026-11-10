@@ -6,6 +6,7 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { BREAKPOINTS, GRID_IDS, WIDGETS, resolve } from './homeGrid.js'
+import { displayScale } from './displaySize.js'
 
 const props = defineProps({
   layout: { type: Array, required: true },
@@ -31,12 +32,12 @@ const marker = ref(null)
 const said = ref('')
 
 const cols = computed(() => BREAKPOINTS[props.bp]?.cols || 12)
-const gap = computed(() => BREAKPOINTS[props.bp]?.gap || 16)
+const gap = computed(() => (BREAKPOINTS[props.bp]?.gap || 16) * displayScale.value)
 const cell = computed(() => (width.value > 0 ? (width.value - (cols.value - 1) * gap.value) / cols.value : 0))
 const pitch = computed(() => cell.value + gap.value)
 // Cells are square until a row would pass MAX_ROW; on wide screens they get wider instead of taller.
 const MAX_ROW = 104
-const rowCell = computed(() => Math.min(cell.value, MAX_ROW))
+const rowCell = computed(() => Math.min(cell.value, MAX_ROW) * displayScale.value)
 const rowPitch = computed(() => rowCell.value + gap.value)
 // Render in a fixed order: a node Vue moves loses its running transition and keyboard focus.
 const shown = computed(() => [...(live.value || props.layout)].sort((a, b) => GRID_IDS.indexOf(a.id) - GRID_IDS.indexOf(b.id)))

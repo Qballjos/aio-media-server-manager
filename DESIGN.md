@@ -33,6 +33,7 @@ Reuse tokens rather than hardcoding these values in components. Check both theme
 
 - Reuse `.ui-input`, `.ui-btn`, `.ui-btn-primary`, `.ui-btn-ghost` and `.ui-switch`. Shared control changes belong in the shared stylesheet, not isolated scoped overrides.
 - Home grid panels share a 1rem inset and the existing glass surface, including greeting and search. Grid snap and handle transitions use 240ms with the same ease-out curve; active pointer movement stays immediate and reduced-motion disables these transitions. Grid geometry and interaction handlers remain owned by `HomeGrid.vue` and `homeGrid.js`.
+- Display size is a browser-local preference (85%, 90%, 100%, 110%; default 100%). It scales the fluid root font and Home-grid row heights/gaps without rewriting saved grid coordinates. Touch controls retain their minimum targets and mobile input text stays at least 16px. Theme presets and profile sync do not change it.
 - Follow Vue 3 and existing component/composable conventions. This is not a React/Tailwind project.
 - Preserve vue-i18n usage. `frontend/src/i18n/index.js` and `frontend/src/i18n/locales/table.js` define the existing English, Dutch, German and French localization approach.
 - Keep labels task-focused and errors actionable. Explain technical details only when users need them to choose or recover.
