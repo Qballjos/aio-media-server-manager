@@ -187,12 +187,73 @@ test('header navigation stays centered, scrolls away and uses the Home typeface 
       expect(geometry.fonts.every(font => font === geometry.fonts[0])).toBe(true)
       await assertFitsViewport(page)
     }
+
   }
   await flow.settings('backups')
   const typography = await page.evaluate(() => ({ body: getComputedStyle(document.body).fontFamily, controls: [...document.querySelectorAll('input, button, textarea, select, code, pre, .font-mono')].filter(node => node.getClientRects().length).map(node => getComputedStyle(node).fontFamily) }))
   expect(typography.controls.every(font => font === typography.body)).toBe(true)
   await page.evaluate(() => { document.body.style.minHeight = '2500px'; window.scrollTo(0, 600) })
   await expect.poll(async () => page.locator('.top-nav').evaluate(node => node.getBoundingClientRect().bottom)).toBeLessThan(0)
+})
+
+test('trending requests are only available in the poster dialog', async ({ page }) => {
+  const flow = new SetupFlow(page)
+  await flow.complete()
+  await page.request.post('/_test/trending')
+  await page.reload()
+  const tile = page.locator('.home-tile-trending').filter({ hasText: 'Trending Fixture' })
+  await expect(tile).toBeVisible()
+  await expect(tile.locator('.home-tile-request')).toHaveCount(0)
+  await tile.locator('.home-tile-link').click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: 'Trending Fixture', exact: true })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Request', exact: true })).toBeVisible()
+})
+
+test('calendar colors use the app source unless the item is available', async ({ page }) => {
+  const flow = new SetupFlow(page)
+  await flow.complete()
+  await page.request.post('/_test/calendar-colors')
+  await page.reload()
+  const calendar = page.locator('.home-card-calendar')
+  await calendar.getByRole('button', { name: 'Calendar view', exact: true }).click()
+  await page.getByRole('option', { name: 'Month', exact: true }).click()
+  const colors = await calendar.evaluate((root) => {
+    const resolve = (value) => {
+      const probe = document.createElement('span')
+      probe.style.color = value
+      root.append(probe)
+      const color = getComputedStyle(probe).color
+      probe.remove()
+      return color
+    }
+    const eventColor = (selector) => getComputedStyle(root.querySelector(selector)).borderLeftColor
+    return {
+      sonarr: eventColor('.cal-event[data-source="sonarr"]'),
+      radarr: eventColor('.cal-event[data-source="radarr"]'),
+      available: eventColor('.cal-event.is-have'),
+      info: resolve('var(--color-info)'),
+      radarrToken: resolve('var(--calendar-radarr-color)'),
+      success: resolve('var(--color-success)'),
+    }
+  })
+  expect(colors.sonarr).toBe(colors.info)
+  expect(colors.radarr).toBe(colors.radarrToken)
+  expect(colors.available).toBe(colors.success)
+
+  await calendar.getByRole('button', { name: 'Calendar view', exact: true }).click()
+  await page.getByRole('option', { name: 'List', exact: true }).click()
+  const listColors = await calendar.evaluate((root) => {
+    const rowColor = (selector) => getComputedStyle(root.querySelector(`${selector} .cal-row-link`)).borderLeftColor
+    return {
+      sonarr: rowColor('.cal-row[data-source="sonarr"]'),
+      radarr: rowColor('.cal-row[data-source="radarr"]'),
+      available: rowColor('.cal-row.is-have'),
+    }
+  })
+  expect(listColors.sonarr).toBe(colors.info)
+  expect(listColors.radarr).toBe(colors.radarrToken)
+  expect(listColors.available).toBe(colors.success)
 })
 
 test('Home grid keeps pointer drag, resize and keyboard controls with glass styling', async ({ page }, testInfo) => {

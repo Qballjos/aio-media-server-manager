@@ -1589,15 +1589,6 @@ onUnmounted(() => {
                 <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
                 <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
               </button>
-              <button
-                v-if="item.can_request"
-                type="button"
-                class="ui-btn ui-btn-ghost home-tile-request"
-                :disabled="requestBusy === resultKey(item)"
-                @click="requestTitle(item)"
-              >
-                {{ requestBusy === resultKey(item) ? $t('Requesting…') : $t('Request') }}
-              </button>
             </div>
           </div>
           <template v-else-if="isPending('trending')">
@@ -1662,7 +1653,7 @@ onUnmounted(() => {
             </div>
             <p v-else-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
             <ul v-else>
-              <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
+              <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :data-source="row.item.source" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
                 <component
                   :is="calendarTarget(row.item) ? 'a' : 'div'"
                   class="cal-row-link"
@@ -1716,6 +1707,7 @@ onUnmounted(() => {
                         :is="calendarTarget(item) ? 'a' : 'div'"
                         class="cal-event"
                         :data-kind="eventKind(item)"
+                        :data-source="item.source"
                         :class="{ 'is-have': item.has_file }"
                         :href="calendarTarget(item)?.url"
                         :target="calendarTarget(item) ? '_blank' : undefined"

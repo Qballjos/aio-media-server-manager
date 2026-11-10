@@ -41,7 +41,7 @@ def build_app(root: Path):
     from core.wizard import WizardEngine
     from api.routers import auth, wizard, catalog, applications, integrations, homepage, backups, notifications, settings as settings_router, updates
 
-    state = {"wired": False, "source": False, "requested": False, "downloaded": False, "fail_update": False}
+    state = {"wired": False, "source": False, "requested": False, "downloaded": False, "fail_update": False, "trending": False, "calendar_colors": False}
     process_states = {}
 
     class Supervisor:
@@ -122,10 +122,17 @@ def build_app(root: Path):
     def snapshot(*args, **kwargs):
         apps = [{"name": p.name, "display_name": p.manifest.display_name, "category": p.manifest.category.value, "port": p.port, "state": "running", "state_label": "", "sick": False, "url": f"http://127.0.0.1:{p.port}"} for p in catalog.catalog.all_plugins() if p.is_installed()]
         item = {"title": "Synthetic Journey", "source": "jellyfin", "mediaType": "tv", "mediaId": 9001, "detail": "Test series", "url": "http://127.0.0.1:8096/web/", "poster": ""}
+        trending = [{"title": "Trending Fixture", "source": "seerr", "mediaType": "movie", "mediaId": 9002, "detail": "2026", "status": "missing", "can_request": True, "poster": ""}] if state["trending"] else []
         queue = [{"title": "Synthetic Journey", "source": "qbittorrent", "id": "fixture-download", "progress": 42, "size": 100, "downloaded": 42, "speed": 1000, "eta": 60, "state": "downloading", "moving": True}] if state["requested"] and not state["downloaded"] else []
         calendar = [{"title": "Calendar fixture", "when": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), "detail": "S01E01", "kind": "episode", "source": "sonarr", "has_file": False, "url": "http://127.0.0.1:8989/series/fixture"}]
-        return {"apps": apps, "calendar": calendar, "downloads": queue, "recent": [item] if state["downloaded"] else [], "requests": [], "trending": [], "widgets": [], "waiting": [], "seerr": {"available": True, "url": "http://127.0.0.1:5055"}, "partial": False}
+        if state["calendar_colors"]:
+            calendar.extend([
+                {"title": "Radarr fixture", "when": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), "detail": "2026", "kind": "movie", "source": "radarr", "has_file": False, "url": "http://127.0.0.1:7878/movie/fixture"},
+                {"title": "Available fixture", "when": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), "detail": "2026", "kind": "movie", "source": "radarr", "has_file": True, "url": "http://127.0.0.1:7878/movie/fixture"},
+            ])
+        return {"apps": apps, "calendar": calendar, "downloads": queue, "recent": [item] if state["downloaded"] else [], "requests": [], "trending": trending, "widgets": [], "waiting": [], "seerr": {"available": True, "url": "http://127.0.0.1:5055"}, "partial": False}
     homepage.homepage_snapshot = snapshot
+    homepage.homepage_title = lambda *a, **kw: {"ok": True, "title": "Trending Fixture", "overview": "Synthetic title overview", "year": "2026"}
     homepage.sync_seerr_external_links = lambda *a: None
     homepage.homepage_downloads = lambda: {"downloads": snapshot()["downloads"], "widgets": [], "pause": {"paused": False}}
     homepage.homepage_status = lambda *a, **kw: {"playing": [], "server": None, "storage": [], "attention": []}
@@ -146,7 +153,7 @@ def build_app(root: Path):
             if path.is_dir(): shutil.rmtree(path)
             else: path.unlink()
         settings.initialise()
-        state.update(wired=False, source=False, requested=False, downloaded=False, fail_update=False)
+        state.update(wired=False, source=False, requested=False, downloaded=False, fail_update=False, trending=False, calendar_colors=False)
         process_states.clear(); clear_jobs()
         secret_store._fernet = None; secret_store._memory_data.clear()
         auth_manager._rate._hits.clear()
@@ -157,6 +164,16 @@ def build_app(root: Path):
     @app.post("/_test/provider-ready")
     def provider_ready():
         state["source"] = True
+        return {"ok": True}
+
+    @app.post("/_test/trending")
+    def trending_ready():
+        state["trending"] = True
+        return {"ok": True}
+
+    @app.post("/_test/calendar-colors")
+    def calendar_colors_ready():
+        state["calendar_colors"] = True
         return {"ok": True}
 
     @app.post("/_test/complete-download")

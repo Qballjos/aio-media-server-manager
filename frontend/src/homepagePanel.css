@@ -739,12 +739,6 @@ button.home-tile-link {
   text-align: start;
   cursor: pointer;
 }
-.home-tile-request {
-  width: 100%;
-  margin-top: 0.4rem;
-  padding-inline: 0.5rem;
-  color: var(--color-primary-text);
-}
 .home-tile-art {
   position: relative;
   display: block;
@@ -1002,13 +996,15 @@ button.home-tile-link {
   padding: 0;
 }
 .cal-event {
+  --calendar-event-color: var(--color-info);
+  --calendar-event-text: var(--color-info);
   display: grid;
   gap: 0.05rem;
   padding: 0.28rem 0.35rem;
   border-radius: 0.35rem;
   background: color-mix(in srgb, var(--bg-input) 78%, transparent);
   min-width: 0;
-  border-left: 3px solid var(--color-warning, #f59e0b);
+  border-left: 3px solid var(--calendar-event-color);
   color: inherit;
   text-decoration: none;
 }
@@ -1020,16 +1016,10 @@ a.cal-event:hover,
 a.cal-row-link:hover {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
-.cal-event.is-have {
-  border-left-color: var(--color-success, #10b981);
-}
 .cal-event-time {
   font-size: var(--text-kicker);
   font-family: var(--font-mono);
-  color: var(--color-warning, #f59e0b);
-}
-.cal-event.is-have .cal-event-time {
-  color: var(--color-success, #10b981);
+  color: var(--calendar-event-text);
 }
 .cal-event strong {
   font-size: var(--text-kicker);
@@ -1040,8 +1030,37 @@ a.cal-row-link:hover {
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
-.cal-event[data-kind='movie'] {
-  background: color-mix(in srgb, var(--color-primary) 16%, var(--bg-input));
+.cal-event[data-source='radarr'] {
+  --calendar-event-color: var(--calendar-radarr-color);
+  --calendar-event-text: var(--color-warning-fg);
+  background: color-mix(in srgb, var(--calendar-radarr-color) 16%, var(--bg-input));
+}
+.cal-event[data-source='sonarr'] {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--bg-input));
+}
+.cal-event.is-have {
+  --calendar-event-color: var(--color-success);
+  --calendar-event-text: var(--color-success-fg);
+  background: color-mix(in srgb, var(--color-success) 14%, var(--bg-input));
+}
+.cal-event.is-have .cal-event-time {
+  color: var(--color-success-fg);
+}
+.home-card-calendar {
+  --calendar-radarr-color: #eab308;
+}
+.home-card li.cal-row {
+  --calendar-event-color: var(--color-info);
+}
+.home-card li.cal-row[data-source='radarr'] {
+  --calendar-event-color: var(--calendar-radarr-color);
+}
+.home-card li.cal-row.is-have {
+  --calendar-event-color: var(--color-success);
+}
+.cal-row-link {
+  border-left: 3px solid var(--calendar-event-color);
+  padding-left: 0.55rem;
 }
 .cal-event-top,
 .cal-row-title {
