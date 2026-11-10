@@ -210,6 +210,32 @@ test('trending requests are only available in the poster dialog', async ({ page 
   await expect(dialog.getByRole('button', { name: 'Request', exact: true })).toBeVisible()
 })
 
+test('trending popup keeps request available when title details fail', async ({ page }) => {
+  const flow = new SetupFlow(page)
+  await flow.complete()
+  await page.request.post('/_test/trending')
+  await page.request.post('/_test/trending-detail-fail')
+  await page.reload()
+  await page.locator('.home-tile-trending').filter({ hasText: 'Trending Fixture' }).locator('.home-tile-link').click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Synthetic title detail failure', { exact: true })).toBeVisible()
+  const request = dialog.getByRole('button', { name: 'Request', exact: true })
+  await expect(request).toBeVisible()
+  await request.click()
+  await expect.poll(async () => (await flow.state()).requested).toBe(true)
+})
+
+test('trending shows poster dots only for available and requested titles', async ({ page }) => {
+  const flow = new SetupFlow(page)
+  await flow.complete()
+  await page.request.post('/_test/trending-statuses')
+  await page.reload()
+  const tile = (title) => page.locator('.home-tile-trending').filter({ hasText: title })
+  await expect(tile('Available Trending').locator('.home-status-dot.is-available')).toHaveCount(1)
+  await expect(tile('Requested Trending').locator('.home-status-dot.is-requested')).toHaveCount(1)
+  await expect(tile('Missing Trending').locator('.home-status-dot')).toHaveCount(0)
+})
+
 test('calendar colors use the app source unless the item is available', async ({ page }) => {
   const flow = new SetupFlow(page)
   await flow.complete()

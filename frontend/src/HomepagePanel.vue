@@ -624,6 +624,11 @@ function requestStatusDot(item) {
   return { cls: 'is-missing', label: 'Not available' }
 }
 
+function trendingStatusDot(item) {
+  if (!['available', 'requested', 'monitored'].includes(String(item?.status || ''))) return null
+  return requestStatusDot(item)
+}
+
 function notesFor(widget) {
   return widgetNotes.value.filter((item) => item.widget === widget)
 }
@@ -1583,6 +1588,14 @@ onUnmounted(() => {
                 <span class="home-tile-art">
                   <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
                   <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
+                  <span
+                    v-if="trendingStatusDot(item)"
+                    class="home-status-dot"
+                    :class="trendingStatusDot(item).cls"
+                    :title="trendingStatusDot(item).label"
+                    role="img"
+                    :aria-label="trendingStatusDot(item).label"
+                  ></span>
                   <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
                 </span>
                 <span class="home-tile-title">{{ item.title }}</span>
@@ -2081,28 +2094,28 @@ onUnmounted(() => {
                 <li v-for="row in trendingRatings" :key="row.label"><span>{{ row.label }}</span> {{ row.value }}</li>
               </ul>
               <p v-else-if="!trendingDetail.pending" class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
-              <div class="home-request-actions">
-                <button
-                  v-if="trendingDetail.data?.trailer && youtubeIdFromUrl(trendingDetail.data.trailer)"
-                  type="button"
-                  class="ui-btn ui-btn-primary"
-                  @click="openTrailer(trendingDetail.data)"
-                >{{ $t('Trailer') }}</button>
-                <button
-                  v-if="trendingDetail.item.can_request"
-                  type="button"
-                  class="ui-btn"
-                  :disabled="requestBusy === resultKey(trendingDetail.item)"
-                  @click="requestTitle(trendingDetail.item)"
-                >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t('Request') }}</button>
-                <button
-                  v-if="trendingDetail.data?.url"
-                  type="button"
-                  class="ui-btn ui-btn-ghost"
-                  @click="openApp($event, 'seerr', trendingDetail.data.url)"
-                >{{ $t('Open in Seerr') }}</button>
-              </div>
             </div>
+          </div>
+          <div class="home-request-actions">
+            <button
+              v-if="trendingDetail.data?.trailer && youtubeIdFromUrl(trendingDetail.data.trailer)"
+              type="button"
+              class="ui-btn ui-btn-primary"
+              @click="openTrailer(trendingDetail.data)"
+            >{{ $t('Trailer') }}</button>
+            <button
+              v-if="trendingDetail.item.can_request"
+              type="button"
+              class="ui-btn"
+              :disabled="requestBusy === resultKey(trendingDetail.item)"
+              @click="requestTitle(trendingDetail.item)"
+            >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t('Request') }}</button>
+            <button
+              v-if="trendingDetail.data?.url"
+              type="button"
+              class="ui-btn ui-btn-ghost"
+              @click="openApp($event, 'seerr', trendingDetail.data.url)"
+            >{{ $t('Open in Seerr') }}</button>
           </div>
         </div>
       </div>

@@ -41,7 +41,7 @@ def build_app(root: Path):
     from core.wizard import WizardEngine
     from api.routers import auth, wizard, catalog, applications, integrations, homepage, backups, notifications, settings as settings_router, updates
 
-    state = {"wired": False, "source": False, "requested": False, "downloaded": False, "fail_update": False, "trending": False, "calendar_colors": False, "media_widgets": False, "service_status": False, "service_status_down": False}
+    state = {"wired": False, "source": False, "requested": False, "downloaded": False, "fail_update": False, "trending": False, "trending_detail_fail": False, "trending_statuses": False, "calendar_colors": False, "media_widgets": False, "service_status": False, "service_status_down": False}
     process_states = {}
 
     class Supervisor:
@@ -128,6 +128,12 @@ def build_app(root: Path):
         requests_list = [{"title": f"Request {index}", "source": "seerr", "mediaType": "movie", "status": "available", "url": "", "poster": poster} for index in range(1, 3)] if state["media_widgets"] else []
         if state["media_widgets"]:
             trending = [{"title": f"Trending {index}", "source": "seerr", "mediaType": "movie", "mediaId": 9000 + index, "detail": "2026", "status": "missing", "can_request": True, "poster": poster} for index in range(1, 3)]
+        if state["trending_statuses"]:
+            trending = [
+                {"title": "Available Trending", "source": "seerr", "mediaType": "movie", "mediaId": 9101, "status": "available", "can_request": False, "poster": ""},
+                {"title": "Requested Trending", "source": "seerr", "mediaType": "movie", "mediaId": 9102, "status": "requested", "can_request": False, "poster": ""},
+                {"title": "Missing Trending", "source": "seerr", "mediaType": "movie", "mediaId": 9103, "status": "missing", "can_request": True, "poster": ""},
+            ]
         queue = [{"title": "Synthetic Journey", "source": "qbittorrent", "id": "fixture-download", "progress": 42, "size": 100, "downloaded": 42, "speed": 1000, "eta": 60, "state": "downloading", "moving": True}] if state["requested"] and not state["downloaded"] else []
         calendar = [{"title": "Calendar fixture", "when": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), "detail": "S01E01", "kind": "episode", "source": "sonarr", "has_file": False, "url": "http://127.0.0.1:8989/series/fixture"}]
         if state["calendar_colors"]:
@@ -137,7 +143,7 @@ def build_app(root: Path):
             ])
         return {"apps": apps, "calendar": calendar, "downloads": queue, "recent": recent, "requests": requests_list, "trending": trending, "widgets": [], "waiting": [], "seerr": {"available": True, "url": "http://127.0.0.1:5055"}, "partial": False}
     homepage.homepage_snapshot = snapshot
-    homepage.homepage_title = lambda *a, **kw: {"ok": True, "title": "Trending Fixture", "overview": "Synthetic title overview", "year": "2026"}
+    homepage.homepage_title = lambda *a, **kw: {"ok": False, "detail": "Synthetic title detail failure"} if state["trending_detail_fail"] else {"ok": True, "title": "Trending Fixture", "overview": "Synthetic title overview", "year": "2026"}
     homepage.sync_seerr_external_links = lambda *a: None
     homepage.homepage_downloads = lambda: {"downloads": snapshot()["downloads"], "widgets": [], "pause": {"paused": False}}
     homepage.homepage_status = lambda *a, **kw: {"playing": [], "server": None, "storage": [], "attention": []}
@@ -158,7 +164,7 @@ def build_app(root: Path):
             if path.is_dir(): shutil.rmtree(path)
             else: path.unlink()
         settings.initialise()
-        state.update(wired=False, source=False, requested=False, downloaded=False, fail_update=False, trending=False, calendar_colors=False, media_widgets=False, service_status=False, service_status_down=False)
+        state.update(wired=False, source=False, requested=False, downloaded=False, fail_update=False, trending=False, trending_detail_fail=False, trending_statuses=False, calendar_colors=False, media_widgets=False, service_status=False, service_status_down=False)
         process_states.clear(); clear_jobs()
         secret_store._fernet = None; secret_store._memory_data.clear()
         auth_manager._rate._hits.clear()
@@ -174,6 +180,16 @@ def build_app(root: Path):
     @app.post("/_test/trending")
     def trending_ready():
         state["trending"] = True
+        return {"ok": True}
+
+    @app.post("/_test/trending-detail-fail")
+    def trending_detail_fail():
+        state["trending_detail_fail"] = True
+        return {"ok": True}
+
+    @app.post("/_test/trending-statuses")
+    def trending_statuses():
+        state["trending_statuses"] = True
         return {"ok": True}
 
     @app.post("/_test/calendar-colors")
