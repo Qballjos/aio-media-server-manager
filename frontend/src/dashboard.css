@@ -479,7 +479,7 @@ a.status-pill {
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  transition: border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+  transition: border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
   min-width: 0;
   width: 100%;
   max-width: 100%;
@@ -509,11 +509,11 @@ a.status-pill {
   pointer-events: none;
   padding: 1px;
   background: var(--glass-rim, var(--border-subtle));
-  opacity: 0.6;
+  opacity: 0.72;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.32s ease;
 }
 
 .glass-card > * {
@@ -541,10 +541,19 @@ a.status-pill {
 
 .glass-card:hover {
   border-color: transparent;
+  box-shadow: var(--panel-shadow), 0 14px 32px -26px rgba(var(--color-primary-rgb), 0.48);
 }
 
 .glass-card:hover::after {
   background: var(--glass-rim-hover, var(--glass-rim, var(--border-strong)));
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-card,
+  .glass-card::after {
+    transition: none;
+  }
 }
 
 /* Auth Cards */
