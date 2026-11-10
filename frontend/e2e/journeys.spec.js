@@ -236,6 +236,25 @@ test('trending shows poster dots only for available and requested titles', async
   await expect(tile('Missing Trending').locator('.home-status-dot')).toHaveCount(0)
 })
 
+test('trending filter hides and restores requested and available titles', async ({ page }) => {
+  const flow = new SetupFlow(page)
+  await flow.complete()
+  await page.request.post('/_test/trending-statuses')
+  await page.reload()
+  const trending = page.locator('.home-card-trending')
+  const toggle = trending.getByRole('switch', { name: 'Hide requested or available titles' })
+  const tiles = trending.locator('.home-tile-trending')
+
+  await expect(tiles).toHaveCount(3)
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  await expect(tiles).toHaveCount(1)
+  await expect(tiles).toContainText('Missing Trending')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await expect(tiles).toHaveCount(3)
+})
+
 test('calendar colors use the app source unless the item is available', async ({ page }) => {
   const flow = new SetupFlow(page)
   await flow.complete()

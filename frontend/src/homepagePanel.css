@@ -675,6 +675,25 @@
   display: flex;
   gap: 0.35rem;
 }
+.home-trending-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  font-size: var(--text-kicker);
+  white-space: nowrap;
+}
+.home-trending-toggle .ui-switch {
+  width: 40px;
+  height: 24px;
+}
+.home-trending-toggle .ui-switch-thumb {
+  width: 18px;
+  height: 18px;
+}
+.home-trending-toggle .ui-switch[aria-checked="true"] .ui-switch-thumb {
+  transform: translateX(16px);
+}
 /* In a narrow card you swipe the rail, so the arrows go and the filter keeps the head on one line. */
 @container (max-width: 400px) {
   .home-rail-nav {

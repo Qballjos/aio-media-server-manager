@@ -186,6 +186,7 @@ const pausedLabel = computed(() => {
 })
 const requestsFilter = ref('all')
 const trendingFilter = ref('all')
+const hideRequestedTrending = ref(false)
 let poll = null
 let downloadsPoll = null
 let statusPoll = null
@@ -598,7 +599,8 @@ const trendingItems = computed(() => {
       const key = `${item.mediaType}-${item.mediaId}`
       if (seen.has(key)) return false
       seen.add(key)
-      return mediaTypeMatches(item, trendingFilter.value)
+      return mediaTypeMatches(item, trendingFilter.value) &&
+        (!hideRequestedTrending.value || !trendingStatusDot(item))
     })
     .map((item) => withPublicUrls(item, 'seerr'))
 })
@@ -1570,6 +1572,17 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">{{ $t('All') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">{{ $t('Movies') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" @click="trendingFilter = 'tv'">{{ $t('Series') }}</button>
+              </div>
+              <div v-if="snapshot.trending.length" class="home-trending-toggle">
+                <span id="trending-hide-status-label">{{ $t('Hide requested or available titles') }}</span>
+                <button
+                  type="button"
+                  class="ui-switch"
+                  role="switch"
+                  aria-labelledby="trending-hide-status-label"
+                  :aria-checked="hideRequestedTrending ? 'true' : 'false'"
+                  @click="hideRequestedTrending = !hideRequestedTrending"
+                ><span class="ui-switch-thumb"></span></button>
               </div>
               <div v-if="trendingItems.length" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous trending')" @click="scrollRail('trending', -1)">‹</button>

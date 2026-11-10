@@ -749,6 +749,7 @@ export const TABLE = {
   "Previous requests": ["Vorige aanvragen", "Vorherige Anfragen", "Demandes précédentes"],
   "Next requests": ["Volgende aanvragen", "Nächste Anfragen", "Demandes suivantes"],
   "Filter trending": ["Trending filteren", "Trends filtern", "Filtrer les tendances"],
+  "Hide requested or available titles": ["Verberg aangevraagde of beschikbare titels", "Angefragte oder verfügbare Titel ausblenden", "Masquer les titres demandés ou disponibles"],
   "Previous trending": ["Vorige trending", "Vorherige Trends", "Tendances précédentes"],
   "Next trending": ["Volgende trending", "Nächste Trends", "Tendances suivantes"],
   "Trailer": ["Trailer", "Trailer", "Bande-annonce"],
