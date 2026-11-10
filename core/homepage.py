@@ -452,7 +452,7 @@ def homepage_title(host: str, scheme: str, media_type: str, media_id: int) -> di
         "trailer": _seerr_trailer(data.get("relatedVideos")),
         "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
         "status": status,
-        "can_request": status in {"missing", "partial"},
+        "can_request": status in {"missing", "partial", "deleted"},
     }
 
 
@@ -2067,7 +2067,7 @@ def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str, scheme: str =
                 "mediaType": media_type,
                 "mediaId": media_id,
                 "status": status,
-                "can_request": status in {"missing", "partial"},
+                "can_request": status in {"missing", "partial", "deleted"},
             }
         )
         if len(items) >= 20:
@@ -2178,7 +2178,7 @@ def _seerr_media_details(
     }
 
 
-_SEERR_MEDIA_STATUS = {2: "requested", 3: "requested", 4: "partial", 5: "available"}
+_SEERR_MEDIA_STATUS = {2: "requested", 3: "requested", 4: "partial", 5: "available", 7: "deleted"}
 
 
 def seerr_media_status(row: dict[str, Any]) -> str:
@@ -2383,7 +2383,7 @@ def _seerr_search(catalog: ApplicationCatalog, term: str) -> tuple[list[dict[str
                 "year": row.get("releaseDate") or row.get("firstAirDate") or "",
                 "poster": f"https://image.tmdb.org/t/p/w154{poster}" if poster else "",
                 "status": status,
-                "can_request": status in {"missing", "partial"},
+                "can_request": status in {"missing", "partial", "deleted"},
             }
         )
         if len(items) >= 20:

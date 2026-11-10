@@ -132,6 +132,7 @@ def build_app(root: Path):
             trending = [
                 {"title": "Available Trending", "source": "seerr", "mediaType": "movie", "mediaId": 9101, "status": "available", "can_request": False, "poster": ""},
                 {"title": "Requested Trending", "source": "seerr", "mediaType": "movie", "mediaId": 9102, "status": "requested", "can_request": False, "poster": ""},
+                {"title": "Deleted Trending", "source": "seerr", "mediaType": "tv", "mediaId": 9104, "status": "deleted", "can_request": True, "poster": ""},
                 {"title": "Missing Trending", "source": "seerr", "mediaType": "movie", "mediaId": 9103, "status": "missing", "can_request": True, "poster": ""},
             ]
         queue = [{"title": "Synthetic Journey", "source": "qbittorrent", "id": "fixture-download", "progress": 42, "size": 100, "downloaded": 42, "speed": 1000, "eta": 60, "state": "downloading", "moving": True}] if state["requested"] and not state["downloaded"] else []

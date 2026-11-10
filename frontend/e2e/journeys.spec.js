@@ -225,7 +225,7 @@ test('trending popup keeps request available when title details fail', async ({ 
   await expect.poll(async () => (await flow.state()).requested).toBe(true)
 })
 
-test('trending shows poster dots only for available and requested titles', async ({ page }) => {
+test('trending dots distinguish available, requested, deleted and missing titles', async ({ page }) => {
   const flow = new SetupFlow(page)
   await flow.complete()
   await page.request.post('/_test/trending-statuses')
@@ -233,7 +233,10 @@ test('trending shows poster dots only for available and requested titles', async
   const tile = (title) => page.locator('.home-tile-trending').filter({ hasText: title })
   await expect(tile('Available Trending').locator('.home-status-dot.is-available')).toHaveCount(1)
   await expect(tile('Requested Trending').locator('.home-status-dot.is-requested')).toHaveCount(1)
+  await expect(tile('Deleted Trending').locator('.home-status-dot.is-deleted')).toHaveCount(1)
   await expect(tile('Missing Trending').locator('.home-status-dot')).toHaveCount(0)
+  await tile('Deleted Trending').locator('.home-tile-link').click()
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Request', exact: true })).toBeVisible()
 })
 
 test('trending filter hides and restores requested and available titles', async ({ page }) => {
@@ -244,15 +247,17 @@ test('trending filter hides and restores requested and available titles', async 
   const trending = page.locator('.home-card-trending')
   const toggle = trending.getByRole('switch', { name: 'Hide requested or available titles' })
   const tiles = trending.locator('.home-tile-trending')
+  const tile = (title) => tiles.filter({ hasText: title })
 
-  await expect(tiles).toHaveCount(3)
+  await expect(tiles).toHaveCount(4)
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
-  await expect(tiles).toHaveCount(1)
-  await expect(tiles).toContainText('Missing Trending')
+  await expect(tiles).toHaveCount(2)
+  await expect(tile('Missing Trending')).toBeVisible()
+  await expect(tile('Deleted Trending')).toBeVisible()
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
-  await expect(tiles).toHaveCount(3)
+  await expect(tiles).toHaveCount(4)
 })
 
 test('calendar colors use the app source unless the item is available', async ({ page }) => {

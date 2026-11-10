@@ -600,7 +600,7 @@ const trendingItems = computed(() => {
       if (seen.has(key)) return false
       seen.add(key)
       return mediaTypeMatches(item, trendingFilter.value) &&
-        (!hideRequestedTrending.value || !trendingStatusDot(item))
+        (!hideRequestedTrending.value || !isRequestedOrAvailable(item))
     })
     .map((item) => withPublicUrls(item, 'seerr'))
 })
@@ -626,8 +626,14 @@ function requestStatusDot(item) {
   return { cls: 'is-missing', label: 'Not available' }
 }
 
+function isRequestedOrAvailable(item) {
+  return ['available', 'requested', 'monitored'].includes(String(item?.status || ''))
+}
+
 function trendingStatusDot(item) {
-  if (!['available', 'requested', 'monitored'].includes(String(item?.status || ''))) return null
+  const status = String(item?.status || '')
+  if (status === 'deleted') return { cls: 'is-deleted', label: 'Deleted' }
+  if (!['available', 'requested', 'monitored'].includes(status)) return null
   return requestStatusDot(item)
 }
 

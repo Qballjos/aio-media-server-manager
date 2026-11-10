@@ -785,6 +785,9 @@ button.home-tile-link {
 .home-status-dot.is-missing {
   background: var(--color-danger);
 }
+.home-status-dot.is-deleted {
+  background: var(--color-danger);
+}
 /* Posters: 2:3 glass tiles that lift a little on hover. */
 .home-tile-poster,
 .home-tile-fallback {
