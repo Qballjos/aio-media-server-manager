@@ -240,7 +240,11 @@ def build_app(root: Path):
     @app.get("/_test/state")
     def fixture_state():
         preferences = settings.config_dir / "sonarr" / "preferences.json"
-        return {**state, "preferences": json.loads(preferences.read_text()) if preferences.exists() else None}
+        try:
+            preferences_data = json.loads(preferences.read_text()) if preferences.exists() else None
+        except (OSError, json.JSONDecodeError):
+            preferences_data = None
+        return {**state, "preferences": preferences_data}
 
     @app.get("/health")
     def health(): return {"status": "ok", "version": "fixture", "git_sha": "fixture"}

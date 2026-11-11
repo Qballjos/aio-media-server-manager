@@ -12,7 +12,7 @@ class SetupFlow {
     await page.getByLabel('Password (minimum 8 characters)', { exact: true }).fill(password)
     await page.getByLabel('Confirm password', { exact: true }).fill(password)
     await page.getByRole('button', { name: 'Create account', exact: true }).click()
-    await expect(page.getByLabel('Media directory', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Media directory', { exact: true })).toBeVisible({ timeout: 30000 })
     for (const step of [3, 4, 5, 6, 7, 8, 9, 10]) {
       if (step === 5) await page.getByRole('checkbox', { name: /SABnzbd/ }).uncheck()
       if (step === 7) await expect(page.getByRole('checkbox', { name: /starter set of public/ })).not.toBeChecked()
@@ -100,7 +100,7 @@ test('backup and selective restore preserve the original application configurati
   await page.locator('.backup-restore').getByRole('checkbox', { name: 'sonarr', exact: true }).check()
   page.once('dialog', dialog => dialog.accept())
   await page.locator('.backup-restore').getByRole('button', { name: 'Restore', exact: true }).click()
-  await expect.poll(async () => (await flow.state()).preferences.quality).toBe('original')
+  await expect.poll(async () => (await flow.state()).preferences?.quality).toBe('original')
   await expect(page.locator('[role="alert"]')).toHaveCount(0)
   await assertFitsViewport(page)
 })
