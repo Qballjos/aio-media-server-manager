@@ -60,8 +60,7 @@ appliance image job. Do not present ARMv7 as a supported Docker image.
 | Environment | Automated coverage configured | Acceptance status |
 | --- | --- | --- |
 | Python logic on Linux amd64 | Existing Python CI (3.11, 3.12, 3.14) | Python 3.11/3.12/3.14 passed in run 41537663957 |
-| Browser journeys on Linux amd64 | Native amd64 job, desktop and mobile Chromium | Passed in beta run 41537663957 |
-| Browser journeys on Linux arm64 | Native `ubuntu-24.04-arm` job, desktop and mobile Chromium | Passed in beta run 41537663957 |
+| Browser journeys (desktop/mobile Chromium) | Local Playwright suite; historical native Linux passes in beta run 41537663957 | Run locally before beta pushes; no longer part of GitHub Actions and does not certify iOS Safari |
 | macOS arm64 | Local Python, Node and Chromium tests | Local evidence only; not a Linux appliance installation |
 | Docker amd64 / arm64 real catalog apps | Architecture-specific image builds exist | Full install/start/auto-wire acceptance still needed |
 | Native Linux / LXC | Installation scripts and tests exist | Full catalog acceptance still needed |

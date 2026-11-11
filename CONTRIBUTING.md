@@ -82,4 +82,4 @@ Report vulnerabilities through [GitHub private advisories](https://github.com/Qb
 - Add or update tests when behaviour changes.
 - Squash merge is preferred.
 
-Browser journeys and their real/synthetic boundaries are documented in [verification](docs/testing.md). CI runs them on native Linux amd64 and arm64, with desktop and mobile Chromium projects.
+Browser journeys and their real/synthetic boundaries are documented in [verification](docs/testing.md). Run them locally before pushing beta; GitHub Actions does not run these browser journeys.

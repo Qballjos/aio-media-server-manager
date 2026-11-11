@@ -28,6 +28,9 @@ npx --no-install playwright install chromium
 npm run test:e2e
 ```
 
+Run these browser journeys locally before pushing to beta. GitHub Actions runs
+the Python tests and frontend unit/build checks, but does not run Playwright.
+
 The default Python executable is the repository's `.venv/bin/python`. If Poetry
 uses a different environment, set `E2E_PYTHON` to the absolute path returned by
 `poetry env info --executable`. `AIO_E2E_PORT` can select a free port (default
@@ -36,7 +39,7 @@ an existing server. The fixture binds only to 127.0.0.1.
 
 `PLAYWRIGHT_BROWSERS_PATH` optionally selects a browser cache directory. On Linux,
 install browser system libraries with `npx --no-install playwright install
---with-deps chromium` as CI does.
+--with-deps chromium` before running the local journeys.
 
 ### What is real, what is simulated
 
@@ -91,10 +94,10 @@ they do not verify delivery of the Google-hosted Figtree font.
 
 ## Architecture and target acceptance
 
-CI defines native Linux amd64 and arm64 browser jobs. Configured jobs are not
-recorded as executed until their actual CI run passes. The local run was on macOS
-arm64; that proves the browser journeys and manager logic there, not real Linux
-catalog installs or NAS compatibility.
+Playwright browser journeys are no longer configured in CI. Previous native Linux
+amd64 and arm64 runs are historical evidence only. A local macOS arm64 run proves
+the browser journeys and manager logic there, not real Linux catalog installs or
+NAS compatibility.
 
 Continue real-app acceptance using the matrix in
 [release readiness](release-readiness.md). Desktop/mobile emulation does not

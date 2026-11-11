@@ -25,7 +25,7 @@ Run checks relevant to the change; these commands assume dependencies are instal
 - Python lint: `poetry run ruff check core api applications tests scripts/e2e_server.py`.
 - Frontend unit tests: `npm --prefix frontend test`.
 - Frontend build: `npm --prefix frontend run build`.
-- Browser journeys: build the frontend, then `npm --prefix frontend run test:e2e`; see `docs/testing.md` for browser installation and Python environment setup.
+- Browser journeys: run locally before pushing beta with `npm --prefix frontend run test:e2e`; see `docs/testing.md` for browser installation and Python environment setup. GitHub Actions does not run them.
 - Real appliance testing: `./scripts/test-env.sh up`, with logs/down subcommands; see `CONTRIBUTING.md`. Do not run native catalog installs on macOS/Windows.
 - Report what actually ran and distinguish synthetic browser adapters from real child-app/NAS acceptance. Never present an unexecuted CI job or an emulated device as verified hardware.
 
