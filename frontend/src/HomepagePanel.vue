@@ -185,6 +185,8 @@ const pausedLabel = computed(() => {
   return t('Paused · resumes {time}', { time })
 })
 const requestsFilter = ref('all')
+const requestsPage = ref(0)
+const REQUESTS_PAGE_SIZE = 20
 const trendingFilter = ref('all')
 const hideRequestedTrending = ref(false)
 let poll = null
@@ -588,6 +590,22 @@ const requestItems = computed(() =>
     .filter((item) => mediaTypeMatches(item, requestsFilter.value))
     .map((item) => withPublicUrls(item, 'seerr')),
 )
+const requestsPageCount = computed(() => Math.ceil(requestItems.value.length / REQUESTS_PAGE_SIZE))
+const requestsPageIndex = computed(() => Math.min(requestsPage.value, Math.max(0, requestsPageCount.value - 1)))
+const requestsPageStart = computed(() => requestsPageIndex.value * REQUESTS_PAGE_SIZE)
+const requestsPageItems = computed(() => requestItems.value.slice(requestsPageStart.value, requestsPageStart.value + REQUESTS_PAGE_SIZE))
+
+function moveRequestsPage(direction) {
+  requestsPage.value = Math.max(0, Math.min(requestsPageCount.value - 1, requestsPageIndex.value + direction))
+}
+
+watch(requestsFilter, () => { requestsPage.value = 0 })
+watch(requestsPageCount, count => {
+  requestsPage.value = Math.min(requestsPage.value, Math.max(0, count - 1))
+})
+watch([requestsPageIndex, requestsFilter], () => nextTick(() => {
+  if (requestsRail.value) requestsRail.value.scrollLeft = 0
+}))
 // Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
 const trendingMore = ref([])
 const trendingDetail = ref(null)
@@ -1517,16 +1535,28 @@ onUnmounted(() => {
         </article>
       </template>
       <template #requests>
-        <article class="home-card glass-card">
+        <article class="home-card glass-card" :class="{ 'has-request-pages': requestsPageCount > 1 }">
           <div class="home-rail-head">
             <h3>{{ $t('Requests') }}</h3>
             <div class="home-rail-tools">
-              <div v-if="snapshot.requests.length" class="home-type-filter" role="group" :aria-label="$t('Filter requests')">
+              <UiSelect
+                v-if="snapshot.requests.length > REQUESTS_PAGE_SIZE"
+                v-model="requestsFilter"
+                variant="inline"
+                :aria-label="$t('Filter requests')"
+                :options="[{ value: 'all', label: $t('All') }, { value: 'movie', label: $t('Movies') }, { value: 'tv', label: $t('Series') }]"
+              />
+              <div v-else-if="snapshot.requests.length" class="home-type-filter" role="group" :aria-label="$t('Filter requests')">
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'all' }" @click="requestsFilter = 'all'">{{ $t('All') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">{{ $t('Movies') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
-              <div v-if="requestItems.length" class="home-rail-nav">
+              <div v-if="requestsPageCount > 1" class="home-request-pages">
+                <span aria-live="polite">{{ requestsPageStart + 1 }}–{{ requestsPageStart + requestsPageItems.length }} / {{ requestItems.length }}</span>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :disabled="requestsPageIndex === 0" :aria-label="$t('Previous requests')" @click="moveRequestsPage(-1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :disabled="requestsPageIndex >= requestsPageCount - 1" :aria-label="$t('Next requests')" @click="moveRequestsPage(1)">›</button>
+              </div>
+              <div v-if="requestItems.length && requestsPageCount <= 1" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous requests')" @click="scrollRail('requests', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next requests')" @click="scrollRail('requests', 1)">›</button>
               </div>
@@ -1534,8 +1564,8 @@ onUnmounted(() => {
           </div>
           <div v-if="requestItems.length" ref="requestsRail" class="home-rail">
             <a
-              v-for="(item, idx) in requestItems"
-              :key="idx"
+              v-for="(item, idx) in requestsPageItems"
+              :key="`${requestsPageStart + idx}-${item.mediaType}-${item.mediaId || item.title}`"
               class="home-tile"
               :href="item.url || seerrHomeUrl || undefined"
               :target="item.url || seerrHomeUrl ? '_blank' : undefined"
