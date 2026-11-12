@@ -54,7 +54,7 @@ onUnmounted(() => clearInterval(timer))
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-if="saved.last_transfer">{{ $t('Last external copy') }}: {{ saved.last_transfer.status }} {{ saved.last_transfer.name || saved.last_transfer.error }}</p>
     <p v-if="saved.last_drill">{{ $t('Last restore test') }}: {{ saved.last_drill.status }} — {{ saved.last_drill.name }}</p>
-    <label class="ui-field">{{ $t('Backup filename') }}<input class="ui-input" v-model="name" placeholder="amm-….tar.gz (or .tar.gz.aioenc for import)" /></label>
+    <label class="ui-field">{{ $t('Backup filename') }}<input class="ui-input" v-model="name" :placeholder="$t('amm-….tar.gz (or .tar.gz.aioenc for import)')" /></label>
     <div class="share-row"><button class="ui-btn ui-btn-ghost" :disabled="busy || !name" @click="run('export')">{{ $t('Export encrypted copy') }}</button><button class="ui-btn ui-btn-ghost" :disabled="busy || !name" @click="run('import')">{{ $t('Import external copy') }}</button><button class="ui-btn ui-btn-ghost" :disabled="busy || !name" @click="run('drill')">{{ $t('Test restore safely') }}</button></div>
     <p>{{ $t('Import first, then test the imported filename. A restore test uses a temporary folder and leaves running apps untouched. To restore for real, choose the imported backup in the backup list.') }}</p>
     <div v-if="job" aria-live="polite"><strong>{{ job.kind }}: {{ job.stage }}</strong><p v-if="job.error" role="alert">{{ job.error }}</p><p v-if="job.result">{{ job.result.status }} — {{ job.result.name }}</p></div>

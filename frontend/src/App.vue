@@ -282,7 +282,7 @@ async function onWizardDone() {
   wizardCompleted.value = true
   unlockTheme()
   await router.replace({ name: 'home' })
-  showToast('Setup finished. Catalog installs may continue in the background.', 'success')
+  showToast(t("Setup finished. Catalog installs may continue in the background."), 'success')
   await refreshDashboard()
 }
 
@@ -354,13 +354,13 @@ async function runAutomatedWiring() {
     const res = await apiRequest('/api/integrations/run', { method: 'POST' })
     if (res.ok) {
       const data = await readJson(res)
-      showToast(`Auto-Wire finished (${data.steps?.length || 0} tasks)`, 'success')
+      showToast(t("Auto-Wire finished ({count} tasks)", { count: data.steps?.length || 0 }), 'success')
       await refreshDashboard()
     } else {
-      showToast('Auto-Wire failed', 'error')
+      showToast(t("Auto-Wire failed"), 'error')
     }
   } catch (err) {
-    showToast(`Auto-Wire error: ${err}`, 'error')
+    showToast(t("Auto-Wire error: {error}", { error: String(err) }), 'error')
   } finally {
     wiringRunning.value = false
   }
@@ -381,7 +381,7 @@ function refreshPwaInstall() {
 
 async function installPwa() {
   const ok = await promptInstall()
-  if (ok) showToast('App installed on this device.', 'success')
+  if (ok) showToast(t("App installed on this device."), 'success')
 }
 
 let stopPwa = null
@@ -566,7 +566,7 @@ onUnmounted(() => {
         @session="onAuthSession"
       />
       <section v-else-if="!wizardStatusLoaded" class="auth-card-wrapper animate-fade">
-        <AppLoader label="Loading setup" />
+        <AppLoader :label="$t('Loading setup')" />
       </section>
       <WizardPanel
         v-else-if="!wizardCompleted"

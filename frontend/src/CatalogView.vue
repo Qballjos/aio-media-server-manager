@@ -28,6 +28,9 @@ const emit = defineEmits(['open-logs', 'open-settings', 'open-health'])
 const { showToast } = useToasts()
 
 const catalogSearchInput = ref('')
+const categoryFiltersExpanded = ref(false)
+const categoryFiltersToggle = ref(null)
+const categoryNavigation = ref(null)
 let catalogSearchTimer = null
 const actionLoading = ref({})
 const iconFailed = ref({})
@@ -35,7 +38,7 @@ const openCardMenu = ref('')
 const activity = ref(null)
 const preflightReview = ref(null)
 async function retryJob(job) {
-  if (job.status === 'rollback_failed') { showToast('Resolve incomplete recovery before retrying the update.', 'error'); return }
+  if (job.status === 'rollback_failed') { showToast(t('Resolve incomplete recovery before retrying the update.'), 'error'); return }
   const service = combinedServices.value.find(item => item.name === job.name)
   if (job.operation === 'update') return updateApp(job.name)
   if (service?.installed) {
@@ -125,7 +128,7 @@ const combinedServices = computed(() => {
     return {
       name: cat.name,
       displayName: cat.display_name,
-      description: cat.description,
+      description: cat.description ? t(cat.description) : '',
       category: cat.category,
       iconSrc: appIconSrc(cat.name),
       tier: cat.tier,
@@ -229,6 +232,9 @@ const catalogHeading = computed(() => {
   return t('Discover')
 })
 function selectCatalogSection(status = '', category = '') {
+  const restoreFocus = categoryFiltersExpanded.value && categoryNavigation.value?.contains(document.activeElement)
+  categoryFiltersExpanded.value = false
+  if (restoreFocus) nextTick(() => categoryFiltersToggle.value?.focus())
   patchCatalogQuery({ status: status ? [status] : [], cat: category ? [category] : [] })
 }
 function onAppRowClick(event, service) {
@@ -320,13 +326,13 @@ async function startApp(name) {
     const res = await apiRequest(`/api/applications/${name}/start`, { method: 'POST' })
     const data = await readJson(res)
     if (res.ok) {
-      showToast(`Started ${name}`, 'success')
+      showToast(t('Started {name}', { name }), 'success')
       await props.fetchApplications()
     } else {
-      showToast(apiError(data, `Failed to start ${name}`), 'error')
+      showToast(apiError(data, t('Failed to start {name}', { name })), 'error')
     }
   } catch (err) {
-    showToast(`Error starting ${name}: ${err.message}`, 'error')
+    showToast(t('Error starting {name}: {message}', { name, message: err.message }), 'error')
   } finally {
     delete actionLoading.value[name]
   }
@@ -338,13 +344,13 @@ async function stopApp(name) {
     const res = await apiRequest(`/api/applications/${name}/stop`, { method: 'POST' })
     const data = await readJson(res)
     if (res.ok) {
-      showToast(`Stopped ${name}`, 'info')
+      showToast(t('Stopped {name}', { name }), 'info')
       await props.fetchApplications()
     } else {
-      showToast(apiError(data, `Failed to stop ${name}`), 'error')
+      showToast(apiError(data, t('Failed to stop {name}', { name })), 'error')
     }
   } catch (err) {
-    showToast(`Error stopping ${name}: ${err.message}`, 'error')
+    showToast(t('Error stopping {name}: {message}', { name, message: err.message }), 'error')
   } finally {
     delete actionLoading.value[name]
   }
@@ -356,13 +362,13 @@ async function restartApp(name) {
     const res = await apiRequest(`/api/applications/${name}/restart`, { method: 'POST' })
     const data = await readJson(res)
     if (res.ok) {
-      showToast(`Restarted ${name}`, 'success')
+      showToast(t('Restarted {name}', { name }), 'success')
       await props.fetchApplications()
     } else {
-      showToast(apiError(data, `Failed to restart ${name}`), 'error')
+      showToast(apiError(data, t('Failed to restart {name}', { name })), 'error')
     }
   } catch (err) {
-    showToast(`Error restarting ${name}: ${err.message}`, 'error')
+    showToast(t('Error restarting {name}: {message}', { name, message: err.message }), 'error')
   } finally {
     delete actionLoading.value[name]
   }
@@ -375,13 +381,13 @@ async function updateApp(name) {
     const res = await apiRequest(`/api/applications/${name}/update`, { method: 'POST' })
     const data = await readJson(res)
     if (res.ok && data.status === 'updated') {
-      showToast(`Updated ${name} to ${data.version || 'latest'}`, 'success')
+      showToast(t('Updated {name} to {version}', { name, version: data.version || t('latest') }), 'success')
       await props.refreshDashboard()
     } else {
-      showToast(apiError(data, `Update failed for ${name}`), 'error')
+      showToast(apiError(data, t('Update failed for {name}', { name })), 'error')
     }
   } catch (err) {
-    showToast(`Error updating ${name}: ${err.message}`, 'error')
+    showToast(t('Error updating {name}: {message}', { name, message: err.message }), 'error')
   } finally {
     delete actionLoading.value[name]
     await activity.value?.refresh()
@@ -390,9 +396,9 @@ async function updateApp(name) {
 
 async function uninstallApp(name) {
   const removeConfig = window.confirm(
-    `Uninstall ${name}?\n\nOK = also remove configuration.\nCancel = keep configuration (binary only).`
+    t('Uninstall {name}?\n\nOK = also remove configuration.\nCancel = keep configuration (binary only).', { name })
   )
-  const removeData = removeConfig && window.confirm(`Also delete ${name} application data? Media libraries are never deleted.`)
+  const removeData = removeConfig && window.confirm(t('Also delete {name} application data? Media libraries are never deleted.', { name }))
   actionLoading.value[name] = 'uninstall'
   try {
     const res = await apiRequest(`/api/applications/${name}/uninstall`, {
@@ -405,13 +411,13 @@ async function uninstallApp(name) {
     })
     const data = await readJson(res)
     if (res.ok) {
-      showToast(`Uninstalled ${name}`, 'info')
+      showToast(t('Uninstalled {name}', { name }), 'info')
       await props.refreshDashboard()
     } else {
-      showToast(apiError(data, `Failed to uninstall ${name}`), 'error')
+      showToast(apiError(data, t('Failed to uninstall {name}', { name })), 'error')
     }
   } catch (err) {
-    showToast(`Error uninstalling ${name}: ${err.message}`, 'error')
+    showToast(t('Error uninstalling {name}: {message}', { name, message: err.message }), 'error')
   } finally {
     delete actionLoading.value[name]
   }
@@ -425,13 +431,13 @@ async function installApp(name, displayName) {
     const data = await readJson(res)
     if (res.ok) {
       activity.value?.show()
-      showToast(`Installing ${displayName || name}…`, 'success')
+      showToast(t('Installing {name}…', { name: displayName || name }), 'success')
       setTimeout(() => props.refreshDashboard(), 3000)
     } else {
-      showToast(apiError(data, `Failed to install ${name}`), 'error')
+      showToast(apiError(data, t('Failed to install {name}', { name })), 'error')
     }
   } catch (err) {
-    showToast(`Error installing ${name}: ${err.message}`, 'error')
+    showToast(t('Error installing {name}: {message}', { name, message: err.message }), 'error')
   } finally {
     delete actionLoading.value[name]
   }
@@ -440,11 +446,11 @@ async function resetCrashLoop(name) {
   try {
     const res = await apiRequest(`/api/applications/${name}/reset-crash-loop`, { method: 'POST' })
     if (res.ok) {
-      showToast(`Crash loop reset for ${name}`, 'success')
+      showToast(t('Crash loop reset for {name}', { name }), 'success')
       await props.fetchApplications()
     }
   } catch (err) {
-    showToast(`Failed to reset crash loop: ${err}`, 'error')
+    showToast(t('Failed to reset crash loop: {message}', { message: String(err) }), 'error')
   }
 }
 
@@ -469,12 +475,12 @@ async function syncRecyclarr() {
     const res = await apiRequest('/api/recyclarr/sync', { method: 'POST' })
     const data = await readJson(res)
     if (!res.ok) {
-      showToast(apiError(data, 'Recyclarr sync failed'), 'error')
+      showToast(apiError(data, t('Recyclarr sync failed')), 'error')
       return
     }
-    showToast('Recyclarr sync finished', 'success')
+    showToast(t('Recyclarr sync finished'), 'success')
   } catch (err) {
-    showToast(err.message || 'Recyclarr sync failed', 'error')
+    showToast(err.message || t('Recyclarr sync failed'), 'error')
   } finally {
     delete actionLoading.value.recyclarr
   }
@@ -482,10 +488,16 @@ async function syncRecyclarr() {
 
 function statusLabel(service) {
   if (service.installJob === 'restart_required') return t('Restart required')
-  if (service.installBusy || ['failed', 'rollback_failed'].includes(service.installJob)) return service.installJob.toUpperCase()
-  if (service.is_crash_loop) return `CRASH LOOP (${service.recent_crashes || 5})`
+  const labels = {
+    queued: t('Queued'), installing: t('Installing'), configuring: t('Configuring'), updating: t('Updating'),
+    failed: t('Failed'), rollback_failed: t('Recovery incomplete'), running: t('Running'),
+    healthy: t('Healthy'), stopped: t('Stopped'), starting: t('Starting'), stopping: t('Stopping'),
+    not_installed: t('Not installed'), unhealthy: t('Unhealthy'),
+  }
+  if (service.installBusy || ['failed', 'rollback_failed'].includes(service.installJob)) return labels[service.installJob] || service.installJob
+  if (service.is_crash_loop) return t('Crash loop ({count})', { count: service.recent_crashes || 5 })
   if (!service.daemon && !isServiceActive(service)) return 'CLI'
-  return String(service.state || 'stopped').toUpperCase().replace('_', ' ')
+  return labels[service.state || 'stopped'] || String(service.state).replaceAll('_', ' ')
 }
 
 function onDocumentClick() {
@@ -538,7 +550,7 @@ onUnmounted(() => {
       <label class="catalog-search-label" for="catalog-search">{{ $t('Search') }}</label>
       <input id="catalog-search" v-model="catalogSearchInput" type="search" class="ui-input catalog-store-search"
         :placeholder="$t('Search apps…')" autocomplete="off" spellcheck="false" />
-      <nav class="catalog-store-nav" :aria-label="$t('Catalog')">
+      <nav class="catalog-store-nav catalog-status-nav" :aria-label="$t('Catalog')">
         <button type="button" :aria-pressed="discoverSelected" @click="selectCatalogSection()">
           <span aria-hidden="true">✧</span>{{ $t('Discover') }}
         </button>
@@ -551,13 +563,24 @@ onUnmounted(() => {
         <button type="button" :aria-pressed="catalogStatusFilters.includes('available')" @click="selectCatalogSection('available')">
           <span aria-hidden="true">＋</span>{{ $t('Available') }}<small>{{ availableAppCount }}</small>
         </button>
+      </nav>
+      <div class="catalog-category-filters">
+        <button ref="categoryFiltersToggle" class="ui-btn ui-btn-ghost catalog-filters-toggle" type="button" :aria-expanded="categoryFiltersExpanded" aria-controls="catalog-category-navigation" @click="categoryFiltersExpanded = !categoryFiltersExpanded">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4" /></svg>
+          <span>{{ $t('Filters') }}</span>
+          <small v-if="catalogCategoriesSelected.length">{{ catalogCategoriesSelected.map(categoryLabel).join(', ') }}</small>
+          <svg class="catalog-filters-chevron" :class="{ 'is-expanded': categoryFiltersExpanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+        </button>
+        <nav ref="categoryNavigation" id="catalog-category-navigation" class="catalog-store-nav catalog-category-nav" :class="{ 'is-expanded': categoryFiltersExpanded }" :aria-label="$t('Category')">
         <p class="catalog-sidebar-label">{{ $t('Category') }}</p>
+        <button class="catalog-all-categories" type="button" :aria-pressed="!catalogCategoriesSelected.length" @click="selectCatalogSection()">{{ $t('All categories') }}</button>
         <button v-for="category in catalogCategories" :key="category" type="button"
           :aria-pressed="catalogCategoriesSelected.includes(category)" @click="selectCatalogSection('', category)">
           <span aria-hidden="true">{{ { media: '▷', automation: '✧', downloading: '↓', indexers: '⌕', subtitles: '≡', requests: '＋', optimization: '◇', maintenance: '⚙' }[category] || '◇' }}</span>
           {{ categoryLabel(category) }}
         </button>
-      </nav>
+        </nav>
+      </div>
       <button type="button" class="catalog-store-health" :class="{ 'is-warning': healthTone !== 'ok' }" @click="openHealthModal">
         <span>{{ $t('Health') }} · {{ healthTone === 'ok' ? 'OK' : $t('HIGH') }}</span>
         <small>CPU {{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</small>
@@ -682,6 +705,7 @@ onUnmounted(() => {
 .catalog-sidebar-title { margin: 0 0.5rem; font-size: var(--text-title); letter-spacing: -0.04em; }
 .catalog-store-search { width: 100%; min-width: 0; border-radius: var(--radius-inset); }
 .catalog-store-nav { display: grid; gap: 0.25rem; }
+.catalog-filters-toggle, .catalog-store-nav .catalog-all-categories { display: none; }
 .catalog-store-nav button { display: flex; align-items: center; gap: 0.6rem; width: 100%; border: 1px solid transparent; border-radius: 10px; padding: 0.65rem; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--text-body); text-align: left; cursor: pointer; }
 .catalog-store-nav button > span { width: 1.1rem; color: var(--color-primary-text); text-align: center; flex-shrink: 0; }
 .catalog-store-nav button > small { margin-left: auto; font-size: var(--text-kicker); }
@@ -749,7 +773,16 @@ onUnmounted(() => {
   .catalog-store { grid-template-columns: minmax(0, 1fr); }
   .catalog-store-sidebar { border-right: 0; border-bottom: 1px solid var(--border-subtle); padding: 1rem; border-radius: var(--radius-glass) var(--radius-glass) 0 0; }
   .catalog-sidebar-title, .catalog-sidebar-label, .catalog-store-health { display: none; }
-  .catalog-store-nav { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .catalog-status-nav { display: flex; flex-wrap: nowrap; gap: 0.35rem; overflow-x: auto; }
+  .catalog-status-nav button { flex: 0 0 auto; white-space: nowrap; }
+  .catalog-category-nav { display: none; }
+  .catalog-category-nav.is-expanded { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; margin-top: .75rem; }
+  .catalog-category-nav.is-expanded .catalog-all-categories { display: flex; grid-column: 1 / -1; }
+  .catalog-filters-toggle { display: flex; width: 100%; min-height: 44px; justify-content: flex-start; gap: .5rem; }
+  .catalog-filters-toggle svg { width: 1.1rem; height: 1.1rem; flex-shrink: 0; }
+  .catalog-filters-toggle small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-primary-text); font: inherit; }
+  .catalog-filters-chevron { margin-left: auto; }
+  .catalog-filters-chevron.is-expanded { transform: rotate(180deg); }
   .catalog-store-nav button { width: auto; padding: 0.5rem 0.65rem; font-size: var(--text-kicker); }
   .catalog-store-nav button > span, .catalog-store-nav button > small { display: none; }
   .catalog-store-main { padding: 1.25rem; }

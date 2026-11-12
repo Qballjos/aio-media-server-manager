@@ -31,7 +31,7 @@ onMounted(async () => { try { choice.value = await call('/api/integrations/publi
   <section class="glass-card settings-card">
     <h3>{{ $t('Check my installation') }}</h3>
     <p>{{ $t('Read back library folders, download clients, indexer synchronization and request connections. No settings are changed by this check.') }}</p>
-    <div class="share-row"><button class="ui-btn ui-btn-primary" :disabled="busy" @click="verify">{{ $t('Check connections') }}</button><button class="ui-btn ui-btn-ghost" :disabled="busy" @click="repair">Auto-Wire</button></div>
+    <div class="share-row"><button class="ui-btn ui-btn-primary" :disabled="busy" @click="verify">{{ $t('Check connections') }}</button><button class="ui-btn ui-btn-ghost" :disabled="busy" @click="repair">{{ $t('Auto-Wire') }}</button></div>
     <p v-if="busy" aria-live="polite">{{ $t('Working…') }}</p><p v-if="error" role="alert">{{ error }}</p><p v-if="message" role="status">{{ $t(message) }}</p>
     <ul v-if="report"><li v-for="(check, index) in report.checks" :key="index"><strong>{{ check.app }} — {{ check.name }}: {{ check.status }}</strong><p>{{ check.detail }} {{ check.hint }}</p></li></ul>
     <p v-if="report && !report.checks.length">{{ $t('Install supported apps to check their connections.') }}</p>

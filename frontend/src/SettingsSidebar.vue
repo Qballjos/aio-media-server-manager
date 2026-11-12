@@ -46,10 +46,10 @@ const paths = {
 
 <template>
   <aside class="settings-sidebar" :style="{ '--settings-header-height': `${headerHeight}px` }">
-    <button ref="mobileToggle" class="settings-mobile-toggle" type="button" :aria-label="`${$t('Settings')} / ${$t(current?.label || 'Profile')}`" :aria-expanded="expanded" aria-controls="settings-navigation" @click="expanded = !expanded">
+    <button ref="mobileToggle" class="ui-btn ui-btn-ghost settings-mobile-toggle" type="button" :aria-label="`${$t('Settings')} / ${$t(current?.label || 'Profile')}`" :aria-expanded="expanded" aria-controls="settings-navigation" @click="expanded = !expanded">
       <svg class="settings-mobile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="paths[current?.icon || 'user']" /></svg>
       <span class="settings-mobile-copy">
-        <span>{{ $t('Settings sections') }}</span>
+        <span>{{ $t('Choose a settings section') }}</span>
         <strong>{{ $t(current?.label || 'Profile') }}</strong>
       </span>
       <svg class="settings-mobile-chevron" :class="{ 'is-expanded': expanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
@@ -101,7 +101,8 @@ const paths = {
 .settings-mobile-chevron.is-expanded { transform:rotate(180deg); }
 @media (max-width: 760px) {
   .settings-sidebar { padding:.875rem 1rem; border-right:0; border-bottom:1px solid var(--border-subtle); border-radius:var(--radius-glass) var(--radius-glass) 0 0; }
-  .settings-mobile-toggle { display:flex; align-items:center; justify-content:space-between; gap:.75rem; min-height:3rem; width:100%; padding:.25rem .35rem; background:none; border:0; color:var(--text-heading); font:inherit; text-align:left; cursor:pointer; }
+  .settings-mobile-toggle { display:flex; align-items:center; justify-content:space-between; gap:.75rem; min-height:3.5rem; width:100%; padding:.65rem .875rem; background:var(--control-bg); border:1px solid var(--border-strong); border-radius:var(--radius-control); color:var(--text-heading); font:inherit; text-align:left; cursor:pointer; }
+  .settings-mobile-chevron { width:2rem; height:2rem; padding:.4rem; border:1px solid var(--border-subtle); border-radius:50%; background:var(--pill-bg); color:var(--text-heading); }
   .settings-sidebar-title { display:none; }
   .settings-navigation { position:static; display:none; max-height:min(55dvh,28rem); margin-top:.75rem; padding: .75rem .15rem .15rem; border-top:1px solid var(--border-subtle); }
   .settings-navigation.expanded { display:block; }

@@ -1,4 +1,5 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { resolveSettingsSection, SETTINGS_PAGES } from './settingsNavigation.js'
@@ -8,6 +9,7 @@ import BackupSettings from './settings/BackupSettings.vue'
 import { useBackups } from './composables/useBackups.js'
 import NotificationSettings from './settings/NotificationSettings.vue'
 import PreflightReview from './PreflightReview.vue'
+const { t } = useI18n()
 const preflightReview = ref(null)
 import { apiError, apiRequest, readJson } from './api.js'
 import { readHomepageWidgetDebug } from './homepageDebug.js'
@@ -32,6 +34,7 @@ import {
   getThemePreference,
 } from './theme.js'
 import {
+  WALLPAPER_OPTIONS,
   getWallpaperPreference,
   getWallpaperImage,
   wallpaperCss,
@@ -150,11 +153,11 @@ const hostnameMeta = ref({
 })
 
 const publicTunnelChip = computed(() => {
-  const t = tunnelLive.value || {}
+  const tunnel = tunnelLive.value || {}
   const meta = hostnameMeta.value || {}
-  const tokenOk = !!(t.token_present || t.token_saved || meta.tunnel_token_present)
-  const connected = !!(t.connected || meta.tunnel_connected)
-  const enabled = !!(t.enabled || meta.tunnel_enabled)
+  const tokenOk = !!(tunnel.token_present || tunnel.token_saved || meta.tunnel_token_present)
+  const connected = !!(tunnel.connected || meta.tunnel_connected)
+  const enabled = !!(tunnel.enabled || meta.tunnel_enabled)
 
   if (connected) {
     return { cls: 'is-on', label: 'Cloudflare tunnel active' }
@@ -201,10 +204,10 @@ function chooseTheme(pref) {
   saveThemeToProfile(pref)
     .then(() => {
       themePreference.value = getThemePreference()
-      notice.value = `Theme set to ${themePreference.value}.`
+      notice.value = t('Theme set to {theme}.', { theme: t(THEME_OPTIONS.find(([value]) => value === themePreference.value)?.[1] || themePreference.value) })
     })
     .catch((err) => {
-      error.value = err?.message || 'Could not save theme.'
+      error.value = err?.message || t('Could not save theme.')
     })
 }
 
@@ -214,10 +217,10 @@ function chooseWallpaper(pref) {
     .then(() => {
       wallpaperPreference.value = getWallpaperPreference()
       wallpaperImage.value = getWallpaperImage()
-      notice.value = wallpaperPreference.value === 'personal' ? 'Using your own image.' : `Background set to ${wallpaperPreference.value}.`
+      notice.value = wallpaperPreference.value === 'personal' ? t('Using your own image.') : t('Background set to {background}.', { background: t(WALLPAPER_OPTIONS.find(([value]) => value === wallpaperPreference.value)?.[1] || wallpaperPreference.value) })
     })
     .catch((err) => {
-      error.value = err?.message || 'Could not save background.'
+      error.value = err?.message || t('Could not save background.')
     })
 }
 
@@ -242,9 +245,9 @@ async function applyTheme(theme) {
     themePreference.value = getThemePreference()
     wallpaperPreference.value = getWallpaperPreference()
     wallpaperImage.value = getWallpaperImage()
-    notice.value = `Theme set to ${theme.name}.`
+    notice.value = t('Theme set to {theme}.', { theme: t(theme.name) })
   } catch (err) {
-    error.value = err?.message || 'Could not apply the theme.'
+    error.value = err?.message || t('Could not apply the theme.')
   } finally {
     themePreference.value = getThemePreference()
     wallpaperPreference.value = getWallpaperPreference()
@@ -286,9 +289,9 @@ async function onWallpaperFileChange(event) {
     await uploadWallpaperToProfile(file)
     wallpaperPreference.value = getWallpaperPreference()
     wallpaperImage.value = getWallpaperImage()
-    notice.value = 'Personal background saved to your profile.'
+    notice.value = t('Personal background saved to your profile.')
   } catch (err) {
-    error.value = err?.message || 'Could not save background image.'
+    error.value = err?.message || t('Could not save background image.')
   } finally {
     wallpaperBusy.value = false
     if (input) input.value = ''
@@ -301,10 +304,10 @@ function removeWallpaperImage() {
     .then(() => {
       wallpaperImage.value = ''
       wallpaperPreference.value = getWallpaperPreference()
-      notice.value = 'Personal background image removed.'
+      notice.value = t('Personal background image removed.')
     })
     .catch((err) => {
-      error.value = err?.message || 'Could not remove background image.'
+      error.value = err?.message || t('Could not remove background image.')
     })
 }
 
@@ -341,15 +344,15 @@ async function saveLoginMessage() {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not save login message.')
+      error.value = apiError(data, t('Could not save login message.'))
       return
     }
     applyBrandingPayload(data)
     notice.value = form.value.login_message.trim()
-      ? 'Login message saved.'
-      : 'Login message cleared.'
+      ? t('Login message saved.')
+      : t('Login message cleared.')
   } catch (err) {
-    error.value = err.message || 'Could not save login message.'
+    error.value = err.message || t('Could not save login message.')
   } finally {
     saving.value = false
   }
@@ -366,13 +369,13 @@ async function saveBrandTitle() {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not save title.')
+      error.value = apiError(data, t('Could not save title.'))
       return
     }
     applyBrandingPayload(data)
-    notice.value = 'Brand title saved.'
+    notice.value = t('Brand title saved.')
   } catch (err) {
-    error.value = err.message || 'Could not save title.'
+    error.value = err.message || t('Could not save title.')
   } finally {
     saving.value = false
   }
@@ -385,7 +388,7 @@ async function saveAccentColor(next) {
   if (!reset) {
     accent = normalizeAccentInput(raw)
     if (!/^#[0-9a-f]{6}$/.test(accent)) {
-      error.value = 'Accent must be a hex color like #f97316.'
+      error.value = t('Accent must be a hex color like #f97316.')
       return
     }
   }
@@ -400,13 +403,13 @@ async function saveAccentColor(next) {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not save accent color.')
+      error.value = apiError(data, t('Could not save accent color.'))
       return
     }
     applyBrandingPayload(data)
-    notice.value = reset ? 'Accent color reset to default.' : 'Accent color saved.'
+    notice.value = reset ? t('Accent color reset to default.') : t('Accent color saved.')
   } catch (err) {
-    error.value = err.message || 'Could not save accent color.'
+    error.value = err.message || t('Could not save accent color.')
   } finally {
     saving.value = false
   }
@@ -432,13 +435,13 @@ async function uploadBrandSlot(slot, event) {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not upload image.')
+      error.value = apiError(data, t('Could not upload image.'))
       return
     }
     applyBrandingPayload(data)
-    notice.value = `${branding.value.slots?.[slot]?.label || 'Image'} updated.`
+    notice.value = t('{image} updated.', { image: t(branding.value.slots?.[slot]?.label || 'Image') })
   } catch (err) {
-    error.value = err.message || 'Could not upload image.'
+    error.value = err.message || t('Could not upload image.')
   } finally {
     brandUploading.value = ''
     if (event?.target) event.target.value = ''
@@ -453,13 +456,13 @@ async function resetBrandSlot(slot) {
     const res = await apiRequest(`/api/branding/${slot}`, { method: 'DELETE' })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not reset image.')
+      error.value = apiError(data, t('Could not reset image.'))
       return
     }
     applyBrandingPayload(data)
-    notice.value = `${data.slots?.[slot]?.label || 'Image'} reset to default.`
+    notice.value = t('{image} reset to default.', { image: t(data.slots?.[slot]?.label || 'Image') })
   } catch (err) {
-    error.value = err.message || 'Could not reset image.'
+    error.value = err.message || t('Could not reset image.')
   } finally {
     brandUploading.value = ''
   }
@@ -467,7 +470,7 @@ async function resetBrandSlot(slot) {
 
 async function installPwaFromSettings() {
   const ok = await promptInstall()
-  if (ok) notice.value = 'App installed on this device.'
+  if (ok) notice.value = t('App installed on this device.')
   refreshPwaInstall()
 }
 
@@ -475,7 +478,7 @@ async function installPwaFromSettings() {
 async function toggleHomeDock() {
   const hide = !dockHidden.value
   await setDockHidden(hide)
-  notice.value = hide ? 'The app dock is hidden on Home.' : 'The app dock shows on Home again.'
+  notice.value = hide ? t('The app dock is hidden on Home.') : t('The app dock shows on Home again.')
 }
 
 async function toggleHomepageWidgetDebug() {
@@ -483,10 +486,10 @@ async function toggleHomepageWidgetDebug() {
   widgetDebug.value = next
   try {
     await saveHomepageWidgetDebugToProfile(next)
-    notice.value = next ? 'Widget debug enabled on your profile.' : 'Widget debug disabled.'
+    notice.value = next ? t('Widget debug enabled on your profile.') : t('Widget debug disabled.')
   } catch (err) {
     widgetDebug.value = !next
-    error.value = err?.message || 'Could not save widget debug.'
+    error.value = err?.message || t('Could not save widget debug.')
   }
 }
 
@@ -524,9 +527,9 @@ async function refreshTunnelStatus() {
 async function pollTunnelUntilSettled(attempts = 8, delayMs = 1000) {
   for (let i = 0; i < attempts; i += 1) {
     await refreshTunnelStatus()
-    const t = tunnelLive.value || {}
-    if (!t.enabled) return
-    if (t.connected || (!t.token_present && !t.token_saved)) return
+    const tunnel = tunnelLive.value || {}
+    if (!tunnel.enabled) return
+    if (tunnel.connected || (!tunnel.token_present && !tunnel.token_saved)) return
     if (t.process && t.process !== 'running' && t.process !== 'starting' && i >= 2) return
     await new Promise((r) => setTimeout(r, delayMs))
   }
@@ -542,11 +545,11 @@ async function saveCloudflare() {
   if (!ok) return
   await pollTunnelUntilSettled()
   await refreshHostnames()
-  const t = tunnelLive.value || {}
-  if (form.value.cloudflare_tunnel_enabled && !t.connected) {
-    error.value = t.summary || 'Tunnel is enabled but not connected yet. Check cloudflared logs.'
-  } else if (form.value.cloudflare_tunnel_enabled && t.connected) {
-    notice.value = 'Cloudflare Tunnel connected. Token saved on disk.'
+  const tunnel = tunnelLive.value || {}
+  if (form.value.cloudflare_tunnel_enabled && !tunnel.connected) {
+    error.value = tunnel.summary || t('Tunnel is enabled but not connected yet. Check cloudflared logs.')
+  } else if (form.value.cloudflare_tunnel_enabled && tunnel.connected) {
+    notice.value = t('Cloudflare Tunnel connected. Token saved on disk.')
   }
 }
 
@@ -618,16 +621,16 @@ async function saveHostnames() {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not save subdomains.')
+      error.value = apiError(data, t('Could not save subdomains.'))
       return
     }
     hostnameRoutes.value = (data.routes || []).map((row) => ({ ...row }))
     apiTokenConfigured.value = !!data.api_token_configured
     form.value.cloudflare_api_token = ''
     form.value.public_app_base_domain = data.public_app_base_domain || form.value.public_app_base_domain
-    notice.value = 'Subdomains saved. Open UI will use them on HTTPS / public access.'
+    notice.value = t('Subdomains saved. Open UI will use them on HTTPS / public access.')
   } catch (err) {
-    error.value = err?.message || 'Could not save subdomains.'
+    error.value = err?.message || t('Could not save subdomains.')
   } finally {
     hostnameBusy.value = false
   }
@@ -648,14 +651,14 @@ async function clearCloudflareApiToken() {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not clear API token.')
+      error.value = apiError(data, t('Could not clear API token.'))
       return
     }
     apiTokenConfigured.value = !!data.api_token_configured
     form.value.cloudflare_api_token = ''
-    notice.value = 'Cloudflare API token cleared.'
+    notice.value = t('Cloudflare API token cleared.')
   } catch (err) {
-    error.value = err?.message || 'Could not clear API token.'
+    error.value = err?.message || t('Could not clear API token.')
   } finally {
     hostnameBusy.value = false
   }
@@ -672,11 +675,11 @@ async function publishHostnames() {
   const okConfirm = window.confirm(
     [
       count
-        ? `Publish ${count} hostname${count === 1 ? '' : 's'} to Cloudflare?`
-        : 'Disable previously published hostnames in the tunnel?',
+        ? t('Publish {count} hostnames to Cloudflare?', { count })
+        : t('Disable previously published hostnames in the tunnel?'),
       preview ? `\n${preview}${count > 6 ? '\n…' : ''}` : '',
-      '\nThese URLs are reachable from the internet unless you add Cloudflare Access.',
-      'Hand-made Cloudflare dashboard hostnames you never published from AIO are left alone.',
+      '\n' + t('These URLs are reachable from the internet unless you add Cloudflare Access.'),
+      t('Hand-made Cloudflare dashboard hostnames you never published from AIO are left alone.'),
     ].join('\n'),
   )
   if (!okConfirm) return
@@ -696,7 +699,7 @@ async function publishHostnames() {
       })
       const saveData = await readJson(saveRes)
       if (!saveRes.ok) {
-        error.value = apiError(saveData, 'Could not save API token before publish.')
+        error.value = apiError(saveData, t('Could not save API token before publish.'))
         return
       }
       form.value.cloudflare_api_token = ''
@@ -712,17 +715,17 @@ async function publishHostnames() {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Publish to Cloudflare failed.')
+      error.value = apiError(data, t('Publish to Cloudflare failed.'))
       return
     }
     await refreshHostnames()
     const published = (data.published || []).length
     const removed = (data.removed || []).length
-    const bits = [`Published ${published} hostname${published === 1 ? '' : 's'} to Cloudflare`]
-    if (removed) bits.push(`removed ${removed} from the tunnel`)
+    const bits = [t('Published {count} hostnames to Cloudflare', { count: published })]
+    if (removed) bits.push(t('removed {count} from the tunnel', { count: removed }))
     notice.value = `${bits.join('; ')}.${data.warning ? ` ${data.warning}` : ''}`
   } catch (err) {
-    error.value = err?.message || 'Publish to Cloudflare failed.'
+    error.value = err?.message || t('Publish to Cloudflare failed.')
   } finally {
     hostnameBusy.value = false
   }
@@ -731,7 +734,7 @@ async function publishHostnames() {
 async function addCloudflareAccess() {
   const gated = (hostnameRoutes.value || []).filter((row) => row.enabled && row.access_gate)
   if (!gated.length) {
-    error.value = 'Turn on Expose for at least one *Arr app, download client, Seerr, or NeutArr.'
+    error.value = t('Turn on Expose for at least one *Arr app, download client, Seerr, or NeutArr.')
     notice.value = ''
     return
   }
@@ -741,11 +744,11 @@ async function addCloudflareAccess() {
     .join('\n')
   const okConfirm = window.confirm(
     [
-      `Add Cloudflare Access for ${gated.length} hostname${gated.length === 1 ? '' : 's'}?`,
+      t('Add Cloudflare Access for {count} hostnames?', { count: gated.length }),
       preview ? `\n${preview}` : '',
-      '\nJellyfin, Plex, and this dashboard stay on their own login.',
-      'Publish the tunnel first if these names are not public yet.',
-      'Turning Expose off and running this again removes only the Access apps AIO created.',
+      '\n' + t('Jellyfin, Plex, and this dashboard stay on their own login.'),
+      t('Publish the tunnel first if these names are not public yet.'),
+      t('Turning Expose off and running this again removes only the Access apps AIO created.'),
     ].join('\n'),
   )
   if (!okConfirm) return
@@ -765,7 +768,7 @@ async function addCloudflareAccess() {
       })
       const saveData = await readJson(saveRes)
       if (!saveRes.ok) {
-        error.value = apiError(saveData, 'Could not save API token before adding Access.')
+        error.value = apiError(saveData, t('Could not save API token before adding Access.'))
         return
       }
       form.value.cloudflare_api_token = ''
@@ -782,7 +785,7 @@ async function addCloudflareAccess() {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not add Cloudflare Access.')
+      error.value = apiError(data, t('Could not add Cloudflare Access.'))
       return
     }
     accessEmails.value = (data.emails || []).join('\n')
@@ -791,11 +794,11 @@ async function addCloudflareAccess() {
     await refreshHostnames()
     const applied = (data.applied || []).length
     const removed = (data.removed || []).length
-    const bits = [`Cloudflare Access is on ${applied} hostname${applied === 1 ? '' : 's'}`]
-    if (removed) bits.push(`removed ${removed} Access app${removed === 1 ? '' : 's'} AIO created`)
+    const bits = [t('Cloudflare Access is on {count} hostnames', { count: applied })]
+    if (removed) bits.push(t('removed {count} Access apps AIO created', { count: removed }))
     notice.value = `${bits.join('; ')}.`
   } catch (err) {
-    error.value = err?.message || 'Could not add Cloudflare Access.'
+    error.value = err?.message || t('Could not add Cloudflare Access.')
   } finally {
     hostnameBusy.value = false
   }
@@ -817,7 +820,7 @@ function previewHostnameUrl(row) {
 async function saveHomepageKey(field) {
   const value = String(form.value[field] || '').trim()
   if (!value) {
-    error.value = 'Paste a key to save it, or use Clear key.'
+    error.value = t('Paste a key to save it, or use Clear key.')
     notice.value = ''
     return
   }
@@ -944,7 +947,7 @@ async function loadAll() {
       wallpaperImage.value = getWallpaperImage()
     }
     if (setRes.ok) applySettingsPayload(await readJson(setRes))
-    else error.value = 'Could not load settings.'
+    else error.value = t('Could not load settings.')
     if (bakRes.ok) {
       const bak = await readJson(bakRes)
       backupController.applyPayload(bak)
@@ -955,7 +958,7 @@ async function loadAll() {
       errors.value = diag.errors || []
     }
   } catch (err) {
-    error.value = err.message || 'Could not load settings.'
+    error.value = err.message || t('Could not load settings.')
   } finally {
     loading.value = false
   }
@@ -972,7 +975,7 @@ async function patchSettings(payload) {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not save settings.')
+      error.value = apiError(data, t('Could not save settings.'))
       return false
     }
     applySettingsPayload(data)
@@ -980,17 +983,17 @@ async function patchSettings(payload) {
     if (Object.prototype.hasOwnProperty.call(payload, 'vpn_enabled')) {
       emit('vpn', data.vpn)
       if (payload.vpn_enabled && !data.vpn?.tunnel_up) {
-        error.value = notes || data.vpn?.last_error || 'VPN tunnel did not come up.'
+        error.value = notes || data.vpn?.last_error || t('VPN tunnel did not come up.')
       } else {
-        notice.value = notes || (payload.vpn_enabled ? 'VPN started.' : 'VPN stopped.')
+        notice.value = notes || (payload.vpn_enabled ? t('VPN started.') : t('VPN stopped.'))
       }
     } else {
-      notice.value = notes || 'Saved.'
+      notice.value = notes || t('Saved.')
     }
     if (Object.prototype.hasOwnProperty.call(payload, 'update_check_schedule')) emit('updates')
     return true
   } catch (err) {
-    error.value = err.message || 'Could not save settings.'
+    error.value = err.message || t('Could not save settings.')
     return false
   } finally {
     saving.value = false
@@ -1013,7 +1016,7 @@ async function loadUsenet() {
     const data = await readJson(res)
     usenet.value = data
     if (data.server) usenetForm.value = { ...usenetForm.value, ...data.server, password: '' }
-    if (data.imported_from) notice.value = `Usenet server taken over from ${USENET_CLIENTS[data.imported_from] || data.imported_from}.`
+    if (data.imported_from) notice.value = t('Usenet server taken over from {app}.', { app: USENET_CLIENTS[data.imported_from] || data.imported_from })
   } catch (_) {
     /* the form still works without the saved values */
   }
@@ -1021,11 +1024,11 @@ async function loadUsenet() {
 
 function usenetSavedNotice(applied) {
   const names = Object.keys(applied || {})
-  if (!names.length) return 'Usenet server saved. Install SABnzbd or NZBGet from Catalog to use it.'
+  if (!names.length) return t('Usenet server saved. Install SABnzbd or NZBGet from Catalog to use it.')
   const sent = names.filter((name) => applied[name]).map((name) => USENET_CLIENTS[name] || name)
   const later = names.filter((name) => !applied[name]).map((name) => USENET_CLIENTS[name] || name)
-  if (!later.length) return `Usenet server saved and sent to ${sent.join(' and ')}.`
-  return `Usenet server saved. ${later.join(' and ')} could not be reached and gets it on its next start.`
+  if (!later.length) return t('Usenet server saved and sent to {apps}.', { apps: sent.join(t(' and ')) })
+  return t('Usenet server saved. {apps} could not be reached and gets it on its next start.', { apps: later.join(t(' and ')) })
 }
 
 async function saveUsenet() {
@@ -1044,14 +1047,14 @@ async function saveUsenet() {
     const res = await apiRequest('/api/usenet/server', { method: 'PUT', body: JSON.stringify(body) })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not save the Usenet server.')
+      error.value = apiError(data, t('Could not save the Usenet server.'))
       return
     }
     usenet.value = { ...usenet.value, server: data.server }
     usenetForm.value.password = ''
     notice.value = usenetSavedNotice(data.applied)
   } catch (err) {
-    error.value = err.message || 'Could not save the Usenet server.'
+    error.value = err.message || t('Could not save the Usenet server.')
   } finally {
     saving.value = false
   }
@@ -1079,7 +1082,7 @@ async function controlVpn(action) {
     const res = await apiRequest(`/api/vpn/${action}`, { method: 'POST' })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, `Could not ${action} VPN.`)
+      error.value = apiError(data, t(action === 'start' ? 'Could not start VPN.' : action === 'restart' ? 'Could not restart VPN.' : 'Could not stop VPN.'))
       return
     }
     vpnLive.value = data
@@ -1089,20 +1092,20 @@ async function controlVpn(action) {
     if (action === 'start' || action === 'restart') {
       if (data.tunnel_up) {
         notice.value = apps
-          ? `VPN ${action === 'restart' ? 'restarted' : 'started'}. Started ${apps} on the tunnel.`
-          : `VPN ${action === 'restart' ? 'restarted' : 'started'}.`
+          ? (action === 'restart' ? t('VPN restarted. Started {apps} on the tunnel.', { apps }) : t('VPN started. Started {apps} on the tunnel.', { apps }))
+          : t(action === 'restart' ? 'VPN restarted.' : 'VPN started.')
       } else {
-        error.value = data.detail || data.last_error || 'VPN tunnel did not come up.'
+        error.value = data.detail || data.last_error || t('VPN tunnel did not come up.')
       }
     } else if (data.enabled) {
-      notice.value = 'VPN tunnel stopped. Kill switch stays on until you turn Enable VPN off.'
+      notice.value = t('VPN tunnel stopped. Kill switch stays on until you turn Enable VPN off.')
     } else {
       notice.value = apps
-        ? `VPN stopped. Started ${apps} on the house network.`
-        : 'VPN stopped.'
+        ? t('VPN stopped. Started {apps} on the house network.', { apps })
+        : t('VPN stopped.')
     }
   } catch (err) {
-    error.value = err.message || `Could not ${action} VPN.`
+    error.value = err.message || t(action === 'start' ? 'Could not start VPN.' : action === 'restart' ? 'Could not restart VPN.' : 'Could not stop VPN.')
   } finally {
     vpnBusy.value = false
   }
@@ -1134,14 +1137,14 @@ async function uploadProfileAvatar(event) {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not upload profile image.')
+      error.value = apiError(data, t('Could not upload profile image.'))
       return
     }
     applyProfileAvatar(data)
     emit('session', data)
-    notice.value = 'Profile image updated.'
+    notice.value = t('Profile image updated.')
   } catch (err) {
-    error.value = err.message || 'Could not upload profile image.'
+    error.value = err.message || t('Could not upload profile image.')
   } finally {
     avatarUploading.value = false
     if (event?.target) event.target.value = ''
@@ -1156,14 +1159,14 @@ async function resetProfileAvatar() {
     const res = await apiRequest('/api/auth/avatar', { method: 'DELETE' })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not remove profile image.')
+      error.value = apiError(data, t('Could not remove profile image.'))
       return
     }
     applyProfileAvatar(data)
     emit('session', { ...data, avatar_url: null })
-    notice.value = 'Profile image removed.'
+    notice.value = t('Profile image removed.')
   } catch (err) {
-    error.value = err.message || 'Could not remove profile image.'
+    error.value = err.message || t('Could not remove profile image.')
   } finally {
     avatarUploading.value = false
   }
@@ -1186,14 +1189,14 @@ async function saveAccount() {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not update account.')
+      error.value = apiError(data, t('Could not update account.'))
       return
     }
     if (data.avatar_url !== undefined) applyProfileAvatar(data)
     emit('session', data)
-    notice.value = 'Account updated.'
+    notice.value = t('Account updated.')
   } catch (err) {
-    error.value = err.message || 'Could not update account.'
+    error.value = err.message || t('Could not update account.')
   } finally {
     saving.value = false
   }
@@ -1238,15 +1241,15 @@ async function runUpdateCheck() {
     const res = await apiRequest('/api/updates/check', { method: 'POST' })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Update check failed.')
+      error.value = apiError(data, t('Update check failed.'))
       return
     }
     const count = (data.available || []).length
-    notice.value = count ? `${count} update(s) available.` : 'No updates found.'
+    notice.value = count ? t('{count} update(s) available.', { count }) : t('No updates found.')
     await loadAll()
     emit('updates')
   } catch (err) {
-    error.value = err.message || 'Update check failed.'
+    error.value = err.message || t('Update check failed.')
   } finally {
     saving.value = false
   }
@@ -1277,13 +1280,13 @@ async function watchUpdate(name) {
       /* the next tick tries again */
     }
   }
-  updateStep.value = 'Starting the update…'
+  updateStep.value = t('Starting the update…')
   updateElapsed.value = ''
   updateTimer = setInterval(tick, 2000)
 }
 
 async function applyAppUpdate(item) {
-  if (preflightReview.value && !(await preflightReview.value.review(item.name, 'update'))) return { ok: false, reason: 'Cancelled' }
+  if (preflightReview.value && !(await preflightReview.value.review(item.name, 'update'))) return { ok: false, reason: t('Cancelled') }
   updatingApp.value = item.name
   watchUpdate(item.name)
   try {
@@ -1291,9 +1294,9 @@ async function applyAppUpdate(item) {
     const data = await readJson(res)
     // Updated but not running again (the VPN it needs is down, say): the new version is in, the app is not.
     if (res.ok && data.status === 'updated') return { ok: true, version: data.version || item.latest_version, stopped: data.start_error || '' }
-    return { ok: false, reason: apiError(data, 'update failed') }
+    return { ok: false, reason: apiError(data, t('update failed')) }
   } catch (err) {
-    return { ok: false, reason: err.message || 'update failed' }
+    return { ok: false, reason: err.message || t('update failed') }
   } finally {
     clearInterval(updateTimer)
     updatingApp.value = ''
@@ -1308,9 +1311,9 @@ async function updateOneApp(item) {
   // Reload first: loadAll clears the error line.
   await loadAll()
   emit('updates')
-  if (result.ok && result.stopped) error.value = `${updateLabel(item)} updated to ${result.version}, but it is stopped: ${result.stopped}`
-  else if (result.ok) notice.value = `${updateLabel(item)} updated to ${result.version}.`
-  else error.value = `${updateLabel(item)} was not updated: ${result.reason}`
+  if (result.ok && result.stopped) error.value = t('{app} updated to {version}, but it is stopped: {reason}', { app: updateLabel(item), version: result.version, reason: result.stopped })
+  else if (result.ok) notice.value = t('{app} updated to {version}.', { app: updateLabel(item), version: result.version })
+  else error.value = t('{app} was not updated: {reason}', { app: updateLabel(item), reason: result.reason })
 }
 
 async function updateAllApps() {
@@ -1320,7 +1323,7 @@ async function updateAllApps() {
   const failed = []
   const stopped = []
   for (const [index, item] of items.entries()) {
-    updateAllProgress.value = `Updating ${index + 1} of ${items.length}: ${updateLabel(item)}…`
+    updateAllProgress.value = t('Updating {index} of {total}: {app}…', { index: index + 1, total: items.length, app: updateLabel(item) })
     const result = await applyAppUpdate(item)
     if (!result.ok) failed.push(`${updateLabel(item)} (${result.reason})`)
     else if (result.stopped) stopped.push(`${updateLabel(item)} (${result.stopped})`)
@@ -1328,9 +1331,9 @@ async function updateAllApps() {
   updateAllProgress.value = ''
   await loadAll()
   emit('updates')
-  const problems = [failed.length ? `Not updated: ${failed.join(', ')}.` : '', stopped.length ? `Updated but stopped: ${stopped.join(', ')}.` : ''].filter(Boolean)
-  if (problems.length) error.value = `Updated ${items.length - failed.length} of ${items.length}. ${problems.join(' ')}`
-  else notice.value = `Updated all ${items.length} apps.`
+  const problems = [failed.length ? t('Not updated: {apps}.', { apps: failed.join(', ') }) : '', stopped.length ? t('Updated but stopped: {apps}.', { apps: stopped.join(', ') }) : ''].filter(Boolean)
+  if (problems.length) error.value = t('Updated {count} of {total}. {problems}', { count: items.length - failed.length, total: items.length, problems: problems.join(' ') })
+  else notice.value = t('Updated all {count} apps.', { count: items.length })
 }
 
 async function loadStatus() {
@@ -1349,7 +1352,7 @@ async function createShare() {
     const res = await apiRequest('/api/diagnostics/share', { method: 'POST' })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not create debug link.')
+      error.value = apiError(data, t('Could not create debug link.'))
       return
     }
     share.value = {
@@ -1361,7 +1364,7 @@ async function createShare() {
     }
     await loadStatus()
   } catch (err) {
-    error.value = err.message || 'Could not create debug link.'
+    error.value = err.message || t('Could not create debug link.')
   } finally {
     saving.value = false
   }
@@ -1374,13 +1377,13 @@ async function revokeShare() {
     const res = await apiRequest('/api/diagnostics/share', { method: 'DELETE' })
     if (!res.ok) {
       const data = await readJson(res)
-      error.value = apiError(data, 'Could not revoke debug link.')
+      error.value = apiError(data, t('Could not revoke debug link.'))
       return
     }
     share.value = { active: false, url: '', expires_at: null, ttl_hours: 24 }
     copied.value = false
   } catch (err) {
-    error.value = err.message || 'Could not revoke debug link.'
+    error.value = err.message || t('Could not revoke debug link.')
   } finally {
     saving.value = false
   }
@@ -1398,7 +1401,7 @@ async function copyUrl() {
   try {
     await copyText(share.value.url)
     copied.value = true
-    notice.value = 'Support share URL copied.'
+    notice.value = t('Support share URL copied.')
     setTimeout(() => { copied.value = false }, 2500)
   } catch (err) {
     // Last resort: select the readonly field so the user can Cmd/Ctrl+C.
@@ -1407,7 +1410,7 @@ async function copyUrl() {
       field.focus()
       field.select()
     }
-    error.value = 'Copy failed. The URL is selected — press Cmd/Ctrl+C.'
+    error.value = t('Copy failed. The URL is selected — press Cmd/Ctrl+C.')
   }
 }
 
@@ -1656,16 +1659,16 @@ onBeforeUnmount(() => {
             :key="key"
             class="brand-asset-row brand-style-asset"
           >
-            <h4 class="brand-style-title">{{ slot.label }}</h4>
-            <img :src="slot.url" :alt="slot.label" class="brand-asset-preview" :class="{ 'is-logo': key === 'logo' }" />
+            <h4 class="brand-style-title">{{ $t(slot.label) }}</h4>
+            <img :src="slot.url" :alt="$t(slot.label)" class="brand-asset-preview" :class="{ 'is-logo': key === 'logo' }" />
             <div class="brand-asset-copy">
-              <span>{{ slot.help }}</span>
-              <span class="brand-asset-size">{{ $t('Required / recommended:') }} {{ slot.recommended }}</span>
-              <span class="share-idle">{{ slot.custom ? 'Custom image in use.' : 'Built-in placeholder — upload to replace.' }}</span>
+              <span>{{ $t(slot.help) }}</span>
+              <span class="brand-asset-size">{{ $t('Required / recommended:') }} {{ $t(slot.recommended) }}</span>
+              <span class="share-idle">{{ slot.custom ? $t("Custom image in use.") : $t("Built-in placeholder — upload to replace.") }}</span>
             </div>
             <div class="brand-asset-actions">
               <label class="ui-btn ui-btn-ghost brand-upload-btn">
-                {{ brandUploading === key ? 'Uploading…' : $t('Upload') }}
+                {{ brandUploading === key ? $t("Uploading…") : $t('Upload') }}
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif,image/x-icon,.ico"
@@ -1718,7 +1721,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="brand-asset-actions">
               <label class="ui-btn ui-btn-ghost brand-upload-btn">
-                {{ avatarUploading ? 'Uploading…' : $t('Upload') }}
+                {{ avatarUploading ? $t("Uploading…") : $t('Upload') }}
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif"
@@ -1830,7 +1833,7 @@ onBeforeUnmount(() => {
         <dl class="info-grid">
           <div>
             <dt>{{ $t('Version') }}</dt>
-            <dd class="font-mono" :title="buildSha ? `Build ${buildSha}` : undefined">{{ versionText || '—' }}</dd>
+            <dd class="font-mono" :title="buildSha ? $t('Build {sha}', { sha: buildSha }) : undefined">{{ versionText || '—' }}</dd>
           </div>
           <div>
             <dt>{{ $t('Architecture') }}</dt>
@@ -1861,11 +1864,11 @@ onBeforeUnmount(() => {
           </div>
           <div>
             <dt>{{ $t('Hardlinks') }}</dt>
-            <dd>{{ hardlinks == null ? '—' : hardlinks ? 'Supported between downloads and media' : 'Not available — *Arr will copy' }}</dd>
+            <dd>{{ hardlinks == null ? '—' : hardlinks ? $t("Supported between downloads and media") : $t("Not available — *Arr will copy") }}</dd>
           </div>
           <div>
             <dt>{{ $t('Transcoding') }}</dt>
-            <dd>{{ transcoding.available ? 'Hardware GPU available' : 'Software only' }}</dd>
+            <dd>{{ transcoding.available ? $t("Hardware GPU available") : $t("Software only") }}</dd>
           </div>
         </dl>
       </div>
@@ -1989,7 +1992,7 @@ onBeforeUnmount(() => {
             <div v-if="item.kind !== 'appliance'" class="share-row">
               <a class="ui-btn ui-btn-ghost" :href="`#/catalog?q=${encodeURIComponent(item.name)}`">{{ $t('Open in Catalog') }}</a>
               <button type="button" class="ui-btn ui-btn-primary" :disabled="!!updatingApp || !!updateAllProgress" @click="updateOneApp(item)">
-                {{ updatingApp === item.name ? 'Updating…' : 'Update' }}
+                {{ updatingApp === item.name ? $t("Updating…") : $t("Update") }}
               </button>
             </div>
           </li>
@@ -2000,7 +2003,7 @@ onBeforeUnmount(() => {
           <h3>{{ $t('GitHub token') }}</h3>
           <p>{{ $t('Optional. Catalog installs and scheduled update checks stay under the authenticated rate limit.') }}</p>
         </div>
-        <p class="share-meta">{{ githubConfigured ? 'A token is saved.' : 'No token configured.' }}</p>
+        <p class="share-meta">{{ githubConfigured ? $t("A token is saved.") : $t("No token configured.") }}</p>
         <form class="form-stack" @submit.prevent="patchSettings({ github_token: form.github_token })">
           <label class="ui-field">{{ $t('Personal access token (blank clears it)') }}
             <input v-model="form.github_token" type="password" class="ui-input font-mono" autocomplete="off" />
@@ -2018,11 +2021,11 @@ onBeforeUnmount(() => {
           <h3>{{ $t('VPN') }}</h3>
           <p>{{ $t('qBittorrent, Prowlarr, and Flaresolverr. Usenet always bypasses the tunnel.') }}</p>
         </div>
-        <p class="share-meta">{{ vpnLive.enabled ? 'VPN is on' : 'VPN is off' }}{{ vpnLive.provider ? ` · ${vpnLive.provider}` : '' }}{{ vpnLive.protocol ? ` · ${vpnLive.protocol}` : '' }}</p>
+        <p class="share-meta">{{ vpnLive.enabled ? $t("VPN is on") : $t("VPN is off") }}{{ vpnLive.provider ? ` · ${vpnLive.provider}` : '' }}{{ vpnLive.protocol ? ` · ${vpnLive.protocol}` : '' }}</p>
         <div class="setting-status">
-          <span class="setting-chip" :class="vpnLive.enabled ? 'is-on' : 'is-off'">{{ vpnLive.enabled ? 'Enabled' : $t('Off') }}</span>
-          <span class="setting-chip" :class="vpnLive.config_present ? 'is-on' : 'is-warn'">{{ vpnLive.config_present ? 'Config saved' : 'No config' }}</span>
-          <span class="setting-chip" :class="vpnLive.tunnel_up ? 'is-on' : (vpnLive.enabled ? 'is-bad' : 'is-off')">{{ vpnLive.tunnel_up ? 'Tunnel up' : $t('Tunnel down') }}</span>
+          <span class="setting-chip" :class="vpnLive.enabled ? 'is-on' : 'is-off'">{{ vpnLive.enabled ? $t("Enabled") : $t('Off') }}</span>
+          <span class="setting-chip" :class="vpnLive.config_present ? 'is-on' : 'is-warn'">{{ vpnLive.config_present ? $t("Config saved") : $t("No config") }}</span>
+          <span class="setting-chip" :class="vpnLive.tunnel_up ? 'is-on' : (vpnLive.enabled ? 'is-bad' : 'is-off')">{{ vpnLive.tunnel_up ? $t("Tunnel up") : $t('Tunnel down') }}</span>
         </div>
         <p v-if="vpnLive.config_present" class="share-meta font-mono">{{ vpnLive.config_path }}</p>
         <div class="share-row" style="margin: 0.75rem 0 1rem;">
@@ -2031,7 +2034,7 @@ onBeforeUnmount(() => {
             class="ui-btn ui-btn-primary"
             :disabled="saving || vpnBusy || !vpnLive.config_present || !!vpnLive.tunnel_up"
             @click="controlVpn('start')"
-          >{{ vpnBusy ? 'Working…' : $t('Start') }}</button>
+          >{{ vpnBusy ? $t("Working…") : $t('Start') }}</button>
           <button
             type="button"
             class="ui-btn ui-btn-ghost"
@@ -2089,22 +2092,22 @@ onBeforeUnmount(() => {
         </div>
         <div class="setting-status" aria-live="polite">
           <span class="setting-chip" :class="tunnelLive.enabled ? 'is-on' : 'is-off'">
-            {{ tunnelLive.enabled ? 'Enabled' : $t('Off') }}
+            {{ tunnelLive.enabled ? $t("Enabled") : $t('Off') }}
           </span>
           <span
             class="setting-chip"
             :class="(tunnelLive.token_saved || tunnelLive.token_present) ? 'is-on' : (tunnelLive.enabled ? 'is-bad' : 'is-warn')"
           >
-            {{ (tunnelLive.token_saved || tunnelLive.token_present) ? 'Token saved' : 'No token' }}
+            {{ (tunnelLive.token_saved || tunnelLive.token_present) ? $t("Token saved") : $t("No token") }}
           </span>
           <span
             class="setting-chip"
             :class="tunnelLive.connected ? 'is-on' : (tunnelLive.enabled ? (tunnelLive.running ? 'is-warn' : 'is-bad') : 'is-off')"
           >
-            {{ tunnelLive.connected ? 'Tunnel up' : (tunnelLive.running ? 'Connecting…' : $t('Tunnel down')) }}
+            {{ tunnelLive.connected ? $t("Tunnel up") : (tunnelLive.running ? $t("Connecting…") : $t('Tunnel down')) }}
           </span>
           <span class="setting-chip" :class="tunnelLive.binary_present ? 'is-on' : 'is-bad'">
-            {{ tunnelLive.binary_present ? 'cloudflared ready' : 'cloudflared missing' }}
+            {{ tunnelLive.binary_present ? $t("cloudflared ready") : $t("cloudflared missing") }}
           </span>
         </div>
         <p class="ui-alert ui-alert-warning">
@@ -2148,7 +2151,7 @@ onBeforeUnmount(() => {
           <label class="ui-field">{{ $t('Public app domain (Open UI over tunnel)') }}
             <span class="ui-field-hint">
               {{ $t('DNS zone for Catalog Open UI when you use HTTPS / Cloudflare, e.g.') }} <code>example.com</code>
-              or <code>example.co.uk</code>
+              {{ $t('or') }} <code>example.co.uk</code>
               {{ $t('→ links become') }} <code>https://sonarr.example.com</code>{{ $t('. Leave empty to derive from the current host (') }}<code>media.example.com</code> → <code>example.com</code>,
               <code>media.example.co.uk</code> → <code>example.co.uk</code>{{ $t('). LAN IP access still uses') }} <code>http://nas-ip:port</code>.
             </span>
@@ -2171,10 +2174,10 @@ onBeforeUnmount(() => {
         </div>
         <div class="setting-status" aria-live="polite">
           <span class="setting-chip" :class="apiTokenConfigured ? 'is-on' : 'is-warn'">
-            {{ apiTokenConfigured ? 'API token saved' : 'API token needed to publish' }}
+            {{ apiTokenConfigured ? $t("API token saved") : $t("API token needed to publish") }}
           </span>
           <span class="setting-chip" :class="publicTunnelChip.cls">
-            {{ publicTunnelChip.label }}
+            {{ $t(publicTunnelChip.label) }}
           </span>
         </div>
         <p v-if="hostnameMeta.tunnel_decode_error" class="share-meta">{{ hostnameMeta.tunnel_decode_error }}</p>
@@ -2209,7 +2212,7 @@ onBeforeUnmount(() => {
               <thead>
                 <tr>
                   <th>{{ $t('Expose') }}</th>
-                  <th>App</th>
+                  <th>{{ $t('App') }}</th>
                   <th>{{ $t('Subdomain') }}</th>
                   <th>{{ $t('Public URL') }}</th>
                 </tr>
@@ -2318,7 +2321,7 @@ onBeforeUnmount(() => {
           <p>{{ $t('The news server from your Usenet provider. Saving sends it to SABnzbd and NZBGet. Usenet downloads never use the VPN.') }}</p>
         </div>
         <div class="setting-status">
-          <span class="setting-chip" :class="usenet.server ? 'is-on' : 'is-off'">{{ usenet.server ? 'Server saved' : 'No server yet' }}</span>
+          <span class="setting-chip" :class="usenet.server ? 'is-on' : 'is-off'">{{ usenet.server ? $t("Server saved") : $t("No server yet") }}</span>
           <span v-for="name in usenetClientNames" :key="name" class="setting-chip is-on">{{ $t('Sends to') }} {{ name }}</span>
           <span v-if="!usenetClientNames.length" class="setting-chip is-warn">{{ $t('No SABnzbd or NZBGet installed') }}</span>
         </div>
@@ -2428,9 +2431,9 @@ onBeforeUnmount(() => {
           </p>
         </div>
         <div class="setting-status">
-          <span class="setting-chip" :class="credentialChip(jellyfinKey).cls">{{ credentialChip(jellyfinKey).label }}</span>
+          <span class="setting-chip" :class="credentialChip(jellyfinKey).cls">{{ $t(credentialChip(jellyfinKey).label) }}</span>
         </div>
-        <p class="share-meta">{{ jellyfinKey.detail || (jellyfinKey.configured ? 'A Jellyfin API key is saved.' : 'No Jellyfin API key saved yet.') }}</p>
+        <p class="share-meta">{{ jellyfinKey.detail || (jellyfinKey.configured ? $t("A Jellyfin API key is saved.") : $t("No Jellyfin API key saved yet.")) }}</p>
         <form class="form-stack" @submit.prevent="saveHomepageKey('jellyfin_api_key')">
           <label class="ui-field">{{ $t('API key') }}
             <input
@@ -2455,9 +2458,9 @@ onBeforeUnmount(() => {
           </p>
         </div>
         <div class="setting-status">
-          <span class="setting-chip" :class="credentialChip(seerrKey).cls">{{ credentialChip(seerrKey).label }}</span>
+          <span class="setting-chip" :class="credentialChip(seerrKey).cls">{{ $t(credentialChip(seerrKey).label) }}</span>
         </div>
-        <p class="share-meta">{{ seerrKey.detail || (seerrKey.configured ? 'A Seerr API key is saved.' : 'No Seerr API key saved yet.') }}</p>
+        <p class="share-meta">{{ seerrKey.detail || (seerrKey.configured ? $t("A Seerr API key is saved.") : $t("No Seerr API key saved yet.")) }}</p>
         <form class="form-stack" @submit.prevent="saveHomepageKey('seerr_api_key')">
           <label class="ui-field">{{ $t('API key') }}
             <input
@@ -2527,7 +2530,7 @@ onBeforeUnmount(() => {
           <label class="ui-field" for="debug-share-url">{{ $t('Share URL') }}</label>
           <div class="share-row">
             <input id="debug-share-url" class="ui-input font-mono" :value="share.url" readonly />
-            <button type="button" class="ui-btn ui-btn-ghost" @click="copyUrl">{{ copied ? 'Copied' : 'Copy' }}</button>
+            <button type="button" class="ui-btn ui-btn-ghost" @click="copyUrl">{{ copied ? $t("Copied") : $t("Copy") }}</button>
           </div>
           <p class="share-meta font-mono">{{ $t('Expires') }} {{ formatExpiry(share.expires_at) }}</p>
         </div>
@@ -2537,7 +2540,7 @@ onBeforeUnmount(() => {
           <h3>{{ $t('Recent errors') }}</h3>
           <p>{{ $t('Last captured ERROR+ events. Shown from localhost, or while Support share is on.') }}</p>
         </div>
-        <div v-if="!errors.length" class="share-idle">{{ share.active ? 'No errors captured since startup.' : 'Turn on Support share, or open Settings from localhost, to view captured errors.' }}</div>
+        <div v-if="!errors.length" class="share-idle">{{ share.active ? $t("No errors captured since startup.") : $t("Turn on Support share, or open Settings from localhost, to view captured errors.") }}</div>
         <pre v-else class="error-log font-mono">{{ errors.map(e => `[${e.timestamp}] ${e.level} ${e.source}\n${e.message}`).join('\n\n') }}</pre>
       </div>
     </template>

@@ -1,3 +1,5 @@
+import { i18n, t } from './i18n/index.js'
+
 export function formatBytes(n) {
   const v = Number(n) || 0
   if (v < 1024) return `${Math.round(v)} B`
@@ -33,7 +35,7 @@ export function formatUptime(seconds) {
 }
 
 export function formatUpdateWhen(ts) {
-  if (!ts) return 'never'
+  if (!ts) return t('never')
   const ms = ts > 1e12 ? ts : ts * 1000
-  return new Date(ms).toLocaleString()
+  return new Date(ms).toLocaleString(i18n.global.locale.value)
 }

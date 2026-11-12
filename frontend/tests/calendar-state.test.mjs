@@ -2,12 +2,46 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { effectScope, nextTick, ref } from 'vue'
 import { useHomeCalendar } from '../src/composables/useHomeCalendar.js'
+import { setLocale } from '../src/i18n/index.js'
 
-function calendar(items = [], wide = false) {
-  const scope = effectScope(), snapshot = ref({ calendar: items }), calendarWide = ref(wide)
-  const state = scope.run(() => useHomeCalendar({ snapshot, calendarWide }))
-  return { ...state, snapshot, calendarWide, dispose: () => scope.stop() }
+test('calendar dates, weekdays and episode counts follow the selected language', () => {
+  const state = calendar()
+  try {
+    for (const locale of ['en', 'nl', 'de', 'fr']) {
+      setLocale(locale)
+      state.setCalView('month')
+      const monday = new Date(2024, 0, 1)
+      assert.equal(state.weekdayLabels.value[0], monday.toLocaleDateString(locale, { weekday: 'short' }))
+      assert.equal(state.formatEventTime('2026-11-12T14:30:00'), new Date('2026-11-12T14:30:00').toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }))
+    }
+  } finally { setLocale('en'); state.dispose() }
+})
+
+function calendar(items = [], wide = false, phone = false) {
+  const scope = effectScope(), snapshot = ref({ calendar: items }), calendarWide = ref(wide), calendarPhone = ref(phone)
+  const state = scope.run(() => useHomeCalendar({ snapshot, calendarWide, calendarPhone }))
+  return { ...state, snapshot, calendarWide, calendarPhone, dispose: () => scope.stop() }
 }
+
+test('phones start on today and preserve a manually selected calendar view', async () => {
+  const state = calendar([], false, true)
+  try {
+    assert.equal(state.calView.value, 'day')
+    assert.equal(state.dayKey(state.calCursor.value), state.dayKey(new Date()))
+    state.calendarPhone.value = false
+    state.calendarWide.value = true
+    await nextTick()
+    assert.equal(state.calView.value, 'week')
+    state.calendarPhone.value = true
+    state.calendarWide.value = false
+    await nextTick()
+    assert.equal(state.calView.value, 'day')
+    state.setCalView('list')
+    state.calendarPhone.value = false
+    await nextTick()
+    assert.equal(state.calView.value, 'list')
+  } finally { state.dispose() }
+})
 
 test('responsive default changes until the user explicitly selects a view', async () => {
   const state = calendar([], true)

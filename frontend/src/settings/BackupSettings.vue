@@ -78,7 +78,7 @@ const { backups, backupInfo, backupJob, restoreTarget, uploading, backupJobRunni
             <button type="submit" class="ui-btn ui-btn-ghost" :disabled="saving">{{ $t('Save') }}</button>
             <button type="button" class="ui-btn ui-btn-primary" :disabled="backupJobRunning" @click="createBackup">{{ $t('Backup now') }}</button>
             <label class="ui-btn ui-btn-ghost backup-upload" :class="{ 'is-disabled': uploading || backupJobRunning }">
-              {{ uploading ? 'Uploading…' : 'Upload backup' }}
+              {{ uploading ? $t("Uploading…") : $t("Upload backup") }}
               <input type="file" accept=".tar.gz,.tgz,application/gzip" :disabled="uploading || backupJobRunning" @change="uploadBackup" />
             </label>
           </div>
@@ -100,7 +100,7 @@ const { backups, backupInfo, backupJob, restoreTarget, uploading, backupJobRunni
                 :checked="restoreTarget.selected.includes(item)"
                 @change="toggleRestoreSection(item)"
               />
-              {{ item === 'manager' ? 'Manager settings & secrets' : item }}
+              {{ item === 'manager' ? $t("Manager settings & secrets") : item }}
             </label>
           </div>
           <div class="share-row">

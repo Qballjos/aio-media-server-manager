@@ -235,8 +235,8 @@ watch(query, () => {
             class="ui-select-search"
             type="search"
             autocomplete="off"
-            :placeholder="searchPlaceholder"
-            :aria-label="searchPlaceholder"
+            :placeholder="$t(searchPlaceholder)"
+            :aria-label="$t(searchPlaceholder)"
             :aria-controls="listId"
             @keydown="onSearchKey"
           />
@@ -248,7 +248,7 @@ watch(query, () => {
           role="listbox"
           :aria-label="ariaLabel || undefined"
         >
-          <p v-if="!visible.length" class="ui-select-empty">{{ emptyLabel }}</p>
+          <p v-if="!visible.length" class="ui-select-empty">{{ $t(emptyLabel) }}</p>
           <button
             v-for="(row, index) in visible"
             :id="optionId(index)"

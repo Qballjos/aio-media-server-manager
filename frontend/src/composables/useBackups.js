@@ -1,8 +1,10 @@
+import { useI18n } from 'vue-i18n'
 import { ref, computed, onUnmounted } from 'vue'
 import { apiRequest, readJson, apiError } from '../api.js'
 import { startGuardedInterval } from '../pageVisible.js'
 
 export function useBackups({ snapshot, error, notice, reload }) {
+  const { t } = useI18n()
   const loadAll = reload
   const backups = ref([])
   const backupInfo = ref({ backup_dir: '', legacy_dir: '', schedule: {} })
@@ -30,24 +32,24 @@ export function useBackups({ snapshot, error, notice, reload }) {
 
   function describeJob(job) {
     const result = job.result || {}
-    if (job.status === 'error') return `${job.kind} failed: ${job.error}`
+    if (job.status === 'error') return t('{kind} failed: {error}', { kind: t(job.kind), error: job.error })
     if (job.kind === 'backup') {
       const warn = (result.warnings || []).length
-      return `Created ${result.name}${warn ? ` with ${warn} warning(s)` : ''}.`
+      return warn ? t('Created {name} with {count} warning(s).', { name: result.name, count: warn }) : t('Created {name}.', { name: result.name })
     }
     if (job.kind === 'verify') {
       return result.ok
-        ? `${result.name} is intact (${result.checked} files checked).`
-        : `${result.name} failed verification: ${result.error}`
+        ? t('{name} is intact ({count} files checked).', { name: result.name, count: result.checked })
+        : t('{name} failed verification: {error}', { name: result.name, error: result.error })
     }
     if (job.kind === 'restore') {
-      const parts = [`Restored ${result.files} files (${(result.sections || []).join(', ')}).`]
-      if (result.safety_backup) parts.push(`Previous state saved as ${result.safety_backup}.`)
-      if ((result.restarted || []).length) parts.push(`Restarted ${result.restarted.join(', ')}.`)
-      if ((result.restart_failed || []).length) parts.push(`Could not restart ${result.restart_failed.join(', ')}.`)
+      const parts = [t('Restored {count} files ({sections}).', { count: result.files, sections: (result.sections || []).map(section => t(section)).join(', ') })]
+      if (result.safety_backup) parts.push(t('Previous state saved as {name}.', { name: result.safety_backup }))
+      if ((result.restarted || []).length) parts.push(t('Restarted {apps}.', { apps: result.restarted.join(', ') }))
+      if ((result.restart_failed || []).length) parts.push(t('Could not restart {apps}.', { apps: result.restart_failed.join(', ') }))
       return parts.join(' ')
     }
-    return 'Done.'
+    return t('Done.')
   }
 
   function watchJob(job) {
@@ -82,7 +84,7 @@ export function useBackups({ snapshot, error, notice, reload }) {
       const res = await apiRequest(endpoint, { method: 'POST', body: JSON.stringify(body || {}) })
       const data = await readJson(res)
       if (!res.ok) {
-        error.value = apiError(data, 'Backup action failed.')
+        error.value = apiError(data, t('Backup action failed.'))
         return
       }
       watchJob(data.job)
@@ -104,7 +106,7 @@ export function useBackups({ snapshot, error, notice, reload }) {
     const res = await apiRequest(`/api/backups/${encodeURIComponent(name)}`)
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not read backup.')
+      error.value = apiError(data, t('Could not read backup.'))
       return
     }
     restoreTarget.value = { name, sections: data.sections || [], selected: ['all'] }
@@ -126,8 +128,8 @@ export function useBackups({ snapshot, error, notice, reload }) {
   async function confirmRestore() {
     const target = restoreTarget.value
     if (!target) return
-    const scope = target.selected.includes('all') ? 'everything' : target.selected.join(', ')
-    if (!window.confirm(`Restore ${scope} from ${target.name}? Affected apps are stopped, the current state is saved first, then apps restart.`)) return
+    const scope = target.selected.includes('all') ? t('everything') : target.selected.map(section => t(section)).join(', ')
+    if (!window.confirm(t('Restore {scope} from {name}? Affected apps are stopped, the current state is saved first, then apps restart.', { scope, name: target.name }))) return
     restoreTarget.value = null
     await startBackupJob(`/api/backups/${encodeURIComponent(target.name)}/restore`, {
       sections: target.selected.includes('all') ? null : target.selected,
@@ -140,7 +142,7 @@ export function useBackups({ snapshot, error, notice, reload }) {
       const res = await apiRequest(`/api/backups/${encodeURIComponent(name)}/download`)
       if (!res.ok) {
         const data = await readJson(res)
-        error.value = apiError(data, `Download failed (HTTP ${res.status}).`)
+        error.value = apiError(data, t('Download failed (HTTP {status}).', { status: res.status }))
         return
       }
       const url = URL.createObjectURL(await res.blob())
@@ -172,10 +174,10 @@ export function useBackups({ snapshot, error, notice, reload }) {
       })
       const data = await readJson(res)
       if (!res.ok) {
-        error.value = apiError(data, 'Upload failed.')
+        error.value = apiError(data, t('Upload failed.'))
         return
       }
-      notice.value = `Uploaded ${data.backup?.name || file.name}. Verify it, then restore when ready.`
+      notice.value = t('Uploaded {name}. Verify it, then restore when ready.', { name: data.backup?.name || file.name })
       await loadAll()
     } catch (err) {
       error.value = err.message
@@ -185,17 +187,17 @@ export function useBackups({ snapshot, error, notice, reload }) {
   }
 
   async function deleteBackup(name) {
-    if (!window.confirm(`Delete ${name}?`)) return
+    if (!window.confirm(t('Delete {name}?', { name }))) return
     const res = await apiRequest(`/api/backups/${encodeURIComponent(name)}`, { method: 'DELETE' })
     if (res.ok) await loadAll()
   }
 
   function backupKindLabel(item) {
     return {
-      manual: 'Manual',
-      scheduled: 'Scheduled',
-      'pre-restore': 'Before restore',
-      uploaded: 'Uploaded',
+      manual: t('Manual'),
+      scheduled: t('Scheduled'),
+      'pre-restore': t('Before restore'),
+      uploaded: t('Uploaded'),
     }[item.kind] || item.kind
   }
 

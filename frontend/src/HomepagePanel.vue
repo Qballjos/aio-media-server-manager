@@ -10,6 +10,7 @@ import UiSelect from './UiSelect.vue'
 import { useHomeCalendar } from './composables/useHomeCalendar.js'
 import HomeEditBar from './HomeEditBar.vue'
 import HomeGrid from './HomeGrid.vue'
+import HomePoster from './HomePoster.vue'
 import HomeGridSheet from './HomeGridSheet.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
@@ -143,7 +144,7 @@ const stuckSummary = computed(() => {
     const label = STUCK_STATUSES[item.status]
     if (label) counts[label] = (counts[label] || 0) + 1
   }
-  return Object.entries(counts).map(([label, n]) => `${n} ${label}`).join(' · ')
+  return Object.entries(counts).map(([label, n]) => `${n} ${t(label)}`).join(' · ')
 })
 const stuckItems = computed(() =>
   downloadPause.value.paused ? [] : snapshot.value.downloads.filter((item) => item.status in STUCK_STATUSES),
@@ -154,8 +155,7 @@ const removeBusy = ref(new Set())
 async function removeDownloads(items, confirmFirst = false) {
   const list = items.filter((item) => item.download_id)
   if (!list.length) return
-  const what = `${list.length} stuck download${list.length === 1 ? '' : 's'}`
-  if (confirmFirst && !window.confirm(`Remove ${what}? Sonarr and Radarr search for another release.`)) return
+  if (confirmFirst && !window.confirm(t('Remove {count} stuck downloads? Sonarr and Radarr search for another release.', { count: list.length }))) return
   removeBusy.value = new Set([...removeBusy.value, ...list.map((item) => item.download_id)])
   try {
     await apiRequest('/api/downloads/remove', {
@@ -417,7 +417,7 @@ const netChart = computed(() => {
     end: { x: x(last), down: (y(last.rxRate) / 40) * 100, up: (y(last.txRate) / 40) * 100 },
     minutes: Math.max(1, Math.round(span / 60)),
     hoverX: netHoverIdx.value >= 0 && points[netHoverIdx.value] ? x(points[netHoverIdx.value]) : null,
-    label: `Network over the last ${Math.round(span / 60) || 1} min: download peak ${peak('rxRate')}, upload peak ${peak('txRate')}`,
+    label: t('Network over the last {minutes} min: download peak {download}, upload peak {upload}', { minutes: Math.round(span / 60) || 1, download: peak('rxRate'), upload: peak('txRate') }),
   }
 })
 const netAgo = computed(() => {
@@ -504,7 +504,7 @@ async function loadStatus() {
 
 function upFor(seconds) {
   const days = Math.floor(seconds / 86400)
-  if (days) return `${days} day${days === 1 ? '' : 's'}`
+  if (days) return t(days === 1 ? '{count} day' : '{count} days', { count: days })
   const hours = Math.floor(seconds / 3600)
   return hours ? `${hours} h` : `${Math.max(1, Math.floor(seconds / 60))} min`
 }
@@ -516,7 +516,7 @@ const downloadsProgress = computed(() => {
   return Math.round(list.reduce((sum, item) => sum + (Number(item.progress) || 0), 0) / list.length)
 })
 function chipDay(dt) {
-  return dt.toLocaleDateString(undefined, { weekday: 'short' }).replace('.', '').toUpperCase()
+  return dt.toLocaleDateString(i18nLocale(), { weekday: 'short' }).replace('.', '').toUpperCase()
 }
 function isToday(dt) {
   return dayKey(dt) === dayKey(new Date())
@@ -543,14 +543,14 @@ const launcherGroups = computed(() => {
     if (!groups.has(id)) {
       groups.set(id, {
         id,
-        label: CATEGORY_LABELS[id] || id,
+        label: t(CATEGORY_LABELS[id] || id),
         apps: [],
       })
     }
     groups.get(id).apps.push({
       ...app,
-      ...(['failed', 'rollback_failed'].includes(job?.status) ? { state: 'unhealthy', state_label: job.status === 'rollback_failed' ? 'Recovery incomplete' : 'Setup failed', sick: true } : {}),
-      ...(busy ? { state: job.status, state_label: `${job.status[0].toUpperCase()}${job.status.slice(1)}…` } : {}),
+      ...(['failed', 'rollback_failed'].includes(job?.status) ? { state: 'unhealthy', state_label: t(job.status === 'rollback_failed' ? 'Recovery incomplete' : 'Setup failed'), sick: true } : {}),
+      ...(busy ? { state: job.status, state_label: t({ queued: 'Queued', installing: 'Installing', configuring: 'Configuring', updating: 'Updating' }[job.status]) } : {}),
       progress_message: job && !busy && !['failed', 'rollback_failed'].includes(job.status) ? '' : job?.message ?? app.progress_message,
       progress_updated_at: job?.updated_at ?? app.progress_updated_at,
       url: publicAppUrl(app.name, app.port, app.url || ''),
@@ -620,10 +620,10 @@ function mediaTypeMatches(item, filter) {
 
 function requestStatusDot(item) {
   const status = String(item?.status || 'missing')
-  if (status === 'available') return { cls: 'is-available', label: 'Available' }
-  if (status === 'partial') return { cls: 'is-partial', label: 'Partially available' }
-  if (status === 'requested' || status === 'monitored') return { cls: 'is-requested', label: 'Requested' }
-  return { cls: 'is-missing', label: 'Not available' }
+  if (status === 'available') return { cls: 'is-available', label: t('Available') }
+  if (status === 'partial') return { cls: 'is-partial', label: t('Partially available') }
+  if (status === 'requested' || status === 'monitored') return { cls: 'is-requested', label: t('Requested') }
+  return { cls: 'is-missing', label: t('Not available') }
 }
 
 function isRequestedOrAvailable(item) {
@@ -632,7 +632,7 @@ function isRequestedOrAvailable(item) {
 
 function trendingStatusDot(item) {
   const status = String(item?.status || '')
-  if (status === 'deleted') return { cls: 'is-deleted', label: 'Deleted' }
+  if (status === 'deleted') return { cls: 'is-deleted', label: t('Deleted') }
   if (!['available', 'requested', 'monitored'].includes(status)) return null
   return requestStatusDot(item)
 }
@@ -651,7 +651,7 @@ function isPending(widget) {
 function waitingLabel(widget) {
   if (!(snapshot.value.waiting || []).includes(widget)) return ''
   const names = [...new Set(notesFor(widget).filter((note) => note.state === 'error').map((note) => SOURCE_NAMES[note.source] || note.source))]
-  return names.length ? `Waiting for ${names.join(' and ')}…` : ''
+  return names.length ? t('Waiting for {names}…', { names: names.join(t(' and ')) }) : ''
 }
 
 function debugFlagFromRoute() {
@@ -691,10 +691,10 @@ async function loadSnapshot(force = false) {
       }
       snapshotError.value = ''
     } else {
-      snapshotError.value = `Home API HTTP ${res.status}`
+      snapshotError.value = t('Home API HTTP {status}', { status: res.status })
     }
   } catch (err) {
-    snapshotError.value = err?.message || 'Home snapshot failed'
+    snapshotError.value = err?.message || t('Home snapshot failed')
   } finally {
     loading.value = false
   }
@@ -801,7 +801,7 @@ async function runSearch() {
   } catch (err) {
     if (gen !== searchGen) return
     results.value = []
-    searchError.value = err?.message || 'Search failed'
+    searchError.value = err?.message || t('Search failed')
   } finally {
     if (gen === searchGen) {
       searchedFor.value = q
@@ -873,7 +873,8 @@ const STATUS_LABELS = {
 }
 
 function statusLabel(item) {
-  return STATUS_LABELS[item?.status] || ''
+  const label = STATUS_LABELS[item?.status]
+  return label ? t(label) : ''
 }
 
 function closeTrending() {
@@ -1053,7 +1054,7 @@ async function requestTitle(item) {
     }
     await submitRequest(item)
   } catch (err) {
-    notice.value = err.message || 'Request failed.'
+    notice.value = err.message || t('Request failed.')
   } finally {
     if (!requestChoice.value) requestBusy.value = ''
   }
@@ -1089,7 +1090,7 @@ async function submitRequest(item, extra = {}) {
     })
     const data = await readJson(res)
     if (res.ok && data.ok !== false) {
-      notice.value = data.detail || 'Request submitted.'
+      notice.value = data.detail || t('Request submitted.')
       item.status = 'requested'
       item.can_request = false
       trendingMore.value = trendingMore.value.map((t) =>
@@ -1098,10 +1099,10 @@ async function submitRequest(item, extra = {}) {
       loadSnapshot(true)
       return true
     }
-    notice.value = apiError(data, 'Request failed.')
+    notice.value = apiError(data, t('Request failed.'))
     return false
   } catch (err) {
-    notice.value = err.message || 'Request failed.'
+    notice.value = err.message || t('Request failed.')
     return false
   } finally {
     requestBusy.value = ''
@@ -1119,14 +1120,14 @@ async function downloadRelease(item) {
     })
     const data = await readJson(res)
     if (res.ok && data.ok !== false) {
-      notice.value = data.detail || 'Sent to the download client.'
+      notice.value = data.detail || t('Sent to the download client.')
       item.status = 'requested'
       item.can_request = false
       return
     }
-    notice.value = apiError(data, 'Download failed.')
+    notice.value = apiError(data, t('Download failed.'))
   } catch (err) {
-    notice.value = err.message || 'Download failed.'
+    notice.value = err.message || t('Download failed.')
   } finally {
     requestBusy.value = ''
   }
@@ -1137,7 +1138,8 @@ const requestsRail = ref(null)
 const trendingRail = ref(null)
 
 
-// A calendar spanning more than half the grid shows the week; a narrower one (or any on a phone) the list.
+// Phones start on today; larger screens choose week or list from the card width.
+const calendarPhone = computed(() => activeBp.value === 'phone')
 const calendarWide = computed(() => {
   const item = gridLayout.value.find((entry) => entry.id === 'calendar')
   return !!item && activeBp.value !== 'phone' && item.w * 12 >= 7 * BREAKPOINTS[activeBp.value].cols
@@ -1163,7 +1165,7 @@ const {
   calOnToday,
   shiftCalendar,
   goToday
-} = useHomeCalendar({ snapshot, calendarWide })
+} = useHomeCalendar({ snapshot, calendarWide, calendarPhone })
 
 watch(statusWanted, (wanted) => {
   if (wanted) loadStatus()
@@ -1197,9 +1199,8 @@ const vpnNotice = computed(() => {
   const names = vpn.waiting.map(
     (name) => (snapshot.value.apps || []).find((app) => app.name === name)?.display_name || name,
   )
-  const verb = names.length === 1 ? 'stays' : 'stay'
-  const error = vpn.last_error ? ` Last VPN error: ${vpn.last_error}` : ''
-  return `VPN is on but not connected yet, so ${names.join(', ')} ${verb} stopped until it is.${error}`
+    const error = vpn.last_error ? ` ${t('Last VPN error: {message}', { message: vpn.last_error })}` : ''
+  return t('VPN is on but not connected yet. {names} will remain stopped until it connects.', { names: names.join(', ') }) + error
 })
 
 function scrollRail(which, direction) {
@@ -1492,9 +1493,9 @@ onUnmounted(() => {
               @click="item.url && openApp($event, item.source || 'jellyfin', item.url)"
             >
               <span class="home-tile-art">
-                <img v-if="item.poster" :src="item.poster" loading="lazy" decoding="async" alt="" class="home-tile-poster" />
+                <HomePoster v-if="item.poster" :src="item.poster" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
-                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
@@ -1542,10 +1543,10 @@ onUnmounted(() => {
               @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
             >
               <span class="home-tile-art">
-                <img v-if="item.poster" :src="item.poster" loading="lazy" decoding="async" alt="" class="home-tile-poster" />
+                <HomePoster v-if="item.poster" :src="item.poster" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
                 <span class="home-status-dot" :class="requestStatusDot(item).cls" :title="requestStatusDot(item).label" role="img" :aria-label="requestStatusDot(item).label"></span>
-                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
@@ -1605,7 +1606,7 @@ onUnmounted(() => {
                 @click="openTrending(item)"
               >
                 <span class="home-tile-art">
-                  <img v-if="item.poster" :src="item.poster" loading="lazy" decoding="async" alt="" class="home-tile-poster" />
+                  <HomePoster v-if="item.poster" :src="item.poster" class="home-tile-poster" />
                   <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
                   <span
                     v-if="trendingStatusDot(item)"
@@ -1615,7 +1616,7 @@ onUnmounted(() => {
                     role="img"
                     :aria-label="trendingStatusDot(item).label"
                   ></span>
-                  <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                  <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
                 </span>
                 <span class="home-tile-title">{{ item.title }}</span>
                 <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
@@ -1632,7 +1633,7 @@ onUnmounted(() => {
           <p v-else-if="snapshot.trending.length" class="home-muted">
             {{ trendingFilter === 'movie' ? $t('No movies in this filter.') : trendingFilter === 'tv' ? $t('No series in this filter.') : $t('No titles in this filter.') }}
           </p>
-          <p v-else class="home-muted">{{ snapshot.seerr?.available ? 'No trending titles right now.' : 'Trending titles appear when Seerr is running.' }}</p>
+          <p v-else class="home-muted">{{ $t(snapshot.seerr?.available ? 'No trending titles right now.' : 'Trending titles appear when Seerr is running.') }}</p>
           <ul v-if="widgetDebug && notesFor('trending').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('trending')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1699,7 +1700,7 @@ onUnmounted(() => {
                   <span class="cal-row-body">
                     <span class="cal-row-title">
                       <strong>{{ row.item.title }}</strong>
-                      <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                      <span v-if="mediaKind(row.item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(row.item)]) }}</span>
                     </span>
                     <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
                   </span>
@@ -1749,7 +1750,7 @@ onUnmounted(() => {
                       >
                         <span class="cal-event-top">
                           <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
-                          <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                          <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
                         </span>
                         <strong>{{ item.title }}</strong>
                         <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
@@ -1810,7 +1811,7 @@ onUnmounted(() => {
           </div>
           <div v-if="movingDownloads.length && !downloadPause.paused" class="home-dl-compact">
             <span class="home-dl-count">{{ movingDownloads.length }}<small>{{ $t('active') }}</small></span>
-            <span class="home-muted home-dl-meta">{{ totalSpeed || 'Waiting for speed' }}</span>
+            <span class="home-muted home-dl-meta">{{ totalSpeed || $t('Waiting for speed') }}</span>
             <span class="home-bar"><span :style="{ width: `${downloadsProgress}%` }" /></span>
           </div>
           <div class="home-card-body">
@@ -1909,7 +1910,7 @@ onUnmounted(() => {
           <div class="gh-head">
             <h3>{{ $t('Storage') }}</h3>
             <span v-if="storageStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[storageStatus.level] }">{{ storageStatus.text }}</span>
-            <span v-else class="gh-status is-idle">{{ statusLoaded ? 'No data folders found' : 'Checking disks…' }}</span>
+            <span v-else class="gh-status is-idle">{{ $t(statusLoaded ? 'No data folders found' : 'Checking disks…') }}</span>
           </div>
           <template v-if="fullestVolume">
             <div class="gh-figure">
@@ -1980,7 +1981,7 @@ onUnmounted(() => {
               </span>
               <span class="gh-pill">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-                Up {{ upFor(homeStatus.server.uptime_seconds) }}
+                {{ $t('Up') }} {{ upFor(homeStatus.server.uptime_seconds) }}
               </span>
             </div>
           </template>
@@ -2002,7 +2003,7 @@ onUnmounted(() => {
                     <strong>{{ item.title }}</strong>
                     <span class="gh-label">{{ item.detail }}</span>
                   </span>
-                  <span class="at-kind">{{ item.level === 'problem' ? 'Problem' : item.level === 'warning' ? 'Warning' : 'Update' }}</span>
+                  <span class="at-kind">{{ $t(item.level === 'problem' ? 'Problem' : item.level === 'warning' ? 'Warning' : 'Update') }}</span>
                 </a>
               </li>
             </ol>
@@ -2102,7 +2103,7 @@ onUnmounted(() => {
             <img v-if="trendingDetail.data?.poster || trendingDetail.item.poster" :src="trendingDetail.data?.poster || trendingDetail.item.poster" loading="lazy" decoding="async" alt="" class="home-title-poster" />
             <div>
               <p class="home-title-meta">
-                <span v-if="mediaKind(trendingDetail.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(trendingDetail.item)] }}</span>
+                <span v-if="mediaKind(trendingDetail.item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(trendingDetail.item)]) }}</span>
                 <span>{{ trendingDetail.data?.year || trendingDetail.item.detail }}</span>
                 <span v-if="statusLabel(trendingDetail.data || trendingDetail.item)">{{ statusLabel(trendingDetail.data || trendingDetail.item) }}</span>
               </p>

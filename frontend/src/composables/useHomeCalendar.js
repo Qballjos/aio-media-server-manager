@@ -1,11 +1,11 @@
 import { computed, ref, watch } from 'vue'
 import { openApp } from '../appOpen.js'
-import { t } from '../i18n/index.js'
+import { i18n, t } from '../i18n/index.js'
 
 /** Calendar state stays with the Home page, including a manually chosen view. */
-export function useHomeCalendar({ snapshot, calendarWide }) {
+export function useHomeCalendar({ snapshot, calendarWide, calendarPhone = ref(false) }) {
   function defaultCalView() {
-    return 'list'
+    return calendarPhone.value ? 'day' : calendarWide.value ? 'week' : 'list'
   }
 
   const SOURCE_NAMES = { jellyfin: 'Jellyfin', plex: 'Plex', sonarr: 'Sonarr', radarr: 'Radarr' }
@@ -23,7 +23,7 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
   function formatEventTime(value) {
     const dt = parseWhen(value)
     if (!dt) return ''
-    return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return dt.toLocaleTimeString(i18n.global.locale.value, { hour: '2-digit', minute: '2-digit' })
   }
 
   function dayKey(dt) {
@@ -33,7 +33,9 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
     return `${y}-${m}-${d}`
   }
 
-  const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const weekdayLabels = computed(() => Array.from({ length: 7 }, (_, index) =>
+    new Date(2024, 0, 1 + index).toLocaleDateString(i18n.global.locale.value, { weekday: 'short' }),
+  ))
   const calViewPicked = ref(false)
   const calView = ref(defaultCalView())
   const calFilter = ref('all')
@@ -60,7 +62,7 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
 
   function syncCalViewToViewport() {
     if (calViewPicked.value) return
-    const next = calendarWide.value ? 'week' : defaultCalView()
+    const next = defaultCalView()
     if (calView.value !== next) calView.value = next
   }
 
@@ -122,16 +124,16 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
 
   const calendarRangeLabel = computed(() => {
     if (calView.value === 'month') {
-      return calCursor.value.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+      return calCursor.value.toLocaleDateString(i18n.global.locale.value, { month: 'long', year: 'numeric' })
     }
     if (calView.value === 'day') {
-      return calCursor.value.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })
+      return calCursor.value.toLocaleDateString(i18n.global.locale.value, { weekday: 'long', day: 'numeric', month: 'short' })
     }
     if (calView.value === 'list' && calendarListInfo.value.label) return calendarListInfo.value.label
     const start = startOfWeek(calCursor.value)
     const end = addDays(start, 6)
     const opts = { day: 'numeric', month: 'short' }
-    return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, { ...opts, year: 'numeric' })}`
+    return `${start.toLocaleDateString(i18n.global.locale.value, opts)} – ${end.toLocaleDateString(i18n.global.locale.value, { ...opts, year: 'numeric' })}`
   })
 
   const calendarDays = computed(() => {
@@ -155,7 +157,7 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
           key,
           date: calCursor.value.getDate(),
           month: calCursor.value.getMonth() + 1,
-          weekday: weekdayLabels[(calCursor.value.getDay() + 6) % 7],
+          weekday: weekdayLabels.value[(calCursor.value.getDay() + 6) % 7],
           inMonth: true,
           isToday: key === todayKey,
           events: byDay[key] || [],
@@ -172,7 +174,7 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
           key,
           date: cursor.getDate(),
           month: cursor.getMonth() + 1,
-          weekday: weekdayLabels[i],
+          weekday: weekdayLabels.value[i],
           inMonth: true,
           isToday: key === todayKey,
           events: byDay[key] || [],
@@ -194,7 +196,7 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
         key,
         date: cursor.getDate(),
         month: cursor.getMonth() + 1,
-        weekday: weekdayLabels[(cursor.getDay() + 6) % 7],
+        weekday: weekdayLabels.value[(cursor.getDay() + 6) % 7],
         inMonth: cursor.getMonth() === month,
         isToday: key === todayKey,
         events: byDay[key] || [],
@@ -235,9 +237,9 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
     const start = thisWeek ? today : weekStart
     const end = addDays(weekStart, 7)
     const inWeek = groupSameDay(rows.filter((row) => row.dt >= start && row.dt < end))
-    if (inWeek.length || !thisWeek) return { rows: inWeek, label: thisWeek ? 'This week' : '' }
+    if (inWeek.length || !thisWeek) return { rows: inWeek, label: thisWeek ? t('This week') : '' }
     // ponytail: nothing left this week → the next few releases instead of an empty card
-    return { rows: groupSameDay(rows.filter((row) => row.dt >= start)).slice(0, 8), label: 'Coming up' }
+    return { rows: groupSameDay(rows.filter((row) => row.dt >= start)).slice(0, 8), label: t('Coming up') }
   })
 
   /** Episodes of one series on one day collapse into a single row ("S03E01 – S03E05 · 5 episodes"). */
@@ -258,7 +260,7 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
       const code = (r) => String(r.item.detail || '').split(' ')[0]
       const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
       // Downloaded only when every episode in the group is.
-      const item = { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have }
+      const item = { ...row.item, detail: `${span}${t('{count} episodes', { count: row.count })}`, has_file: row.have }
       // A run of episodes opens the series, not the first episode.
       if (row.have && item.series_play_url) item.play_url = item.series_play_url
       return { ...row, item }
@@ -298,9 +300,9 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
 
 
   watch(
-    calendarWide,
-    (wide) => {
-      if (!calViewPicked.value) calView.value = wide ? 'week' : 'list'
+    [calendarWide, calendarPhone],
+    () => {
+      if (!calViewPicked.value) calView.value = defaultCalView()
     },
     { immediate: true },
   )
@@ -312,7 +314,7 @@ export function useHomeCalendar({ snapshot, calendarWide }) {
     if (view === 'week' || view === 'list') {
       calCursor.value = startOfWeek(calCursor.value)
     }
-  })
+  }, { immediate: true })
 
   return { parseWhen, dayKey, formatEventTime, weekdayLabels, calViewPicked, calView, calFilter, selectedDayKey, calCursor, setCalView, selectCalDay, syncCalViewToViewport, eventKind, calendarTarget, calendarLinkTitle, openCalendarItem, calendarRangeLabel, calendarDays, calendarWeeks, calendarListInfo, calendarList, calOnToday, shiftCalendar, goToday, groupSameDay, startOfWeek }
 }

@@ -758,12 +758,18 @@
     display: none;
   }
   .home-trending-head {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "title" "tools" "toggle";
-    justify-items: start;
+    grid-template-columns: max-content minmax(0, 1fr);
+    grid-template-areas: "title tools" "toggle toggle";
+    column-gap: 0.5rem;
   }
   .home-trending-tools {
-    justify-content: flex-start;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+  }
+  .home-trending-tools .home-type-filter .ui-btn {
+    padding-inline: 0.5rem;
+    font-size: var(--text-kicker);
+    min-height: 2.75rem;
   }
   .home-trending-toggle {
     white-space: normal;

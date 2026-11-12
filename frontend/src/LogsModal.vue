@@ -166,7 +166,7 @@ onUnmounted(() => {
               :alt="app.displayName"
               class="app-icon app-icon-sm"
             />
-            <h3>{{ app?.displayName }} logs</h3>
+            <h3>{{ $t('{name} logs', { name: app?.displayName }) }}</h3>
             <span class="font-mono text-dim">({{ app?.name }})</span>
           </div>
 

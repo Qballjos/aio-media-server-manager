@@ -16,6 +16,20 @@ manual view preservation, grouped episode availability, year boundaries and
 calendar link targets. Existing Home loading and failed-job tests exercise the
 same extracted calendar module used by the actual page.
 
+## Home poster loading in WebKit
+
+After `npm ci` in `frontend`, install WebKit with `npx --no-install playwright install webkit`,
+then run `npm run test:posters`. This builds the production frontend and tests a
+350-request rail on mobile and desktop WebKit with synthetic API responses and
+local images. It covers cold loading, reload, scrolling to the final poster and
+unloading offscreen image sources, without requiring the Python fixture.
+WebKit device emulation does not reproduce physical iPhone memory limits.
+
+`npm run test:webkit` also checks Home's title/filter layout and phone Day default,
+Catalog's collapsible category filters, and the Settings section picker at mobile,
+small-mobile and desktop sizes. These UI checks use Dutch labels and synthetic
+API responses; they do not exercise real media services.
+
 ## Repeatable desktop and mobile journeys
 
 Install Python dependencies as documented in Contributing, then:

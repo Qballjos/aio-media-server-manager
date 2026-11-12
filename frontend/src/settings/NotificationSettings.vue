@@ -1,8 +1,10 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { ref, onMounted } from 'vue'
 import { apiRequest, readJson, apiError } from '../api.js'
 import UiSelect from '../UiSelect.vue'
 import IncidentHistory from '../IncidentHistory.vue'
+const { t } = useI18n()
 const saving = ref(false), error = ref(''), notice = ref('')
 // Settings → Notifications: the saved state (secrets only as "saved") and the editable form.
 const notif = ref(null)
@@ -54,14 +56,14 @@ async function saveNotifications(overrides = {}) {
     const res = await apiRequest('/api/notifications', { method: 'PUT', body: JSON.stringify(body) })
     const data = await readJson(res)
     if (!res.ok) {
-      error.value = apiError(data, 'Could not save notifications.')
+      error.value = apiError(data, t('Could not save notifications.'))
       return false
     }
     fillNotifForm(data)
-    notice.value = 'Notifications saved.'
+    notice.value = t('Notifications saved.')
     return true
   } catch (err) {
-    error.value = err?.message || 'Could not save notifications.'
+    error.value = err?.message || t('Could not save notifications.')
     return false
   } finally {
     saving.value = false
@@ -74,10 +76,10 @@ async function testNotification(channel) {
   try {
     const res = await apiRequest('/api/notifications/test', { method: 'POST', body: JSON.stringify({ channel }) })
     const data = await readJson(res)
-    if (!res.ok) error.value = apiError(data, 'Could not send the test message.')
-    else notice.value = channel === 'discord' ? 'Test message sent to Discord.' : 'Test e-mail sent.'
+    if (!res.ok) error.value = apiError(data, t('Could not send the test message.'))
+    else notice.value = channel === 'discord' ? t('Test message sent to Discord.') : t('Test e-mail sent.')
   } catch (err) {
-    error.value = err?.message || 'Could not send the test message.'
+    error.value = err?.message || t('Could not send the test message.')
   } finally {
     notifTesting.value = ''
   }
@@ -107,7 +109,7 @@ onMounted(loadNotifications)
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
               <strong>{{ $t('Send to Discord') }}</strong>
-              <span>{{ notif?.discord.webhook_saved ? 'A webhook is saved.' : 'No webhook saved yet.' }}</span>
+              <span>{{ notif?.discord.webhook_saved ? $t("A webhook is saved.") : $t("No webhook saved yet.") }}</span>
             </div>
             <button
               type="button"
@@ -131,7 +133,7 @@ onMounted(loadNotifications)
           <div class="notif-actions">
             <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save') }}</button>
             <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('discord')">
-              {{ notifTesting === 'discord' ? $t('Sending…') : 'Send a test' }}
+              {{ notifTesting === 'discord' ? $t('Sending…') : $t("Send a test") }}
             </button>
             <button v-if="notif?.discord.webhook_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removeWebhook: true })">{{ $t('Remove webhook') }}</button>
           </div>
@@ -199,7 +201,7 @@ onMounted(loadNotifications)
           <div class="notif-actions">
             <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">{{ saving ? $t('Saving…') : $t('Save') }}</button>
             <button type="button" class="ui-btn ui-btn-ghost" :disabled="saving || !!notifTesting" @click="testNotification('email')">
-              {{ notifTesting === 'email' ? $t('Sending…') : 'Send a test' }}
+              {{ notifTesting === 'email' ? $t('Sending…') : $t("Send a test") }}
             </button>
             <button v-if="notif?.email.password_saved" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="saveNotifications({ removePassword: true })">{{ $t('Remove password') }}</button>
           </div>
@@ -213,7 +215,7 @@ onMounted(loadNotifications)
         <div class="form-stack">
           <div v-for="(label, key) in notif?.event_labels || {}" :key="key" class="ui-switch-row">
             <div class="ui-switch-copy">
-              <strong>{{ NOTIF_EVENT_NAMES[key] || key }}</strong>
+              <strong>{{ $t(NOTIF_EVENT_NAMES[key] || key) }}</strong>
               <span>{{ label }}</span>
             </div>
             <button

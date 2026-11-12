@@ -261,7 +261,8 @@ test('trending filter hides and restores requested and available titles', async 
   expect(toggleBox).not.toBeNull()
   expect(cardBox).not.toBeNull()
   if (page.viewportSize().width <= 600) {
-    expect(filterBox.y).toBeGreaterThanOrEqual(headingBox.y + headingBox.height)
+    expect(filterBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width)
+    expect(Math.abs((filterBox.y + filterBox.height / 2) - (headingBox.y + headingBox.height / 2))).toBeLessThan(2)
     expect(toggleBox.y).toBeGreaterThanOrEqual(filterBox.y + filterBox.height)
   } else {
     expect(toggleBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width)
