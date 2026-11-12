@@ -228,6 +228,7 @@ def test_catalog_help_urls_and_icons():
         "jellyfin": "jellyfin.svg",
         "lidarr": "lidarr.svg",
         "neutarr": "neutarr.svg",
+        "cleanuparr": "cleanuparr.svg",
         "nzbget": "nzbget.svg",
         "plex": "plex.svg",
         "prowlarr": "prowlarr.svg",
@@ -321,6 +322,7 @@ def test_pwa_public_assets():
 
 @pytest.mark.parametrize("outcome", ["success", "exception", "wiring_error"])
 def test_install_job_reports_configuration_result(monkeypatch, outcome):
+    monkeypatch.setattr("core.preflight.require_action", lambda *args, **kwargs: None)
     from fastapi.testclient import TestClient
 
     from api.app import create_app

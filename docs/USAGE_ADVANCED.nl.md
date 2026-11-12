@@ -30,10 +30,12 @@ Begin klein (bijvoorbeeld Radarr + één downloadclient + Jellyfin) en voeg de r
 
 ---
 
+**Header:** Start, Catalogus en Instellingen blijven gecentreerd over de volledige header. Op smalle schermen krijgen ze een eigen gecentreerde rij. De header scrollt mee met de pagina. Op Start staat de knop met vier blokjes rechts, naast je account. Alle app-pagina’s, bedieningselementen en labels gebruiken Figtree; als dat weblettertype niet kan laden, gebruikt de app overal dezelfde systeemlettertypen als terugval.
+
 ## De widgets op je hoofdpagina aanpassen {#customize-home}
 
 <div class="widget-visual-guide" role="group" aria-label="De widgets op je hoofdpagina aanpassen">
-<div class="widget-visual-step"><span class="visual-number">1</span><strong>De bewerkknop</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>Ga naar Home en klik op het pictogram met vier blokjes naast de paginatabs. Er verschijnen handgrepen en een bewerkbalk.</p></div>
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>De bewerkknop</strong><div class="visual-nav"><span class="visual-nav-pages"><span>Home</span><span>Catalog</span><span>Settings</span></span><span class="visual-nav-tools"><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span><span aria-label="Account">●</span></span></div><p>Ga naar Home en klik op het pictogram met vier blokjes rechts in de header, naast je account. Er verschijnen handgrepen en een bewerkbalk.</p></div>
 <div class="widget-visual-step"><span class="visual-number">2</span><strong>Verplaatsen: sleep de handgreep</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Downloads</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Formaat: sleep deze hoek</p></div>
 <div class="widget-visual-step"><span class="visual-number">3</span><strong>Kies wat je toevoegt</strong><div class="visual-toolbar"><span>＋ Widget toevoegen</span><span>Klaar</span></div><p>Kies Widget toevoegen, daarna Dit formaat of Elk formaat en vervolgens de widget. Wijzigingen worden automatisch opgeslagen; kies Klaar als je klaar bent.</p></div>
 </div>
@@ -80,7 +82,7 @@ Als je publieke Cloudflare-hostnamen hebt ingesteld, kan **Open** in plaats daar
 
 ## Wat de wizard koppelt
 
-Als een app gezond is — of als je op **Auto-koppelen** klikt — zet AIO downloadmappen en categorieën, hoofdmapen en downloadclients in Sonarr, Radarr en Lidarr, Prowlarr-sync, Seerr, Bazarr-koppeling en startconfiguraties voor Recyclarr en NeutArr. **Instellingen → Usenet** bewaart de nieuwsserver en stuurt die naar SABnzbd en NZBGet. Prowlarr krijgt ook een startset publieke indexers. Verwijder wat je niet wilt; ze worden niet opnieuw toegevoegd.
+Als een app gezond is — of als je op **Auto-koppelen** klikt — zet AIO downloadmappen en categorieën, hoofdmapen en downloadclients in Sonarr, Radarr en Lidarr, Prowlarr-sync, Seerr, Bazarr-koppeling en startconfiguraties voor Recyclarr en NeutArr. **Instellingen → Usenet** bewaart de nieuwsserver en stuurt die naar SABnzbd en NZBGet. De startset publieke indexers staat standaard uit. Schakel deze expliciet in via de wizard of Instellingen → App-koppelingen en start daarna Auto-koppelen. Uitschakelen verwijdert bestaande indexers niet. Verwijder wat je niet wilt; ze worden niet opnieuw toegevoegd.
 
 SSD-downloadopslag en een HDD-bibliotheek werken samen; imports ertussen kopiëren bestanden. Hardlinks vereisen hetzelfde bestandssysteem.
 
@@ -104,6 +106,16 @@ De eerste keer dat NeutArr start, voordat het een account heeft, vraagt het om e
 Die waarde is het bestand `/config/neutarr/.setup-token` in het apparaat (de hostmap die als `/config` is gemount). NeutArr verwijdert het bestand nadat het account is aangemaakt, en het veld in Instellingen wordt leeg. Tot NeutArr is gestart, blijft het veld leeg.
 
 ---
+
+### Controles, voortgang en herstel
+
+Voor een installatie of handmatige update toont AIO controles voor opslag, onderhoud en downloadtoegang. Los een blokkade op voordat je doorgaat. **Catalogus → Installatievoortgang** toont de stappen en opent de live logs; je kunt het venster sluiten en opnieuw openen. Mislukt het instellen na een geslaagde installatie, dan probeert **Opnieuw proberen** alleen het starten en koppelen opnieuw.
+
+Via **Instellingen → App-koppelingen → Mijn installatie controleren** lees je de daadwerkelijk opgeslagen koppelingen terug. **Auto-koppelen** past de automatische configuratie toe; de controle zelf wijzigt geen app-instellingen. Publieke startindexers vereisen een expliciete keuze.
+
+**Instellingen → Back-ups** ondersteunt versleutelde HTTPS/WebDAV-kopieën en veilige hersteltests in een tijdelijke map. Bewaar het versleutelingswachtwoord buiten de server. **Instellingen → Meldingen** bevat opslaggrenzen en recente incidenten. De app-instellingen van Recyclarr hebben een **Handmatige configuratie** om eigen YAML exact te behouden.
+
+Lees [installatiecontrole en herstel](operations.md) en [sessies, HTTPS en noodherstel](security-operations.md).
 
 ## De interface van elke app openen
 
@@ -294,3 +306,35 @@ De image werkt die apps niet vanzelf bij. Lees de release-opmerkingen op GitHub 
 - Checklist voor een nieuwe installatie: [Installeren](INSTALL.md)
 - Toegang van buitenaf: [Cloudflare Tunnel](deploy/CLOUDFLARE.md)
 - De deur op slot voor publieke URL’s: [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md)
+
+### Cleanuparr
+
+Installeer **Cleanuparr** via Catalogus of selecteer de app bij de optionele wizard-apps. AIO beheert de app als proces op Linux amd64/arm64, op poort **11011**, met configuratie in `/config/cleanuparr`. Voeg bij bestaande Compose-installaties `11011:11011` toe en maak de AIO-container opnieuw aan. De test- en GPU-overlays nemen deze poort over.
+
+Auto-Wire maakt bij een nieuwe installatie de AIO-beheerder aan en koppelt geïnstalleerde Sonarr, Radarr, Lidarr, qBittorrent en SABnzbd met hun ingestelde poorten en aanmeldgegevens. Cleanuparr ondersteunt NZBGet niet. Nieuwe installaties starten in **dry-run** voordat koppelingen worden toegevoegd. AIO schakelt conservatieve wachtrij- en malwarecontroles in dry-run in, maar laat het opruimen van afgeronde downloads en proactief zoeken uit. Controleer de regels voordat je verwijderen toestaat en voorkom overlappende zoektaken met NeutArr. Bestaande externe koppelingen, uitgeschakelde keuzes en opruimregels blijven behouden.
+
+**Open UI** meldt de gedeelde beheerder aan op dezelfde LAN-host; openbare subdomeinen en accounts met 2FA behouden hun eigen aanmelding. Wachtwoorden en API-sleutels blijven op de server en sessietokens komen niet in URL’s. Heeft Cleanuparr al een ander account, voltooi dan de setup en bewaar de API-sleutel via **Catalogus → Cleanuparr → Instellingen**. Voer daarna Auto-Wire uit. AIO neemt geen onbekend onvoltooid account over.
+
+**Koppelingen controleren** leest de opgeslagen adressen zonder ze te wijzigen. Updates, backups, selectief herstellen en verwijderen volgen de standaard appbediening. Verwijderen behoudt standaard de configuratie en verwijdert nooit mediabibliotheken. Pas bij een poortwijziging ook de Docker-poortkoppeling aan. Voer na het wijzigen van de AIO-beheerder Auto-Wire uit om de aanmelding te synchroniseren.
+
+#### Standaardprofiel voor nieuwe installaties
+
+Dit zijn conservatieve **AIO-keuzes**, gebaseerd op de officiële documentatie. Het zijn geen universeel voorgeschreven waarden. Het profiel wordt eenmalig ingesteld wanneer AIO het account aanmaakt. Bestaande accounts en latere wijzigingen blijven behouden.
+
+| Instelling | AIO-standaard |
+| --- | --- |
+| Dry-run | Aan; controleer eerst de gesimuleerde resultaten |
+| Internetcontrole | Aan, via HTTPS naar GitHub en Cloudflare; certificaatcontrole aan |
+| Queue Cleaner | Elke 5 minuten |
+| Vastgelopen publieke torrents | 12 meldingen, ongeveer 1 uur; teller reset bij voortgang; private torrents overslaan |
+| Mislukte imports | 6 meldingen, ongeveer 30 minuten; alleen specifieke inhouds-/releasefouten |
+| Importbeveiliging | Private torrents en ontbrekende clientitems overslaan; geforceerd importeren uit |
+| Metadata-, clientfout- en traagheidsregels | Uit; geen aannames over snelheid of schijfproblemen |
+| Malware Blocker | Elke minuut; officiële permissieve blacklist voor Sonarr/Radarr, niet voor muziek |
+| Malwareverwijdering | Private torrents overslaan; niet de hele torrent verwijderen vanwege één geblokkeerd bestand |
+| Download Cleaner | Uit; geen automatisch verwijderen op seedratio of weesbestanden |
+| Seeker | Alleen vervangende zoekopdrachten, elke 10 minuten; proactief zoeken uit |
+
+De importpatronen zijn `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing` en `Unable to parse`. Uitpakken, onvoldoende schijfruimte en onjuiste padkoppelingen vallen daar niet onder. De globale metadataregel blijft uit om private torrents te beschermen. AIO verandert geen qBittorrent-uitsluitingen buiten Cleanuparrs dry-run om.
+
+Bronnen: [Queue Cleaner](https://cleanuparr.github.io/docs/configuration/queue-cleaner/), [Malware Blocker](https://cleanuparr.github.io/docs/configuration/malware-blocker/), [General](https://cleanuparr.github.io/docs/configuration/general/), [Seeker](https://cleanuparr.github.io/docs/configuration/seeker/). API-velden gecontroleerd voor Cleanuparr v2.11.0; de online documentatie kan nieuwere velden beschrijven.

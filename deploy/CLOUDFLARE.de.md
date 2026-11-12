@@ -114,6 +114,7 @@ Nachdem das Connector-Token gespeichert ist (Schritt 3):
 | `sonarr.example.com` | `http://127.0.0.1:8989` |
 | `prowlarr.example.com` | `http://127.0.0.1:9696` |
 | `neutarr.example.com` | `http://127.0.0.1:9705` |
+| `cleanuparr.example.com` | `http://127.0.0.1:11011` |
 | `plex.example.com` | `http://127.0.0.1:32400` |
 
 Flaresolverr und Recyclarr werden nicht als öffentliche Hostnamen angeboten. Recyclarr ist eine Kommandozeilen-Synchronisation. Flaresolverr wird im Gerät von Prowlarr genutzt. Weitere Ports: [Installieren → Ports](../docs/INSTALL.md#ports).

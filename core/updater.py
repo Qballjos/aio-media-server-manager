@@ -64,27 +64,44 @@ class ApplicationUpdater:
         if not plugin.is_installed():
             raise RuntimeError(f"{plugin.name} is not installed.")
 
+        from core.preflight import require_action
+        await asyncio.to_thread(require_action, plugin, self.settings, operation="update")
+
         label = plugin.manifest.display_name
 
         def step(message: str) -> None:
             set_job(plugin.name, "updating", message)
 
         supervisor = ProcessSupervisor.get()
+        previous_install = plugin.install_dir.with_name(f".{plugin.name}.pre-update")
+        if previous_install.exists():
+            message = f"Resolve the retained recovery copy before updating: {previous_install}"
+            set_job(plugin.name, "rollback_failed", message)
+            raise RuntimeError(message)
         was_running = supervisor.status(plugin.name).value == "running"
         if was_running:
             step(f"Stopping {label}…")
             await supervisor.stop(plugin.name)
 
-        previous_install = plugin.install_dir.with_name(f".{plugin.name}.pre-update")
         try:
             step(f"Backing up {label}'s settings…")
             snapshot = await asyncio.to_thread(self.backups.snapshot_application, plugin.name)
             step("Setting the current version aside…")
             await asyncio.to_thread(_set_aside, plugin.install_dir, previous_install)
         except Exception as exc:
-            set_job(plugin.name, "rolled_back", f"The update did not start: {exc}")
+            message = f"The update did not start: {exc}"
+            if was_running:
+                try:
+                    await supervisor.start(
+                        name=plugin.name, cmd=plugin.start_command(), cwd=plugin.working_directory(),
+                        env=plugin.extra_env(), log_dir=self.settings.config_dir / "logs",
+                    )
+                except Exception as restart_exc:
+                    message += f"; restart failed: {restart_exc}"
+            set_job(plugin.name, "failed", message)
             raise
 
+        discard_previous = False
         try:
             plugin.require_host_arch()
             step(f"Installing the new version of {label}…")
@@ -102,6 +119,7 @@ class ApplicationUpdater:
                     )
                 except VpnIsolationError as exc:
                     logger.warning("Updated '%s' but left it stopped: %s", plugin.name, exc)
+                    discard_previous = True
                     set_job(plugin.name, "updated", f"Updated to {result.version}, but stopped: {exc}")
                     return {
                         "status": "updated",
@@ -115,6 +133,7 @@ class ApplicationUpdater:
                 healthy = await asyncio.to_thread(self._wait_healthy, plugin)
                 if not healthy:
                     raise RuntimeError("Post-update health check failed.")
+            discard_previous = True
             set_job(plugin.name, "updated", f"Updated to {result.version}")
             return {
                 "status": "updated",
@@ -126,35 +145,52 @@ class ApplicationUpdater:
         except Exception as exc:
             logger.error("Update failed for %s: %s — rolling back", plugin.name, exc)
             step(f"Update failed; putting the previous version of {label} back…")
-            await supervisor.stop(plugin.name)
-            if previous_install.exists():
-                if plugin.install_dir.exists():
-                    await asyncio.to_thread(shutil.rmtree, plugin.install_dir, ignore_errors=True)
-                await asyncio.to_thread(shutil.move, str(previous_install), str(plugin.install_dir))
+            recovery = {"binary": False, "configuration": False, "process": not (was_running and plugin.manifest.daemon)}
+            errors = {}
+            stopped = False
             try:
-                await asyncio.to_thread(self.backups.restore_application_snapshot, snapshot)
+                await supervisor.stop(plugin.name)
+                stopped = True
+                if not previous_install.exists():
+                    raise RuntimeError("Previous installation is unavailable")
+                if plugin.install_dir.exists():
+                    await asyncio.to_thread(shutil.rmtree, plugin.install_dir)
+                await asyncio.to_thread(shutil.move, str(previous_install), str(plugin.install_dir))
+                recovery["binary"] = True
             except Exception as restore_exc:
-                logger.error("Snapshot restore also failed for %s: %s", plugin.name, restore_exc)
-            if was_running and plugin.manifest.daemon:
+                errors["binary"] = str(restore_exc)
+            if stopped:
+                try:
+                    await asyncio.to_thread(self.backups.restore_application_snapshot, snapshot)
+                    recovery["configuration"] = True
+                except Exception as restore_exc:
+                    errors["configuration"] = str(restore_exc)
+            else:
+                errors["configuration"] = "Not restored because the application could not be stopped"
+            if was_running and plugin.manifest.daemon and recovery["binary"] and recovery["configuration"]:
                 try:
                     await supervisor.start(
-                        name=plugin.name,
-                        cmd=plugin.start_command(),
-                        cwd=plugin.working_directory(),
-                        env=plugin.extra_env(),
+                        name=plugin.name, cmd=plugin.start_command(),
+                        cwd=plugin.working_directory(), env=plugin.extra_env(),
                         log_dir=self.settings.config_dir / "logs",
                     )
-                except Exception:
-                    logger.exception("Failed to restart previous version of %s", plugin.name)
-            set_job(plugin.name, "rolled_back", f"Update failed, back on the previous version: {exc}")
+                    if not await asyncio.to_thread(self._wait_healthy, plugin):
+                        raise RuntimeError("Restored version failed its health check")
+                    recovery["process"] = True
+                except Exception as restore_exc:
+                    errors["process"] = str(restore_exc)
+            outcome = "rolled_back" if all(recovery.values()) else "rollback_failed"
+            message = f"Update failed; previous version restored: {exc}" if outcome == "rolled_back" else f"Update failed; recovery incomplete: {exc}. {errors}"
+            set_job(plugin.name, outcome, message)
+            from core.notifications import notify
+            await asyncio.to_thread(notify, "update_failures", f"Update failed: {plugin.name}", "Open Catalog for the recovery status and details.", "problem")
             return {
-                "status": "rolled_back",
-                "name": plugin.name,
-                "error": str(exc),
-                "snapshot": str(snapshot),
+                "status": outcome, "name": plugin.name, "error": str(exc), "detail": message,
+                "snapshot": str(snapshot), "recovery": recovery, "recovery_errors": errors,
+                "recovery_install": str(previous_install) if previous_install.exists() else None,
             }
         finally:
-            if previous_install.exists():
+            if discard_previous and previous_install.exists():
                 _discard_later(previous_install)
 
     def _wait_healthy(self, plugin: BaseApplication, timeout: float = 45.0) -> bool:
@@ -178,6 +214,8 @@ def _set_aside(install_dir: Path, previous: Path) -> None:
     them), so a rename does what copying every file did, in no time. Leftovers of earlier updates go first: at most
     one old version per app.
     """
+    if previous.exists():
+        raise RuntimeError(f"An earlier recovery copy must be resolved first: {previous}")
     for leftover in install_dir.parent.glob(f"{previous.name}*"):
         shutil.rmtree(leftover, ignore_errors=True)
     if install_dir.exists():

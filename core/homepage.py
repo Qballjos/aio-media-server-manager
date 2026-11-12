@@ -452,7 +452,7 @@ def homepage_title(host: str, scheme: str, media_type: str, media_id: int) -> di
         "trailer": _seerr_trailer(data.get("relatedVideos")),
         "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
         "status": status,
-        "can_request": status in {"missing", "partial"},
+        "can_request": status in {"missing", "partial", "deleted"},
     }
 
 
@@ -685,7 +685,7 @@ def homepage_prowlarr_grab(token: str) -> dict[str, Any]:
     return {"ok": False, "detail": _http_error_detail(resp, "Prowlarr")}
 
 
-_SICK_STATES = frozenset({"crash_loop", "failed"})
+_SICK_STATES = frozenset({"crash_loop", "failed", "rollback_failed"})
 
 
 def _running_names() -> set[str]:
@@ -719,7 +719,7 @@ def _launcher_apps(
         if plugin.name in _LAUNCHER_SKIP or not plugin.manifest.daemon:
             continue
         job = get_job(plugin.name) or {}
-        if not plugin.is_installed() and job.get("status") not in {"queued", "installing", "configuring", "failed"}:
+        if not plugin.is_installed() and job.get("status") not in {"queued", "installing", "configuring", "failed", "rollback_failed"}:
             continue
         proc = states.get(plugin.name) or {}
         state = str(proc.get("state") or ("running" if plugin.name in running else "stopped"))
@@ -759,6 +759,7 @@ _STATE_LABELS = {
     "waiting_for_vpn": "Waiting for VPN",
     "stopped": "Stopped",
     "failed": "Setup failed",
+    "rollback_failed": "Recovery incomplete",
 }
 
 
@@ -774,8 +775,8 @@ def _launcher_state(name: str, running: bool, sick: bool, vpn_waiting: bool) -> 
     elif job == "configuring":
         # The process may already run, but the post-install wiring is still busy.
         state = "configuring"
-    elif job == "failed":
-        state = "failed"
+    elif job in {"failed", "rollback_failed"}:
+        state = job
     elif running:
         state = "running"
     elif vpn_waiting and name in VPN_TUNNELED_APPS:
@@ -2048,6 +2049,7 @@ def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str, scheme: str =
         seen.add(ident)
         title = row.get("title") or row.get("name") or f"{media_type} {media_id}"
         poster = row.get("posterPath") or ""
+        backdrop = row.get("backdropPath") or ""
         year = str(row.get("releaseDate") or row.get("firstAirDate") or "")[:4]
         status = seerr_media_status(row)
         path = f"tv/{media_id}" if media_type == "tv" else f"movie/{media_id}"
@@ -2060,11 +2062,12 @@ def _seerr_trending_cards(plugin: Any, rows: list[Any], host: str, scheme: str =
                 "overview": " ".join(str(row.get("overview") or "").split())[:4000],
                 "voteAverage": _score_10(row.get("voteAverage")) if vote_count else None,
                 "poster": f"https://image.tmdb.org/t/p/w185{poster}" if poster else "",
+                "backdrop": f"https://image.tmdb.org/t/p/w1280{backdrop}" if backdrop else "",
                 "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
                 "mediaType": media_type,
                 "mediaId": media_id,
                 "status": status,
-                "can_request": status in {"missing", "partial"},
+                "can_request": status in {"missing", "partial", "deleted"},
             }
         )
         if len(items) >= 20:
@@ -2175,7 +2178,7 @@ def _seerr_media_details(
     }
 
 
-_SEERR_MEDIA_STATUS = {2: "requested", 3: "requested", 4: "partial", 5: "available"}
+_SEERR_MEDIA_STATUS = {2: "requested", 3: "requested", 4: "partial", 5: "available", 7: "deleted"}
 
 
 def seerr_media_status(row: dict[str, Any]) -> str:
@@ -2380,7 +2383,7 @@ def _seerr_search(catalog: ApplicationCatalog, term: str) -> tuple[list[dict[str
                 "year": row.get("releaseDate") or row.get("firstAirDate") or "",
                 "poster": f"https://image.tmdb.org/t/p/w154{poster}" if poster else "",
                 "status": status,
-                "can_request": status in {"missing", "partial"},
+                "can_request": status in {"missing", "partial", "deleted"},
             }
         )
         if len(items) >= 20:

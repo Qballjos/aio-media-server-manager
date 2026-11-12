@@ -197,7 +197,10 @@ def test_wizard_blank_qbittorrent_login_uses_manager_account(tmp_path: Path, mon
 
 
 @pytest.mark.asyncio
-async def test_wizard_api_endpoints(tmp_path: Path):
+async def test_wizard_api_endpoints(tmp_path: Path, monkeypatch):
+    from api.routers import wizard as wizard_router
+    cfg = Settings(config_dir=tmp_path / "config", media_dir=tmp_path / "media", download_dir=tmp_path / "downloads")
+    monkeypatch.setattr(wizard_router, "wizard_engine", WizardEngine(cfg=cfg))
     app = create_app()
     client = TestClient(app)
 

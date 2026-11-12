@@ -59,7 +59,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
         class="home-sheet glass-card"
         role="dialog"
         aria-modal="true"
-        :aria-label="mode === 'add' ? $t('Add widget') : $t('{name} settings', { name: WIDGETS[item.id].label })"
+        :aria-label="mode === 'add' ? $t('Add widget') : $t('{name} settings', { name: $t(WIDGETS[item.id].label) })"
       >
         <div class="home-sheet-head">
           <h3>{{ mode === 'add' ? $t('Add widget') : $t(WIDGETS[item.id].label) }}</h3>

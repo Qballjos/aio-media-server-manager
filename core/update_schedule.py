@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import logging
 import re
 from datetime import datetime
@@ -106,6 +107,7 @@ class UpdateScheduler:
     def __init__(self, app_settings: Settings | None = None) -> None:
         self.settings = app_settings or settings
         self.updater = ApplicationUpdater(app_settings=self.settings)
+        self._operation_lock = asyncio.Lock()
 
     @property
     def state_file(self) -> Path:
@@ -265,6 +267,10 @@ class UpdateScheduler:
         return {"checked_at": now_ts, "available": available, "skipped": skipped, "appliance": appliance}
 
     async def apply_available(self, names: list[str] | None = None) -> dict[str, Any]:
+        async with self._operation_lock:
+            return await self._apply_available(names)
+
+    async def _apply_available(self, names: list[str] | None = None) -> dict[str, Any]:
         self._refresh_github()
         catalog = ApplicationCatalog(app_settings=self.settings)
         supervisor = ProcessSupervisor.get()
@@ -294,7 +300,7 @@ class UpdateScheduler:
                 if reason:
                     results.append({"name": name, "status": "skipped", "reason": reason})
                     continue
-                current = self.updater.update_available(plugin)
+                current = await asyncio.to_thread(self.updater.update_available, plugin)
                 if not current.get("update_available"):
                     results.append({"name": name, "status": "skipped", "reason": "already_current"})
                     continue
@@ -315,6 +321,10 @@ class UpdateScheduler:
         return {"applied_at": state["last_apply_at"], "results": results}
 
     async def tick(self, *, force_check: bool = False, force_apply: bool = False) -> dict[str, Any]:
+        async with self._operation_lock:
+            return await self._tick(force_check=force_check, force_apply=force_apply)
+
+    async def _tick(self, *, force_check: bool = False, force_apply: bool = False) -> dict[str, Any]:
         paused = pause_reason()
         if paused and not force_check:
             return {"status": "paused", "reason": paused}
@@ -335,7 +345,7 @@ class UpdateScheduler:
             weekday=self.settings.update_weekday,
             day_of_month=self.settings.update_day_of_month,
         ):
-            report.update(self.check_installed())
+            report.update(await asyncio.to_thread(self.check_installed))
             ran_check = True
             report["status"] = "checked"
         should_apply = force_apply or (
@@ -354,8 +364,8 @@ class UpdateScheduler:
             if paused:
                 return {"status": "paused", "reason": paused, **report}
             if not ran_check and not (self.load_state().get("available") or []):
-                report.update(self.check_installed())
-            applied = await self.apply_available()
+                report.update(await asyncio.to_thread(self.check_installed))
+            applied = await self._apply_available()
             report["apply"] = applied
             report["status"] = "applied" if applied.get("results") else report.get("status", "checked")
         return report
@@ -379,5 +389,9 @@ async def scheduler_loop() -> None:
             await scheduler.tick()
         except GitHubRateLimitError as exc:
             logger.warning("Scheduled update check hit GitHub rate limit: %s", exc)
+            from core.notifications import notify
+            await asyncio.to_thread(notify, "update_failures", "Update check failed", "GitHub API quota is exhausted. See Settings → Updates.", "problem")
         except Exception:
             logger.exception("Scheduled update tick failed")
+            from core.notifications import notify
+            await asyncio.to_thread(notify, "update_failures", "Update check failed", "Open Settings → Updates to review the failure.", "problem")

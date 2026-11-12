@@ -43,3 +43,35 @@ async def run_integration_wiring(request: Request) -> dict[str, Any]:
     """
     _ensure_authenticated(request)
     return await schedule_full_wiring()
+
+
+@router.post("/verify", summary="Read back configuration and verify application connections")
+async def verify(request: Request) -> dict[str, Any]:
+    auth_manager.authenticate_request(request)
+    import asyncio
+    from core.integration_verify import verify_integrations
+    return await asyncio.to_thread(verify_integrations)
+
+
+@router.get("/public-indexers", summary="Public starter indexer opt-in")
+async def get_indexer_choice(request: Request) -> dict[str, Any]:
+    auth_manager.authenticate_request(request)
+    from core.app_prefs import load_prefs
+    from core.integrations.prowlarr import STARTER_INDEXERS
+    options = (load_prefs().get("options") or {}).get("prowlarr") or {}
+    return {"enabled": options.get("public_indexers_opt_in") is True, "indexers": list(STARTER_INDEXERS)}
+
+
+from pydantic import BaseModel, StrictBool
+
+
+class IndexerChoice(BaseModel):
+    enabled: StrictBool
+
+
+@router.put("/public-indexers", summary="Explicitly opt in to public starter indexers")
+async def set_indexer_choice(body: IndexerChoice, request: Request) -> dict[str, Any]:
+    auth_manager.authenticate_request(request)
+    from core.app_prefs import set_app_option
+    set_app_option("prowlarr", "public_indexers_opt_in", body.enabled)
+    return await get_indexer_choice(request)

@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "frontend/src/homepagePanel.css"
+        ],
+        "createdAt": "2026-11-12T10:57:21.085Z",
+        "reason": "Agent review: existing calendar event borders encode source and availability through --calendar-event-color; these are semantic event indicators, not decorative card accents."
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "frontend/src/HomepagePanel.css"
+        ],
+        "createdAt": "2026-11-12T11:17:18.923Z",
+        "reason": "Agent review: calendar event borders encode source and availability via --calendar-event-color. Preserve intentional semantic indicators; this scope matches the casing reported by the hook."
+      }
+    ]
+  }
+}

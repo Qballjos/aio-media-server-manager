@@ -158,7 +158,7 @@ RUN set -eux; \
 
 # Pinned so Dependabot-style bumps (see cloudflared-bump.yml) change the Dockerfile
 # digest and trigger Nightly / Docker rebuilds. Do not switch back to floating :latest.
-ARG CLOUDFLARED_VERSION=2026.10.7
+ARG CLOUDFLARED_VERSION=2026.11.0
 RUN set -eux; \
     case "${TARGETARCH:-amd64}" in \
       amd64) cfarch=amd64 ;; \
@@ -202,6 +202,18 @@ COPY applications ./applications
 COPY packaging/nginx/jellyfin-cf-origin.conf.template /etc/aio/nginx/jellyfin-cf-origin.conf.template
 COPY main.py ./
 COPY --from=frontend /ui/dist ./frontend/dist
+
+# Keep image identity independent of environment overrides retained by updaters.
+RUN python - <<'PY'
+import os
+from pathlib import Path
+
+Path("core/_build.py").write_text(
+    f"VERSION = {os.environ['AMM_VERSION']!r}\n"
+    f"GIT_SHA = {os.environ['AMM_GIT_SHA']!r}\n",
+    encoding="utf-8",
+)
+PY
 
 VOLUME ["/config", "/data", "/downloads", "/media"]
 EXPOSE 8080

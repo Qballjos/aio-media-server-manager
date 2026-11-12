@@ -9,7 +9,7 @@ defineProps({
 </script>
 
 <template>
-  <div class="app-loader" role="status" :aria-label="label">
+  <div class="app-loader" role="status" :aria-label="$t(label)">
     <span class="app-loader-ring" aria-hidden="true"></span>
     <span class="app-loader-orb" aria-hidden="true">
       <img :src="brandHeaderUrl" alt="" />

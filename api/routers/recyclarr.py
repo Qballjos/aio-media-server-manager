@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/recyclarr", tags=["Recyclarr"])
 
 
 class RecyclarrPrefsBody(BaseModel):
+    manual_override: bool | None = None
     sonarr_web_1080p: bool | None = None
     sonarr_older_tv: bool | None = None
     sonarr_web_2160p: bool | None = None
@@ -59,6 +60,8 @@ async def patch_recyclarr_prefs(request: Request, body: RecyclarrPrefsBody) -> d
 @router.post("/reset", summary="Restore TRaSH default Recyclarr YAML")
 async def reset_recyclarr(request: Request) -> dict[str, Any]:
     _ensure_authenticated(request)
+    if config_payload()["prefs"].get("manual_override"):
+        raise HTTPException(status_code=409, detail="Disable manual mode before restoring automatic defaults.")
     return apply_prefs_and_render({}, force=True)
 
 

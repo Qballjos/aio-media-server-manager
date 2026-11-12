@@ -16,6 +16,7 @@ import re
 import smtplib
 import ssl
 import time
+import threading
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
@@ -37,7 +38,9 @@ EVENTS = {
     "vpn": "The VPN tunnel goes down or comes back",
     "tunnel": "The Cloudflare tunnel disconnects or reconnects",
     "updates": "A new appliance image or app update is available",
-    "disk": "A storage volume is more than 90% full",
+    "disk": "A storage volume crosses the configured threshold",
+    "backups": "A backup, transfer or restore test fails",
+    "update_failures": "An application update or update check fails",
 }
 SECURITY = ("starttls", "ssl", "none")
 DISK_ALERT_PERCENT = 90.0
@@ -72,6 +75,8 @@ def _default_config() -> dict[str, Any]:
             "sender": "",
             "recipients": [],
         },
+        "disk_alert_percent": 90,
+        "disk_clear_percent": 85,
         "events": {key: True for key in EVENTS},
     }
 
@@ -99,6 +104,10 @@ def load_config() -> dict[str, Any]:
     )
     events = data.get("events") or {}
     config["events"] = {key: bool(events.get(key, True)) for key in EVENTS}
+    alert = data.get("disk_alert_percent", 90)
+    clear = data.get("disk_clear_percent", 85)
+    if isinstance(alert, (int, float)) and isinstance(clear, (int, float)) and 1 <= clear < alert <= 99:
+        config.update(disk_alert_percent=alert, disk_clear_percent=clear)
     return config
 
 
@@ -140,8 +149,12 @@ def save_config(
     email: dict[str, Any],
     smtp_password: str | None,
     events: dict[str, bool],
+    disk_alert_percent: float = 90,
+    disk_clear_percent: float = 85,
 ) -> dict[str, Any]:
     """Validate and store. ``None`` for a secret keeps the saved one, ``""`` removes it."""
+    if not 1 <= disk_clear_percent < disk_alert_percent <= 99:
+        raise ValueError("Recovery threshold must be lower than the warning threshold (1–99%).")
     if webhook_url is not None:
         if webhook_url.strip():
             secret_store.save_secret(DISCORD_SECRET, validate_webhook(webhook_url))
@@ -182,6 +195,7 @@ def save_config(
         },
         "events": {key: bool(events.get(key, True)) for key in EVENTS},
     }
+    config.update(disk_alert_percent=disk_alert_percent, disk_clear_percent=disk_clear_percent)
     path = _config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, indent=2), encoding="utf-8")
@@ -257,6 +271,7 @@ def send_email(subject: str, body: str, config: dict[str, Any] | None = None) ->
 
 def notify(event: str, subject: str, body: str, level: str = "info") -> list[str]:
     """Send to every enabled channel if ``event`` is switched on. Never raises; returns the failures."""
+    record_incident(event, subject, body, level)
     config = load_config()
     if not config["events"].get(event, False):
         return []
@@ -285,6 +300,34 @@ def send_test(channel: str) -> None:
         send_email(subject, body)
     else:
         raise ValueError("Unknown channel.")
+
+
+_history_lock = threading.RLock()
+
+
+def incident_history() -> list[dict[str, Any]]:
+    with _history_lock:
+        try:
+            value = json.loads((Path(settings.config_dir) / "incidents.json").read_text())
+            return value[-100:] if isinstance(value, list) else []
+        except (OSError, ValueError):
+            return []
+
+
+def record_incident(event: str, subject: str, body: str, level: str) -> None:
+    from core.log_redactor import redact_log_line
+    with _history_lock:
+        rows = incident_history()
+        rows.append({"at": time.time(), "event": event, "level": level,
+                     "subject": redact_log_line(subject)[:200], "body": redact_log_line(body)[:2000]})
+        path = Path(settings.config_dir) / "incidents.json"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(rows[-100:]))
+            temporary.replace(path)
+        except OSError:
+            logger.warning("Could not store incident history")
 
 
 # --------------------------------------------------------------------------- watching
@@ -324,6 +367,7 @@ def snapshot(*, disks: bool = True) -> dict[str, Any]:
         snap["updates"] = sorted(names)
     except Exception as exc:
         logger.debug("notifications: update status failed: %s", exc)
+    snap.update({key: load_config()[key] for key in ("disk_alert_percent", "disk_clear_percent")})
     if not disks:
         return snap
     try:
@@ -386,11 +430,12 @@ class Watcher:
         self.notified_updates = updates
 
         for label, percent in sorted((snap.get("full_disks") or {}).items()):
-            if percent >= DISK_ALERT_PERCENT and label not in self.full:
+            if percent >= snap.get("disk_alert_percent", DISK_ALERT_PERCENT) and label not in self.full:
                 out.append(("disk", f"{label} storage is {percent:.0f}% full", f"The {label} volume is {percent:.0f}% full. Free some space before downloads and imports start failing.", "problem"))
                 self.full.add(label)
-            elif percent < DISK_CLEAR_PERCENT and label in self.full:
+            elif percent < snap.get("disk_clear_percent", DISK_CLEAR_PERCENT) and label in self.full:
                 self.full.discard(label)
+                out.append(("disk", f"{label} storage recovered", f"The {label} volume is now {percent:.0f}% full.", "ok"))
         return out
 
 
@@ -419,13 +464,12 @@ async def notifications_loop() -> None:
     await asyncio.sleep(CHECK_SECONDS)  # let apps, VPN and tunnel come up first
     while True:
         try:
-            if any_channel_enabled():
-                snap = await asyncio.to_thread(snapshot)
-                before = list(watcher.notified_updates)
-                for event, subject, body, level in watcher.messages(snap):
-                    await asyncio.to_thread(notify, event, subject, body, level)
-                if watcher.notified_updates != before:
-                    await asyncio.to_thread(_save_notified_updates, watcher.notified_updates)
+            snap = await asyncio.to_thread(snapshot)
+            before = list(watcher.notified_updates)
+            for event, subject, body, level in watcher.messages(snap):
+                await asyncio.to_thread(notify, event, subject, body, level)
+            if watcher.notified_updates != before:
+                await asyncio.to_thread(_save_notified_updates, watcher.notified_updates)
         except Exception as exc:  # the loop must survive anything
             logger.warning("Notifications check failed: %s", exc)
         await asyncio.sleep(CHECK_SECONDS)

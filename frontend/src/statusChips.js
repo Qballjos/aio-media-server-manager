@@ -28,6 +28,15 @@ export function tunnelChip(tunnel) {
   return { label: t('Tunnel down'), tone: 'bad', title: t('Cloudflare Tunnel is not running{reason}', { reason }) }
 }
 
+export function combinedServiceStatus(chips) {
+  const active = (Array.isArray(chips) ? chips : []).filter(Boolean)
+  if (!active.length) return null
+  return {
+    tone: active.every((chip) => chip.tone === 'ok') ? 'ok' : 'bad',
+    title: active.map((chip) => chip.title).join('. '),
+  }
+}
+
 export function versionLabel(health) {
   if (!health?.version) return ''
   const sha = String(health.git_sha || '').slice(0, 7)

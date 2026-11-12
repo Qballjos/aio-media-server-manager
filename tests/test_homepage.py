@@ -681,6 +681,7 @@ def test_homepage_seerr_trending_row(tmp_path):
                             "mediaType": "movie",
                             "title": "Trending Hit",
                             "posterPath": "/t.jpg",
+                            "backdropPath": "/wide.jpg",
                             "releaseDate": "2026-01-15",
                             "overview": "A court herbalist solves mysteries.",
                             "voteAverage": 8.2,
@@ -694,6 +695,12 @@ def test_homepage_seerr_trending_row(tmp_path):
                             "posterPath": "/s.jpg",
                             "firstAirDate": "2025-05-01",
                             "mediaInfo": {"status": 5},
+                        },
+                        {
+                            "id": 13,
+                            "mediaType": "movie",
+                            "title": "Removed Title",
+                            "mediaInfo": {"status": 7},
                         },
                         {"id": 3, "mediaType": "person", "name": "Someone"},
                     ]
@@ -711,7 +718,7 @@ def test_homepage_seerr_trending_row(tmp_path):
         patch("core.homepage._fetch_json", side_effect=fake_fetch),
     ):
         snap = homepage_snapshot("nas.local", force=True)
-    assert len(snap["trending"]) == 2
+    assert len(snap["trending"]) == 3
     assert snap["trending"][0]["title"] == "Trending Hit"
     assert snap["trending"][0]["detail"] == "2026"
     assert snap["trending"][0]["can_request"] is True
@@ -719,9 +726,13 @@ def test_homepage_seerr_trending_row(tmp_path):
     assert snap["trending"][0]["overview"] == "A court herbalist solves mysteries."
     assert snap["trending"][0]["voteAverage"] == 8.2
     assert "image.tmdb.org" in snap["trending"][0]["poster"]
+    assert snap["trending"][0]["backdrop"] == "https://image.tmdb.org/t/p/w1280/wide.jpg"
     assert snap["trending"][1]["title"] == "Hot Show"
+    assert snap["trending"][1]["backdrop"] == ""
     assert snap["trending"][1]["can_request"] is False
     assert snap["trending"][1]["status"] == "available"
+    assert snap["trending"][2]["status"] == "deleted"
+    assert snap["trending"][2]["can_request"] is True
 
 
 def test_homepage_trending_fetches_the_asked_page(tmp_path):
@@ -965,6 +976,7 @@ def test_seerr_media_status_mapping():
     assert seerr_media_status({"mediaInfo": {"status": 2}}) == "requested"
     assert seerr_media_status({"mediaInfo": {"status": 4}}) == "partial"
     assert seerr_media_status({"mediaInfo": {"status": 5}}) == "available"
+    assert seerr_media_status({"mediaInfo": {"status": 7}}) == "deleted"
     assert seerr_media_status({"status": 2}) == "requested"
     assert seerr_media_status({"status": 5}) == "available"
 

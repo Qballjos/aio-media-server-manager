@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 WIRE_AFTER_INSTALL = frozenset(
     {
+        "cleanuparr",
         "sonarr",
         "radarr",
         "lidarr",
@@ -66,6 +67,7 @@ WIRE_AFTER_INSTALL = frozenset(
 )
 
 _STATUS_APPS = (
+    "cleanuparr",
     "sabnzbd",
     "nzbget",
     "qbittorrent",
@@ -204,6 +206,8 @@ class IntegrationEngine:
         from core.app_prefs import load_prefs, set_app_option
 
         options = (load_prefs(self._settings).get("options") or {}).get("prowlarr") or {}
+        if options.get("public_indexers_opt_in") is not True:
+            return _step("prowlarr", "starter_indexers", True, "Public indexers are disabled; explicit opt-in required")
         tried = set(options.get("starter_indexers") or [])
         starter = prowlarr_client.add_starter_indexers(
             skip=tried, definitions_wait=0.0 if tried else 45.0, progress=progress
@@ -689,6 +693,16 @@ class IntegrationEngine:
             steps.append(_step("neutarr", "write_starter_config", True, str(neu_path)))
         except Exception as exc:
             steps.append(_step("neutarr", "write_starter_config", False, str(exc)))
+
+        if not self._skip_unavailable(steps, "cleanuparr", "connect_applications"):
+            from core.integrations.cleanuparr import wire_cleanuparr
+
+            set_wiring_progress("Connecting Cleanuparr to applications and download clients")
+            try:
+                steps.extend(wire_cleanuparr(self._catalog))
+                steps.append(_step("cleanuparr", "connect_applications", True, "AIO login and connections configured"))
+            except Exception as exc:
+                steps.append(_step("cleanuparr", "connect_applications", False, str(exc)))
 
         # Last: adding indexers waits on Prowlarr's catalog download and tests each
         # indexer, so it must not hold up Seerr, Bazarr, or the shared logins.

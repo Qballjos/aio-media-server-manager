@@ -6,6 +6,7 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { BREAKPOINTS, GRID_IDS, WIDGETS, resolve } from './homeGrid.js'
+import { displayScale } from './displaySize.js'
 
 const props = defineProps({
   layout: { type: Array, required: true },
@@ -31,12 +32,12 @@ const marker = ref(null)
 const said = ref('')
 
 const cols = computed(() => BREAKPOINTS[props.bp]?.cols || 12)
-const gap = computed(() => BREAKPOINTS[props.bp]?.gap || 16)
+const gap = computed(() => (BREAKPOINTS[props.bp]?.gap || 16) * displayScale.value)
 const cell = computed(() => (width.value > 0 ? (width.value - (cols.value - 1) * gap.value) / cols.value : 0))
 const pitch = computed(() => cell.value + gap.value)
 // Cells are square until a row would pass MAX_ROW; on wide screens they get wider instead of taller.
 const MAX_ROW = 104
-const rowCell = computed(() => Math.min(cell.value, MAX_ROW))
+const rowCell = computed(() => Math.min(cell.value, MAX_ROW) * displayScale.value)
 const rowPitch = computed(() => rowCell.value + gap.value)
 // Render in a fixed order: a node Vue moves loses its running transition and keyboard focus.
 const shown = computed(() => [...(live.value || props.layout)].sort((a, b) => GRID_IDS.indexOf(a.id) - GRID_IDS.indexOf(b.id)))
@@ -376,6 +377,9 @@ function onKey(event, id) {
 
 <style scoped>
 .hg {
+  --hg-duration: 240ms;
+  --hg-easing: cubic-bezier(0.16, 1, 0.3, 1);
+  --hg-padding: 1rem;
   position: relative;
   width: 100%;
   min-width: 0;
@@ -395,11 +399,12 @@ function onKey(event, id) {
   stroke-width: 1.2;
   stroke-dasharray: 4 6;
 }
+/* Width/height transitions preserve grid snapping; live drag and resize bypass them below. */
 .hg-item {
   position: absolute;
   top: 0;
   left: 0;
-  transition: transform 0.34s cubic-bezier(0.2, 0.85, 0.25, 1.08), width 0.26s ease, height 0.26s ease;
+  transition: transform var(--hg-duration) var(--hg-easing), width var(--hg-duration) var(--hg-easing), height var(--hg-duration) var(--hg-easing);
   will-change: transform;
 }
 .hg.no-anim .hg-item,
@@ -416,6 +421,8 @@ function onKey(event, id) {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  border-radius: var(--radius-glass);
+  transition: box-shadow var(--hg-duration) var(--hg-easing);
 }
 .hg-body > :deep(*) {
   flex: 1 1 auto;
@@ -448,7 +455,7 @@ function onKey(event, id) {
 .hg-item.is-lifted .hg-body,
 .hg-item.is-resizing .hg-body {
   border-radius: var(--radius-glass);
-  box-shadow: 0 0 0 1px rgba(var(--color-primary-rgb), 0.55), 0 40px 80px -24px rgb(0 0 0 / 0.6);
+  box-shadow: 0 0 0 1px rgba(var(--color-primary-rgb), 0.55), var(--glass-shadow);
 }
 .hg-item.is-lifted .hg-body::after,
 .hg-item.is-resizing .hg-body::after {
@@ -481,7 +488,7 @@ function onKey(event, id) {
   border: 1.5px solid rgba(var(--color-primary-rgb), 0.55);
   opacity: 0;
   pointer-events: none;
-  transition: transform 0.18s ease, width 0.18s ease, height 0.18s ease, opacity 0.15s;
+  transition: transform var(--hg-duration) var(--hg-easing), width var(--hg-duration) var(--hg-easing), height var(--hg-duration) var(--hg-easing), opacity var(--hg-duration) var(--hg-easing);
 }
 .hg-marker.is-on {
   opacity: 1;
@@ -513,6 +520,23 @@ function onKey(event, id) {
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  transition: color var(--hg-duration) var(--hg-easing), background-color var(--hg-duration) var(--hg-easing), border-color var(--hg-duration) var(--hg-easing), box-shadow var(--hg-duration) var(--hg-easing), opacity var(--hg-duration) var(--hg-easing);
+}
+.hg-grip:hover,
+.hg-rz:hover,
+.hg-item.is-lifted .hg-grip,
+.hg-item.is-resizing .hg-rz {
+  color: var(--color-primary);
+  background: var(--floating-bg);
+  border-color: var(--border-active);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+}
+.hg-item.is-lifted .hg-grip {
+  cursor: grabbing;
+}
+.hg-x:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 3px;
 }
 .hg-x {
   top: -10px;
@@ -576,7 +600,11 @@ function onKey(event, id) {
 }
 @media (prefers-reduced-motion: reduce) {
   .hg-item,
-  .hg-marker {
+  .hg-marker,
+  .hg-body,
+  .hg-x,
+  .hg-grip,
+  .hg-rz {
     transition: none;
   }
   .hg-item.is-new .hg-body {

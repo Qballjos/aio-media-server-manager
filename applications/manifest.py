@@ -75,6 +75,7 @@ def help_url_for(name: str, github_repo: str = "", upstream_url: str = "") -> st
 
 
 HELP_URLS: dict[str, str] = {
+    "cleanuparr": "https://cleanuparr.github.io/docs/",
     "sonarr": "https://wiki.servarr.com/sonarr",
     "radarr": "https://wiki.servarr.com/radarr",
     "lidarr": "https://wiki.servarr.com/lidarr",

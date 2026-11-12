@@ -117,7 +117,7 @@ onUnmounted(() => {
           <div class="modal-title-group">
             <h3>{{ $t('Host health') }}</h3>
             <span class="font-mono" :class="healthTone === 'ok' ? 'text-emerald' : 'text-warn'">
-              {{ healthTone === 'ok' ? 'OK' : 'HIGH LOAD' }}
+              {{ healthTone === 'ok' ? $t("OK") : $t("HIGH LOAD") }}
             </span>
           </div>
           <button type="button" class="btn-icon" :title="$t('Close')" @click="closeHealthModal">×</button>
@@ -175,7 +175,7 @@ onUnmounted(() => {
               <table class="health-apps-table">
                 <thead>
                   <tr>
-                    <th>App</th>
+                    <th>{{ $t('App') }}</th>
                     <th>{{ $t('CPU') }}</th>
                     <th>RAM</th>
                     <th class="hide-narrow">{{ $t('Share') }}</th>

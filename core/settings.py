@@ -200,6 +200,10 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Reverse proxy (optional)
     # ------------------------------------------------------------------
+    preflight_min_free_mb: int = Field(default=512, ge=1, description="Minimum free MiB before installing/updating applications.")
+
+    secure_cookies: bool = Field(default=False, description="Require HTTPS for manager session cookies (AMM_SECURE_COOKIES).")
+
     trusted_proxies: str = Field(
         default="",
         description="Comma-separated proxy IPs/CIDRs. Empty disables forwarded-header trust.",

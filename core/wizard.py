@@ -76,6 +76,7 @@ class WizardEngine:
                 "download_clients": ["sabnzbd", "qbittorrent"],
                 "vpn_provider": "none",
                 "arr_apps": ["prowlarr", "sonarr", "radarr"],
+                "public_indexers_opt_in": False,
                 "media_server": "jellyfin",
                 "media_servers": ["jellyfin"],
                 "request_system": "seerr",
@@ -293,6 +294,7 @@ class WizardEngine:
                     ]
                 ),
                 "selected": selections.get("arr_apps", []),
+                "public_indexers_opt_in": bool(selections.get("public_indexers_opt_in", False)),
             }
 
         if step_id == 8:
@@ -433,6 +435,7 @@ class WizardEngine:
                 self._settings.cloudflare_tunnel_token = token
                 CloudflareTunnelManager(self._settings).persist_token()
         elif step_id == 7:
+            selections["public_indexers_opt_in"] = data.get("public_indexers_opt_in") is True
             selections["arr_apps"] = data.get("arr_apps", selections.get("arr_apps", []))
         elif step_id == 8:
             if "media_servers" in data:
@@ -496,6 +499,9 @@ class WizardEngine:
             cfg.puid = int(selections["puid"])
         if selections.get("pgid"):
             cfg.pgid = int(selections["pgid"])
+
+        from core.app_prefs import set_app_option
+        set_app_option("prowlarr", "public_indexers_opt_in", bool(selections.get("public_indexers_opt_in", False)), app_settings=cfg)
 
         vpn_provider = selections.get("vpn_provider") or "none"
         if vpn_provider != "none":

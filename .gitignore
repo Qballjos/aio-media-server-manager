@@ -76,6 +76,7 @@ Thumbs.db
 # ===========================
 # Runtime artefacts
 # ===========================
+core/_build.py
 /config/
 /data/
 /backups/
@@ -112,3 +113,7 @@ DUMB_docs/
 .venv-docs/
 site/
 
+
+# Browser test artifacts (synthetic fixture data and traces)
+frontend/test-results/
+frontend/playwright-report/

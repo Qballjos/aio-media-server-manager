@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/applications", tags=["Applications"])
 
 catalog = ApplicationCatalog(app_settings=settings)
-API_KEY_APPS = frozenset({"jellyfin", "seerr"})
+API_KEY_APPS = frozenset({"jellyfin", "seerr", "cleanuparr"})
 updater = ApplicationUpdater(app_settings=settings)
 
 
@@ -148,6 +148,26 @@ async def app_session(name: str, request: Request) -> JSONResponse:
             "detail": "Automatic Jellyfin sign-in is unavailable. Sign in directly in Jellyfin.",
         })
     same_host = (urlparse(target).hostname or "") == (request.url.hostname or "")
+    if plugin.name == "cleanuparr":
+        # Unlike status/settings, this authenticated endpoint hands a browser its session.
+        auth_manager.authenticate_request(request)
+        if same_host:
+            from core.integrations.cleanuparr import CleanuparrClient, CleanuparrError
+            from core.shared_credentials import shared_admin_credentials
+
+            creds = shared_admin_credentials()
+            try:
+                ready = await asyncio.to_thread(plugin.prepare_browser_login)
+                if not ready or not creds:
+                    raise CleanuparrError("Open Cleanuparr to complete its sign-in.")
+                tokens = await asyncio.to_thread(CleanuparrClient(port=plugin.port).login, *creds)
+                return JSONResponse({"url": f"{target.rstrip('/')}/aio-login.html", "signed_in": False,
+                                     "handoff": "cleanuparr-session", "tokens": tokens},
+                                    headers={"Cache-Control": "no-store"})
+            except (CleanuparrError, OSError):
+                return JSONResponse({"url": target, "signed_in": False,
+                                     "detail": "Automatic Cleanuparr sign-in is unavailable. Sign in directly in Cleanuparr."},
+                                    headers={"Cache-Control": "no-store"})
     jar = None
     if same_host:
         plex_dir = catalog.get("plex").config_dir if catalog.has("plex") else None
@@ -215,6 +235,10 @@ async def start_application(name: str, request: Request) -> dict[str, Any]:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
 
     supervisor = ProcessSupervisor.get()
+    from core.install_jobs import get_job, set_job
+    pending_restart = (get_job(name) or {}).get("status") == "restart_required"
+    if pending_restart and supervisor.status(name).value == "running":
+        raise HTTPException(status_code=409, detail="Restart this application to apply its saved settings")
     cmd = plugin.start_command()
     env = plugin.extra_env()
     cwd = plugin.working_directory()
@@ -231,6 +255,8 @@ async def start_application(name: str, request: Request) -> dict[str, Any]:
     except RuntimeError as err:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
 
+    if pending_restart:
+        set_job(name, "started", "Saved settings are active")
     return {
         "status": "started",
         "name": name,
@@ -285,8 +311,12 @@ async def restart_application(name: str, request: Request) -> dict[str, Any]:
         except VpnIsolationError as err:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
 
+    from core.install_jobs import get_job, set_job
+    pending_restart = (get_job(name) or {}).get("status") == "restart_required"
     try:
-        if supervisor.status(name).value == "stopped":
+        if pending_restart:
+            await supervisor.stop(name)
+        if pending_restart or supervisor.status(name).value == "stopped":
             # If stopped, simply start it
             cmd = plugin.start_command()
             await supervisor.start(
@@ -301,6 +331,8 @@ async def restart_application(name: str, request: Request) -> dict[str, Any]:
     except VpnIsolationError as err:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
 
+    if pending_restart:
+        set_job(name, "started", "Saved settings are active")
     return {
         "status": "restarted",
         "name": name,
@@ -364,6 +396,12 @@ def _application_settings(plugin, request: Request) -> dict[str, Any]:
     elif plugin.name == "seerr":
         notes.append(
             "Paste the API key from Seerr Settings → General if homepage search and requests cannot find it automatically."
+        )
+    elif plugin.name == "cleanuparr":
+        notes.append(
+            "AIO connects Sonarr, Radarr, Lidarr, qBittorrent and SABnzbd automatically. "
+            "Cleanuparr uses your AIO login. New setups start in dry-run; review rules in Cleanuparr before enabling deletions. "
+            "NZBGet is not supported by Cleanuparr."
         )
     elif plugin.manifest.daemon:
         notes.append(
@@ -537,7 +575,7 @@ async def patch_application_settings(
         if plugin.name not in API_KEY_APPS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="API key can only be saved for Jellyfin or Seerr.",
+                detail="API key can only be saved for Jellyfin, Seerr or Cleanuparr.",
             )
         from core.crypto import secret_store
         from core.integrations.credentials import set_application_api_key
@@ -570,7 +608,14 @@ async def patch_application_settings(
         except VpnIsolationError as err:
             logger.warning("Left '%s' stopped after settings change: %s", name, err)
 
+    from core.install_jobs import set_job, get_job
+    pending_restart = running and not restarted and (body.port is not None or vuetorrent_changed)
+    if pending_restart:
+        set_job(name, "restart_required", "Restart this application to apply its saved settings before updating")
+    elif restarted and (get_job(name) or {}).get("status") == "restart_required":
+        set_job(name, "started", "Saved settings are active")
     payload = _application_settings(plugin, request)
+    payload["restart_required"] = pending_restart
     payload["restarted"] = restarted
     payload["status"] = "updated"
     if tunnel_sync is not None:
@@ -606,7 +651,7 @@ async def check_application_update(name: str, request: Request) -> dict[str, Any
         plugin = catalog.get(name)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    return updater.update_available(plugin)
+    return await asyncio.to_thread(updater.update_available, plugin)
 
 
 @router.post("/{name}/update", summary="Update an application with rollback on failure")
@@ -623,8 +668,12 @@ async def update_application(name: str, request: Request) -> dict[str, Any]:
         )
     from core.maintenance import update_in_progress
 
-    with update_in_progress():
-        outcome = await updater.update(plugin)
+    from core.preflight import PreflightError
+    try:
+        with update_in_progress():
+            outcome = await updater.update(plugin)
+    except PreflightError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
         from core.update_schedule import scheduler
 

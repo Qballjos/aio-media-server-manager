@@ -1,5 +1,6 @@
 /** Bundled dashboard icons served from /app-icons (public/). */
 const ICON_FILES = {
+  cleanuparr: 'cleanuparr.svg',
   flaresolverr: 'flaresolverr.png',
   grimmory: 'grimmory.svg',
   shelfmark: 'shelfmark.png',

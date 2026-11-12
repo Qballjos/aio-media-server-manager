@@ -23,6 +23,7 @@ De interface van de manager gebruikt **8080**. Kind-apps luisteren in dezelfde c
 | <img src="__AIO_ASSET__/assets/app-icons/seerr.svg" alt="" class="aio-app-icon" /> Seerr | 5055 |
 | <img src="__AIO_ASSET__/assets/app-icons/grimmory.svg" alt="" class="aio-app-icon" /> Grimmory | 6060 |
 | <img src="__AIO_ASSET__/assets/app-icons/neutarr.svg" alt="" class="aio-app-icon" /> NeutArr | 9705 |
+| <img src="__AIO_ASSET__/assets/app-icons/cleanuparr.svg" alt="" class="aio-app-icon" /> Cleanuparr | 11011 |
 | <img src="__AIO_ASSET__/assets/app-icons/recyclarr.svg" alt="" class="aio-app-icon" /> Recyclarr | geen (alleen CLI) |
 | <img src="__AIO_ASSET__/assets/app-icons/plex.svg" alt="" class="aio-app-icon" /> Plex | 32400 |
 
@@ -38,3 +39,9 @@ Kopieer [`.env.example`](../.env.example) voor native installs. Veel hiervan kun
 | `GITHUB_TOKEN` | Optioneel; hogere GitHub-API-limiet voor updates |
 | `AMM_CLOUDFLARE_TUNNEL_*` | Optionele tunnel voor toegang van buitenaf (`cloudflared` start na de apps bij boot) |
 | `AMM_VPN_*` | Optionele VPN voor qBittorrent, Prowlarr en Flaresolverr (ze wachten op de tunnel; lokale DNS-cache voor die apps) |
+| `AMM_SECURE_COOKIES` | Zet op `true` als je de manager via HTTPS opent; standaard `false` voor HTTP op het LAN. |
+| `AMM_PREFLIGHT_MIN_FREE_MB` | Minimaal vereiste vrije MiB per opslaglocatie vóór installatie/update; standaard `512`. |
+| `AMM_BACKUP_RECOVERY_TOKEN` | Optionele herstelcode van minimaal 32 tekens voor de serverbeheerder, alleen zonder werkend beheerdersaccount. Verwijder na herstel; zie de beveiligingsgids. |
+
+- [Installatiecontrole, externe back-ups en herstel](operations.md)
+- [Sessies, HTTPS en noodherstel](security-operations.md)

@@ -1,4 +1,5 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
@@ -6,6 +7,8 @@ import { openApp } from './appOpen.js'
 import { copyText } from './clipboard.js'
 import { useToasts } from './useToasts.js'
 import UiSelect from './UiSelect.vue'
+
+const { t } = useI18n()
 
 const props = defineProps({
   service: { type: Object, default: null },
@@ -73,7 +76,7 @@ async function loadSettings(service) {
     const res = await apiRequest(`/api/applications/${service.name}/settings`)
     const data = await readJson(res)
     if (!res.ok) {
-      settingsError.value = apiError(data, 'Could not load settings.')
+      settingsError.value = apiError(data, t('Could not load settings.'))
       settingsMeta.value = null
       settingsForm.value = { port: service.port, autostart: service.autostart }
       return
@@ -103,7 +106,7 @@ async function loadSettings(service) {
       }
     }
   } catch (err) {
-    settingsError.value = err.message || 'Could not load settings.'
+    settingsError.value = err.message || t('Could not load settings.')
   } finally {
     settingsLoading.value = false
   }
@@ -127,20 +130,20 @@ async function updateVueTorrent() {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      settingsError.value = apiError(data, 'Could not update VueTorrent.')
+      settingsError.value = apiError(data, t('Could not update VueTorrent.'))
       return
     }
     settingsForm.value.vuetorrent = true
     settingsMeta.value = data
     showToast(
       data.vuetorrent_version
-        ? `VueTorrent updated to ${data.vuetorrent_version}`
-        : 'VueTorrent updated',
+        ? t('VueTorrent updated to {version}', { version: data.vuetorrent_version })
+        : t('VueTorrent updated'),
       'success'
     )
     emit('saved')
   } catch (err) {
-    settingsError.value = err.message || 'Could not update VueTorrent.'
+    settingsError.value = err.message || t('Could not update VueTorrent.')
   } finally {
     vuetorrentUpdating.value = false
   }
@@ -153,7 +156,7 @@ async function saveAppSettings() {
   try {
     if (settingsApp.value.name === 'recyclarr') {
       if (!recyclarrMeta.value) {
-        settingsError.value = 'Could not load Recyclarr config.'
+        settingsError.value = t('Could not load Recyclarr config.')
         return
       }
       const yamlChanged = settingsForm.value.recyclarrYaml !== settingsForm.value.recyclarrOriginalYaml
@@ -164,7 +167,7 @@ async function saveAppSettings() {
         })
         const recData = await readJson(rec)
         if (!rec.ok) {
-          settingsError.value = apiError(recData, 'Could not save Recyclarr YAML.')
+          settingsError.value = apiError(recData, t('Could not save Recyclarr YAML.'))
           return
         }
       } else {
@@ -178,16 +181,17 @@ async function saveAppSettings() {
             radarr_hd: !!settingsForm.value.recyclarrPrefs.radarr_hd,
             radarr_anime: !!settingsForm.value.recyclarrPrefs.radarr_anime,
             radarr_uhd: !!settingsForm.value.recyclarrPrefs.radarr_uhd,
+            manual_override: !!settingsForm.value.recyclarrPrefs.manual_override,
             naming: settingsForm.value.recyclarrNaming
           })
         })
         const recData = await readJson(rec)
         if (!rec.ok) {
-          settingsError.value = apiError(recData, 'Could not save Recyclarr profiles.')
+          settingsError.value = apiError(recData, t('Could not save Recyclarr profiles.'))
           return
         }
       }
-      showToast('Saved Recyclarr TRaSH config', 'success')
+      showToast(t('Saved Recyclarr TRaSH config'), 'success')
       closeAppSettings()
       emit('saved')
       return
@@ -200,7 +204,7 @@ async function saveAppSettings() {
     if (settingsApp.value.name === 'qbittorrent') {
       payload.vuetorrent = !!settingsForm.value.vuetorrent
     }
-    if (['jellyfin', 'seerr'].includes(settingsApp.value.name) && String(settingsForm.value.apiKey || '').trim()) {
+    if (['jellyfin', 'seerr', 'cleanuparr'].includes(settingsApp.value.name) && String(settingsForm.value.apiKey || '').trim()) {
       payload.api_key = String(settingsForm.value.apiKey).trim()
     }
     const res = await apiRequest(`/api/applications/${settingsApp.value.name}/settings`, {
@@ -209,20 +213,20 @@ async function saveAppSettings() {
     })
     const data = await readJson(res)
     if (!res.ok) {
-      settingsError.value = apiError(data, 'Could not save settings.')
+      settingsError.value = apiError(data, t('Could not save settings.'))
       return
     }
     const sync = data.cloudflare_tunnel_sync
     let msg = data.restarted
-      ? `Saved ${data.display_name} and restarted on port ${data.port}`
-      : `Saved ${data.display_name} settings`
+      ? t('Saved {app} and restarted on port {port}', { app: data.display_name, port: data.port })
+      : t('Saved {app} settings', { app: data.display_name })
     if (sync && !sync.skipped) {
       if (sync.ok) {
-        msg += ` · Cloudflare tunnel updated (${sync.hostname || 'hostname'})`
+        msg += ' · ' + t('Cloudflare tunnel updated ({hostname})', { hostname: sync.hostname || t('hostname') })
         showToast(msg, 'success')
       } else {
         showToast(msg, 'success')
-        showToast(sync.detail || 'Cloudflare tunnel port sync failed.', 'error')
+        showToast(sync.detail || t('Cloudflare tunnel port sync failed.'), 'error')
       }
     } else if (sync?.skipped && sync.detail && /API token/i.test(sync.detail)) {
       showToast(msg, 'success')
@@ -233,7 +237,7 @@ async function saveAppSettings() {
     closeAppSettings()
     emit('saved')
   } catch (err) {
-    settingsError.value = err.message || 'Could not save settings.'
+    settingsError.value = err.message || t('Could not save settings.')
   } finally {
     settingsLoading.value = false
   }
@@ -246,7 +250,7 @@ async function copySetupToken() {
   try {
     await copyText(token)
     setupTokenCopied.value = true
-    showToast('Setup token copied', 'success')
+    showToast(t('Setup token copied'), 'success')
     setTimeout(() => { setupTokenCopied.value = false }, 2500)
   } catch {
     const field = document.getElementById('neutarr-setup-token')
@@ -254,7 +258,7 @@ async function copySetupToken() {
       field.focus()
       field.select()
     }
-    settingsError.value = 'Copy failed. The token is selected — press Cmd/Ctrl+C.'
+    settingsError.value = t('Copy failed. The token is selected — press Cmd/Ctrl+C.')
   }
 }
 
@@ -265,7 +269,7 @@ async function resetRecyclarrDefaults() {
     const rec = await apiRequest('/api/recyclarr/reset', { method: 'POST' })
     const recData = await readJson(rec)
     if (!rec.ok) {
-      settingsError.value = apiError(recData, 'Could not reset Recyclarr.')
+      settingsError.value = apiError(recData, t('Could not reset Recyclarr.'))
       return
     }
     recyclarrMeta.value = recData
@@ -273,9 +277,9 @@ async function resetRecyclarrDefaults() {
     settingsForm.value.recyclarrOriginalYaml = recData.yaml || ''
     settingsForm.value.recyclarrNaming = recData.prefs?.naming || 'plex'
     settingsForm.value.recyclarrPrefs = { ...(recData.prefs || {}) }
-    showToast('Restored TRaSH Recyclarr defaults', 'success')
+    showToast(t('Restored TRaSH Recyclarr defaults'), 'success')
   } catch (err) {
-    settingsError.value = err.message || 'Could not reset Recyclarr.'
+    settingsError.value = err.message || t('Could not reset Recyclarr.')
   } finally {
     settingsLoading.value = false
   }
@@ -287,12 +291,12 @@ async function syncRecyclarr() {
     const res = await apiRequest('/api/recyclarr/sync', { method: 'POST' })
     const data = await readJson(res)
     if (!res.ok) {
-      showToast(apiError(data, 'Recyclarr sync failed'), 'error')
+      showToast(apiError(data, t('Recyclarr sync failed')), 'error')
       return
     }
-    showToast('Recyclarr sync finished', 'success')
+    showToast(t('Recyclarr sync finished'), 'success')
   } catch (err) {
-    showToast(err.message || 'Recyclarr sync failed', 'error')
+    showToast(err.message || t('Recyclarr sync failed'), 'error')
   } finally {
     delete actionLoading.value.recyclarr
   }
@@ -340,6 +344,7 @@ watch(
         <form class="app-settings-form" @submit.prevent="saveAppSettings">
           <div class="app-settings-body">
           <template v-if="settingsApp.name === 'recyclarr' && recyclarrMeta">
+            <label class="ui-field"><span><input type="checkbox" v-model="settingsForm.recyclarrPrefs.manual_override" /> {{ $t('Manual configuration — preserve my YAML exactly') }}</span><small>{{ $t('Automatic generation and endpoint changes are paused while enabled. Save to apply. Edited YAML automatically enables manual mode.') }}</small></label>
             <p class="settings-hint">
               {{ $t('Official TRaSH Guides profiles via Recyclarr v8. HD is on by default; 4K is opt-in. Saving profile checkboxes regenerates YAML. Editing YAML marks the file as custom until you reset.') }}
             </p>
@@ -418,7 +423,7 @@ watch(
                   :disabled="!settingsMeta?.setup_token"
                   @click="copySetupToken"
                 >
-                  {{ setupTokenCopied ? 'Copied' : 'Copy' }}
+                  {{ setupTokenCopied ? $t("Copied") : $t("Copy") }}
                 </button>
               </span>
             </label>
@@ -441,9 +446,12 @@ watch(
               <span class="ui-switch-thumb"></span>
             </button>
           </div>
-          <div v-if="settingsApp.name === 'jellyfin' || settingsApp.name === 'seerr'" class="ui-field-block">
+          <ul v-if="settingsApp.name === 'cleanuparr' && settingsMeta?.notes?.length" class="app-settings-notes">
+            <li v-for="note in settingsMeta.notes" :key="note">{{ $t(note) }}</li>
+          </ul>
+          <div v-if="['jellyfin', 'seerr', 'cleanuparr'].includes(settingsApp.name)" class="ui-field-block">
             <label class="ui-field">
-              {{ settingsApp.name === 'seerr' ? 'Seerr' : 'Jellyfin' }} {{ $t('API key') }}
+              {{ settingsMeta?.display_name || settingsApp.name }} {{ $t('API key') }}
               <input
                 v-model="settingsForm.apiKey"
                 class="ui-input font-mono"
@@ -451,12 +459,12 @@ watch(
                 autocomplete="off"
                 :placeholder="settingsMeta?.api_key_configured
                   ? $t('Saved — paste a new key to replace')
-                  : (settingsApp.name === 'seerr' ? $t('Settings → General → API Key') : $t('Dashboard → API Keys'))"
+                  : (settingsApp.name === 'cleanuparr' ? $t('Account → API Key') : settingsApp.name === 'seerr' ? $t('Settings → General → API Key') : $t('Dashboard → API Keys'))"
               />
             </label>
             <p class="settings-hint">
               {{ $t('Optional. Saved keys are used for') }}
-              {{ settingsApp.name === 'seerr' ? $t('Home search and requests') : $t('Recently added') }}{{ $t('. Leave empty to keep the current key.') }}
+              {{ settingsApp.name === 'cleanuparr' ? $t('Automatic app connections') : settingsApp.name === 'seerr' ? $t('Home search and requests') : $t('Recently added') }}{{ $t('. Leave empty to keep the current key.') }}
             </p>
           </div>
           <div v-if="settingsApp.name === 'qbittorrent'" class="ui-switch-row">
@@ -478,7 +486,7 @@ watch(
                 :disabled="vuetorrentUpdating || settingsLoading"
                 @click="updateVueTorrent"
               >
-                {{ vuetorrentUpdating ? 'Updating VueTorrent…' : 'Update VueTorrent' }}
+                {{ vuetorrentUpdating ? $t("Updating VueTorrent…") : $t("Update VueTorrent") }}
               </button>
             </div>
             <button
@@ -497,8 +505,8 @@ watch(
             <div><dt>{{ $t('Install') }}</dt><dd>{{ settingsMeta.install_dir }}</dd></div>
             <div><dt>{{ $t('Health') }}</dt><dd>{{ settingsMeta.health_url }}</dd></div>
           </dl>
-          <ul v-if="settingsMeta?.notes?.length" class="app-settings-notes">
-            <li v-for="note in settingsMeta.notes" :key="note">{{ note }}</li>
+          <ul v-if="settingsApp.name !== 'cleanuparr' && settingsMeta?.notes?.length" class="app-settings-notes">
+            <li v-for="note in settingsMeta.notes" :key="note">{{ $t(note) }}</li>
           </ul>
           </template>
           </div>

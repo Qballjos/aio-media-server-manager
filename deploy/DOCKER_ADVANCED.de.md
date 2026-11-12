@@ -64,6 +64,8 @@ docker compose up -d --force-recreate
 
 Der Container kann sein eigenes Image nicht ersetzen. Einstellungen → Updates meldet eine `:nightly`-Installation nur, wenn `:nightly` sich verschoben hat, und eine `:latest`-Installation nur, wenn `:latest` sich verschoben hat. Holen tun Sie weiter diesen Tag auf dem Host. Installierte Apps (Sonarr, Seerr und der Rest) aktualisieren Sie unter **Einstellungen → Updates**, einzeln oder alle auf einmal. Diese Zeitpläne sind standardmäßig aus. Den Container neu zu erstellen hebt sie nicht an.
 
+Veröffentlichte Images lesen Version und Commit aus ihren eigenen Build-Metadaten. Alte `AMM_VERSION`- oder `AMM_GIT_SHA`-Werte in Compose können diese Identität nicht überschreiben oder eine falsche Update-Meldung auslösen. Bei einer Quellcode-Installation ohne Image-Metadaten werden diese Variablen weiterhin verwendet.
+
 **Ältere Compose-Datei, die nur Port 8080 veröffentlicht hat?** Kopieren Sie die aktuelle `ports:`-Liste aus diesem Repo und erstellen Sie neu, sonst scheitern die **Oberfläche öffnen**-Links der Kind-Apps im LAN.
 
 **`/backups` später ergänzen:** Host-Ordner anlegen, `- /path/to/backups:/backups` unter `volumes:` eintragen und neu erstellen. Alte Sicherungen unter `/config/backups` bleiben wiederherstellbar, bis Sie sie entfernen.
@@ -109,7 +111,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   -p 8081:8081 -p 8084:8084 -p 8085:8085 -p 8096:8096 \
   -p 8191:8191 -p 5055:5055 -p 6060:6060 \
   -p 6767:6767 -p 6789:6789 \
-  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 \
+  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 -p 11011:11011 \
   -p 32400:32400 \
   -e PUID="${PUID}" -e PGID="${PGID}" \
   -e TZ=UTC \

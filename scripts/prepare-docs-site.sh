@@ -26,6 +26,9 @@ copy_localized "${ROOT}/docs" USAGE "${OUT}"
 copy_localized "${ROOT}/docs" USAGE_ADVANCED "${OUT}"
 copy_localized "${ROOT}/docs" ADVANCED "${OUT}"
 copy_localized "${ROOT}/docs" REFERENCE "${OUT}"
+for name in operations security-operations release-readiness testing; do
+  copy_localized "${ROOT}/docs" "${name}" "${OUT}"
+done
 
 if [[ -d "${ROOT}/docs/assets" ]]; then
   cp -R "${ROOT}/docs/assets/." "${OUT}/assets/"

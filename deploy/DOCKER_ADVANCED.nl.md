@@ -64,6 +64,8 @@ docker compose up -d --force-recreate
 
 De container kan zijn eigen image niet vervangen. Instellingen → Updates meldt een `:nightly`-installatie alleen wanneer `:nightly` is verschoven, en een `:latest`-installatie alleen wanneer `:latest` is verschoven. Ophalen doe je nog steeds die tag op de host. Geïnstalleerde apps (Sonarr, Seerr en de rest) werk je bij via **Instellingen → Updates**, één voor één of allemaal tegelijk. Die schema’s staan standaard uit. De container opnieuw aanmaken werkt ze niet bij.
 
+Gepubliceerde images lezen hun versie en commit uit buildgegevens in het image. Oude waarden voor `AMM_VERSION` of `AMM_GIT_SHA` in Compose kunnen die identiteit niet overschrijven of een onterechte updatemelding veroorzaken. Een broncode-installatie zonder imagegegevens accepteert deze variabelen nog wel.
+
 **Ouder compose-bestand dat alleen poort 8080 publiceerde?** Kopieer de huidige `ports:`-lijst uit deze repo en maak opnieuw aan, anders falen de **Interface openen**-links van kind-apps op het LAN.
 
 **`/backups` later toevoegen:** maak de hostmap, voeg `- /path/to/backups:/backups` toe onder `volumes:` en maak opnieuw aan. Oude back-ups onder `/config/backups` blijven herstelbaar tot je ze verwijdert.
@@ -109,7 +111,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   -p 8081:8081 -p 8084:8084 -p 8085:8085 -p 8096:8096 \
   -p 8191:8191 -p 5055:5055 -p 6060:6060 \
   -p 6767:6767 -p 6789:6789 \
-  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 \
+  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 -p 11011:11011 \
   -p 32400:32400 \
   -e PUID="${PUID}" -e PGID="${PGID}" \
   -e TZ=UTC \

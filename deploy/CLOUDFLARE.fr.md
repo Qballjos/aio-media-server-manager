@@ -114,6 +114,7 @@ Cibles de service habituelles (dans AIO) :
 | `sonarr.example.com` | `http://127.0.0.1:8989` |
 | `prowlarr.example.com` | `http://127.0.0.1:9696` |
 | `neutarr.example.com` | `http://127.0.0.1:9705` |
+| `cleanuparr.example.com` | `http://127.0.0.1:11011` |
 | `plex.example.com` | `http://127.0.0.1:32400` |
 
 Flaresolverr et Recyclarr ne sont pas proposés comme noms d’hôte publics. Recyclarr est une synchro en ligne de commande. Flaresolverr est utilisé dans l’appliance par Prowlarr. Plus de ports : [Installer → Ports](../docs/INSTALL.md#ports).

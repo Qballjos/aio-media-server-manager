@@ -64,6 +64,8 @@ docker compose up -d --force-recreate
 
 Le conteneur ne peut pas remplacer sa propre image. Réglages → Mises à jour signale une installation `:nightly` seulement quand `:nightly` a bougé, et une installation `:latest` seulement quand `:latest` a bougé. Vous tirez toujours ce tag sur l’hôte. Les apps installées (Sonarr, Seerr et le reste) se mettent à jour depuis **Réglages → Mises à jour**, une par une ou toutes à la fois. Ces planifications sont désactivées par défaut. Recréer le conteneur ne les fait pas avancer.
 
+Les images publiées lisent leur version et leur commit dans leurs propres métadonnées de build. D’anciennes valeurs `AMM_VERSION` ou `AMM_GIT_SHA` conservées dans Compose ne peuvent plus remplacer cette identité ni provoquer une fausse notification. Une installation depuis les sources sans métadonnées d’image utilise toujours ces variables.
+
 **Ancien Compose qui ne publiait que le port 8080 ?** Copiez la liste `ports:` actuelle de ce dépôt et recréez, sinon les liens **Ouvrir l’interface** des apps enfants échouent sur le LAN.
 
 **Ajouter `/backups` plus tard :** créez le dossier hôte, ajoutez `- /path/to/backups:/backups` sous `volumes:`, recréez. Les anciennes sauvegardes sous `/config/backups` restent restaurables jusqu’à ce que vous les retiriez.
@@ -109,7 +111,7 @@ docker run -d --name aio-media-manager --restart unless-stopped \
   -p 8081:8081 -p 8084:8084 -p 8085:8085 -p 8096:8096 \
   -p 8191:8191 -p 5055:5055 -p 6060:6060 \
   -p 6767:6767 -p 6789:6789 \
-  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 \
+  -p 7878:7878 -p 8686:8686 -p 8989:8989 -p 9696:9696 -p 9705:9705 -p 11011:11011 \
   -p 32400:32400 \
   -e PUID="${PUID}" -e PGID="${PGID}" \
   -e TZ=UTC \

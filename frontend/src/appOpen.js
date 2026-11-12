@@ -21,6 +21,30 @@ function withDeepPath(baseUrl, path) {
   }
 }
 
+function openCleanuparr(tab, helperUrl, tokens) {
+  const url = new URL(helperUrl)
+  const origin = url.origin
+  url.hash = encodeURIComponent(window.location.origin)
+  function cleanup() {
+    tokens = null
+    clearTimeout(timer)
+    window.removeEventListener('message', onMessage)
+    window.removeEventListener('pagehide', cleanup)
+  }
+  function onMessage(event) {
+    if (event.source !== tab || event.origin !== origin) return
+    if (event.data?.type === 'aio-cleanuparr-complete') cleanup()
+    else if (event.data?.type === 'aio-cleanuparr-ready' && tokens) {
+      tab.postMessage({ type: 'aio-cleanuparr-session', tokens }, origin)
+      tokens = null
+    }
+  }
+  const timer = setTimeout(cleanup, 15000)
+  window.addEventListener('message', onMessage)
+  window.addEventListener('pagehide', cleanup)
+  tab.location.href = url.href
+}
+
 function openJellyfin(tab, helperUrl, next = '') {
   const url = new URL(helperUrl)
   const origin = url.origin
@@ -75,7 +99,10 @@ export async function openApp(event, name, fallbackUrl) {
     const { res, data } = await apiJson(`/api/applications/${encodeURIComponent(name)}/session`, {
       method: 'POST',
     })
-    if (res.ok && data?.handoff === 'jellyfin-quick-connect') {
+    if (res.ok && data?.handoff === 'cleanuparr-session' && tab) {
+      openCleanuparr(tab, data.url, data.tokens)
+      return
+    } else if (res.ok && data?.handoff === 'jellyfin-quick-connect') {
       if (tab) {
         openJellyfin(tab, data.url, path)
         return
@@ -83,7 +110,7 @@ export async function openApp(event, name, fallbackUrl) {
     } else if (res.ok && data?.url) {
       url = withDeepPath(data.url, path)
     }
-    if (data?.detail && name === 'jellyfin') useToasts().showToast(data.detail, 'info')
+    if (data?.detail && ['jellyfin', 'cleanuparr'].includes(name)) useToasts().showToast(data.detail, 'info')
   } catch (_) {
     /* fall back to the plain link */
   }

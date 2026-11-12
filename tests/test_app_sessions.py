@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import requests
+import pytest
 from fastapi.testclient import TestClient
 
 from api.app import create_app
@@ -105,3 +106,50 @@ def test_session_endpoint_sets_the_app_cookie_and_returns_its_url(monkeypatch):
 def test_session_endpoint_rejects_unknown_apps():
     client = TestClient(create_app())
     assert client.post("/api/applications/nope/session").status_code == 404
+
+
+def test_cleanuparr_session_requires_auth_and_never_returns_api_keys(monkeypatch):
+    from core.integrations.cleanuparr import CleanuparrClient
+    from core.shared_credentials import save_shared_admin_credentials
+    from fastapi import HTTPException
+
+    client = TestClient(create_app())
+    monkeypatch.setattr(applications_router.auth_manager, "authenticate_request",
+                        lambda request: (_ for _ in ()).throw(HTTPException(status_code=401)))
+    assert client.post("/api/applications/cleanuparr/session").status_code == 401
+    monkeypatch.setattr(applications_router.auth_manager, "authenticate_request", lambda request: "admin")
+    plugin = applications_router.catalog.get("cleanuparr")
+    monkeypatch.setattr(plugin, "prepare_browser_login", lambda: True)
+    save_shared_admin_credentials("admin", "Password123!")
+    monkeypatch.setattr(CleanuparrClient, "login", lambda self, *args: {"accessToken": "session", "refreshToken": "refresh"})
+    result = client.post("/api/applications/cleanuparr/session")
+    assert result.status_code == 200
+    assert result.json()["handoff"] == "cleanuparr-session"
+    assert result.json()["url"] == "http://testserver:11011/aio-login.html"
+    assert result.headers["cache-control"] == "no-store"
+    assert "Password123" not in result.text and "api_key" not in result.text
+
+
+def test_cleanuparr_public_url_keeps_its_own_login(monkeypatch):
+    from core.integrations.cleanuparr import CleanuparrClient
+    monkeypatch.setattr(applications_router.auth_manager, "authenticate_request", lambda request: "admin")
+    monkeypatch.setattr(applications_router, "app_web_ui_url_for_request", lambda *args, **kwargs: "https://cleanuparr.example.com")
+    monkeypatch.setattr(CleanuparrClient, "login", lambda *args: pytest.fail("Public URL must not receive a shared session"))
+    result = TestClient(create_app()).post("/api/applications/cleanuparr/session")
+    assert result.json() == {"url": "https://cleanuparr.example.com", "signed_in": False}
+
+
+def test_cleanuparr_two_factor_login_keeps_the_manual_login(monkeypatch):
+    from core.integrations.cleanuparr import CleanuparrClient, CleanuparrError
+    from core.shared_credentials import save_shared_admin_credentials
+    monkeypatch.setattr(applications_router.auth_manager, "authenticate_request", lambda request: "admin")
+    monkeypatch.setattr(applications_router.catalog.get("cleanuparr"), "prepare_browser_login", lambda: True)
+    save_shared_admin_credentials("admin", "Password123!")
+    def requires_two_factor(*args):
+        raise CleanuparrError("Two-factor sign-in required")
+    monkeypatch.setattr(CleanuparrClient, "login", requires_two_factor)
+    result = TestClient(create_app()).post("/api/applications/cleanuparr/session")
+    assert result.status_code == 200
+    assert result.json()["signed_in"] is False
+    assert "tokens" not in result.json()
+    assert result.json()["url"] == "http://testserver:11011"

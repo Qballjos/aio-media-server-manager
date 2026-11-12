@@ -139,7 +139,9 @@ def test_user_edited_yaml_is_preserved(tmp_path: Path):
     )
     text = path.read_text(encoding="utf-8")
     assert "custom:" in text
-    assert "api_key: new-key" in text
+    assert "api_key: keepme" in text
+    assert "base_url: http://old" in text
+    assert load_prefs(root)["manual_override"] is True
     assert load_prefs(root)["user_edited"] is True
 
 
@@ -168,6 +170,8 @@ def test_recyclarr_api_prefs_and_yaml(tmp_path: Path, monkeypatch):
     assert "hand-edit: true" in saved.json()["yaml"]
     assert saved.json()["user_edited"] is True
 
+    assert client.post("/api/recyclarr/reset", headers=headers).status_code == 409
+    assert client.patch("/api/recyclarr", json={"manual_override": False}, headers=headers).status_code == 200
     reset = client.post("/api/recyclarr/reset", headers=headers)
     assert reset.status_code == 200
     assert reset.json()["user_edited"] is False

@@ -82,15 +82,17 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 **Shared local login.** The manager admin username, email, and password are applied to apps that support a local account (*Arr, download clients, Bazarr, Jellyfin). Seerr's admin is created by signing in with that Jellyfin account (or the claimed Plex token), and its first-run wizard is completed for you. Plex still uses a Plex account.
 
-**Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr. Settings → Usenet holds the Usenet provider (server, port, SSL, login, connections) and sends it to SABnzbd and NZBGet; NZB indexers are added in Prowlarr. Prowlarr also gets a starter set of public indexers (1337x, The Pirate Bay, YTS, Nyaa.si, LimeTorrents, Knaben) with seed settings (ratio 1, 48 hours, season packs 7 days), and FlareSolverr is attached to the ones Cloudflare blocks. Remove any you do not want; they are not added back.
+**Automatic wiring.** After an app is healthy — or when you click **Auto-Wire** — the manager configures categories, root folders, download clients in Sonarr/Radarr, Prowlarr sync, Seerr, Bazarr pairing, and starter configs for Recyclarr and NeutArr. Settings → Usenet holds the Usenet provider (server, port, SSL, login, connections) and sends it to SABnzbd and NZBGet; NZB indexers are added in Prowlarr. With an explicit opt-in in the wizard or App connections, Prowlarr can also add a starter set of public indexers (1337x, The Pirate Bay, YTS, Nyaa.si, LimeTorrents, Knaben) with seed settings (ratio 1, 48 hours, season packs 7 days), and FlareSolverr is attached to the ones Cloudflare blocks. Remove any you do not want; they are not added back.
 
 **Home.** A grid with its own layout on phone, tablet, and desktop: greeting, search, calendar, downloading, recently added, requests, trending, now playing, storage, server, and needs attention, plus an app dock. Recently added and Trending keep loading as you scroll (Jellyfin recently added walks the library; Plex stays on its latest 20). The Server card shows the host's network traffic when `/sys` is mounted read-only at `/host/sys`. Arrange widgets with the layout control on the Home tab. The dock is shown or hidden under **Settings → Homepage**. Widget diagnostics live under **Settings → Diagnostics** (empty tiles explained; API keys never shown).
+
+**Navigation and typography.** Home, Catalog and Settings stay centered across the full header. The header scrolls with the page; the Home layout button sits beside the account. All app screens and controls use Figtree with a common system-font fallback.
 
 **Visuals.** Dark / light / system theme, accent color, wallpaper, custom header title, and replaceable header icon, login logo, and favicon under **Settings → Visuals**.
 
 **Notifications.** Settings → Notifications sends Discord and email when an app crash-loops, the VPN or Cloudflare tunnel drops, an update is available, or a disk passes 90% full, and again when it recovers.
 
-**Operations.** `config` / `downloads` / `media` with `PUID` / `PGID` and hardlink checks. Optional WireGuard or OpenVPN isolation for qBittorrent, Prowlarr, and Flaresolverr (Usenet stays off the tunnel), with a local DNS cache for those apps so brief tunnel DNS failures do not take Prowlarr indexers offline. Optional VAAPI / QSV / NVIDIA transcoding. Optional Cloudflare Tunnel (`cloudflared` inside this appliance; starts after apps on boot). Configuration backups with verify, per-app restore, and a schedule.
+**Operations.** `config` / `downloads` / `media` with `PUID` / `PGID` and hardlink checks. Optional WireGuard or OpenVPN isolation for qBittorrent, Prowlarr, and Flaresolverr (Usenet stays off the tunnel), with a local DNS cache for those apps so brief tunnel DNS failures do not take Prowlarr indexers offline. Optional VAAPI / QSV / NVIDIA transcoding. Optional Cloudflare Tunnel (`cloudflared` inside this appliance; starts after apps on boot). Configuration backups with verify, per-app restore, a schedule, encrypted HTTPS/WebDAV copies and isolated restore tests. See [operations](docs/operations.md).
 
 **Open UI.** Each catalog card opens `http://<host>:<app-port>`. On the LAN, apps with a local login (Sonarr, Radarr, Lidarr, Prowlarr, qBittorrent, SABnzbd, Bazarr, Seerr) open already signed in as the manager admin: the manager signs in server-side and hands the session to your browser. Jellyfin, Plex, and NZBGet keep their own login, and so does every app on public subdomains. Compose and the NAS templates publish those ports; host networking is an alternative. qBittorrent uses [VueTorrent](https://github.com/VueTorrent/VueTorrent) by default (same port and WebAPI). Catalog → qBittorrent → Settings can switch to the stock WebUI or **Update VueTorrent** (re-downloads the latest UI zip; not part of Catalog app updates). Catalog → NeutArr → Settings shows NeutArr's first-run setup token while `/config/neutarr/.setup-token` exists. NeutArr removes that file after account creation.
 
@@ -98,7 +100,7 @@ Most *Arr setups turn into a long Compose file: one container for Sonarr, one fo
 
 ## Application catalog
 
-Sixteen applications are defined. Install only what you select. Entries that cannot run on the current architecture are omitted from the catalog and the wizard.
+Seventeen applications are defined. Install only what you select. Entries that cannot run on the current architecture are omitted from the catalog and the wizard.
 
 | Role | Applications |
 |------|----------------|
@@ -110,6 +112,7 @@ Sixteen applications are defined. Install only what you select. Entries that can
 | Books | Grimmory |
 | Subtitles | Bazarr |
 | Profiles | Recyclarr, NeutArr |
+| Maintenance | Cleanuparr |
 
 Each catalog card includes a help control that opens that project's official documentation.
 
@@ -128,6 +131,7 @@ Each catalog card includes a help control that opens that project's official doc
 | [Linux](deploy/LINUX.md) · [Unraid](deploy/UNRAID.md) · [Synology](deploy/SYNOLOGY.md) · [TrueNAS](deploy/TRUENAS.md) | Platform-specific steps |
 | [Cloudflare Tunnel](deploy/CLOUDFLARE.md) | Remote HTTPS without opening router ports |
 | [Cloudflare Access](deploy/CLOUDFLARE_ACCESS.md) | Login gate on those public URLs |
+| [Roadmap and release readiness](docs/release-readiness.md) | Implementation, test coverage and remaining real-platform acceptance |
 | [Contributing](CONTRIBUTING.md) | Development workflow |
 
 Local preview: `bash scripts/prepare-docs-site.sh && pip install -r requirements-docs.txt && mkdocs serve`
@@ -192,6 +196,9 @@ This project is designed solely as a self-hosting management tool and deployment
 
 ## Security
 
+For administrator sessions, HTTPS cookies and emergency backup recovery, see
+[security operations](docs/security-operations.md).
+
 Report vulnerabilities through [GitHub private advisories](https://github.com/Qballjos/aio-media-server-manager/security/advisories/new), not public issues.
 
 ---
@@ -203,3 +210,5 @@ Report vulnerabilities through [GitHub private advisories](https://github.com/Qb
 ## Homey dashboard integration
 
 Homey can pair with AIO using a five-minute, one-use code from **Settings → App connections → Homey connections**. Each connection gets its own revocable, read-only dashboard credential. No admin password, TV credential or media-server key is exported. The companion Homey app shows server status, Now playing and Recently added widgets. See [Homey protocol and setup](docs/homey.md).
+
+**Cleanuparr.** Optional cleanup app on port 11011. Auto-Wire sets the shared AIO account and connects installed Sonarr/Radarr/Lidarr, qBittorrent and SABnzbd. New setups start in dry-run with conservative queue and malware checks, private-torrent protection and internet connectivity checks. Seeding/orphan cleanup and proactive searches stay off. Review simulated results before allowing deletions. See [Cleanuparr setup and defaults](docs/USAGE_ADVANCED.md#cleanuparr).

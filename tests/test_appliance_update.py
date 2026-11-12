@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import core.version as version
 from core.appliance_update import (
     APPLIANCE_DOCKER_WORKFLOW,
     APPLIANCE_IMAGE,
@@ -44,6 +45,45 @@ def test_running_identity_uses_env(monkeypatch):
     assert ident["update_available"] is False
     assert APPLIANCE_IMAGE in ident["apply_hint"]
     assert app_version() == "1.2.3"
+
+
+def test_image_identity_overrides_stale_compose_environment(monkeypatch):
+    monkeypatch.setenv("AMM_VERSION", "0.3.0")
+    monkeypatch.setenv("AMM_GIT_SHA", "06c3ca0a5088894580846fad30a4dac0e32afa68")
+    current_sha = "22be3d7713bbe4ac693188d70645695bf0999104"
+    monkeypatch.setattr(version, "_IMAGE_VERSION", "0.4.1-nightly")
+    monkeypatch.setattr(version, "_IMAGE_GIT_SHA", current_sha)
+    github = MagicMock()
+    github.latest_workflow_run_sha.return_value = current_sha
+
+    payload = check_appliance_image(github)
+
+    assert payload["installed_version"] == "0.4.1-nightly (22be3d7)"
+    assert payload["running_sha"] == current_sha
+    assert payload["update_available"] is False
+    github.compare_commits.assert_not_called()
+    github.latest_workflow_run_sha.assert_called_once_with(
+        "Qballjos/aio-media-server-manager",
+        APPLIANCE_NIGHTLY_WORKFLOW,
+        branch="beta",
+        status="success",
+    )
+    github.latest_workflow_run_sha.return_value = "b" * 40
+    github.compare_commits.return_value = {"status": "ahead"}
+    assert check_appliance_image(github)["update_available"] is True
+    github.compare_commits.assert_called_once_with(
+        "Qballjos/aio-media-server-manager", current_sha, "b" * 40
+    )
+
+
+def test_image_without_revision_does_not_inherit_an_old_revision(monkeypatch):
+    monkeypatch.setenv("AMM_GIT_SHA", "06c3ca0a5088894580846fad30a4dac0e32afa68")
+    monkeypatch.setattr(version, "_IMAGE_VERSION", "0.4.1")
+    monkeypatch.setattr(version, "_IMAGE_GIT_SHA", "")
+    github = MagicMock()
+    assert check_appliance_image(github)["update_available"] is False
+    assert git_sha() == ""
+    github.latest_workflow_run_sha.assert_not_called()
 
 
 def test_newer_published_image_is_available(monkeypatch):

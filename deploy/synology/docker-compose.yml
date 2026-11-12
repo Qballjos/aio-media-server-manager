@@ -24,6 +24,7 @@ services:
       - "8989:8989"     # Sonarr
       - "9696:9696"     # Prowlarr
       - "9705:9705"     # NeutArr
+      - "11011:11011"    # Cleanuparr
       - "32400:32400"   # Plex
     volumes:
       - /volume1/docker/aio-media-manager/config:/config

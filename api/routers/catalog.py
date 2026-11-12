@@ -86,6 +86,19 @@ async def install_jobs(request: Request) -> dict[str, Any]:
     return {"jobs": snapshot()}
 
 
+@router.get("/{name}/preflight", summary="Check installation prerequisites")
+async def preflight(name: str, request: Request, operation: str = "install") -> dict[str, Any]:
+    auth_manager.authenticate_request(request)
+    from core.preflight import inspect_action
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown application") from exc
+    if operation not in {"install", "update"}:
+        raise HTTPException(status_code=422, detail="Invalid operation")
+    return await asyncio.to_thread(inspect_action, plugin, settings, operation=operation, network=True)
+
+
 @router.get("/{name}", summary="Get application details")
 async def get_application_details(name: str, request: Request) -> dict[str, Any]:
     """
@@ -151,6 +164,11 @@ async def install_application(
     from core.diagnostics import diagnostics
     from core.maintenance import begin_install, end_install
 
+    from core.preflight import require_action, PreflightError
+    try:
+        await asyncio.to_thread(require_action, plugin, settings)
+    except PreflightError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     set_job(name, "queued", "Waiting to start installation")
 
     async def _do_install():
@@ -184,3 +202,37 @@ async def install_application(
         "status": "installing",
         "message": f"Installation started for '{plugin.manifest.display_name}'.",
     }
+
+
+@router.post("/{name}/retry-setup", summary="Retry starting and connecting an installed app")
+async def retry_setup(name: str, request: Request, background_tasks: BackgroundTasks):
+    auth_manager.authenticate_request(request)
+    from core.install_jobs import get_job, set_job
+    from core.maintenance import action_conflict, begin_install, end_install
+    try:
+        plugin = catalog.get(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown application") from exc
+    if not plugin.is_installed():
+        raise HTTPException(status_code=409, detail="Install this application first")
+    if action_conflict("install"):
+        raise HTTPException(status_code=409, detail="Wait for backup/update maintenance to finish")
+    previous = get_job(name) or {}
+    if previous.get("status") in {"queued", "installing", "configuring", "updating"}:
+        raise HTTPException(status_code=409, detail="Setup is already running")
+    if previous.get("status") == "rollback_failed":
+        raise HTTPException(status_code=409, detail="Resolve incomplete recovery before retrying setup")
+    set_job(name, "configuring", "Retrying application setup")
+    async def work():
+        begin_install()
+        try:
+            report = await finalize_application_install(plugin)
+            if report.get("wiring_error"):
+                raise RuntimeError(report["wiring_error"])
+            set_job(name, "started", "Application setup completed")
+        except Exception as exc:
+            set_job(name, "failed", f"Automatic setup failed: {exc}")
+        finally:
+            end_install()
+    background_tasks.add_task(work)
+    return {"status": "configuring"}

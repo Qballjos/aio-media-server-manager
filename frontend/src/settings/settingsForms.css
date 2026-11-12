@@ -1,0 +1,39 @@
+
+.settings-content :deep(.form-stack > button[type="submit"]) { align-self:flex-start; min-width:min(9rem,100%); }
+.notif-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.usenet-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+@media (max-width: 560px) {
+  .usenet-pair {
+    grid-template-columns: 1fr;
+  }
+}
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+  max-width: 36rem;
+  min-width: 0;
+}
+.share-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.share-row .ui-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .share-row .ui-btn {
+    width: 100%;
+  }
+}

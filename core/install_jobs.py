@@ -26,6 +26,11 @@ def set_job(name: str, status: str, message: str = "", *, wiring: bool = False) 
             row["status"] = "updating"
         if previous and all(previous.get(key) == row[key] for key in ("status", "message", "wiring")):
             row["updated_at"] = previous["updated_at"]
+        row["operation"] = "update" if row["status"] == "updating" else "install" if row["status"] in {"queued", "installing"} else (previous or {}).get("operation", "install")
+        history = list((previous or {}).get("history") or [])
+        if not previous or previous.get("message") != row["message"] or previous.get("status") != row["status"]:
+            history.append({"status": row["status"], "message": row["message"], "at": row["updated_at"]})
+        row["history"] = history[-100:]
         _jobs[name] = row
         return _public_job(row)
 
@@ -35,6 +40,7 @@ def update_job(name: str, message: str) -> None:
         row = _jobs.get(name)
         if row and row["status"] in {"queued", "installing", "configuring", "updating"} and row["message"] != message:
             row.update(message=message, updated_at=time.time())
+            row["history"] = [*(row.get("history") or []), {"status": row["status"], "message": message, "at": row["updated_at"]}][-100:]
 
 
 def set_wiring_progress(message: str) -> None:

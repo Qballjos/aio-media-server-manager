@@ -14,6 +14,8 @@ Créez le compte administrateur et terminez l’assistant. Commencez par exemple
 | Catalogue | Installer les apps, vérifier leur état et les ouvrir avec Ouvrir. |
 | Réglages | Apparence, compte et mises à jour AIO ; ce n’est pas ici que vous ajoutez des films à votre bibliothèque. |
 
+**En-tête :** Accueil, Catalogue et Réglages restent centrés sur toute la largeur de l’en-tête. Sur les petits écrans, ils occupent une ligne centrée distincte. L’en-tête défile avec la page. Sur Accueil, le bouton de disposition se trouve à droite, près du compte. Toutes les pages, commandes et étiquettes de l’app utilisent Figtree ; si cette police ne peut pas être chargée, la même liste de polices système de remplacement s’applique partout.
+
 ## Utiliser le nouveau catalogue {#catalog-menu}
 
 Ouvrez **Catalogue** en haut. Choisissez la vue à gauche ; les apps apparaissent à droite.
@@ -86,7 +88,7 @@ Pour une série utilisez media/tv. Après la copie, ouvrez Jellyfin → Dashboar
 ## 5. Organiser les widgets Home {#customize-home}
 
 <div class="widget-visual-guide" role="group" aria-label="Organiser les widgets de l’accueil">
-<div class="widget-visual-step"><span class="visual-number">1</span><strong>Le bouton de disposition</strong><div class="visual-nav"><span>Home</span><span>Catalog</span><span>Settings</span><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span></div><p>Sur Home, choisissez l’icône à quatre blocs à côté des onglets. Les poignées et la barre de modification apparaissent.</p></div>
+<div class="widget-visual-step"><span class="visual-number">1</span><strong>Le bouton de disposition</strong><div class="visual-nav"><span class="visual-nav-pages"><span>Home</span><span>Catalog</span><span>Settings</span></span><span class="visual-nav-tools"><span class="visual-highlight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/><rect x="3" y="17" width="7" height="4" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg></span><span aria-label="Compte">●</span></span></div><p>Sur Home, choisissez l’icône à quatre blocs à droite de l’en-tête, près du compte. Les poignées et la barre de modification apparaissent.</p></div>
 <div class="widget-visual-step"><span class="visual-number">2</span><strong>Déplacer : glisser la poignée</strong><div class="visual-widget"><span class="visual-grip">⠿</span><span class="visual-remove">×</span><strong>Téléchargements</strong><span class="visual-widget-line"></span><span class="visual-widget-line short"></span><span class="visual-corner">↘</span></div><p>Taille : glisser ce coin</p></div>
 <div class="widget-visual-step"><span class="visual-number">3</span><strong>Choisir un widget</strong><div class="visual-toolbar"><span>＋ Ajouter un widget</span><span>Terminé</span></div><p>Choisissez Ajouter un widget, puis Cette taille ou Toutes les tailles et le widget. Les changements sont enregistrés automatiquement ; terminez avec Terminé.</p></div>
 </div>
@@ -118,6 +120,16 @@ Réglages → Updates met à jour les apps internes. AIO lui-même se met à jou
 ## Captures et référence technique {#screens}
 
 [Captures et référence technique](USAGE_ADVANCED.md#screens).
+
+### Vérifications, progression et restauration
+
+Avant une installation ou une mise à jour manuelle, AIO vérifie le stockage, la maintenance et l’accès aux téléchargements. Corrigez les blocages avant de continuer. **Catalogue → Progression des installations** affiche les étapes et les journaux en direct ; la fenêtre peut être fermée puis rouverte. Si la configuration échoue après l’installation, **Réessayer** relance uniquement le démarrage et les connexions.
+
+Dans **Réglages → Connexions des apps → Vérifier mon installation**, AIO relit la configuration effective. **Liaison auto** applique la configuration automatique ; la vérification ne modifie aucun réglage des apps. Les indexeurs publics de départ nécessitent un choix explicite.
+
+**Réglages → Sauvegardes** propose des copies HTTPS/WebDAV chiffrées et des tests de restauration dans un dossier temporaire. Conservez le mot de passe de chiffrement hors du serveur. **Notifications** inclut des seuils de stockage et l’historique des incidents. Recyclarr propose un mode manuel pour préserver exactement votre YAML.
+
+Voir [vérifications et restauration](operations.md) et [sessions, HTTPS et récupération d’urgence](security-operations.md).
 
 ## Avancé
 

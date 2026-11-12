@@ -144,12 +144,12 @@ async function waitForAppInstall(name) {
 }
 
 function installStatusLabel(status) {
-  if (status === 'queued') return 'QUEUED'
-  if (status === 'installing') return 'INSTALLING'
-  if (status === 'configuring') return 'CONFIGURING'
-  if (status === 'started') return 'STARTED'
-  if (status === 'already_installed') return 'INSTALLED'
-  if (status === 'failed') return 'FAILED'
+  if (status === 'queued') return t('QUEUED')
+  if (status === 'installing') return t('INSTALLING')
+  if (status === 'configuring') return t('CONFIGURING')
+  if (status === 'started') return t('STARTED')
+  if (status === 'already_installed') return t('INSTALLED')
+  if (status === 'failed') return t('FAILED')
   return String(status || '').toUpperCase()
 }
 
@@ -170,7 +170,7 @@ async function loadStep(id) {
   error.value = ''
   try {
     const res = await apiRequest(`/api/wizard/step/${id}`)
-    if (!res.ok) throw new Error('Could not load wizard step')
+    if (!res.ok) throw new Error(t('Could not load wizard step'))
     payload.value = await readJson(res)
     const data = payload.value
     if (id === 3) {
@@ -202,6 +202,7 @@ async function loadStep(id) {
       selections.cloudflare_tunnel_token = ''
     } else if (id === 7) {
       selections.arr_apps = [...(data.selected || [])]
+      selections.public_indexers_opt_in = !!data.public_indexers_opt_in
     } else if (id === 8) {
       selections.media_servers = [...(data.selected || [])]
       selections.plex_claim = data.plex_claim || ''
@@ -247,7 +248,7 @@ function bodyForStep(id) {
       ...(selections.cloudflare_tunnel_token ? { cloudflare_tunnel_token: selections.cloudflare_tunnel_token } : {})
     }
   }
-  if (id === 7) return { arr_apps: selections.arr_apps }
+  if (id === 7) return { arr_apps: selections.arr_apps, public_indexers_opt_in: !!selections.public_indexers_opt_in }
   if (id === 8) return { media_servers: selections.media_servers, plex_claim: selections.plex_claim }
   if (id === 9) return { request_system: selections.request_system }
   if (id === 10) return { recommended_preview: selections.recommended_preview }
@@ -265,7 +266,7 @@ async function next() {
       })
       if (!res.ok) {
         const data = await readJson(res)
-        throw new Error(apiError(data, 'Could not save this step'))
+        throw new Error(apiError(data, t('Could not save this step')))
       }
     }
     const idx = FLOW.indexOf(step.value)
@@ -297,7 +298,7 @@ async function skip() {
       method: 'POST',
       signal: controller.signal
     })
-    if (!res.ok) throw new Error('Could not skip wizard')
+    if (!res.ok) throw new Error(t('Could not skip wizard'))
   } catch (err) {
     if (err.name !== 'AbortError') error.value = err.message
   } finally {
@@ -313,7 +314,7 @@ async function installOne(item) {
     const inst = await apiRequest(`/api/catalog/${item.name}/install`, { method: 'POST' })
     const instData = await readJson(inst)
     if (!inst.ok) {
-      patchInstallItem(item.name, { status: 'failed', detail: apiError(instData, 'Install failed') })
+      patchInstallItem(item.name, { status: 'failed', detail: apiError(instData, t('Install failed')) })
       return
     }
     if (instData.status === 'already_installed') {
@@ -334,7 +335,7 @@ async function finish() {
   try {
     const res = await apiRequest('/api/wizard/execute', { method: 'POST' })
     const data = await readJson(res)
-    if (!res.ok) throw new Error(apiError(data, 'Wizard could not finish'))
+    if (!res.ok) throw new Error(apiError(data, t('Wizard could not finish')))
     const apps = data.target_apps || []
     const already = new Set(
       (data.installations || [])
@@ -400,8 +401,8 @@ const reviewGroups = computed(() => {
   const media = [...(chosen.media_servers || [])]
   if (chosen.request_system && chosen.request_system !== 'none') media.push(chosen.request_system)
   let usenet = ''
-  if (chosen.usenet_host) usenet = `Usenet through ${chosen.usenet_host}`
-  else if (chosen.has_usenet_account) usenet = 'Usenet account saved'
+  if (chosen.usenet_host) usenet = t('Usenet through {host}', { host: chosen.usenet_host })
+  else if (chosen.has_usenet_account) usenet = t('Usenet account saved')
   return [
     { id: 'automation', label: 'Indexers and automation', apps: arr, note: '' },
     { id: 'downloads', label: 'Downloads', apps: chosen.download_clients || [], note: usenet },
@@ -412,9 +413,9 @@ const reviewGroups = computed(() => {
 const reviewAppCount = computed(() => new Set(reviewGroups.value.flatMap((group) => group.apps)).size)
 const reviewVpn = computed(() => {
   const provider = summary.value.vpn_provider
-  if (!provider || provider === 'none') return 'off'
-  const name = provider === 'privadovpn' ? 'PrivadoVPN' : provider === 'custom' ? 'your own WireGuard or OpenVPN profile' : provider
-  return summary.value.has_vpn_config ? `${name}, config saved` : name
+  if (!provider || provider === 'none') return t('off')
+  const name = provider === 'privadovpn' ? 'PrivadoVPN' : provider === 'custom' ? t('your own WireGuard or OpenVPN profile') : provider
+  return summary.value.has_vpn_config ? t('{name}, config saved', { name }) : name
 })
 const showPlexClaim = computed(() => (selections.media_servers || []).includes('plex'))
 const showQbitCreds = computed(() => (selections.download_clients || []).includes('qbittorrent'))
@@ -472,7 +473,7 @@ onUnmounted(() => {
         <template v-if="installing">
           <div class="wizard-install">
             <div class="wizard-install-meta">
-              <span>{{ installTotal ? 'Catalog installs' : 'Preparing' }}</span>
+              <span>{{ installTotal ? $t("Catalog installs") : $t("Preparing") }}</span>
               <span class="font-mono">{{ installDoneCount }}/{{ installTotal || 0 }}</span>
             </div>
             <div
@@ -534,7 +535,7 @@ onUnmounted(() => {
             <span>{{ $t('Config directory') }}</span>
             <input v-model="selections.config_dir" class="ui-input font-mono" />
           </label>
-          <p class="wizard-muted">{{ payload.hardlink_message }} Put both media and downloads under one host folder (for example <code>/data/media</code> {{ $t('and') }} <code>/data/downloads</code>{{ $t(') so *Arr can hardlink instead of copying.') }}</p>
+          <p class="wizard-muted">{{ payload.hardlink_message }} {{ $t('Put both media and downloads under one host folder (for example') }} <code>/data/media</code> {{ $t('and') }} <code>/data/downloads</code>{{ $t(') so *Arr can hardlink instead of copying.') }}</p>
         </template>
 
         <template v-else-if="step === 4">
@@ -592,7 +593,7 @@ onUnmounted(() => {
             </label>
             <label class="ui-field">
               <span>{{ $t('Usenet username') }}</span>
-              <input v-model="selections.usenet_username" class="ui-input font-mono" placeholder="username" autocomplete="off" />
+              <input v-model="selections.usenet_username" class="ui-input font-mono" :placeholder="$t('Username')" autocomplete="off" />
             </label>
             <label class="ui-field">
               <span>{{ $t('Usenet password') }}</span>
@@ -643,6 +644,7 @@ onUnmounted(() => {
         </template>
 
         <template v-else-if="step === 7">
+          <label class="ui-field"><span><input type="checkbox" v-model="selections.public_indexers_opt_in" /> {{ $t('Add the starter set of public torrent indexers (optional)') }}</span><small>{{ $t('Off by default. You can add your own sources in Prowlarr.') }}</small></label>
           <div class="wizard-options">
             <label
               v-for="option in payload.options || []"
@@ -730,7 +732,7 @@ onUnmounted(() => {
           </p>
           <ul class="wizard-review">
             <li v-for="group in reviewGroups" :key="group.id" class="wizard-review-row">
-              <span class="wizard-review-label">{{ group.label }}</span>
+              <span class="wizard-review-label">{{ $t(group.label) }}</span>
               <span class="wizard-review-apps">
                 <span v-for="name in group.apps" :key="name" class="wizard-chip">
                   <span class="wizard-app-badge">
@@ -771,7 +773,7 @@ onUnmounted(() => {
           </button>
           <button v-else type="button" class="ui-btn ui-btn-primary" :disabled="installing" @click="finish">
             <span v-if="installing" class="spinner spinner-sm"></span>
-            {{ installing ? 'Installing…' : 'Save & install' }}
+            {{ installing ? $t("Installing…") : $t("Save & install") }}
           </button>
         </div>
       </div>

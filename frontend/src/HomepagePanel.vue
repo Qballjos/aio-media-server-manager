@@ -7,8 +7,10 @@ import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
 import { BP_ORDER, BREAKPOINTS, GRID_IDS, WIDGETS, collapseEmptyRows, dockHidden, firstFree, fitItem, homeEditing, homeGrid, homeGridSaves, layoutFor, resolve, restoreGrid, saveGridLayout, viewportBp } from './homeLayout.js'
 import UiSelect from './UiSelect.vue'
+import { useHomeCalendar } from './composables/useHomeCalendar.js'
 import HomeEditBar from './HomeEditBar.vue'
 import HomeGrid from './HomeGrid.vue'
+import HomePoster from './HomePoster.vue'
 import HomeGridSheet from './HomeGridSheet.vue'
 import { openApp } from './appOpen.js'
 import { startGuardedInterval } from './pageVisible.js'
@@ -142,7 +144,7 @@ const stuckSummary = computed(() => {
     const label = STUCK_STATUSES[item.status]
     if (label) counts[label] = (counts[label] || 0) + 1
   }
-  return Object.entries(counts).map(([label, n]) => `${n} ${label}`).join(' · ')
+  return Object.entries(counts).map(([label, n]) => `${n} ${t(label)}`).join(' · ')
 })
 const stuckItems = computed(() =>
   downloadPause.value.paused ? [] : snapshot.value.downloads.filter((item) => item.status in STUCK_STATUSES),
@@ -153,8 +155,7 @@ const removeBusy = ref(new Set())
 async function removeDownloads(items, confirmFirst = false) {
   const list = items.filter((item) => item.download_id)
   if (!list.length) return
-  const what = `${list.length} stuck download${list.length === 1 ? '' : 's'}`
-  if (confirmFirst && !window.confirm(`Remove ${what}? Sonarr and Radarr search for another release.`)) return
+  if (confirmFirst && !window.confirm(t('Remove {count} stuck downloads? Sonarr and Radarr search for another release.', { count: list.length }))) return
   removeBusy.value = new Set([...removeBusy.value, ...list.map((item) => item.download_id)])
   try {
     await apiRequest('/api/downloads/remove', {
@@ -184,6 +185,8 @@ const pausedLabel = computed(() => {
   return t('Paused · resumes {time}', { time })
 })
 const requestsFilter = ref('all')
+const requestsPage = ref(0)
+const REQUESTS_PAGE_SIZE = 20
 const trendingFilter = ref('all')
 let poll = null
 let downloadsPoll = null
@@ -415,7 +418,7 @@ const netChart = computed(() => {
     end: { x: x(last), down: (y(last.rxRate) / 40) * 100, up: (y(last.txRate) / 40) * 100 },
     minutes: Math.max(1, Math.round(span / 60)),
     hoverX: netHoverIdx.value >= 0 && points[netHoverIdx.value] ? x(points[netHoverIdx.value]) : null,
-    label: `Network over the last ${Math.round(span / 60) || 1} min: download peak ${peak('rxRate')}, upload peak ${peak('txRate')}`,
+    label: t('Network over the last {minutes} min: download peak {download}, upload peak {upload}', { minutes: Math.round(span / 60) || 1, download: peak('rxRate'), upload: peak('txRate') }),
   }
 })
 const netAgo = computed(() => {
@@ -502,7 +505,7 @@ async function loadStatus() {
 
 function upFor(seconds) {
   const days = Math.floor(seconds / 86400)
-  if (days) return `${days} day${days === 1 ? '' : 's'}`
+  if (days) return t(days === 1 ? '{count} day' : '{count} days', { count: days })
   const hours = Math.floor(seconds / 3600)
   return hours ? `${hours} h` : `${Math.max(1, Math.floor(seconds / 60))} min`
 }
@@ -514,7 +517,7 @@ const downloadsProgress = computed(() => {
   return Math.round(list.reduce((sum, item) => sum + (Number(item.progress) || 0), 0) / list.length)
 })
 function chipDay(dt) {
-  return dt.toLocaleDateString(undefined, { weekday: 'short' }).replace('.', '').toUpperCase()
+  return dt.toLocaleDateString(i18nLocale(), { weekday: 'short' }).replace('.', '').toUpperCase()
 }
 function isToday(dt) {
   return dayKey(dt) === dayKey(new Date())
@@ -541,15 +544,15 @@ const launcherGroups = computed(() => {
     if (!groups.has(id)) {
       groups.set(id, {
         id,
-        label: CATEGORY_LABELS[id] || id,
+        label: t(CATEGORY_LABELS[id] || id),
         apps: [],
       })
     }
     groups.get(id).apps.push({
       ...app,
-      ...(job?.status === 'failed' ? { state: 'unhealthy', state_label: 'Setup failed', sick: true } : {}),
-      ...(busy ? { state: job.status, state_label: `${job.status[0].toUpperCase()}${job.status.slice(1)}…` } : {}),
-      progress_message: job && !busy && job.status !== 'failed' ? '' : job?.message ?? app.progress_message,
+      ...(['failed', 'rollback_failed'].includes(job?.status) ? { state: 'unhealthy', state_label: t(job.status === 'rollback_failed' ? 'Recovery incomplete' : 'Setup failed'), sick: true } : {}),
+      ...(busy ? { state: job.status, state_label: t({ queued: 'Queued', installing: 'Installing', configuring: 'Configuring', updating: 'Updating' }[job.status]) } : {}),
+      progress_message: job && !busy && !['failed', 'rollback_failed'].includes(job.status) ? '' : job?.message ?? app.progress_message,
       progress_updated_at: job?.updated_at ?? app.progress_updated_at,
       url: publicAppUrl(app.name, app.port, app.url || ''),
     })
@@ -586,6 +589,22 @@ const requestItems = computed(() =>
     .filter((item) => mediaTypeMatches(item, requestsFilter.value))
     .map((item) => withPublicUrls(item, 'seerr')),
 )
+const requestsPageCount = computed(() => Math.ceil(requestItems.value.length / REQUESTS_PAGE_SIZE))
+const requestsPageIndex = computed(() => Math.min(requestsPage.value, Math.max(0, requestsPageCount.value - 1)))
+const requestsPageStart = computed(() => requestsPageIndex.value * REQUESTS_PAGE_SIZE)
+const requestsPageItems = computed(() => requestItems.value.slice(requestsPageStart.value, requestsPageStart.value + REQUESTS_PAGE_SIZE))
+
+function moveRequestsPage(direction) {
+  requestsPage.value = Math.max(0, Math.min(requestsPageCount.value - 1, requestsPageIndex.value + direction))
+}
+
+watch(requestsFilter, () => { requestsPage.value = 0 })
+watch(requestsPageCount, count => {
+  requestsPage.value = Math.min(requestsPage.value, Math.max(0, count - 1))
+})
+watch([requestsPageIndex, requestsFilter], () => nextTick(() => {
+  if (requestsRail.value) requestsRail.value.scrollLeft = 0
+}))
 // Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
 const trendingMore = ref([])
 const trendingDetail = ref(null)
@@ -597,7 +616,8 @@ const trendingItems = computed(() => {
       const key = `${item.mediaType}-${item.mediaId}`
       if (seen.has(key)) return false
       seen.add(key)
-      return mediaTypeMatches(item, trendingFilter.value)
+      return mediaTypeMatches(item, trendingFilter.value) &&
+        !isHiddenTrendingStatus(item)
     })
     .map((item) => withPublicUrls(item, 'seerr'))
 })
@@ -617,10 +637,21 @@ function mediaTypeMatches(item, filter) {
 
 function requestStatusDot(item) {
   const status = String(item?.status || 'missing')
-  if (status === 'available') return { cls: 'is-available', label: 'Available' }
-  if (status === 'partial') return { cls: 'is-partial', label: 'Partially available' }
-  if (status === 'requested' || status === 'monitored') return { cls: 'is-requested', label: 'Requested' }
-  return { cls: 'is-missing', label: 'Not available' }
+  if (status === 'available') return { cls: 'is-available', label: t('Available') }
+  if (status === 'partial') return { cls: 'is-partial', label: t('Partially available') }
+  if (status === 'requested' || status === 'monitored') return { cls: 'is-requested', label: t('Requested') }
+  return { cls: 'is-missing', label: t('Not available') }
+}
+
+function isHiddenTrendingStatus(item) {
+  return ['available', 'partial', 'requested', 'monitored', 'deleted'].includes(String(item?.status || ''))
+}
+
+function trendingStatusDot(item) {
+  const status = String(item?.status || '')
+  if (status === 'deleted') return { cls: 'is-deleted', label: t('Deleted') }
+  if (!['available', 'requested', 'monitored'].includes(status)) return null
+  return requestStatusDot(item)
 }
 
 function notesFor(widget) {
@@ -637,7 +668,7 @@ function isPending(widget) {
 function waitingLabel(widget) {
   if (!(snapshot.value.waiting || []).includes(widget)) return ''
   const names = [...new Set(notesFor(widget).filter((note) => note.state === 'error').map((note) => SOURCE_NAMES[note.source] || note.source))]
-  return names.length ? `Waiting for ${names.join(' and ')}…` : ''
+  return names.length ? t('Waiting for {names}…', { names: names.join(t(' and ')) }) : ''
 }
 
 function debugFlagFromRoute() {
@@ -677,10 +708,10 @@ async function loadSnapshot(force = false) {
       }
       snapshotError.value = ''
     } else {
-      snapshotError.value = `Home API HTTP ${res.status}`
+      snapshotError.value = t('Home API HTTP {status}', { status: res.status })
     }
   } catch (err) {
-    snapshotError.value = err?.message || 'Home snapshot failed'
+    snapshotError.value = err?.message || t('Home snapshot failed')
   } finally {
     loading.value = false
   }
@@ -787,7 +818,7 @@ async function runSearch() {
   } catch (err) {
     if (gen !== searchGen) return
     results.value = []
-    searchError.value = err?.message || 'Search failed'
+    searchError.value = err?.message || t('Search failed')
   } finally {
     if (gen === searchGen) {
       searchedFor.value = q
@@ -859,7 +890,8 @@ const STATUS_LABELS = {
 }
 
 function statusLabel(item) {
-  return STATUS_LABELS[item?.status] || ''
+  const label = STATUS_LABELS[item?.status]
+  return label ? t(label) : ''
 }
 
 function closeTrending() {
@@ -1039,7 +1071,7 @@ async function requestTitle(item) {
     }
     await submitRequest(item)
   } catch (err) {
-    notice.value = err.message || 'Request failed.'
+    notice.value = err.message || t('Request failed.')
   } finally {
     if (!requestChoice.value) requestBusy.value = ''
   }
@@ -1075,7 +1107,7 @@ async function submitRequest(item, extra = {}) {
     })
     const data = await readJson(res)
     if (res.ok && data.ok !== false) {
-      notice.value = data.detail || 'Request submitted.'
+      notice.value = data.detail || t('Request submitted.')
       item.status = 'requested'
       item.can_request = false
       trendingMore.value = trendingMore.value.map((t) =>
@@ -1084,10 +1116,10 @@ async function submitRequest(item, extra = {}) {
       loadSnapshot(true)
       return true
     }
-    notice.value = apiError(data, 'Request failed.')
+    notice.value = apiError(data, t('Request failed.'))
     return false
   } catch (err) {
-    notice.value = err.message || 'Request failed.'
+    notice.value = err.message || t('Request failed.')
     return false
   } finally {
     requestBusy.value = ''
@@ -1105,68 +1137,53 @@ async function downloadRelease(item) {
     })
     const data = await readJson(res)
     if (res.ok && data.ok !== false) {
-      notice.value = data.detail || 'Sent to the download client.'
+      notice.value = data.detail || t('Sent to the download client.')
       item.status = 'requested'
       item.can_request = false
       return
     }
-    notice.value = apiError(data, 'Download failed.')
+    notice.value = apiError(data, t('Download failed.'))
   } catch (err) {
-    notice.value = err.message || 'Download failed.'
+    notice.value = err.message || t('Download failed.')
   } finally {
     requestBusy.value = ''
   }
 }
 
-function parseWhen(value) {
-  if (!value) return null
-  const text = String(value)
-  if (/^\d+$/.test(text) && text.length >= 9) {
-    const dt = new Date(Number(text) * 1000)
-    return Number.isNaN(dt.getTime()) ? null : dt
-  }
-  const dt = new Date(text)
-  return Number.isNaN(dt.getTime()) ? null : dt
-}
-
-function formatEventTime(value) {
-  const dt = parseWhen(value)
-  if (!dt) return ''
-  return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function dayKey(dt) {
-  const y = dt.getFullYear()
-  const m = String(dt.getMonth() + 1).padStart(2, '0')
-  const d = String(dt.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const calViewPicked = ref(false)
-const calView = ref(defaultCalView())
-const calFilter = ref('all')
-const selectedDayKey = ref(dayKey(new Date()))
 const recentRail = ref(null)
 const requestsRail = ref(null)
 const trendingRail = ref(null)
 
-function defaultCalView() {
-  return 'list'
-}
 
-// A calendar spanning more than half the grid shows the week; a narrower one (or any on a phone) the list.
+// Phones start on today; larger screens choose week or list from the card width.
+const calendarPhone = computed(() => activeBp.value === 'phone')
 const calendarWide = computed(() => {
   const item = gridLayout.value.find((entry) => entry.id === 'calendar')
   return !!item && activeBp.value !== 'phone' && item.w * 12 >= 7 * BREAKPOINTS[activeBp.value].cols
 })
-watch(
-  calendarWide,
-  (wide) => {
-    if (!calViewPicked.value) calView.value = wide ? 'week' : 'list'
-  },
-  { immediate: true },
-)
+const {
+  dayKey,
+  formatEventTime,
+  weekdayLabels,
+  calView,
+  calFilter,
+  selectedDayKey,
+  setCalView,
+  selectCalDay,
+  syncCalViewToViewport,
+  eventKind,
+  calendarTarget,
+  calendarLinkTitle,
+  openCalendarItem,
+  calendarRangeLabel,
+  calendarDays,
+  calendarWeeks,
+  calendarList,
+  calOnToday,
+  shiftCalendar,
+  goToday
+} = useHomeCalendar({ snapshot, calendarWide, calendarPhone })
+
 watch(statusWanted, (wanted) => {
   if (wanted) loadStatus()
 })
@@ -1184,31 +1201,6 @@ watch(editing, (on) => {
   toast.value = null
 })
 
-function setCalView(view) {
-  calViewPicked.value = true
-  calView.value = view
-  if ((view === 'week' || view === 'day' || view === 'list') && !selectedDayKey.value) {
-    selectedDayKey.value = dayKey(new Date())
-  }
-}
-
-function selectCalDay(day) {
-  if (!day?.key) return
-  selectedDayKey.value = day.key
-  if (calView.value === 'month' || calView.value === 'week') {
-    const parts = day.key.split('-').map(Number)
-    if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
-      calCursor.value = new Date(parts[0], parts[1] - 1, parts[2])
-    }
-  }
-}
-
-function syncCalViewToViewport() {
-  if (calViewPicked.value) return
-  const next = calendarWide.value ? 'week' : defaultCalView()
-  if (calView.value !== next) calView.value = next
-}
-
 function launcherTitle(app) {
   if (app.state_label) return `${app.display_name}: ${app.state_label}`
   return app.display_name
@@ -1224,19 +1216,9 @@ const vpnNotice = computed(() => {
   const names = vpn.waiting.map(
     (name) => (snapshot.value.apps || []).find((app) => app.name === name)?.display_name || name,
   )
-  const verb = names.length === 1 ? 'stays' : 'stay'
-  const error = vpn.last_error ? ` Last VPN error: ${vpn.last_error}` : ''
-  return `VPN is on but not connected yet, so ${names.join(', ')} ${verb} stopped until it is.${error}`
+    const error = vpn.last_error ? ` ${t('Last VPN error: {message}', { message: vpn.last_error })}` : ''
+  return t('VPN is on but not connected yet. {names} will remain stopped until it connects.', { names: names.join(', ') }) + error
 })
-
-function startOfWeek(value) {
-  const dt = new Date(value)
-  dt.setHours(0, 0, 0, 0)
-  dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7))
-  return dt
-}
-
-const calCursor = ref(startOfWeek(new Date()))
 
 function scrollRail(which, direction) {
   const node =
@@ -1284,39 +1266,6 @@ const loadMoreRecent = railPager(recentRail, recentMore, '/api/homepage/recent',
 watch([trendingRail, trendingFilter], () => nextTick(loadMoreTrending))
 watch(recentRail, () => nextTick(loadMoreRecent))
 
-function addDays(value, amount) {
-  const dt = new Date(value)
-  dt.setDate(dt.getDate() + amount)
-  return dt
-}
-
-function eventKind(item) {
-  return item?.kind || item?.source || ''
-}
-
-/** Downloaded titles open on Jellyfin or Plex. Everything else opens in Sonarr or Radarr. */
-function calendarTarget(item) {
-  if (item?.has_file && item.play_url && item.play_app) {
-    return { app: item.play_app, url: item.play_url }
-  }
-  if (item?.url && item.source) return { app: item.source, url: item.url }
-  return null
-}
-
-function calendarLinkTitle(item) {
-  const target = calendarTarget(item)
-  if (!target) return undefined
-  const app = SOURCE_NAMES[target.app] || target.app
-  return t('Open in {app}', { app })
-}
-
-function openCalendarItem(event, item) {
-  const target = calendarTarget(item)
-  if (!target) return
-  event.stopPropagation()
-  openApp(event, target.app, target.url)
-}
-
 const MEDIA_LABELS = { tv: 'Series', movie: 'Movie' }
 
 // Requests, trending and recent carry mediaType; calendar entries only kind and source.
@@ -1325,193 +1274,6 @@ function mediaKind(item) {
   if (['tv', 'series', 'episode', 'season', 'sonarr'].includes(kind)) return 'tv'
   if (['movie', 'radarr'].includes(kind)) return 'movie'
   return ''
-}
-
-function matchesCalFilter(item) {
-  if (calFilter.value === 'tv') return eventKind(item) === 'episode' || item?.source === 'sonarr'
-  if (calFilter.value === 'movies') return eventKind(item) === 'movie' || item?.source === 'radarr'
-  if (calFilter.value === 'missing') return !item?.has_file
-  return true
-}
-
-const filteredCalendar = computed(() =>
-  (snapshot.value.calendar || []).filter(matchesCalFilter),
-)
-
-const calendarRangeLabel = computed(() => {
-  if (calView.value === 'month') {
-    return calCursor.value.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-  }
-  if (calView.value === 'day') {
-    return calCursor.value.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })
-  }
-  if (calView.value === 'list' && calendarListInfo.value.label) return calendarListInfo.value.label
-  const start = startOfWeek(calCursor.value)
-  const end = addDays(start, 6)
-  const opts = { day: 'numeric', month: 'short' }
-  return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, { ...opts, year: 'numeric' })}`
-})
-
-const calendarDays = computed(() => {
-  const byDay = {}
-  for (const item of filteredCalendar.value) {
-    const dt = parseWhen(item.when)
-    if (!dt) continue
-    const key = dayKey(dt)
-    if (!byDay[key]) byDay[key] = []
-    byDay[key].push(item)
-  }
-  for (const key of Object.keys(byDay)) {
-    const rows = byDay[key].map((item) => ({ item, dt: parseWhen(item.when) })).sort((a, b) => a.dt - b.dt)
-    byDay[key] = groupSameDay(rows).map((row) => row.item)
-  }
-  const todayKey = dayKey(new Date())
-  if (calView.value === 'day' || calView.value === 'list') {
-    const key = dayKey(calCursor.value)
-    return [
-      {
-        key,
-        date: calCursor.value.getDate(),
-        month: calCursor.value.getMonth() + 1,
-        weekday: weekdayLabels[(calCursor.value.getDay() + 6) % 7],
-        inMonth: true,
-        isToday: key === todayKey,
-        events: byDay[key] || [],
-      },
-    ]
-  }
-  if (calView.value === 'week') {
-    const start = startOfWeek(calCursor.value)
-    const days = []
-    for (let i = 0; i < 7; i += 1) {
-      const cursor = addDays(start, i)
-      const key = dayKey(cursor)
-      days.push({
-        key,
-        date: cursor.getDate(),
-        month: cursor.getMonth() + 1,
-        weekday: weekdayLabels[i],
-        inMonth: true,
-        isToday: key === todayKey,
-        events: byDay[key] || [],
-      })
-    }
-    return days
-  }
-  const year = calCursor.value.getFullYear()
-  const month = calCursor.value.getMonth()
-  const first = new Date(year, month, 1)
-  const start = startOfWeek(first)
-  const last = new Date(year, month + 1, 0)
-  const end = addDays(startOfWeek(last), 6)
-  const days = []
-  const cursor = new Date(start)
-  while (cursor <= end) {
-    const key = dayKey(cursor)
-    days.push({
-      key,
-      date: cursor.getDate(),
-      month: cursor.getMonth() + 1,
-      weekday: weekdayLabels[(cursor.getDay() + 6) % 7],
-      inMonth: cursor.getMonth() === month,
-      isToday: key === todayKey,
-      events: byDay[key] || [],
-    })
-    cursor.setDate(cursor.getDate() + 1)
-  }
-  return days
-})
-
-const calendarWeeks = computed(() => {
-  const days = calendarDays.value
-  if (calView.value !== 'month') return [{ key: days[0]?.key || 'week', isCurrent: true, days }]
-  const weeks = []
-  for (let i = 0; i < days.length; i += 7) {
-    const slice = days.slice(i, i + 7)
-    weeks.push({
-      key: slice[0]?.key || String(i),
-      isCurrent: slice.some((day) => day.isToday),
-      days: slice,
-    })
-  }
-  return weeks
-})
-
-const calendarListInfo = computed(() => {
-  const rows = filteredCalendar.value
-    .map((item) => ({ item, dt: parseWhen(item.when) }))
-    .filter((row) => row.dt)
-    .sort((a, b) => a.dt - b.dt)
-  if (calView.value !== 'list') {
-    const end = addDays(calCursor.value, 1)
-    return { rows: rows.filter((row) => row.dt >= calCursor.value && row.dt < end), label: '' }
-  }
-  const weekStart = startOfWeek(calCursor.value)
-  const thisWeek = dayKey(weekStart) === dayKey(startOfWeek(new Date()))
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const start = thisWeek ? today : weekStart
-  const end = addDays(weekStart, 7)
-  const inWeek = groupSameDay(rows.filter((row) => row.dt >= start && row.dt < end))
-  if (inWeek.length || !thisWeek) return { rows: inWeek, label: thisWeek ? 'This week' : '' }
-  // ponytail: nothing left this week → the next few releases instead of an empty card
-  return { rows: groupSameDay(rows.filter((row) => row.dt >= start)).slice(0, 8), label: 'Coming up' }
-})
-
-/** Episodes of one series on one day collapse into a single row ("S03E01 – S03E05 · 5 episodes"). */
-function groupSameDay(rows) {
-  const out = []
-  for (const row of rows) {
-    const prev = out[out.length - 1]
-    if (prev && prev.item.title === row.item.title && dayKey(prev.dt) === dayKey(row.dt)) {
-      prev.count += 1
-      prev.last = row
-      prev.have = prev.have && row.item.has_file
-      continue
-    }
-    out.push({ ...row, count: 1, last: row, have: row.item.has_file })
-  }
-  return out.map((row) => {
-    if (row.count === 1) return row
-    const code = (r) => String(r.item.detail || '').split(' ')[0]
-    const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
-    // Downloaded only when every episode in the group is.
-    const item = { ...row.item, detail: `${span}${row.count} episodes`, has_file: row.have }
-    // A run of episodes opens the series, not the first episode.
-    if (row.have && item.series_play_url) item.play_url = item.series_play_url
-    return { ...row, item }
-  })
-}
-const calendarList = computed(() => calendarListInfo.value.rows)
-const calOnToday = computed(() => {
-  const now = new Date()
-  if (calView.value === 'month') return calCursor.value.getMonth() === now.getMonth() && calCursor.value.getFullYear() === now.getFullYear()
-  if (calView.value === 'day') return dayKey(calCursor.value) === dayKey(now)
-  return dayKey(startOfWeek(calCursor.value)) === dayKey(startOfWeek(now))
-})
-
-function shiftCalendar(direction) {
-  if (calView.value === 'month') {
-    calCursor.value = new Date(calCursor.value.getFullYear(), calCursor.value.getMonth() + direction, 1)
-    return
-  }
-  const step = calView.value === 'day' ? 1 : 7
-  calCursor.value = addDays(calView.value === 'week' ? startOfWeek(calCursor.value) : calCursor.value, direction * step)
-}
-
-function goToday() {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  selectedDayKey.value = dayKey(now)
-  if (calView.value === 'month') {
-    calCursor.value = new Date(now.getFullYear(), now.getMonth(), 1)
-    return
-  }
-  if (calView.value === 'week' || calView.value === 'list') {
-    calCursor.value = startOfWeek(now)
-    return
-  }
-  calCursor.value = now
 }
 
 function onWidgetDebugEvent(event) {
@@ -1558,15 +1320,6 @@ watch(
     }
   }
 )
-watch(calView, (view) => {
-  if (view === 'day') {
-    goToday()
-    return
-  }
-  if (view === 'week' || view === 'list') {
-    calCursor.value = startOfWeek(calCursor.value)
-  }
-})
 onUnmounted(() => {
   homeEditing.value = false
   dockObserver?.disconnect()
@@ -1648,7 +1401,7 @@ onUnmounted(() => {
         @open="openWidget"
       >
       <template #greeting>
-      <section class="home-hero">
+      <section class="home-hero glass-card">
         <span class="home-hero-date">{{ todayLabel }}</span>
         <h2 class="home-hero-title">{{ greeting }}</h2>
         <p class="home-hero-sub">{{ heroSummary }}</p>
@@ -1656,7 +1409,7 @@ onUnmounted(() => {
       </template>
 
       <template #searchbar>
-      <section ref="searchRoot" class="home-search">
+      <section ref="searchRoot" class="home-search glass-card">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
           <label class="home-sr" for="home-search-provider">{{ $t('Search in') }}</label>
           <UiSelect
@@ -1712,7 +1465,7 @@ onUnmounted(() => {
             </p>
             <ul v-if="results.length" class="home-results">
               <li v-for="item in results" :key="resultKey(item)" class="home-result">
-                <img v-if="item.poster" :src="item.poster" alt="" class="home-poster" />
+                <img v-if="item.poster" :src="item.poster" loading="lazy" decoding="async" alt="" class="home-poster" />
                 <div class="home-result-body">
                   <strong>{{ item.title }}</strong>
                   <span v-if="item.source === 'prowlarr'">{{ item.detail }}</span>
@@ -1757,9 +1510,9 @@ onUnmounted(() => {
               @click="item.url && openApp($event, item.source || 'jellyfin', item.url)"
             >
               <span class="home-tile-art">
-                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                <HomePoster v-if="item.poster" :src="item.poster" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
-                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
@@ -1781,16 +1534,28 @@ onUnmounted(() => {
         </article>
       </template>
       <template #requests>
-        <article class="home-card glass-card">
+        <article class="home-card glass-card" :class="{ 'has-request-pages': requestsPageCount > 1 }">
           <div class="home-rail-head">
             <h3>{{ $t('Requests') }}</h3>
             <div class="home-rail-tools">
-              <div v-if="snapshot.requests.length" class="home-type-filter" role="group" :aria-label="$t('Filter requests')">
+              <UiSelect
+                v-if="snapshot.requests.length > REQUESTS_PAGE_SIZE"
+                v-model="requestsFilter"
+                variant="inline"
+                :aria-label="$t('Filter requests')"
+                :options="[{ value: 'all', label: $t('All') }, { value: 'movie', label: $t('Movies') }, { value: 'tv', label: $t('Series') }]"
+              />
+              <div v-else-if="snapshot.requests.length" class="home-type-filter" role="group" :aria-label="$t('Filter requests')">
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'all' }" @click="requestsFilter = 'all'">{{ $t('All') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">{{ $t('Movies') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
-              <div v-if="requestItems.length" class="home-rail-nav">
+              <div v-if="requestsPageCount > 1" class="home-request-pages">
+                <span aria-live="polite">{{ requestsPageStart + 1 }}–{{ requestsPageStart + requestsPageItems.length }} / {{ requestItems.length }}</span>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :disabled="requestsPageIndex === 0" :aria-label="$t('Previous requests')" @click="moveRequestsPage(-1)">‹</button>
+                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :disabled="requestsPageIndex >= requestsPageCount - 1" :aria-label="$t('Next requests')" @click="moveRequestsPage(1)">›</button>
+              </div>
+              <div v-if="requestItems.length && requestsPageCount <= 1" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous requests')" @click="scrollRail('requests', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next requests')" @click="scrollRail('requests', 1)">›</button>
               </div>
@@ -1798,8 +1563,8 @@ onUnmounted(() => {
           </div>
           <div v-if="requestItems.length" ref="requestsRail" class="home-rail">
             <a
-              v-for="(item, idx) in requestItems"
-              :key="idx"
+              v-for="(item, idx) in requestsPageItems"
+              :key="`${requestsPageStart + idx}-${item.mediaType}-${item.mediaId || item.title}`"
               class="home-tile"
               :href="item.url || seerrHomeUrl || undefined"
               :target="item.url || seerrHomeUrl ? '_blank' : undefined"
@@ -1807,10 +1572,10 @@ onUnmounted(() => {
               @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
             >
               <span class="home-tile-art">
-                <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                <HomePoster v-if="item.poster" :src="item.poster" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
                 <span class="home-status-dot" :class="requestStatusDot(item).cls" :title="requestStatusDot(item).label" role="img" :aria-label="requestStatusDot(item).label"></span>
-                <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
               <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
@@ -1836,9 +1601,9 @@ onUnmounted(() => {
       </template>
       <template #trending>
         <article class="home-card glass-card home-card-trending">
-          <div class="home-rail-head">
+          <div class="home-rail-head home-trending-head">
             <h3>{{ $t('Trending') }}</h3>
-            <div class="home-rail-tools">
+            <div class="home-rail-tools home-trending-tools">
               <div v-if="snapshot.trending.length" class="home-type-filter" role="group" :aria-label="$t('Filter trending')">
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">{{ $t('All') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">{{ $t('Movies') }}</button>
@@ -1859,22 +1624,21 @@ onUnmounted(() => {
                 @click="openTrending(item)"
               >
                 <span class="home-tile-art">
-                  <img v-if="item.poster" :src="item.poster" alt="" class="home-tile-poster" />
+                  <HomePoster v-if="item.poster" :src="item.poster" class="home-tile-poster" />
                   <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
-                  <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                  <span
+                    v-if="trendingStatusDot(item)"
+                    class="home-status-dot"
+                    :class="trendingStatusDot(item).cls"
+                    :title="trendingStatusDot(item).label"
+                    role="img"
+                    :aria-label="trendingStatusDot(item).label"
+                  ></span>
+                  <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
                 </span>
                 <span class="home-tile-title">{{ item.title }}</span>
                 <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
                 <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
-              </button>
-              <button
-                v-if="item.can_request"
-                type="button"
-                class="ui-btn ui-btn-ghost home-tile-request"
-                :disabled="requestBusy === resultKey(item)"
-                @click="requestTitle(item)"
-              >
-                {{ requestBusy === resultKey(item) ? $t('Requesting…') : $t('Request') }}
               </button>
             </div>
           </div>
@@ -1887,7 +1651,7 @@ onUnmounted(() => {
           <p v-else-if="snapshot.trending.length" class="home-muted">
             {{ trendingFilter === 'movie' ? $t('No movies in this filter.') : trendingFilter === 'tv' ? $t('No series in this filter.') : $t('No titles in this filter.') }}
           </p>
-          <p v-else class="home-muted">{{ snapshot.seerr?.available ? 'No trending titles right now.' : 'Trending titles appear when Seerr is running.' }}</p>
+          <p v-else class="home-muted">{{ $t(snapshot.seerr?.available ? 'No trending titles right now.' : 'Trending titles appear when Seerr is running.') }}</p>
           <ul v-if="widgetDebug && notesFor('trending').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('trending')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1940,7 +1704,7 @@ onUnmounted(() => {
             </div>
             <p v-else-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
             <ul v-else>
-              <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
+              <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :data-source="row.item.source" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
                 <component
                   :is="calendarTarget(row.item) ? 'a' : 'div'"
                   class="cal-row-link"
@@ -1954,7 +1718,7 @@ onUnmounted(() => {
                   <span class="cal-row-body">
                     <span class="cal-row-title">
                       <strong>{{ row.item.title }}</strong>
-                      <span v-if="mediaKind(row.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(row.item)] }}</span>
+                      <span v-if="mediaKind(row.item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(row.item)]) }}</span>
                     </span>
                     <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
                   </span>
@@ -1994,6 +1758,7 @@ onUnmounted(() => {
                         :is="calendarTarget(item) ? 'a' : 'div'"
                         class="cal-event"
                         :data-kind="eventKind(item)"
+                        :data-source="item.source"
                         :class="{ 'is-have': item.has_file }"
                         :href="calendarTarget(item)?.url"
                         :target="calendarTarget(item) ? '_blank' : undefined"
@@ -2003,7 +1768,7 @@ onUnmounted(() => {
                       >
                         <span class="cal-event-top">
                           <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
-                          <span v-if="mediaKind(item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(item)] }}</span>
+                          <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
                         </span>
                         <strong>{{ item.title }}</strong>
                         <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
@@ -2064,7 +1829,7 @@ onUnmounted(() => {
           </div>
           <div v-if="movingDownloads.length && !downloadPause.paused" class="home-dl-compact">
             <span class="home-dl-count">{{ movingDownloads.length }}<small>{{ $t('active') }}</small></span>
-            <span class="home-muted home-dl-meta">{{ totalSpeed || 'Waiting for speed' }}</span>
+            <span class="home-muted home-dl-meta">{{ totalSpeed || $t('Waiting for speed') }}</span>
             <span class="home-bar"><span :style="{ width: `${downloadsProgress}%` }" /></span>
           </div>
           <div class="home-card-body">
@@ -2122,7 +1887,7 @@ onUnmounted(() => {
       <template #playing>
         <article class="home-card glass-card home-card-playing" :class="{ 'has-art': nowItem?.poster }">
           <template v-if="nowItem">
-            <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" alt="" aria-hidden="true" />
+            <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" loading="lazy" decoding="async" alt="" aria-hidden="true" />
             <span v-if="nowItem.poster" class="np-shade" aria-hidden="true"></span>
             <div class="np-top">
               <span class="gh-pill">
@@ -2163,7 +1928,7 @@ onUnmounted(() => {
           <div class="gh-head">
             <h3>{{ $t('Storage') }}</h3>
             <span v-if="storageStatus" class="gh-status" :style="{ '--dot': MOOD_COLORS[storageStatus.level] }">{{ storageStatus.text }}</span>
-            <span v-else class="gh-status is-idle">{{ statusLoaded ? 'No data folders found' : 'Checking disks…' }}</span>
+            <span v-else class="gh-status is-idle">{{ $t(statusLoaded ? 'No data folders found' : 'Checking disks…') }}</span>
           </div>
           <template v-if="fullestVolume">
             <div class="gh-figure">
@@ -2234,7 +1999,7 @@ onUnmounted(() => {
               </span>
               <span class="gh-pill">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-                Up {{ upFor(homeStatus.server.uptime_seconds) }}
+                {{ $t('Up') }} {{ upFor(homeStatus.server.uptime_seconds) }}
               </span>
             </div>
           </template>
@@ -2256,7 +2021,7 @@ onUnmounted(() => {
                     <strong>{{ item.title }}</strong>
                     <span class="gh-label">{{ item.detail }}</span>
                   </span>
-                  <span class="at-kind">{{ item.level === 'problem' ? 'Problem' : item.level === 'warning' ? 'Warning' : 'Update' }}</span>
+                  <span class="at-kind">{{ $t(item.level === 'problem' ? 'Problem' : item.level === 'warning' ? 'Warning' : 'Update') }}</span>
                 </a>
               </li>
             </ol>
@@ -2353,10 +2118,10 @@ onUnmounted(() => {
           </div>
           <p v-if="trendingDetail.error" class="home-notice home-notice-error">{{ trendingDetail.error }}</p>
           <div v-else class="home-title-body">
-            <img v-if="trendingDetail.data?.poster || trendingDetail.item.poster" :src="trendingDetail.data?.poster || trendingDetail.item.poster" alt="" class="home-title-poster" />
+            <img v-if="trendingDetail.data?.poster || trendingDetail.item.poster" :src="trendingDetail.data?.poster || trendingDetail.item.poster" loading="lazy" decoding="async" alt="" class="home-title-poster" />
             <div>
               <p class="home-title-meta">
-                <span v-if="mediaKind(trendingDetail.item)" class="media-badge">{{ MEDIA_LABELS[mediaKind(trendingDetail.item)] }}</span>
+                <span v-if="mediaKind(trendingDetail.item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(trendingDetail.item)]) }}</span>
                 <span>{{ trendingDetail.data?.year || trendingDetail.item.detail }}</span>
                 <span v-if="statusLabel(trendingDetail.data || trendingDetail.item)">{{ statusLabel(trendingDetail.data || trendingDetail.item) }}</span>
               </p>
@@ -2367,28 +2132,28 @@ onUnmounted(() => {
                 <li v-for="row in trendingRatings" :key="row.label"><span>{{ row.label }}</span> {{ row.value }}</li>
               </ul>
               <p v-else-if="!trendingDetail.pending" class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
-              <div class="home-request-actions">
-                <button
-                  v-if="trendingDetail.data?.trailer && youtubeIdFromUrl(trendingDetail.data.trailer)"
-                  type="button"
-                  class="ui-btn ui-btn-primary"
-                  @click="openTrailer(trendingDetail.data)"
-                >{{ $t('Trailer') }}</button>
-                <button
-                  v-if="trendingDetail.item.can_request"
-                  type="button"
-                  class="ui-btn"
-                  :disabled="requestBusy === resultKey(trendingDetail.item)"
-                  @click="requestTitle(trendingDetail.item)"
-                >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t('Request') }}</button>
-                <button
-                  v-if="trendingDetail.data?.url"
-                  type="button"
-                  class="ui-btn ui-btn-ghost"
-                  @click="openApp($event, 'seerr', trendingDetail.data.url)"
-                >{{ $t('Open in Seerr') }}</button>
-              </div>
             </div>
+          </div>
+          <div class="home-request-actions">
+            <button
+              v-if="trendingDetail.data?.trailer && youtubeIdFromUrl(trendingDetail.data.trailer)"
+              type="button"
+              class="ui-btn ui-btn-primary"
+              @click="openTrailer(trendingDetail.data)"
+            >{{ $t('Trailer') }}</button>
+            <button
+              v-if="trendingDetail.item.can_request"
+              type="button"
+              class="ui-btn"
+              :disabled="requestBusy === resultKey(trendingDetail.item)"
+              @click="requestTitle(trendingDetail.item)"
+            >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t('Request') }}</button>
+            <button
+              v-if="trendingDetail.data?.url"
+              type="button"
+              class="ui-btn ui-btn-ghost"
+              @click="openApp($event, 'seerr', trendingDetail.data.url)"
+            >{{ $t('Open in Seerr') }}</button>
           </div>
         </div>
       </div>
@@ -2459,1834 +2224,4 @@ onUnmounted(() => {
   </section>
 </template>
 
-<style scoped>
-.home-shell {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  width: 100%;
-  min-width: 0;
-}
-.home-shell.has-floating-dock {
-  padding-bottom: calc(var(--home-dock-height) + 2rem + env(safe-area-inset-bottom, 0px));
-}
-/* Placeholders in the shape of what loads into them. */
-.home-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-.home-skel {
-  display: block;
-  background: var(--pill-bg);
-  border-radius: var(--radius-md);
-  animation: home-skel-pulse 1.4s ease-in-out infinite;
-}
-.home-skel-icon {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 15px;
-  flex: 0 0 auto;
-}
-.home-skel-poster {
-  flex: 0 0 7.25rem;
-  width: 7.25rem;
-  height: 10.6rem;
-}
-.home-skel-line {
-  height: 0.9rem;
-  margin: 0.6rem 0;
-}
-.home-skel-line:nth-child(2n) {
-  width: 65%;
-}
-@keyframes home-skel-pulse {
-  50% {
-    opacity: 0.45;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .home-skel {
-    animation: none;
-  }
-}
-.home-muted {
-  color: var(--text-muted);
-  font-size: var(--text-body);
-}
-.home-empty {
-  padding: 1.5rem;
-  display: grid;
-  gap: 0.75rem;
-  justify-items: start;
-}
-/* The dock: one glass pill of app tiles that stays at the bottom of the window while you scroll. */
-.home-dock {
-  position: relative;
-  z-index: 5;
-  justify-self: center;
-  margin-top: 1rem;
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: 2rem;
-  background: var(--control-bg);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-}
-.home-dock.is-floating {
-  position: fixed;
-  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
-  width: max-content;
-  max-width: calc(100% - 2rem);
-  margin: 0;
-}
-.home-dock-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  max-width: 100%;
-  overflow-x: auto;
-  padding: 0.15rem;
-  scrollbar-width: none;
-}
-.home-dock-row::-webkit-scrollbar {
-  display: none;
-}
-.home-app {
-  position: relative;
-  flex: 0 0 auto;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 15px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  color: inherit;
-  text-decoration: none;
-  transition: transform 0.2s, background 0.2s;
-}
-.home-app:hover {
-  transform: translateY(-3px) scale(1.06);
-  background: var(--bg-surface-elevated);
-}
-/* Status dot on the tile's corner: green running, grey stopped, amber busy, red unhealthy. */
-.home-app::after {
-  content: '';
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-success);
-  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.8);
-}
-.home-app.is-down {
-  opacity: 0.55;
-  cursor: default;
-}
-.home-app.is-down:hover {
-  transform: none;
-}
-.home-app.is-down::after {
-  background: var(--text-dim);
-}
-.home-app.is-busy::after {
-  background: var(--color-warning);
-  animation: home-skel-pulse 1.4s ease-in-out infinite;
-}
-.home-app.is-sick {
-  background: var(--color-warning-bg);
-  border-color: var(--color-warning);
-}
-.home-app.is-sick::after {
-  background: var(--color-danger);
-}
-.home-app-icon,
-.home-app-fallback {
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 0.5rem;
-  object-fit: contain;
-}
-.home-app-fallback {
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  background: var(--bg-surface-elevated);
-}
-.home-dock-notes {
-  margin: 0;
-  padding: 0 0.6rem 0.2rem;
-  font-size: var(--text-kicker);
-  color: var(--text-muted);
-  text-align: center;
-}
-.home-notice-link {
-  margin-left: 0.35rem;
-  text-decoration: underline;
-}
-/* Greeting: date, greeting and a line about today, centred like the mockup. */
-.home-hero {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 0.55rem;
-  padding: 0.5rem;
-  container-type: size;
-}
-.home-hero-date {
-  font-size: var(--text-body);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-main);
-  text-shadow: var(--wallpaper-text-shadow);
-}
-.home-hero-title {
-  margin: 0;
-  font-size: clamp(1.6rem, 5.5cqw, 3rem);
-  font-weight: 800;
-  letter-spacing: -0.035em;
-  line-height: 1.02;
-  color: var(--text-heading);
-  text-shadow: var(--wallpaper-text-shadow);
-}
-.home-hero-sub {
-  margin: 0;
-  font-size: var(--text-ui);
-  color: var(--text-main);
-  text-shadow: var(--wallpaper-text-shadow);
-}
-/* Search: the pill, centred in a wide card and filling a small one. */
-.home-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 0;
-  padding: 0;
-  container-type: inline-size;
-}
-.home-search-pill {
-  background: var(--control-bg);
-  width: 100%;
-  max-width: 720px;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  height: min(3.5rem, 100%);
-  padding: 0 0.5rem 0 0;
-  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-  overflow: hidden;
-}
-.home-search-provider {
-  align-self: stretch;
-  flex: 0 1 12.4rem;
-  width: 12.4rem;
-  max-width: 12.4rem;
-  min-width: 0;
-  border-right: 1px solid var(--border-subtle);
-}
-.home-search-mark {
-  flex: 0 0 auto;
-  color: var(--text-muted);
-}
-.home-search-go {
-  display: none;
-}
-.home-search-input {
-  flex: 1 1 0;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  /* 16px keeps iOS from zooming the page when the field is focused. */
-  font-size: var(--text-ui);
-  -webkit-appearance: none;
-  appearance: none;
-  border-radius: 0;
-}
-.home-search-input::-webkit-search-decoration,
-.home-search-input::-webkit-search-cancel-button {
-  -webkit-appearance: none;
-  appearance: none;
-  display: none;
-}
-.home-search-input::placeholder {
-  color: var(--text-dim);
-}
-.home-search-clear {
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  width: 1.7rem;
-  height: 1.7rem;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.home-search-clear:hover,
-.home-search-clear:focus-visible {
-  color: var(--text-main);
-  background: color-mix(in srgb, var(--text-main) 10%, transparent);
-  outline: none;
-}
-.home-search-clear svg {
-  width: 0.9rem;
-  height: 0.9rem;
-}
-.home-search-btn {
-  flex: 0 0 auto;
-  max-height: calc(100% - 0.35rem);
-  min-height: 0;
-  height: min(2.6rem, calc(100% - 0.35rem));
-  padding: 0 1.1rem;
-}
-/* Clear takes a slot in the pill; give the field room before the worded Search button collapses. */
-.home-search-pill:has(.home-search-clear) {
-  gap: 0.45rem;
-}
-.home-search-pill:has(.home-search-clear) .home-search-provider {
-  flex-basis: 11rem;
-  max-width: min(11rem, 42%);
-}
-.home-hero-results {
-  position: absolute;
-  top: calc(50% + min(1.75rem, 50%) - 1px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 5;
-  /* Prefer the search widget’s width; grow toward 28rem only while it still fits the window. */
-  width: min(720px, max(100%, min(28rem, calc(100vw - 2rem))));
-  max-width: min(720px, calc(100vw - 1.5rem));
-  padding: 0;
-  text-align: left;
-  box-sizing: border-box;
-}
-.home-results-scroll {
-  max-height: min(60vh, 34rem);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 1rem 1.1rem;
-  display: grid;
-  gap: 0.5rem;
-}
-.home-hero-results.is-left {
-  left: 0;
-  transform: none;
-}
-.home-hero-results.is-right {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-@container (max-height: 172px) {
-  .home-hero-sub {
-    display: none;
-  }
-}
-/* A phone-width bar keeps the field typeable. The worded button becomes an icon; Enter still submits.
-   640px covers half-width search widgets once the clear control is visible. */
-@container (max-width: 640px) {
-  .home-search-pill {
-    gap: 0.4rem;
-    padding-right: 0.3rem;
-  }
-  .home-search-provider {
-    flex: 0 1 10.4rem;
-    width: auto;
-    max-width: min(10.4rem, 46%);
-    --ui-select-font: 0.92rem;
-    --ui-select-pad: 0.7rem;
-  }
-  .home-search-pill:has(.home-search-clear) .home-search-provider {
-    flex-basis: 8.6rem;
-    max-width: min(8.6rem, 36%);
-  }
-  .home-search-mark {
-    display: none;
-  }
-  .home-search-clear {
-    width: 1.55rem;
-    height: 1.55rem;
-  }
-  .home-search-clear svg {
-    width: 0.85rem;
-    height: 0.85rem;
-  }
-  .home-search-go {
-    display: block;
-    flex: 0 0 auto;
-  }
-  .home-search-btn {
-    width: min(2.55rem, calc(100% - 0.35rem));
-    min-width: 0;
-    height: min(2.55rem, calc(100% - 0.35rem));
-    aspect-ratio: 1;
-    padding: 0;
-  }
-  .home-search-btn span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
-  }
-  .home-hero-results,
-  .home-hero-results.is-left,
-  .home-hero-results.is-right {
-    left: 0;
-    right: 0;
-    width: 100%;
-    max-width: 100%;
-    transform: none;
-  }
-}
-@container (max-width: 360px) {
-  .home-search-provider {
-    max-width: min(7.2rem, 40%);
-    --ui-select-pad: 0.55rem;
-  }
-  .home-search-pill:has(.home-search-clear) .home-search-provider {
-    max-width: min(6.2rem, 32%);
-  }
-  .home-search-clear {
-    width: 1.4rem;
-    height: 1.4rem;
-  }
-}
-@container (max-width: 280px) {
-  .home-search-provider {
-    max-width: min(5.6rem, 38%);
-    --ui-select-pad: 0.45rem;
-  }
-  .home-search-pill:has(.home-search-clear) .home-search-provider {
-    max-width: min(5rem, 30%);
-  }
-}
-.home-request-dialog {
-  max-width: 28rem;
-  padding: 1.15rem 1.25rem 1.2rem;
-  gap: 0.75rem;
-}
-.home-title-dialog {
-  max-width: 40rem;
-  padding: 1.1rem 1.2rem 1.2rem;
-  gap: 0.85rem;
-  overflow: auto;
-}
-.home-title-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-.home-title-head h3 {
-  margin: 0;
-}
-.home-title-body {
-  display: grid;
-  grid-template-columns: 7.5rem minmax(0, 1fr);
-  gap: 1rem;
-  align-items: start;
-}
-.home-title-poster {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  border-radius: 8px;
-}
-.home-title-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-body);
-}
-.home-title-overview {
-  margin: 0.55rem 0 0;
-  line-height: 1.45;
-}
-.home-title-ratings {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0.75rem 0 0;
-  padding: 0;
-  list-style: none;
-}
-.home-title-ratings li {
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  padding: 0.15rem 0.6rem;
-  font-size: var(--text-kicker);
-}
-.home-title-ratings span {
-  color: var(--text-muted);
-  margin-right: 0.25rem;
-}
-.home-title-dialog .home-request-actions {
-  margin-top: 0.9rem;
-}
-.home-trailer-backdrop {
-  z-index: 110;
-}
-.home-trailer-dialog {
-  width: min(56rem, calc(100vw - 1.5rem));
-  max-width: none;
-  padding: 1rem 1.1rem 1.15rem;
-  gap: 0.75rem;
-}
-.home-trailer-frame {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #000;
-  border: 1px solid var(--border-subtle);
-}
-.home-trailer-frame iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
-@media (max-width: 640px) {
-  .home-title-body {
-    grid-template-columns: 5.5rem minmax(0, 1fr);
-  }
-}
-.home-request-dialog h3 {
-  margin: 0;
-}
-.home-request-field {
-  display: grid;
-  gap: 0.3rem;
-  font-size: var(--text-body);
-}
-.home-request-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-.home-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-}
-.home-notice {
-  color: var(--color-info);
-  font-size: var(--text-body);
-}
-.home-notice-error {
-  color: var(--color-danger, #f87171);
-}
-.home-results {
-  list-style: none;
-  display: grid;
-  gap: 0.5rem;
-}
-.home-result {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
-}
-.home-poster {
-  width: 2.5rem;
-  height: 3.6rem;
-  object-fit: cover;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-.home-result-body {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: grid;
-}
-.home-result-body span {
-  color: var(--text-muted);
-  font-size: var(--text-body);
-}
-.home-result-body .home-status {
-  justify-self: start;
-  margin-top: 0.2rem;
-  padding: 0.05rem 0.5rem;
-  border-radius: 999px;
-  font-size: var(--text-kicker);
-  font-weight: 600;
-  border: 1px solid currentColor;
-}
-.home-status.is-available {
-  color: var(--color-success-fg);
-}
-.home-status.is-partial,
-.home-status.is-requested,
-.home-status.is-monitored {
-  color: var(--color-warning-fg);
-}
-.home-status.is-missing {
-  color: var(--color-danger-fg);
-}
-/* The grid itself lives in HomeGrid; a smaller screen previewed in edit mode sits centred in a dashed frame. */
-.home-grid-wrap {
-  width: 100%;
-  min-width: 0;
-}
-.home-grid-wrap.is-preview {
-  margin-inline: auto;
-  padding: 1rem;
-  border: 1px dashed var(--border-strong);
-  border-radius: calc(var(--radius-glass) + 1rem);
-}
-.home-shell.is-arranging {
-  padding-bottom: calc(var(--home-dock-height) + 8rem + env(safe-area-inset-bottom, 0px));
-}
-/* While arranging, a card's own buttons step aside so the grip and corner are what you see. */
-.hg.is-editing :is(.home-rail-tools, .home-rail-nav, .cal-nav, .cal-tools, .home-widget-head > :not(h3)) {
-  visibility: hidden;
-}
-.hg.is-editing :is(.home-hero, .home-search) {
-  border-radius: var(--radius-glass);
-  outline: 1px dashed var(--border-strong);
-  outline-offset: -1px;
-}
-/* Section heads: a bold title left, links and round buttons right. */
-.home-rail-head,
-.home-widget-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 0.75rem;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.home-rail-head h3,
-.home-widget-head h3 {
-  min-width: 0;
-}
-.home-card h3 {
-  margin: 0;
-  font-size: var(--text-strong);
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
-.home-rail-tools {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-.home-type-filter {
-  display: inline-flex;
-  gap: 0.1rem;
-  padding: 0.2rem;
-  border-radius: 999px;
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-}
-.home-type-filter .ui-btn {
-  min-height: calc(var(--btn-h) - 0.5rem);
-  padding: 0 0.8rem;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-muted);
-}
-.home-type-filter .ui-btn.is-active {
-  background: var(--pill-active);
-  color: var(--text-heading);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-}
-.home-rail-nav {
-  display: flex;
-  gap: 0.35rem;
-}
-/* In a narrow card you swipe the rail, so the arrows go and the filter keeps the head on one line. */
-@container (max-width: 400px) {
-  .home-rail-nav {
-    display: none;
-  }
-}
-.cal-nav-btn {
-  width: var(--btn-h);
-  min-width: var(--btn-h);
-  padding: 0;
-  border-radius: 50%;
-  font-size: var(--text-strong);
-}
-.home-rail {
-  flex: 1 1 auto;
-  min-height: 0;
-  align-items: flex-start;
-  display: flex;
-  gap: 0.85rem;
-  overflow-x: auto;
-  /* Tiles round up a pixel taller than the rail; a vertically scrollable rail keeps the wheel from the page. */
-  overflow-y: hidden;
-  padding: 0.25rem 0.25rem 0.5rem;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.home-rail::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-.home-tile {
-  --tile-w: clamp(4rem, calc((100cqh - var(--rail-chrome)) * 2 / 3), 9.5rem);
-  flex: 0 0 var(--tile-w);
-  width: var(--tile-w);
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  color: inherit;
-  text-decoration: none;
-  min-width: 0;
-  scroll-snap-align: start;
-}
-.home-tile-trending {
-  min-height: 0;
-}
-.home-tile-link {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  color: inherit;
-  text-decoration: none;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-button.home-tile-link {
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-.home-tile-request {
-  width: 100%;
-  margin-top: 0.4rem;
-  padding-inline: 0.5rem;
-  color: var(--color-primary-text);
-}
-.home-tile-art {
-  position: relative;
-  display: block;
-  width: 100%;
-}
-.home-status-dot {
-  position: absolute;
-  top: 0.5rem;
-  left: 0.5rem;
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
-  pointer-events: none;
-}
-.home-status-dot.is-requested {
-  background: var(--color-primary);
-}
-.home-status-dot.is-available {
-  background: var(--color-success);
-}
-.home-status-dot.is-partial {
-  background: var(--color-warning);
-}
-.home-status-dot.is-missing {
-  background: var(--color-danger);
-}
-/* Posters: 2:3 glass tiles that lift a little on hover. */
-.home-tile-poster,
-.home-tile-fallback {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  border-radius: 18px;
-  object-fit: cover;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-  transition: transform 0.2s;
-}
-.home-tile:hover .home-tile-poster,
-.home-tile:hover .home-tile-fallback {
-  transform: translateY(-3px);
-}
-.home-tile-fallback {
-  display: grid;
-  place-items: center;
-  font-size: var(--text-title);
-  font-weight: 700;
-  color: var(--text-muted);
-}
-.home-tile-title {
-  font-size: var(--text-body);
-  font-weight: 700;
-  line-height: 1.2;
-  height: calc(1.2em * 2);
-  padding-left: 0.25rem;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  word-break: break-word;
-}
-.home-tile-meta {
-  font-size: var(--text-kicker);
-  line-height: 1.25;
-  height: 1.25em;
-  color: var(--text-muted);
-  padding-left: 0.25rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* Request status under a poster. */
-.home-req-status.is-requested {
-  color: var(--color-primary-text);
-}
-.home-req-status.is-available {
-  color: var(--color-success-fg);
-}
-.home-req-status.is-partial {
-  color: var(--color-warning-fg);
-}
-.cal-nav {
-  gap: 0.3rem;
-}
-.cal-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem 1rem;
-  margin-bottom: 0.75rem;
-}
-.cal-head h3 {
-  margin: 0;
-  font-size: var(--text-ui);
-  min-width: 0;
-}
-.cal-nav,
-.cal-tools,
-.cal-views {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-}
-.cal-nav-btn {
-  min-width: 2.1rem;
-  padding-inline: 0.45rem;
-}
-.cal-select {
-  width: auto;
-  min-width: 9rem;
-  max-width: 100%;
-}
-@container (max-width: 520px) {
-  .home-card-calendar .cal-head h3 {
-    flex: 1 1 100%;
-  }
-  .home-card-calendar .cal-tools {
-    width: 100%;
-  }
-  .home-card-calendar .cal-select {
-    flex: 1 1 calc(50% - 0.4rem);
-    min-width: 0;
-  }
-  .cal-day {
-    min-height: 4.75rem;
-    padding: 0.28rem 0.28rem 0.35rem;
-  }
-  .cal-event {
-    padding: 0.2rem 0.28rem;
-  }
-}
-.cal-views .ui-btn.is-active {
-  border-color: rgba(var(--color-primary-rgb), 0.45);
-  background: rgba(var(--color-primary-rgb), 0.14);
-  color: var(--color-primary-text);
-}
-.cal {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 0;
-}
-.cal-weekdays,
-.cal-week {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.28rem;
-}
-.cal-mode-week {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.cal-mode-week::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-/* Wide calendar cards fill the widget; narrow ones scroll sideways instead of crushing the seven days.
-   Tied to the card (container), not the browser window — a small calendar on a big screen still scrolls. */
-.cal-mode-week .cal-weekdays,
-.cal-mode-week .cal-week,
-.cal-weeks.is-week .cal-week {
-  min-width: 0;
-  width: 100%;
-}
-@container (max-width: 860px) {
-  .cal-mode-week .cal-weekdays,
-  .cal-mode-week .cal-week,
-  .cal-weeks.is-week .cal-week {
-    width: auto;
-    min-width: 56rem;
-  }
-}
-.cal-weeks.is-week .cal-week,
-.cal-weeks.is-day .cal-week {
-  overflow-x: visible;
-}
-.cal-weeks.is-day .cal-week {
-  grid-template-columns: 1fr;
-  min-width: 0;
-}
-.cal-weekdays span {
-  font-size: var(--text-kicker);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  text-align: center;
-}
-.cal-weeks {
-  display: grid;
-  gap: 0.28rem;
-}
-.cal-day {
-  min-width: 0;
-  min-height: 7.25rem;
-  padding: 0.4rem 0.4rem 0.5rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.55rem;
-  background: color-mix(in srgb, var(--bg-surface-elevated, var(--bg-card)) 82%, transparent);
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  overflow: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  cursor: pointer;
-  transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
-}
-.cal-day:hover {
-  border-color: var(--border-hover);
-}
-.cal-day::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-.cal-weeks.is-week .cal-day {
-  min-height: clamp(6rem, calc(100cqh - 6.5rem), 22rem);
-}
-.cal-weeks.is-week .cal-num {
-  display: none;
-}
-.cal-day.is-outside {
-  opacity: 0.45;
-}
-.cal-day.is-today {
-  border-color: color-mix(in srgb, var(--color-info) 70%, var(--border-subtle));
-}
-.cal-day.is-selected {
-  border-color: var(--color-primary);
-  box-shadow: inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.55), 0 0 0 1px rgba(var(--color-primary-rgb), 0.2);
-  background: color-mix(in srgb, rgba(var(--color-primary-rgb), 0.16) 55%, var(--bg-surface-elevated, var(--bg-card)));
-}
-.cal-num {
-  font-size: var(--text-kicker);
-  font-weight: 600;
-  color: var(--text-muted);
-}
-.cal-day.is-today .cal-num {
-  color: var(--color-info);
-}
-.cal-day.is-selected .cal-num {
-  color: var(--color-primary-text);
-}
-.cal-events,
-.cal-list ul {
-  list-style: none;
-  display: grid;
-  gap: 0.28rem;
-  margin: 0;
-  padding: 0;
-}
-.cal-event {
-  display: grid;
-  gap: 0.05rem;
-  padding: 0.28rem 0.35rem;
-  border-radius: 0.35rem;
-  background: color-mix(in srgb, var(--bg-input) 78%, transparent);
-  min-width: 0;
-  border-left: 3px solid var(--color-warning, #f59e0b);
-  color: inherit;
-  text-decoration: none;
-}
-a.cal-event,
-a.cal-row-link {
-  cursor: pointer;
-}
-a.cal-event:hover,
-a.cal-row-link:hover {
-  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
-}
-.cal-event.is-have {
-  border-left-color: var(--color-success, #10b981);
-}
-.cal-event-time {
-  font-size: var(--text-kicker);
-  font-family: var(--font-mono);
-  color: var(--color-warning, #f59e0b);
-}
-.cal-event.is-have .cal-event-time {
-  color: var(--color-success, #10b981);
-}
-.cal-event strong {
-  font-size: var(--text-kicker);
-  line-height: 1.2;
-}
-.cal-event-detail {
-  font-size: var(--text-kicker);
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-.cal-event[data-kind='movie'] {
-  background: color-mix(in srgb, var(--color-primary) 16%, var(--bg-input));
-}
-.cal-event-top,
-.cal-row-title {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-}
-.cal-event-top {
-  flex-wrap: wrap;
-  justify-content: space-between;
-}
-.cal-row-title strong {
-  min-width: 0;
-}
-/* Series or movie: a small pill on calendar entries and, overlaid, on posters. */
-.media-badge {
-  flex: none;
-  padding: 0 0.4rem;
-  border-radius: 999px;
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  line-height: 1.6;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-}
-.home-tile-art .media-badge {
-  position: absolute;
-  top: 0.45rem;
-  right: 0.45rem;
-  color: #fff;
-  background: rgba(10, 12, 20, 0.62);
-  border-color: rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(6px);
-  pointer-events: none;
-}
-/* Calendar list rows: a day chip (accent for today), the title and its detail. */
-.cal-list ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.6rem;
-}
-.home-card li.cal-row {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-.cal-row-link {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;
-  min-width: 0;
-  color: inherit;
-  text-decoration: none;
-  border-radius: 12px;
-}
-.cal-chip {
-  flex: 0 0 2.75rem;
-  display: grid;
-  text-align: center;
-  padding: 0.3rem 0;
-  border-radius: 12px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  font-size: var(--text-kicker);
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: 0.04em;
-}
-.cal-chip strong {
-  font-size: var(--text-body);
-}
-.cal-row.is-today .cal-chip {
-  background: var(--color-primary-button);
-  border-color: transparent;
-  color: var(--color-primary-contrast);
-}
-.cal-row-body {
-  display: grid;
-  min-width: 0;
-}
-.cal-row-body strong {
-  font-size: var(--text-body);
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cal-row-meta {
-  font-size: var(--text-kicker);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cal-row.is-have .cal-row-meta {
-  color: var(--color-success-fg);
-}
-/* Cards: glass panels with a bold head, compact controls and lists with progress bars. */
-.home-card {
-  --rail-chrome: 7.9rem;
-  height: 100%;
-  overflow: hidden;
-  container-type: size;
-  padding: 1.35rem 1.35rem 1.3rem;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-/* Phone layouts are full-width cards; trim chrome so more of the widget stays on screen.
-   (Padding is on the container itself, so this has to follow the viewport — not @container.) */
-@media (max-width: 719px) {
-  .home-card {
-    padding: 1rem 0.95rem 0.95rem;
-    gap: 0.65rem;
-  }
-}
-@container (max-width: 320px) {
-  .home-card h3 {
-    font-size: var(--text-ui);
-  }
-  .home-type-filter .ui-btn {
-    padding: 0 0.55rem;
-  }
-}
-.home-card > :is(.home-rail-head, .home-widget-head, .cal-head) {
-  flex: 0 0 auto;
-}
-.home-card-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  overflow-y: auto;
-  padding-right: 0.35rem;
-  scrollbar-width: none;
-}
-.home-card-trending {
-  --rail-chrome: 12.4rem;
-}
-.home-card .cal-head {
-  margin: 0;
-  gap: 0.4rem 0.6rem;
-}
-.home-card .cal-head h3 {
-  font-size: var(--text-strong);
-}
-.home-card .ui-input {
-  width: auto;
-}
-.home-card .cal-select {
-  min-width: 0;
-}
-.home-card-stat {
-  font-size: var(--text-kicker);
-  font-weight: 700;
-  color: var(--color-success-fg);
-}
-.home-widget-head .home-sort {
-  margin-left: auto;
-}
-.home-widget-head .home-sort + .home-pause {
-  margin-left: 0;
-}
-.home-pause {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-left: auto;
-}
-.home-card ul {
-  list-style: none;
-  display: grid;
-  gap: 0.7rem;
-  margin: 0;
-  padding: 0;
-}
-.home-card li {
-  display: grid;
-  gap: 0.3rem;
-  min-width: 0;
-}
-@container (min-width: 760px) {
-  .home-card-downloads .home-card-body > ul {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 1.5rem;
-  }
-}
-/* A small Downloading card shows how many are moving, how fast, and how far along together. */
-.home-dl-compact {
-  display: none;
-  flex: 1 1 auto;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 0.4rem;
-  min-height: 0;
-}
-.home-dl-count {
-  font-size: 2.6rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-.home-dl-count small {
-  margin-left: 0.4rem;
-  font-size: var(--text-body);
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--text-muted);
-}
-@container (max-width: 260px) or (max-height: 220px) {
-  .home-card-downloads .home-dl-compact {
-    display: flex;
-  }
-  .home-card-downloads .home-dl-compact + .home-card-body,
-  .home-card-downloads :is(.home-sort, .home-pause:not(.is-paused), .home-card-stat) {
-    display: none;
-  }
-}
-.home-dl-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
-.home-dl-row strong {
-  font-size: var(--text-body);
-  font-weight: 700;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.home-dl-pct {
-  flex: 0 0 auto;
-  font-size: var(--text-kicker);
-  color: var(--text-muted);
-}
-.home-dl-meta {
-  font-size: var(--text-kicker);
-}
-.home-when {
-  font-size: var(--text-kicker);
-  color: var(--color-info);
-  font-family: var(--font-mono);
-}
-.home-bar {
-  display: block;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--switch-track);
-  overflow: hidden;
-}
-.home-bar span {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--color-primary);
-}
-.home-speed {
-  color: var(--color-info);
-  font-variant-numeric: tabular-nums;
-}
-.home-stuck {
-  margin-top: 0;
-}
-.home-stuck summary {
-  cursor: pointer;
-  font-size: var(--text-body);
-  font-weight: 600;
-  color: var(--text-muted);
-}
-.home-stuck-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 0.75rem;
-  margin: 0.6rem 0;
-  font-size: var(--text-body);
-}
-.home-card .home-stuck-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
-.home-stuck-title {
-  display: grid;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--text-body);
-}
-.home-stuck-remove {
-  flex: 0 0 auto;
-  display: inline-flex;
-  padding: 0.4rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.home-stuck-remove:hover:not(:disabled) {
-  color: var(--color-danger-fg);
-  border-color: var(--color-danger);
-}
-.home-stuck-remove:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.home-stuck-remove svg {
-  width: 16px;
-  height: 16px;
-}
-.home-debug-panel {
-  padding: 1rem 1.15rem;
-}
-.home-debug {
-  list-style: none;
-  display: grid;
-  gap: 0.4rem;
-  margin-top: 0.65rem;
-}
-.home-debug li {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-start;
-  font-size: var(--text-body);
-  color: var(--text-muted);
-}
-.home-debug-state {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: var(--text-kicker);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  background: var(--bg-input);
-}
-.home-debug-state[data-state='ok'] {
-  color: var(--color-success, #3dd68c);
-}
-.home-debug-state[data-state='error'] {
-  color: var(--color-danger, #ff6b6b);
-}
-.home-debug-state[data-state='empty'] {
-  color: var(--color-warning, #e6b84d);
-}
-/* Status widgets, after GlassHome: a title with a one-line status, big light figures, quiet pills and charts. */
-.gh-head {
-  flex: 0 0 auto;
-  display: grid;
-  gap: 0.15rem;
-}
-.gh-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: var(--text-body);
-  color: var(--text-muted);
-}
-.gh-status::before {
-  content: '';
-  flex: 0 0 auto;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--dot, var(--text-dim));
-}
-.gh-status.is-idle::before {
-  display: none;
-}
-.gh-figure {
-  display: grid;
-  gap: 0.2rem;
-  min-width: 0;
-}
-.gh-big {
-  font-size: clamp(2.2rem, 12cqw, 3.6rem);
-  font-weight: 300;
-  letter-spacing: -0.045em;
-  line-height: 1;
-  color: var(--text-heading);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-.gh-big small {
-  margin-left: 0.2em;
-  font-size: 0.32em;
-  font-weight: 500;
-  letter-spacing: 0;
-  vertical-align: top;
-  color: var(--text-muted);
-}
-.gh-label {
-  font-size: var(--text-body);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.gh-pills {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  min-width: 0;
-}
-.gh-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  max-width: 100%;
-  padding: 0.38rem 0.75rem;
-  border-radius: 999px;
-  background: var(--pill-bg);
-  border: 1px solid var(--border-subtle);
-  font-size: var(--text-body);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.gh-pill svg {
-  flex: 0 0 auto;
-  width: 0.95rem;
-  height: 0.95rem;
-  opacity: 0.75;
-}
-.gh-meter {
-  display: block;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--switch-track);
-  overflow: hidden;
-}
-.gh-meter span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--text-main);
-  opacity: 0.85;
-}
-.gh-meter.is-warn span {
-  background: var(--color-warning);
-  opacity: 1;
-}
-.gh-meter.is-crit span {
-  background: var(--color-danger);
-  opacity: 1;
-}
-/* Now playing: the poster fills the card, the title sits on it. */
-.home-card-playing.has-art {
-  color: #fff;
-}
-.home-card-playing > .np-art,
-.home-card-playing > .np-shade {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-.home-card-playing > .np-art {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 22%;
-}
-.home-card-playing > .np-shade {
-  background: linear-gradient(180deg, rgb(0 0 0 / 0.35) 0%, rgb(0 0 0 / 0) 30%, rgb(0 0 0 / 0.25) 50%, rgb(0 0 0 / 0.8) 100%);
-}
-.np-top {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-.has-art .gh-pill {
-  color: #fff;
-  background: rgb(0 0 0 / 0.35);
-  border-color: rgb(255 255 255 / 0.18);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-.np-bottom {
-  margin-top: auto;
-  display: grid;
-  gap: 0.35rem;
-  min-width: 0;
-  color: inherit;
-  text-decoration: none;
-}
-.np-title {
-  font-size: clamp(1.25rem, 7cqw, 2rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.np-sub {
-  font-size: var(--text-kicker);
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  opacity: 0.8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.np-progress {
-  display: block;
-  height: 4px;
-  margin-top: 0.35rem;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.25);
-  overflow: hidden;
-}
-.home-card-playing:not(.has-art) .np-progress {
-  background: var(--switch-track);
-}
-.np-progress span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: currentColor;
-}
-.np-foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  font-size: var(--text-kicker);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.85;
-}
-.np-foot span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-@container (max-height: 200px) {
-  .np-sub,
-  .np-foot span:first-child {
-    display: none;
-  }
-}
-/* Storage: free space as the big figure, a meter, and a pill per disk. */
-.home-card-storage .gh-meter {
-  margin-top: auto;
-}
-@container (max-height: 200px) {
-  .home-card-storage .gh-pills {
-    display: none;
-  }
-}
-@container (max-width: 260px) {
-  .home-card-storage .gh-pills,
-  .home-card-storage .gh-figure .gh-label {
-    display: none;
-  }
-}
-/* Server: CPU and memory as figures, the last few minutes of network use as an area chart, details as pills. */
-.sv-figures {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-}
-/* Three figures side by side leave no room for the memory in bytes until the card is wide. */
-@container (max-width: 560px) {
-  .sv-mem-bytes {
-    display: none;
-  }
-}
-/* Network use is drawn behind the card along its bottom edge, so even a two-row card shows it.
-   Download blue, upload pink: categorical slots of the reference palette, validated on both card surfaces. */
-.home-card-server {
-  --series-down: #3987e5;
-  --series-up: #d55181;
-}
-:global([data-theme='light'] .home-card-server) {
-  --series-down: #2a78d6;
-  --series-up: #e87ba4;
-}
-.sv-key {
-  color: var(--series-down);
-  font-weight: 700;
-}
-.sv-key.is-up {
-  color: var(--series-up);
-}
-.home-card-server > .sv-chart {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 0;
-  height: 46%;
-  color: var(--text-main);
-}
-/* The figures and pills sit on the chart; let the pointer through to it for the crosshair. */
-.home-card-server > :not(.sv-chart) {
-  pointer-events: none;
-}
-.sv-pills {
-  margin-top: auto;
-}
-.sv-spark {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  cursor: crosshair;
-}
-.sv-line {
-  fill: none;
-  stroke: var(--series-down);
-  stroke-width: 2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-  opacity: 0.85;
-}
-.sv-line.is-up {
-  stroke: var(--series-up);
-}
-.sv-cross {
-  stroke: var(--border-strong);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-.sv-end {
-  position: absolute;
-  width: 0.7rem;
-  height: 0.7rem;
-  margin: -0.35rem 0 0 -0.35rem;
-  border-radius: 50%;
-  border: 2px solid var(--series-down);
-  background: var(--bg-card);
-  pointer-events: none;
-}
-.sv-end.is-up {
-  border-color: var(--series-up);
-}
-@container (max-width: 300px) {
-  .sv-pills,
-  .sv-net-figure,
-  .home-card-server > .sv-chart {
-    display: none;
-  }
-  .sv-figures {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.5rem;
-  }
-}
-/* Other downloads: one row each, an icon for what kind of file it is. */
-.home-card-other .od-item {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 0.65rem;
-}
-.od-icon {
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.6rem;
-  background: rgba(var(--color-primary-rgb), 0.14);
-  color: var(--color-primary);
-}
-.od-icon svg {
-  width: 1.1rem;
-  height: 1.1rem;
-}
-.od-text {
-  display: grid;
-  min-width: 0;
-}
-.od-text strong {
-  font-size: 0.85rem;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-@container (min-width: 760px) {
-  .home-card-other .od-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 1.5rem;
-  }
-}
-
-/* Needs attention: a timeline; each row opens where to fix it. */
-.at-timeline {
-  position: relative;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.15rem;
-}
-.at-timeline::before {
-  content: '';
-  position: absolute;
-  left: 0.3rem;
-  top: 0.9rem;
-  bottom: 0.9rem;
-  width: 1px;
-  background: var(--border-strong);
-}
-.home-card .at-timeline li {
-  display: block;
-}
-.at-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.85rem;
-  padding: 0.45rem 0;
-  color: inherit;
-  text-decoration: none;
-}
-.at-item:hover strong {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.at-dot {
-  position: relative;
-  flex: 0 0 auto;
-  width: 0.62rem;
-  height: 0.62rem;
-  margin-top: 0.3rem;
-  border-radius: 50%;
-  background: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--bg-card);
-}
-.at-item.is-problem .at-dot {
-  background: var(--color-danger);
-}
-.at-item.is-warning .at-dot {
-  background: var(--color-warning);
-}
-.at-text {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  gap: 0.1rem;
-}
-.at-text strong {
-  font-size: var(--text-body);
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.at-kind {
-  flex: 0 0 auto;
-  font-size: var(--text-body);
-  color: var(--text-muted);
-}
-.gh-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 0.35rem;
-}
-.gh-empty .gh-big {
-  font-size: clamp(1.8rem, 10cqw, 2.8rem);
-}
-@container (max-width: 300px) {
-  .at-kind {
-    display: none;
-  }
-}
-</style>
+<style scoped src="./homepagePanel.css"></style>

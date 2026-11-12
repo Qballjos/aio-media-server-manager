@@ -116,6 +116,12 @@ async def finalize_application_install(plugin: BaseApplication) -> dict[str, Any
         set_job(plugin.name, "configuring", "Waiting for shared setup", wiring=True)
         report["wiring"] = await schedule_full_wiring()
         report["wired"] = True
+        if plugin.name == "cleanuparr":
+            failed = [step for step in report["wiring"].get("steps", [])
+                      if step.get("target") == "cleanuparr" and step.get("status") != "success"]
+            if failed:
+                report["wired"] = False
+                report["wiring_error"] = failed[0].get("detail") or "Cleanuparr setup is incomplete"
     except Exception as exc:
         logger.error("Wiring after '%s' failed: %s", plugin.name, exc, exc_info=True)
         report["wiring_error"] = str(exc)

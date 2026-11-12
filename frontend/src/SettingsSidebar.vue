@@ -1,12 +1,12 @@
 <script setup>
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { filterSettingsGroups, SETTINGS_PAGES } from './settingsNavigation.js'
-const props = defineProps({ section: { type: String, required: true } })
+import { filterSettingsGroups, SETTINGS_GROUPS } from './settingsNavigation.js'
+defineProps({ section: { type: String, required: true } })
 const { t } = useI18n()
+const router = useRouter()
 const query = ref('')
-const expanded = ref(false)
-const mobileToggle = ref(null)
 const headerHeight = ref(0)
 let headerObserver
 onMounted(() => {
@@ -19,14 +19,6 @@ onMounted(() => {
 })
 onBeforeUnmount(() => headerObserver?.disconnect())
 const groups = computed(() => filterSettingsGroups(query.value, t))
-const current = computed(() => SETTINGS_PAGES.find(item => item.id === props.section))
-watch(() => props.section, async () => {
-  if (!expanded.value) return
-  expanded.value = false
-  query.value = ''
-  await nextTick()
-  mobileToggle.value?.focus()
-})
 const paths = {
   user: 'M20 21v-2a7 7 0 0 0-14 0v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   palette: 'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7 1.5 1.5 0 0 1 1-2.8h2a4 4 0 0 0 4-4A9 9 0 0 0 12 3M7 10h.01M10 6h.01M15 6h.01M18 10h.01',
@@ -46,15 +38,15 @@ const paths = {
 
 <template>
   <aside class="settings-sidebar" :style="{ '--settings-header-height': `${headerHeight}px` }">
-    <button ref="mobileToggle" class="settings-mobile-toggle" type="button" :aria-label="`${$t('Settings')} / ${$t(current?.label || 'Profile')}`" :aria-expanded="expanded" aria-controls="settings-navigation" @click="expanded = !expanded">
-      <svg class="settings-mobile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="paths[current?.icon || 'user']" /></svg>
-      <span class="settings-mobile-copy">
-        <span>{{ $t('Settings sections') }}</span>
-        <strong>{{ $t(current?.label || 'Profile') }}</strong>
-      </span>
-      <svg class="settings-mobile-chevron" :class="{ 'is-expanded': expanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-    </button>
-    <div id="settings-navigation" class="settings-navigation" :class="{ expanded }">
+    <label class="settings-mobile-picker" for="settings-section-select">
+        <span>{{ $t('Choose a settings section') }}</span>
+        <select id="settings-section-select" class="ui-input settings-mobile-select" :value="section" @change="router.push({ name: 'settings', params: { section: $event.target.value } })">
+          <optgroup v-for="group in SETTINGS_GROUPS" :key="group.label" :label="$t(group.label)">
+            <option v-for="item in group.items" :key="item.id" :value="item.id">{{ $t(item.label) }}</option>
+          </optgroup>
+        </select>
+    </label>
+    <div id="settings-navigation" class="settings-navigation">
       <h2 class="settings-sidebar-title">{{ $t('Settings') }}</h2>
       <label class="settings-search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
@@ -79,7 +71,7 @@ const paths = {
 .settings-navigation { position:sticky; top:calc(var(--settings-header-height, 0px) + 1rem); max-height:calc(100dvh - var(--settings-header-height, 0px) - 2rem); overscroll-behavior-y:contain; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; }
 .settings-sidebar-title { margin:0 .5rem 1rem; font-size:var(--text-title); font-weight:600; letter-spacing:-.04em; }
 .settings-search { display:flex; align-items:center; gap:.55rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:var(--radius-inset); background:var(--bg-input); color:var(--text-dim); margin-bottom:1rem; }
-.settings-search:focus-within { outline:2px solid var(--color-primary); outline-offset:2px; }
+.settings-search:focus-within { outline:0; border-color:var(--color-primary); box-shadow:inset 0 0 0 1px var(--color-primary); }
 .settings-search svg { width:16px; height:16px; flex-shrink:0; }
 .settings-search input { width:100%; min-width:0; border:0; outline:0; background:transparent; color:var(--text-main); font:inherit; font-size:var(--text-body); }
 .settings-search input::placeholder { color:var(--text-dim); }
@@ -91,20 +83,13 @@ const paths = {
 .settings-sidebar-link:hover { background:var(--bg-surface); }
 .settings-sidebar-link.is-active { background:var(--pill-active); color:var(--color-primary-text); font-weight:500; }
 .settings-search-empty { color:var(--text-muted); font-size:var(--text-body); padding:.65rem; }
-.settings-mobile-toggle { display:none; }
-.settings-mobile-copy { min-width:0; flex:1; display:flex; flex-direction:column; gap:.15rem; overflow-wrap:anywhere; }
-.settings-mobile-copy > span { font-size:var(--text-kicker); color:var(--text-muted); }
-.settings-mobile-copy strong { font-size:var(--text-body); font-weight:600; }
-.settings-mobile-icon, .settings-mobile-chevron { width:1.25rem; height:1.25rem; flex-shrink:0; }
-.settings-mobile-icon { color:var(--color-primary-text); }
-.settings-mobile-chevron { color:var(--text-muted); transition:transform .15s ease; }
-.settings-mobile-chevron.is-expanded { transform:rotate(180deg); }
+.settings-mobile-picker { display:none; }
 @media (max-width: 760px) {
   .settings-sidebar { padding:.875rem 1rem; border-right:0; border-bottom:1px solid var(--border-subtle); border-radius:var(--radius-glass) var(--radius-glass) 0 0; }
-  .settings-mobile-toggle { display:flex; align-items:center; justify-content:space-between; gap:.75rem; min-height:3rem; width:100%; padding:.25rem .35rem; background:none; border:0; color:var(--text-heading); font:inherit; text-align:left; cursor:pointer; }
+  .settings-mobile-picker { display:grid; gap:.5rem; color:var(--text-muted); font-size:var(--text-kicker); }
+  .settings-mobile-select { appearance:auto; min-height:44px; width:100%; border-color:var(--border-strong); border-radius:var(--radius-inset); color:var(--text-heading); }
   .settings-sidebar-title { display:none; }
   .settings-navigation { position:static; display:none; max-height:min(55dvh,28rem); margin-top:.75rem; padding: .75rem .15rem .15rem; border-top:1px solid var(--border-subtle); }
-  .settings-navigation.expanded { display:block; }
   .settings-sidebar-link, .settings-search { min-height:2.75rem; }
 }
 </style>

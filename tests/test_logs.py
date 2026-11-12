@@ -38,14 +38,16 @@ def test_redact_log_line():
     assert redact_log_line(path_line) == path_line
 
 
-def test_log_websocket_accepts_access_cookie(monkeypatch):
+def test_log_websocket_accepts_access_cookie(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
     from api.routers.logs import _authenticate_ws
     from core.auth import COOKIE_ACCESS, auth_manager
 
     monkeypatch.setattr(auth_manager, "setup_required", lambda: False)
-    monkeypatch.setattr(auth_manager, "jwt_secret", lambda: "test-jwt-secret-for-logs-websocket-32b")
+    from core.settings import Settings
+
+    monkeypatch.setattr(auth_manager, "_settings", Settings(config_dir=tmp_path))
     token = auth_manager.issue_token("tester")
     websocket = SimpleNamespace(
         cookies={COOKIE_ACCESS: token},
@@ -54,6 +56,11 @@ def test_log_websocket_accepts_access_cookie(monkeypatch):
     assert _authenticate_ws(websocket) is True
     assert _authenticate_ws(SimpleNamespace(cookies={}, query_params={"token": token})) is True
     assert _authenticate_ws(SimpleNamespace(cookies={}, query_params={})) is False
+    from starlette.requests import Request
+    auth_manager.revoke_request_session(Request({
+        "type": "http", "method": "POST", "headers": [(b"authorization", f"Bearer {token}".encode())],
+    }))
+    assert _authenticate_ws(websocket) is False
 
 
 @pytest.mark.asyncio

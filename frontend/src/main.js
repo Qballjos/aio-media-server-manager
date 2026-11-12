@@ -8,11 +8,13 @@ import { initPwaInstall } from './pwaInstall.js'
 import { initTheme } from './theme.js'
 import { initWallpaper } from './background.js'
 import { initGlass } from './glass.js'
+import { initDisplaySize } from './displaySize.js'
 import { initAccentFromCache, loadBranding } from './branding.js'
 
 initLocale()
 initTheme()
 initGlass()
+initDisplaySize()
 initWallpaper()
 initAccentFromCache()
 initPwaInstall()

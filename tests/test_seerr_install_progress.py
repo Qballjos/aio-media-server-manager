@@ -97,22 +97,61 @@ raise SystemExit(7)
     assert len(caught.value.output) <= 30 * 2048
 
 
+@pytest.mark.parametrize("probe_code", [0, 1])
+def test_sqlite_probe_only_rebuilds_incompatible_binary(app, monkeypatch, probe_code):
+    steps = []
+    monkeypatch.setattr("applications.seerr.set_job", lambda *args: None)
+    monkeypatch.setattr(
+        "applications.seerr.subprocess.run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, probe_code),
+    )
+    monkeypatch.setattr(app, "_run_install_step", lambda command, env: steps.append((command, env)))
+    env = {"CI": "true"}
+    app._verify_sqlite("node", "pnpm", env)
+    assert env == {"CI": "true"}
+    if probe_code:
+        assert steps[0] == (["pnpm", "rebuild", "sqlite3"], {"CI": "true", "npm_config_build_from_source": "true"})
+        assert steps[1][0][:2] == ["node", "-e"]
+        assert ":memory:" in steps[1][0][2]
+        assert steps[1][1] == env
+    else:
+        assert steps == []
+
+
+@pytest.mark.parametrize("failure_step", [1, 2])
+def test_sqlite_rebuild_or_recheck_failure_aborts_installation(app, monkeypatch, failure_step):
+    monkeypatch.setattr("applications.seerr.set_job", lambda *args: None)
+    monkeypatch.setattr(
+        "applications.seerr.subprocess.run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 1),
+    )
+    steps = []
+    def fail(command, env):
+        steps.append(command)
+        if len(steps) == failure_step:
+            raise subprocess.CalledProcessError(1, command)
+    monkeypatch.setattr(app, "_run_install_step", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        app._verify_sqlite("node", "pnpm", {})
+
+
 @pytest.mark.parametrize("existing_limit", [None, 256 * 1024 * 1024, 0, -1])
-def test_build_memory_target_preserves_existing_positive_limit_and_config(tmp_path, existing_limit):
+@pytest.mark.parametrize("config_name", ["next.config.ts", "next.config.mjs"])
+def test_build_memory_target_preserves_existing_positive_limit_and_config(tmp_path, existing_limit, config_name):
     node = shutil.which("node")
     if not node:
         pytest.skip("Node.js is required to execute Seerr's generated build configuration")
     experimental = {"scrollRestoration": True}
     if existing_limit is not None:
         experimental["turbopackMemoryLimit"] = existing_limit
-    config = tmp_path / "next.config.ts"
+    config = tmp_path / config_name
     config.write_text(
         "const nextConfig = " + json.dumps({"experimental": experimental})
         + ";\nexport default nextConfig;\n"
     )
-    _limit_build_memory(config)
+    _limit_build_memory(tmp_path)
     patched = config.read_text()
-    _limit_build_memory(config)
+    _limit_build_memory(tmp_path)
     assert config.read_text() == patched
     result = subprocess.run(
         [node, "--input-type=module", "-e", patched + "\nconsole.log(JSON.stringify(nextConfig));"],
@@ -130,7 +169,7 @@ def test_build_memory_target_rejects_unrecognized_upstream_config(tmp_path):
     source = "export default {};\n"
     config.write_text(source)
     with pytest.raises(RuntimeError, match="unrecognized next.config.ts"):
-        _limit_build_memory(config)
+        _limit_build_memory(tmp_path)
     assert config.read_text() == source
 
 
@@ -143,7 +182,7 @@ def test_build_config_skips_type_check_and_lint_for_released_tags(tmp_path):
         "const nextConfig = " + json.dumps({"experimental": {}, "typescript": {"tsconfigPath": "tsconfig.json"}})
         + ";\nexport default nextConfig;\n"
     )
-    _limit_build_memory(config)
+    _limit_build_memory(tmp_path)
     result = subprocess.run(
         [node, "--input-type=module", "-e", config.read_text() + "\nconsole.log(JSON.stringify(nextConfig));"],
         check=True, capture_output=True, text=True,

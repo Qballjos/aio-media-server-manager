@@ -23,6 +23,7 @@ Die Oberfläche des Managers nutzt **8080**. Kind-Apps lauschen im selben Contai
 | <img src="__AIO_ASSET__/assets/app-icons/seerr.svg" alt="" class="aio-app-icon" /> Seerr | 5055 |
 | <img src="__AIO_ASSET__/assets/app-icons/grimmory.svg" alt="" class="aio-app-icon" /> Grimmory | 6060 |
 | <img src="__AIO_ASSET__/assets/app-icons/neutarr.svg" alt="" class="aio-app-icon" /> NeutArr | 9705 |
+| <img src="__AIO_ASSET__/assets/app-icons/cleanuparr.svg" alt="" class="aio-app-icon" /> Cleanuparr | 11011 |
 | <img src="__AIO_ASSET__/assets/app-icons/recyclarr.svg" alt="" class="aio-app-icon" /> Recyclarr | keine (nur CLI) |
 | <img src="__AIO_ASSET__/assets/app-icons/plex.svg" alt="" class="aio-app-icon" /> Plex | 32400 |
 
@@ -38,3 +39,9 @@ Kopieren Sie [`.env.example`](../.env.example) für native Installationen. Viele
 | `GITHUB_TOKEN` | Optional; höheres GitHub-API-Limit für Updates |
 | `AMM_CLOUDFLARE_TUNNEL_*` | Optionaler Tunnel für Fernzugriff (`cloudflared` startet nach den Apps beim Boot) |
 | `AMM_VPN_*` | Optionales VPN für qBittorrent, Prowlarr und Flaresolverr (sie warten auf den Tunnel; lokaler DNS-Cache für diese Apps) |
+| `AMM_SECURE_COOKIES` | Für HTTPS auf `true` setzen; Standard `false` für HTTP im LAN. |
+| `AMM_PREFLIGHT_MIN_FREE_MB` | Erforderlicher freier Speicher in MiB je Speicherort vor Installation/Update; Standard `512`. |
+| `AMM_BACKUP_RECOVERY_TOKEN` | Optionaler Wiederherstellungsschlüssel des Betreibers mit mindestens 32 Zeichen, nur ohne funktionierendes Administratorkonto. Nach der Wiederherstellung entfernen; siehe Sicherheitsanleitung. |
+
+- [Installationsprüfung, externe Backups und Wiederherstellung](operations.md)
+- [Sitzungen, HTTPS und Notfallzugriff](security-operations.md)

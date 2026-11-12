@@ -11,11 +11,11 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from core.auth import COOKIE_CSRF, auth_manager, normalize_email
 from core import profile as profile_mod
-from core.shared_credentials import save_shared_admin_credentials
+from core.shared_credentials import save_shared_admin_credentials, shared_admin_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -187,8 +187,9 @@ async def login(req: LoginRequest, request: Request, response: Response) -> dict
 
 
 @router.post("/logout", summary="End session")
-async def logout(response: Response) -> dict:
-    """Clear session cookies."""
+async def logout(request: Request, response: Response) -> dict:
+    """Revoke this session, then clear its cookies."""
+    auth_manager.revoke_request_session(request)
     auth_manager.clear_session_cookies(response)
     return {"status": "ok"}
 
@@ -327,6 +328,29 @@ async def delete_wallpaper(request: Request) -> dict:
     auth_manager.authenticate_request(request)
     visuals = profile_mod.clear_wallpaper_image()
     return {"status": "ok", **visuals}
+
+
+class ProfilePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    email: Optional[str] = None
+    first_name: Optional[str] = Field(default=None, max_length=80)
+    last_name: Optional[str] = Field(default=None, max_length=80)
+
+
+@router.patch("/profile", summary="Update profile without changing the password")
+async def update_profile(req: ProfilePatch, request: Request, response: Response) -> dict:
+    username = auth_manager.authenticate_request(request)
+    updated = auth_manager.update_profile(username, **req.model_dump(exclude_unset=True))
+    shared = shared_admin_credentials()
+    if shared:
+        save_shared_admin_credentials(updated["username"], shared[1], email=updated["email"])
+    token = auth_manager.issue_token(updated["username"])
+    csrf = auth_manager.set_session_cookies(response, token)
+    return {
+        "status": "ok", **updated, "csrf_token": csrf,
+        "access_token": token, "avatar_url": _avatar_url(),
+    }
 
 
 class AccountPatch(BaseModel):
