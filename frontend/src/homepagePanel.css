@@ -734,13 +734,6 @@
 .has-request-pages .home-rail-tools {
   flex-wrap: nowrap;
 }
-.has-request-pages .home-rail {
-  scrollbar-width: thin;
-}
-.has-request-pages .home-rail::-webkit-scrollbar {
-  display: block;
-  height: 6px;
-}
 .hg.is-editing .home-request-pages {
   visibility: hidden;
 }

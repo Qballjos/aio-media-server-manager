@@ -141,6 +141,7 @@ class SeerrApp(BaseApplication):
             [pnpm, "install", "--frozen-lockfile", "--reporter=append-only"],
             env,
         )
+        self._verify_sqlite(node, pnpm, env)
         set_job(self.name, "installing", "Building Seerr from source…")
         _limit_build_memory(self.install_dir)
         self._run_install_step([pnpm, "build"], {**env, "RAYON_NUM_THREADS": "1"})
@@ -159,6 +160,30 @@ class SeerrApp(BaseApplication):
         )
         self.post_install()
         return result
+
+    def _verify_sqlite(self, node: str, pnpm: str, env: dict[str, str]) -> None:
+        # A downloaded native binary can install successfully but require a newer glibc.
+        # Exercise an in-memory database before building or publishing the runner.
+        probe = [node, "-e", """
+const sqlite = require('sqlite3');
+const db = new sqlite.Database(':memory:');
+db.get('SELECT 1 AS ok', (error, row) => {
+  if (error) throw error;
+  if (row.ok !== 1) throw new Error('SQLite validation failed');
+  db.close(error => { if (error) throw error; });
+});
+"""]
+        set_job(self.name, "installing", "Checking Seerr's SQLite runtime…")
+        result = subprocess.run(
+            probe, cwd=self.install_dir, env=env, capture_output=True, text=True,
+        )
+        if result.returncode:
+            set_job(self.name, "installing", "Building SQLite for this appliance…")
+            self._run_install_step(
+                [pnpm, "rebuild", "sqlite3"],
+                {**env, "npm_config_build_from_source": "true"},
+            )
+            self._run_install_step(probe, env)
 
     def _run_install_step(self, command: list[str], env: dict[str, str]) -> None:
         tail: deque[str] = deque(maxlen=30)

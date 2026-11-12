@@ -16,6 +16,20 @@ manual view preservation, grouped episode availability, year boundaries and
 calendar link targets. Existing Home loading and failed-job tests exercise the
 same extracted calendar module used by the actual page.
 
+## Seerr native dependency validation
+
+`tests/test_seerr_install_progress.py` covers both supported Next.js configuration
+filenames and Seerr's SQLite runtime check. The installer executes an in-memory
+SQLite query after dependency installation. If a downloaded native binary cannot
+load (for example, because its glibc requirement exceeds the appliance runtime),
+it rebuilds only SQLite from source and repeats the query. A failed rebuild or
+query aborts installation before the runner is published; the updater retains
+its snapshot, rollback and post-start health checks.
+
+When accepting a new native dependency version, verify the actual query on the
+Linux appliance as well as the mocked installer tests. A successful package
+installation alone does not establish native binary compatibility.
+
 ## Home poster loading in WebKit
 
 After `npm ci` in `frontend`, install WebKit with `npx --no-install playwright install webkit`,
