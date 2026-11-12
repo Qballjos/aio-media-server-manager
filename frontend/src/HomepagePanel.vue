@@ -185,8 +185,8 @@ const pausedLabel = computed(() => {
   return t('Paused · resumes {time}', { time })
 })
 const requestsFilter = ref('all')
-const requestsPage = ref(0)
-const REQUESTS_PAGE_SIZE = 20
+const requestsWindowStart = ref(0)
+const REQUESTS_WINDOW_SIZE = 20
 const trendingFilter = ref('all')
 let poll = null
 let downloadsPoll = null
@@ -589,22 +589,40 @@ const requestItems = computed(() =>
     .filter((item) => mediaTypeMatches(item, requestsFilter.value))
     .map((item) => withPublicUrls(item, 'seerr')),
 )
-const requestsPageCount = computed(() => Math.ceil(requestItems.value.length / REQUESTS_PAGE_SIZE))
-const requestsPageIndex = computed(() => Math.min(requestsPage.value, Math.max(0, requestsPageCount.value - 1)))
-const requestsPageStart = computed(() => requestsPageIndex.value * REQUESTS_PAGE_SIZE)
-const requestsPageItems = computed(() => requestItems.value.slice(requestsPageStart.value, requestsPageStart.value + REQUESTS_PAGE_SIZE))
-
-function moveRequestsPage(direction) {
-  requestsPage.value = Math.max(0, Math.min(requestsPageCount.value - 1, requestsPageIndex.value + direction))
+const requestsWindowItems = computed(() => requestItems.value.slice(
+  requestsWindowStart.value, requestsWindowStart.value + REQUESTS_WINDOW_SIZE,
+))
+let shiftingRequests = false
+async function scrollRequests() {
+  const rail = requestsRail.value
+  if (!rail || shiftingRequests || rail.children.length < 2) return
+  const pitch = rail.children[1].offsetLeft - rail.children[0].offsetLeft
+  if (pitch <= 0) return
+  const start = requestsWindowStart.value
+  let shift = 0
+  if (rail.scrollLeft <= 1 && start > 0) {
+    shift = -Math.min(10, start)
+  } else if (rail.scrollWidth - rail.scrollLeft - rail.clientWidth <= pitch) {
+    shift = Math.min(10, Math.floor(rail.scrollLeft / pitch),
+      Math.max(0, requestItems.value.length - REQUESTS_WINDOW_SIZE - start))
+  }
+  if (!shift) return
+  shiftingRequests = true
+  const left = rail.scrollLeft
+  requestsWindowStart.value += shift
+  await nextTick()
+  // Keep the same titles under the user's finger while recycling offscreen tiles.
+  rail.scrollLeft = left - shift * pitch
+  shiftingRequests = false
 }
-
-watch(requestsFilter, () => { requestsPage.value = 0 })
-watch(requestsPageCount, count => {
-  requestsPage.value = Math.min(requestsPage.value, Math.max(0, count - 1))
-})
-watch([requestsPageIndex, requestsFilter], () => nextTick(() => {
+watch(requestsFilter, async () => {
+  requestsWindowStart.value = 0
+  await nextTick()
   if (requestsRail.value) requestsRail.value.scrollLeft = 0
-}))
+})
+watch(() => requestItems.value.length, count => {
+  requestsWindowStart.value = Math.min(requestsWindowStart.value, Math.max(0, count - REQUESTS_WINDOW_SIZE))
+})
 // Pages 2+ of Seerr's trending list, appended as the rail scrolls; the snapshot keeps page 1 fresh.
 const trendingMore = ref([])
 const trendingDetail = ref(null)
@@ -1534,37 +1552,25 @@ onUnmounted(() => {
         </article>
       </template>
       <template #requests>
-        <article class="home-card glass-card" :class="{ 'has-request-pages': requestsPageCount > 1 }">
+        <article class="home-card glass-card">
           <div class="home-rail-head">
             <h3>{{ $t('Requests') }}</h3>
             <div class="home-rail-tools">
-              <UiSelect
-                v-if="snapshot.requests.length > REQUESTS_PAGE_SIZE"
-                v-model="requestsFilter"
-                variant="inline"
-                :aria-label="$t('Filter requests')"
-                :options="[{ value: 'all', label: $t('All') }, { value: 'movie', label: $t('Movies') }, { value: 'tv', label: $t('Series') }]"
-              />
-              <div v-else-if="snapshot.requests.length" class="home-type-filter" role="group" :aria-label="$t('Filter requests')">
+              <div v-if="snapshot.requests.length" class="home-type-filter" role="group" :aria-label="$t('Filter requests')">
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'all' }" @click="requestsFilter = 'all'">{{ $t('All') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">{{ $t('Movies') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
-              <div v-if="requestsPageCount > 1" class="home-request-pages">
-                <span aria-live="polite">{{ requestsPageStart + 1 }}–{{ requestsPageStart + requestsPageItems.length }} / {{ requestItems.length }}</span>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :disabled="requestsPageIndex === 0" :aria-label="$t('Previous requests')" @click="moveRequestsPage(-1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :disabled="requestsPageIndex >= requestsPageCount - 1" :aria-label="$t('Next requests')" @click="moveRequestsPage(1)">›</button>
-              </div>
-              <div v-if="requestItems.length && requestsPageCount <= 1" class="home-rail-nav">
+              <div v-if="requestItems.length" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous requests')" @click="scrollRail('requests', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next requests')" @click="scrollRail('requests', 1)">›</button>
               </div>
             </div>
           </div>
-          <div v-if="requestItems.length" ref="requestsRail" class="home-rail">
+          <div v-if="requestItems.length" ref="requestsRail" class="home-rail home-requests-rail" @scroll.passive="scrollRequests">
             <a
-              v-for="(item, idx) in requestsPageItems"
-              :key="`${requestsPageStart + idx}-${item.mediaType}-${item.mediaId || item.title}`"
+              v-for="(item, idx) in requestsWindowItems"
+              :key="`${requestsWindowStart + idx}-${item.mediaType}-${item.mediaId || item.title}`"
               class="home-tile"
               :href="item.url || seerrHomeUrl || undefined"
               :target="item.url || seerrHomeUrl ? '_blank' : undefined"

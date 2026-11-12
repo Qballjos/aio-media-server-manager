@@ -37,8 +37,9 @@ then run `npm run test:posters`. This builds the production frontend and tests a
 350-request rail on mobile and desktop WebKit with synthetic API responses and
 local images. It covers cold loading, reload, scrolling to the final poster and
 unloading offscreen image sources, without requiring the Python fixture. Requests
-are rendered in pages of 20 so a large history cannot create an unbounded mobile
-scrolling surface; the test visits the final page and bounds the rail width.
+recycle a window of 20 tiles while scrolling in either direction, so large histories
+cannot create an unbounded mobile scrolling surface. The test reaches the final
+request, returns to the first and verifies the visible media filters.
 WebKit device emulation does not reproduce physical iPhone memory limits.
 
 `npm run test:webkit` also checks Home's title/filter layout and phone Day default,
