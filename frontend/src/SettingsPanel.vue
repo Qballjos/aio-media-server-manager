@@ -1604,7 +1604,9 @@ onBeforeUnmount(() => {
             {{ $t(item.label) }} · {{ Math.round(item.scale * 100) }}%
           </button>
         </div>
-        <button type="button" class="ui-btn ui-btn-ghost" :disabled="displaySize === 'standard'" @click="setDisplaySize('standard')">{{ $t('Reset') }}</button>
+        <div class="display-size-actions">
+          <button type="button" class="ui-btn ui-btn-ghost" :disabled="displaySize === 'standard'" @click="setDisplaySize('standard')">{{ $t('Reset') }}</button>
+        </div>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
@@ -1703,7 +1705,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="brand-asset-list account-avatar-block">
           <div class="brand-asset-row">
-            <div class="account-avatar-preview" aria-hidden="true">
+            <div class="account-avatar-preview" :class="{ 'has-image': profileAvatar.has_avatar && profileAvatar.avatar_url }" aria-hidden="true">
               <img
                 v-if="profileAvatar.has_avatar && profileAvatar.avatar_url"
                 :src="profileAvatar.avatar_url"

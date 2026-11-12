@@ -318,6 +318,12 @@
   object-fit: cover;
   display: block;
 }
+.account-avatar-preview.has-image {
+  background: transparent;
+}
+.display-size-actions {
+  margin-top: 0.75rem;
+}
 .brand-upload-btn {
   position: relative;
   overflow: hidden;

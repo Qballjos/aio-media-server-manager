@@ -3,6 +3,7 @@
 These defaults apply to aio-media-server-manager. Explicit user instructions override them.
 Use Caveman Lite for communication, Ponytail Full for development, and Impeccable for frontend/UI work in every session for this project, unless the user changes or disables them. Apply the technical skills below when their scope matches the task.
 These are project instructions; they do not require a gateway or change global plugin settings.
+Caveman Lite and Ponytail Full are defined in this file and apply directly; they do not depend on separately installed skills. Read this file at the start of every chat working in this project and follow the applicable skill instructions before doing the work.
 
 ## Project context
 
@@ -84,4 +85,6 @@ Unslop is not an active project default: the installed version requires React + 
 - Reuse project patterns, then platform/standard-library features, then installed dependencies. Do not add speculative options, abstractions or dependencies.
 - Preserve validation, error handling, security, accessibility and deployment compatibility. Complete affected callers, fixtures and documentation.
 - Verify non-trivial behavior with focused tests; trivial edits need no new tests. Mark intentional shortcuts with their limit and when to revisit them.
+- Keep verification proportional. Do not add tests for every edit, mirror the implementation with assertions, or add tests merely to satisfy a workflow. For reversible wording, styling and simple layout changes, use a focused inspection or existing checks when sufficient. Add a targeted regression when it meaningfully protects a bug fix or non-trivial behavior.
+- Once relevant checks pass, stop expanding or repeating them unless a new change, failure or unresolved concern justifies it. Distinguish a passing automated check from confirmation that the reported problem is resolved on the user's actual device.
 - End with the outcome, checks actually performed and material limitations. Keep communication concise, in complete sentences (Caveman Lite).

@@ -744,19 +744,10 @@
 .hg.is-editing .home-request-pages {
   visibility: hidden;
 }
-.home-trending-toggle {
-  grid-area: toggle;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--text-muted);
-  font-size: var(--text-kicker);
-  white-space: nowrap;
-}
 .home-trending-head {
   display: grid;
-  grid-template-columns: max-content max-content minmax(0, 1fr);
-  grid-template-areas: "title toggle tools";
+  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-areas: "title tools";
 }
 .home-trending-head > h3 {
   grid-area: title;
@@ -764,17 +755,6 @@
 .home-trending-tools {
   grid-area: tools;
   min-width: 0;
-}
-.home-trending-toggle .ui-switch {
-  width: 40px;
-  height: 24px;
-}
-.home-trending-toggle .ui-switch-thumb {
-  width: 18px;
-  height: 18px;
-}
-.home-trending-toggle .ui-switch[aria-checked="true"] .ui-switch-thumb {
-  transform: translateX(16px);
 }
 /* In a narrow card you swipe the rail, so the arrows go and the filter keeps the head on one line. */
 @container (max-width: 400px) {
@@ -789,22 +769,9 @@
   .home-rail-nav {
     display: none;
   }
-  .home-trending-head {
-    grid-template-columns: max-content minmax(0, 1fr);
-    grid-template-areas: "title tools" "toggle toggle";
-    column-gap: 0.5rem;
-  }
   .home-trending-tools {
     justify-content: flex-end;
     flex-wrap: nowrap;
-  }
-  .home-trending-tools .home-type-filter .ui-btn {
-    padding-inline: 0.5rem;
-    font-size: var(--text-kicker);
-    min-height: 2.75rem;
-  }
-  .home-trending-toggle {
-    white-space: normal;
   }
 }
 .cal-nav-btn {

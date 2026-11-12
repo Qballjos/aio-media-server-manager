@@ -15,12 +15,12 @@ test.beforeEach(async ({ page }, testInfo) => {
     const path = new URL(route.request().url()).pathname
     let json = {}
     if (['/api/auth/status', '/api/auth/visuals', '/api/auth/me'].includes(path)) {
-      json = { authenticated: true, setup_required: false, username: 'fixture', locale: language, theme: 'dark', wallpaper: 'aurora' }
+      json = { authenticated: true, setup_required: false, username: 'fixture', locale: language, theme: 'dark', wallpaper: 'aurora', has_avatar: true, avatar_url: '/app-icons/seerr.svg' }
     } else if (path === '/api/wizard/status') json = { completed: true }
     else if (path === '/api/catalog' || path === '/api/applications') json = { applications: apps }
     else if (path === '/api/homepage') {
       json = { apps, recent: [], requests: [], downloads: [], widgets: [], waiting: [], seerr: { available: true },
-        trending: [{ title: 'Trending fixture', mediaType: 'movie', mediaId: 1, poster: '/pwa-192.png', status: 'missing' }],
+        trending: ['missing', 'requested', 'available', 'partial', 'deleted', 'monitored'].map((status, index) => ({ title: `Trending ${status}`, mediaType: 'movie', mediaId: index + 1, poster: '/pwa-192.png', status })),
         calendar: [{ title: 'Today fixture', source: 'sonarr', kind: 'episode', when: new Date().toISOString() }] }
     } else if (path === '/api/homepage/downloads') json = { downloads: [] }
     else if (path === '/api/homepage/recent' || path === '/api/homepage/trending') json = { items: [] }
@@ -37,11 +37,11 @@ test('Home, Catalog and Settings controls fit their screen size', async ({ page 
   await expect(trending.locator('.home-tile')).toHaveCount(1)
   const title = await trending.locator('h3').boundingBox()
   const filters = await trending.locator('.home-type-filter').boundingBox()
-  const toggle = await trending.locator('.home-trending-toggle').boundingBox()
+  await expect(trending.locator('.home-trending-toggle')).toHaveCount(0)
+  await expect(trending.locator('.home-tile')).toContainText('Trending missing')
   if (mobile) {
     expect(filters.x).toBeGreaterThanOrEqual(title.x + title.width)
     expect(Math.abs(filters.y + filters.height / 2 - title.y - title.height / 2)).toBeLessThan(2)
-    expect(toggle.y).toBeGreaterThanOrEqual(filters.y + filters.height)
     await expect(page.locator('.cal-mode-day')).toBeVisible()
   } else await expect(page.locator('.cal-list, .cal-mode-week')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
@@ -76,17 +76,17 @@ test('Home, Catalog and Settings controls fit their screen size', async ({ page 
   }
 
   await page.goto('/#/settings/account')
-  const settingsToggle = page.locator('.settings-mobile-toggle')
+  const settingsPicker = page.locator('.settings-mobile-select')
   if (mobile) {
-    await expect(settingsToggle).toContainText(tr('Choose a settings section'))
-    await expect(settingsToggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(settingsPicker).toHaveValue('account')
     await page.screenshot({ path: testInfo.outputPath('settings.png'), animations: 'disabled' })
-    await settingsToggle.click()
-    await expect(page.locator('#settings-navigation')).toBeVisible()
-    await settingsToggle.press('Enter')
+    await settingsPicker.selectOption('visuals')
+    await expect(page).toHaveURL(/settings\/visuals/)
     await expect(page.locator('#settings-navigation')).toBeHidden()
+    await page.getByRole('heading', { name: tr('Display size'), exact: true }).waitFor()
+    await page.screenshot({ path: testInfo.outputPath('visuals.png'), animations: 'disabled' })
   } else {
-    await expect(settingsToggle).toBeHidden()
+    await expect(settingsPicker).toBeHidden()
     await expect(page.locator('#settings-navigation')).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('settings.png'), animations: 'disabled' })
   }

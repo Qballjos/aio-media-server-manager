@@ -188,7 +188,6 @@ const requestsFilter = ref('all')
 const requestsPage = ref(0)
 const REQUESTS_PAGE_SIZE = 20
 const trendingFilter = ref('all')
-const hideRequestedTrending = ref(false)
 let poll = null
 let downloadsPoll = null
 let statusPoll = null
@@ -618,7 +617,7 @@ const trendingItems = computed(() => {
       if (seen.has(key)) return false
       seen.add(key)
       return mediaTypeMatches(item, trendingFilter.value) &&
-        (!hideRequestedTrending.value || !isRequestedOrAvailable(item))
+        !isHiddenTrendingStatus(item)
     })
     .map((item) => withPublicUrls(item, 'seerr'))
 })
@@ -644,8 +643,8 @@ function requestStatusDot(item) {
   return { cls: 'is-missing', label: t('Not available') }
 }
 
-function isRequestedOrAvailable(item) {
-  return ['available', 'requested', 'monitored'].includes(String(item?.status || ''))
+function isHiddenTrendingStatus(item) {
+  return ['available', 'partial', 'requested', 'monitored', 'deleted'].includes(String(item?.status || ''))
 }
 
 function trendingStatusDot(item) {
@@ -1604,17 +1603,6 @@ onUnmounted(() => {
         <article class="home-card glass-card home-card-trending">
           <div class="home-rail-head home-trending-head">
             <h3>{{ $t('Trending') }}</h3>
-            <div v-if="snapshot.trending.length" class="home-trending-toggle">
-              <span id="trending-hide-status-label">{{ $t('Hide requested or available titles') }}</span>
-              <button
-                type="button"
-                class="ui-switch"
-                role="switch"
-                aria-labelledby="trending-hide-status-label"
-                :aria-checked="hideRequestedTrending ? 'true' : 'false'"
-                @click="hideRequestedTrending = !hideRequestedTrending"
-              ><span class="ui-switch-thumb"></span></button>
-            </div>
             <div class="home-rail-tools home-trending-tools">
               <div v-if="snapshot.trending.length" class="home-type-filter" role="group" :aria-label="$t('Filter trending')">
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">{{ $t('All') }}</button>

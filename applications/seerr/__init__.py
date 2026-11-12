@@ -63,11 +63,18 @@ def _install_progress(line: str) -> str | None:
     return None
 
 
-def _limit_build_memory(config_path: Path) -> None:
+def _limit_build_memory(install_dir: Path) -> None:
+    config_path = next(
+        (install_dir / name for name in ("next.config.ts", "next.config.mjs")
+         if (install_dir / name).is_file()),
+        None,
+    )
+    if config_path is None:
+        raise RuntimeError("Cannot apply Seerr build memory target: no supported Next.js config found")
     source = config_path.read_text(encoding="utf-8")
     marker = "export default nextConfig;"
     if source.count(marker) != 1:
-        raise RuntimeError("Cannot apply Seerr build memory target: unrecognized next.config.ts")
+        raise RuntimeError(f"Cannot apply Seerr build memory target: unrecognized {config_path.name}")
     patch = """// AIO: keep the build's memory target low while other apps run.
 const aioBuildMemoryLimit = nextConfig.experimental?.turbopackMemoryLimit;
 nextConfig.experimental = {
@@ -135,7 +142,7 @@ class SeerrApp(BaseApplication):
             env,
         )
         set_job(self.name, "installing", "Building Seerr from source…")
-        _limit_build_memory(self.install_dir / "next.config.ts")
+        _limit_build_memory(self.install_dir)
         self._run_install_step([pnpm, "build"], {**env, "RAYON_NUM_THREADS": "1"})
         set_job(self.name, "installing", "Finishing Seerr installation…")
         runner = self.install_dir / "seerr"

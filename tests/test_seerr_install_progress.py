@@ -98,21 +98,22 @@ raise SystemExit(7)
 
 
 @pytest.mark.parametrize("existing_limit", [None, 256 * 1024 * 1024, 0, -1])
-def test_build_memory_target_preserves_existing_positive_limit_and_config(tmp_path, existing_limit):
+@pytest.mark.parametrize("config_name", ["next.config.ts", "next.config.mjs"])
+def test_build_memory_target_preserves_existing_positive_limit_and_config(tmp_path, existing_limit, config_name):
     node = shutil.which("node")
     if not node:
         pytest.skip("Node.js is required to execute Seerr's generated build configuration")
     experimental = {"scrollRestoration": True}
     if existing_limit is not None:
         experimental["turbopackMemoryLimit"] = existing_limit
-    config = tmp_path / "next.config.ts"
+    config = tmp_path / config_name
     config.write_text(
         "const nextConfig = " + json.dumps({"experimental": experimental})
         + ";\nexport default nextConfig;\n"
     )
-    _limit_build_memory(config)
+    _limit_build_memory(tmp_path)
     patched = config.read_text()
-    _limit_build_memory(config)
+    _limit_build_memory(tmp_path)
     assert config.read_text() == patched
     result = subprocess.run(
         [node, "--input-type=module", "-e", patched + "\nconsole.log(JSON.stringify(nextConfig));"],
@@ -130,7 +131,7 @@ def test_build_memory_target_rejects_unrecognized_upstream_config(tmp_path):
     source = "export default {};\n"
     config.write_text(source)
     with pytest.raises(RuntimeError, match="unrecognized next.config.ts"):
-        _limit_build_memory(config)
+        _limit_build_memory(tmp_path)
     assert config.read_text() == source
 
 
@@ -143,7 +144,7 @@ def test_build_config_skips_type_check_and_lint_for_released_tags(tmp_path):
         "const nextConfig = " + json.dumps({"experimental": {}, "typescript": {"tsconfigPath": "tsconfig.json"}})
         + ";\nexport default nextConfig;\n"
     )
-    _limit_build_memory(config)
+    _limit_build_memory(tmp_path)
     result = subprocess.run(
         [node, "--input-type=module", "-e", config.read_text() + "\nconsole.log(JSON.stringify(nextConfig));"],
         check=True, capture_output=True, text=True,
