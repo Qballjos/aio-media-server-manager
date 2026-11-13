@@ -67,3 +67,25 @@ def test_jellyfin_libraries_include_books(tmp_path: Path):
     names = {row[0]: (row[1], row[2]) for row in jellyfin_libraries(layout)}
     assert names["Books"] == ("books", layout.books)
     assert "Audiobooks" not in names
+
+
+def test_parallel_storage_checks_preserve_existing_files(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    marker = tmp_path / '.amm_write_test'
+    marker.write_text('existing data')
+    together = Barrier(2)
+    touch = Path.touch
+    def concurrent_touch(path, *args, **kwargs):
+        result = touch(path, *args, **kwargs)
+        if path == marker:
+            together.wait(timeout=5)
+        return result
+    monkeypatch.setattr(Path, 'touch', concurrent_touch)
+    monkeypatch.setattr('core.storage._detect_fs_type', lambda path: 'test')
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: StorageManager._inspect_path(tmp_path, 'probe'), range(2)))
+    assert all(info.writable for info in results)
+    assert marker.read_text() == 'existing data'
+    assert list(tmp_path.iterdir()) == [marker]

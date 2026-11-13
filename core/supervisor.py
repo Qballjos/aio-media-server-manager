@@ -22,6 +22,7 @@ import collections
 import enum
 import logging
 import os
+import re
 import signal
 import time
 from contextlib import asynccontextmanager
@@ -98,6 +99,28 @@ class ProcessEntry:
 # ---------------------------------------------------------------------------
 # Supervisor
 # ---------------------------------------------------------------------------
+
+_CHILD_LEVEL_RE = re.compile(
+    r"(?:^|[\s:\[\]])(TRACE|DEBUG|INFO|INF|NOTE|WARNING|WARN|WRN|ERROR|ERR|FATAL|CRITICAL)(?=[\s:\]\)]|$)",
+    re.IGNORECASE,
+)
+
+
+def _child_log_level(line: str, stream: str) -> int:
+    match = _CHILD_LEVEL_RE.search(re.sub(r"\x1b\[[0-9;]*m", "", line))
+    if match:
+        level = match.group(1).upper()
+        if level in {"FATAL", "CRITICAL"}:
+            return logging.CRITICAL
+        if level in {"ERROR", "ERR"}:
+            return logging.ERROR
+        if level in {"WARNING", "WARN", "WRN"}:
+            return logging.WARNING
+        if level in {"INFO", "INF", "NOTE"}:
+            return logging.INFO
+        return logging.DEBUG
+    return logging.WARNING if stream == "stderr" else logging.DEBUG
+
 
 class ProcessSupervisor:
     """
@@ -476,11 +499,7 @@ class ProcessSupervisor:
                             except asyncio.QueueFull:
                                 pass
 
-                # Surface stderr at WARNING, stdout at DEBUG
-                if stream_name == "stderr":
-                    logger.warning("[%s] %s", entry.spec.name, line)
-                else:
-                    logger.debug("[%s] %s", entry.spec.name, line)
+                logger.log(_child_log_level(line, stream_name), "[%s] %s", entry.spec.name, line)
         finally:
             if log_file:
                 log_file.close()

@@ -18,6 +18,12 @@ same extracted calendar module used by the actual page.
 
 ## Seerr native dependency validation
 
+Seerr's Next.js patch selects memory options from the installed configuration
+schema and removes unsupported ESLint settings. Older schemas retain their numeric
+memory target; newer schemas use Turbopack garbage collection with the build cache.
+Garbage collection reduces retained memory but does not enforce a hard 512 MB cap.
+Existing source installations refresh this patch when starting after a manager update.
+
 `tests/test_seerr_install_progress.py` covers both supported Next.js configuration
 filenames and Seerr's SQLite runtime check. The installer executes an in-memory
 SQLite query after dependency installation. If a downloaded native binary cannot

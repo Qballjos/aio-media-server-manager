@@ -217,3 +217,19 @@ async def test_restart_watcher_isolates_spawn_failure(monkeypatch):
     assert broken.restart_attempts == 1
     assert broken.next_restart_at > time.monotonic()
     assert healthy.state == ProcessState.RUNNING
+
+
+@pytest.mark.parametrize(('line', 'stream', 'expected'), [
+    ('INFO:settings_manager:Configured apps', 'stderr', 20),
+    ('[2026-11-13] [123] [INFO] Starting gunicorn', 'stderr', 20),
+    ('2026-11-13 INF Registered connection', 'stderr', 20),
+    ('[Note] Ready for connections', 'stderr', 20),
+    ('ERROR:connection failed', 'stdout', 40),
+    ('\x1b[31mERROR\x1b[0m:connection failed', 'stderr', 40),
+    ('WARNING:restricted method', 'stderr', 30),
+    ('unstructured failure details', 'stderr', 30),
+    ('ordinary output', 'stdout', 10),
+])
+def test_child_log_level_respects_explicit_severity(line, stream, expected):
+    from core.supervisor import _child_log_level
+    assert _child_log_level(line, stream) == expected
