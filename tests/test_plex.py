@@ -172,6 +172,64 @@ def test_plex_invalid_pid_is_preserved(tmp_path, monkeypatch, contents):
     assert pid_file.read_text() == contents
 
 
+@pytest.mark.parametrize("executable, preserved", [
+    ("/config/apps/prowlarr/Prowlarr", False),
+    ("/config/apps/plex/Plex Media Server", True),
+    ("/config/apps/plex/Plex Media Server (deleted)", True),
+])
+def test_plex_pid_reused_by_another_executable(tmp_path, monkeypatch, executable, preserved):
+    from applications.plex import cleanup_stale_plex_pid
+
+    support = tmp_path / "Plex Media Server"
+    support.mkdir()
+    pid_file = support / "plexmediaserver.pid"
+    pid_file.write_text("376")
+    monkeypatch.setattr(os, "kill", lambda pid, sig: None)
+    monkeypatch.setattr(Path, "readlink", lambda self: Path(executable))
+
+    cleanup_stale_plex_pid(tmp_path)
+
+    assert pid_file.exists() == preserved
+
+
+def test_plex_reused_pid_preserves_replaced_file(tmp_path, monkeypatch):
+    from applications.plex import cleanup_stale_plex_pid
+
+    support = tmp_path / "Plex Media Server"
+    support.mkdir()
+    pid_file = support / "plexmediaserver.pid"
+    pid_file.write_text("376")
+    monkeypatch.setattr(os, "kill", lambda pid, sig: None)
+
+    def executable(self):
+        pid_file.write_text("999")
+        return Path("/config/apps/prowlarr/Prowlarr")
+
+    monkeypatch.setattr(Path, "readlink", executable)
+    cleanup_stale_plex_pid(tmp_path)
+
+    assert pid_file.read_text() == "999"
+
+
+@pytest.mark.parametrize("error", [FileNotFoundError, PermissionError])
+def test_plex_live_pid_with_unknown_executable_is_preserved(tmp_path, monkeypatch, error):
+    from applications.plex import cleanup_stale_plex_pid
+
+    support = tmp_path / "Plex Media Server"
+    support.mkdir()
+    pid_file = support / "plexmediaserver.pid"
+    pid_file.write_text("376")
+    monkeypatch.setattr(os, "kill", lambda pid, sig: None)
+
+    def unreadable_executable(self):
+        raise error()
+
+    monkeypatch.setattr(Path, "readlink", unreadable_executable)
+    cleanup_stale_plex_pid(tmp_path)
+
+    assert pid_file.read_text() == "376"
+
+
 @pytest.mark.asyncio
 async def test_plex_supervisor_cleans_pid_on_every_start(tmp_path):
     import sys

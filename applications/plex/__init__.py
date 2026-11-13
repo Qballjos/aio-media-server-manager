@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def cleanup_stale_plex_pid(support_dir: Path) -> None:
-    """Remove Plex's PID file only when its process is known to be gone."""
+    """Remove a stale PID file, including PIDs reused by other Linux processes."""
     pid_file = support_dir / "Plex Media Server" / "plexmediaserver.pid"
     try:
         contents = pid_file.read_text()
@@ -32,10 +32,19 @@ def cleanup_stale_plex_pid(support_dir: Path) -> None:
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
-            # Do not remove a file replaced by another Plex startup.
-            if pid_file.read_text() == contents:
-                pid_file.unlink()
-                logger.info("Removed stale Plex PID file %s (PID %d)", pid_file, pid)
+            pass
+        else:
+            # kill(pid, 0) also succeeds for unrelated processes and Linux thread
+            # IDs. Read exe rather than comm, which truncates Plex's name.
+            # If procfs is unavailable or unreadable, preserve the file.
+            executable = (Path("/proc") / str(pid) / "exe").readlink()
+            name = executable.name.removesuffix(" (deleted)")
+            if not name or name == "Plex Media Server":
+                return
+        # Do not remove a file replaced by another Plex startup.
+        if pid_file.read_text() == contents:
+            pid_file.unlink()
+            logger.info("Removed stale Plex PID file %s (PID %d)", pid_file, pid)
     except FileNotFoundError:
         pass
     except (OSError, ValueError) as exc:
