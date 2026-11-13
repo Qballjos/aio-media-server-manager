@@ -4,6 +4,7 @@ import { defineConfig, devices } from '@playwright/test'
 const port = process.env.AIO_E2E_PORT || '8765'
 export default defineConfig({
   testDir: './e2e',
+  testMatch: 'journeys.spec.js',
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

@@ -52,12 +52,15 @@ def _ensure_authenticated(request: Request) -> None:
     auth_manager.authenticate_request(request)
 
 
-def _not_found(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+def _not_found() -> HTTPException:
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found.")
 
 
-def _busy(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+def _busy() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Wait for the current maintenance operation to finish.",
+    )
 
 
 @router.get("", summary="List configuration backups")
@@ -85,7 +88,7 @@ async def create_backup(request: Request, body: Optional[BackupCreate] = None) -
     try:
         job = backup_jobs.start_backup((body.label if body else None) or "manual")
     except BackupBusyError as exc:
-        raise _busy(exc) from exc
+        raise _busy() from exc
     return {"job": job}
 
 
@@ -114,7 +117,7 @@ async def upload_backup(request: Request, filename: str = "") -> dict[str, Any]:
         except (tarfile.TarError, OSError, EOFError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Not a valid .tar.gz backup: {exc}",
+                detail="Not a valid .tar.gz backup.",
             ) from exc
         partial.replace(target)
     finally:
@@ -130,7 +133,7 @@ async def backup_details(name: str, request: Request) -> dict[str, Any]:
     try:
         sections = await asyncio.to_thread(manager.backup_sections, name)
     except FileNotFoundError as exc:
-        raise _not_found(exc) from exc
+        raise _not_found() from exc
     item = next((row for row in manager.list_backups() if row["name"] == name), None)
     return {"backup": item, "sections": sections}
 
@@ -141,7 +144,7 @@ async def download_backup(name: str, request: Request) -> FileResponse:
     try:
         archive = manager.resolve_archive(name)
     except FileNotFoundError as exc:
-        raise _not_found(exc) from exc
+        raise _not_found() from exc
     return FileResponse(archive, media_type="application/gzip", filename=archive.name)
 
 
@@ -151,9 +154,9 @@ async def verify_backup(name: str, request: Request) -> dict[str, Any]:
     try:
         return {"job": backup_jobs.start_verify(name)}
     except FileNotFoundError as exc:
-        raise _not_found(exc) from exc
+        raise _not_found() from exc
     except BackupBusyError as exc:
-        raise _busy(exc) from exc
+        raise _busy() from exc
 
 
 @router.post("/{name}/restore", status_code=status.HTTP_202_ACCEPTED, summary="Restore a configuration backup")
@@ -162,9 +165,9 @@ async def restore_backup(name: str, request: Request, body: Optional[RestoreRequ
     try:
         return {"job": backup_jobs.start_restore(name, body.sections if body else None)}
     except FileNotFoundError as exc:
-        raise _not_found(exc) from exc
+        raise _not_found() from exc
     except BackupBusyError as exc:
-        raise _busy(exc) from exc
+        raise _busy() from exc
 
 
 @router.delete("/{name}", summary="Delete a configuration backup")
@@ -173,7 +176,7 @@ async def delete_backup(name: str, request: Request) -> dict[str, Any]:
     try:
         manager.delete_backup(name)
     except FileNotFoundError as exc:
-        raise _not_found(exc) from exc
+        raise _not_found() from exc
     return {"status": "deleted", "name": name}
 
 
@@ -205,7 +208,13 @@ async def save_external_config(body: ExternalConfigBody, request: Request):
     try:
         return await asyncio.to_thread(ExternalBackups(settings).save, **body.model_dump())
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Invalid external backup settings. Use an HTTPS/WebDAV folder URL "
+                "without credentials and an encryption password of at least 16 characters."
+            ),
+        ) from exc
 
 
 @router.post("/external/{action}", status_code=202, summary="Export, import or test a backup")
@@ -214,6 +223,6 @@ async def external_action(action: str, body: ExternalActionBody, request: Reques
     try:
         return {"job": backup_jobs.start_external(action, body.name)}
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail="Invalid external backup action.") from exc
     except BackupBusyError as exc:
-        raise _busy(exc) from exc
+        raise _busy() from exc

@@ -75,7 +75,10 @@ def _limit_build_memory(install_dir: Path) -> None:
     marker = "export default nextConfig;"
     if source.count(marker) != 1:
         raise RuntimeError(f"Cannot apply Seerr build memory target: unrecognized {config_path.name}")
-    patch = """// AIO: keep the build's memory target low while other apps run.
+    schema = (install_dir / "node_modules/next/dist/server/config-schema.js").read_text(encoding="utf-8")
+    supports = lambda key: re.search(r"\b" + re.escape(key) + r"\s*:", schema) is not None
+    if supports("turbopackMemoryLimit"):
+        memory_patch = """{
 const aioBuildMemoryLimit = nextConfig.experimental?.turbopackMemoryLimit;
 nextConfig.experimental = {
   ...nextConfig.experimental,
@@ -84,11 +87,31 @@ nextConfig.experimental = {
       ? aioBuildMemoryLimit
       : 512 * 1024 * 1024,
 };
-// AIO: a released tag already passed tsc and ESLint upstream; skip re-running them here.
-nextConfig.typescript = { ...nextConfig.typescript, ignoreBuildErrors: true };
-nextConfig.eslint = { ...nextConfig.eslint, ignoreDuringBuilds: true };
-
+}
 """
+    elif supports("turbopackGc") and supports("turbopackFileSystemCacheForBuild"):
+        # Recent Next.js removed the numeric cap. GC needs the filesystem cache;
+        # this reduces retained build memory but is not a hard 512 MB limit.
+        memory_patch = """nextConfig.experimental = {
+  ...nextConfig.experimental,
+  turbopackGc: true,
+  turbopackFileSystemCacheForBuild: true,
+};
+delete nextConfig.experimental.turbopackMemoryLimit;
+"""
+    else:
+        raise RuntimeError("Cannot apply Seerr build memory target: unsupported Next.js schema")
+    lint_patch = (
+        "nextConfig.eslint = { ...nextConfig.eslint, ignoreDuringBuilds: true };\n"
+        if supports("eslint") else "delete nextConfig.eslint;\n"
+    )
+    patch = (
+        "// AIO: use memory options supported by the installed Next.js.\n"
+        + memory_patch
+        + "// AIO: released tags passed upstream type checking.\n"
+        + "nextConfig.typescript = { ...nextConfig.typescript, ignoreBuildErrors: true };\n"
+        + lint_patch + "\n"
+    )
     if patch not in source:
         config_path.write_text(source.replace(marker, patch + marker), encoding="utf-8")
 
@@ -212,4 +235,7 @@ db.get('SELECT 1 AS ok', (error, row) => {
             raise subprocess.CalledProcessError(returncode, command, output="".join(tail))
 
     def build_start_command(self, executable: Path) -> list[str]:
+        # Refresh AIO's patch for existing source installations after a manager update.
+        if (self.install_dir / "node_modules/next/dist/server/config-schema.js").is_file():
+            _limit_build_memory(self.install_dir)
         return [str(executable)]

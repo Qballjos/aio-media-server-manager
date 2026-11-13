@@ -2193,7 +2193,20 @@ def seerr_media_status(row: dict[str, Any]) -> str:
         code = int(raw) if raw is not None else 0
     except (TypeError, ValueError):
         code = 0
-    return _SEERR_MEDIA_STATUS.get(code, "missing")
+    status = _SEERR_MEDIA_STATUS.get(code)
+    if status:
+        return status
+    media = info if info is not None else row
+    # Seerr can reset deleted media to UNKNOWN while retaining its library history.
+    # UNKNOWN alone is not proof that this is a new, unrequested title.
+    if media.get("mediaAddedAt"):
+        return "deleted"
+    if media.get("hasActiveRequest") or any(
+        isinstance(request, dict) and request.get("status") in (1, 2, 4, 5)
+        for request in (media.get("requests") or [])
+    ):
+        return "requested"
+    return "missing"
 
 
 def _prowlarr_search(catalog: ApplicationCatalog, running: set[str], term: str) -> dict[str, Any]:

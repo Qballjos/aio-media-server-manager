@@ -18,6 +18,7 @@ import stat
 import subprocess
 import sys
 import threading
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -124,11 +125,23 @@ def default_vpn_config_filename(protocol: str) -> str:
 
 
 def vpn_config_destination(app_settings: Settings, *, protocol: str | None = None, path: str | None = None) -> Path:
+    # Configuration directories must have trusted local writers. Supporting hostile
+    # concurrent directory replacement would require descriptor-relative file access.
+    root = Path(app_settings.config_dir) / "vpn"
+    config_root = Path(app_settings.config_dir).resolve()
+    if root.is_symlink() or not root.resolve().is_relative_to(config_root):
+        raise ValueError("VPN uploads require a managed VPN directory, not a symlink.")
     requested = (path or "").strip()
-    if requested:
-        return Path(requested).expanduser()
     proto = (protocol or app_settings.vpn_protocol or "wireguard").strip().lower()
-    return Path(app_settings.config_dir) / "vpn" / default_vpn_config_filename(proto)
+    candidate = Path(requested).expanduser() if requested else Path(default_vpn_config_filename(proto))
+    if ".." in candidate.parts:
+        raise ValueError("VPN upload paths cannot contain parent traversal.")
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    dest = candidate.resolve()
+    if candidate.is_symlink() or dest == root.resolve() or not dest.is_relative_to(root.resolve()):
+        raise ValueError("VPN uploads must stay inside the managed VPN directory. External profiles are read-only.")
+    return dest
 
 
 def save_vpn_config_text(
@@ -155,11 +168,19 @@ def save_vpn_config_text(
         raise ValueError("That does not look like an OpenVPN profile.")
     dest = vpn_config_destination(app_settings, protocol=proto, path=path)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(raw if raw.endswith("\n") else raw + "\n", encoding="utf-8")
+    # A private temporary file avoids exposing keys during creation and preserves
+    # an existing profile if writing fails. Replacement does not follow hardlinks.
+    temporary = None
     try:
-        dest.chmod(0o600)
-    except OSError:
-        pass
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=dest.parent, prefix=".aio-vpn-", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(raw if raw.endswith("\n") else raw + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, dest)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     app_settings.vpn_config_path = dest
     return dest
 

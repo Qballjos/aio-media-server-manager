@@ -16,6 +16,27 @@ HTTP installations. Configure `AMM_TRUSTED_PROXIES` with only the actual proxy
 addresses and enforce HTTPS at the proxy. Forwarded headers do not automatically
 change cookie security. Restart the manager after changing these environment settings.
 
+## VPN profile storage
+
+Uploaded and pasted VPN profiles may only be written inside `AMM_CONFIG_DIR/vpn`.
+Absolute paths outside that directory, parent traversal and symlink escapes are
+rejected before filesystem changes. Profiles are replaced atomically using private
+files with mode `0600`. Existing external profiles can still be selected using
+`AMM_VPN_CONFIG` or the Settings path field, but uploads cannot overwrite them.
+
+## Child-application credential files
+
+SABnzbd's INI and Recyclarr's YAML must contain readable credentials for those
+applications. Manager writes use private temporary files and atomic replacement
+with mode `0600`, preserving existing file ownership. SABnzbd startup retains
+PUID/PGID ownership and owner-only file access. Existing files are tightened when
+the manager next configures them; this does not encrypt credentials inside those
+child-application files. Keep the configuration volume and its backups private.
+
+Backup failures and application-settings failures return safe guidance rather
+than uncontrolled exception text. Intentional, token-protected debug reports
+retain their separate diagnostic and redaction behavior.
+
 ## Backup recovery before login
 
 Backup endpoints require administrator authentication, including on a new server.

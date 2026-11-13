@@ -36,7 +36,7 @@ test('a cold Home load bounds the Requests rendering surface and defers offscree
     else await page.reload()
     const rail = page.locator('[data-widget="requests"] .home-rail')
     await expect(rail.locator('.home-tile')).toHaveCount(20)
-    await expect(page.locator('.home-request-pages')).toContainText('1–20 / 350')
+    await expect(page.getByRole('group', { name: 'Filter requests' })).toBeVisible()
     expect(await rail.evaluate(node => node.scrollWidth)).toBeLessThan(5000)
     await rail.scrollIntoViewIfNeeded()
     await expect.poll(() => fetched.size).toBeGreaterThan(0)
@@ -48,21 +48,30 @@ test('a cold Home load bounds the Requests rendering surface and defers offscree
       await page.screenshot({ path: testInfo.outputPath('visible-posters.png') })
     }
 
-    // Horizontal scrolling loads the current page, not the whole request history.
-    await rail.evaluate(node => { node.scrollLeft = node.scrollWidth })
-    await expect.poll(() => fetched.has('/poster-fixture/20.png')).toBe(true)
-    expect(fetched.has('/poster-fixture/350.png')).toBe(false)
-    expect(fetched.size).toBeLessThan(40)
-    await expect(rail.locator('img').first()).not.toHaveAttribute('src', /poster-fixture/)
-    const pages = page.locator('.home-request-pages')
-    const next = pages.getByRole('button', { name: 'Next requests', exact: true })
-    for (let pageIndex = 1; pageIndex < 18; pageIndex++) {
-      await next.click()
-      await expect(rail.locator('.home-tile')).toHaveCount(Math.min(20, 350 - pageIndex * 20))
+    // Scrolling recycles a bounded window, including backward navigation.
+    for (let index = 0; index < 70; index++) {
+      if (await rail.locator('.home-tile-title').last().textContent() === 'Request 350') break
+      const before = await rail.locator('.home-tile-title').first().textContent()
+      await rail.evaluate(node => { node.scrollLeft = node.scrollWidth })
+      await expect(rail.locator('.home-tile-title').first()).not.toHaveText(before)
+      await expect(rail.locator('.home-tile')).toHaveCount(20)
+      expect(await rail.evaluate(node => node.scrollWidth)).toBeLessThan(5000)
     }
-    await expect(pages).toContainText('341–350 / 350')
-    await expect(next).toBeDisabled()
+    await expect(rail.locator('.home-tile-title').last()).toHaveText('Request 350')
     await rail.evaluate(node => { node.scrollLeft = node.scrollWidth })
     await expect.poll(() => fetched.has('/poster-fixture/350.png')).toBe(true)
+    for (let index = 0; index < 70; index++) {
+      if (await rail.locator('.home-tile-title').first().textContent() === 'Request 1') break
+      const before = await rail.locator('.home-tile-title').first().textContent()
+      await rail.evaluate(node => { node.scrollLeft = 0 })
+      await expect(rail.locator('.home-tile-title').first()).not.toHaveText(before)
+    }
+    await expect(rail.locator('.home-tile-title').first()).toHaveText('Request 1')
+    const filters = page.getByRole('group', { name: 'Filter requests' })
+    await filters.getByRole('button', { name: 'Series', exact: true }).click()
+    await expect(rail).toHaveCount(0)
+    await filters.getByRole('button', { name: 'Movies', exact: true }).click()
+    await expect(rail.locator('.home-tile')).toHaveCount(20)
+    await filters.getByRole('button', { name: 'All', exact: true }).click()
   }
 })

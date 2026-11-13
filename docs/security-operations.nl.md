@@ -23,6 +23,28 @@ en dwing HTTPS op die proxy af. Doorgestuurde headers veranderen de
 cookiebeveiliging niet automatisch. Herstart de manager na het aanpassen van
 deze omgevingsvariabelen.
 
+## VPN-profielen opslaan
+
+Geüploade en geplakte VPN-profielen worden alleen binnen `AMM_CONFIG_DIR/vpn`
+geschreven. Externe paden, `..` en symlinkroutes naar buiten worden vooraf geweigerd.
+Vervanging gebeurt atomisch met een privébestand met rechten `0600`.
+Externe profielen blijven selecteerbaar via `AMM_VPN_CONFIG` of het padveld in
+Instellingen, maar kunnen niet via uploaden worden overschreven.
+
+## Bestanden met inloggegevens van applicaties
+
+De INI van SABnzbd en de YAML van Recyclarr bevatten leesbare inloggegevens die
+deze applicaties nodig hebben. De manager schrijft via privébestanden en vervangt
+de configuratie atomisch met rechten `0600`, met behoud van de bestaande eigenaar.
+Bij het starten houdt SABnzbd PUID/PGID als eigenaar en krijgt alleen de eigenaar
+toegang tot het bestand. Bestaande bestanden krijgen deze rechten wanneer de
+manager ze opnieuw configureert. De inhoud wordt hiermee niet versleuteld.
+Bescherm ook het configuratievolume en de back-ups daarvan.
+
+Bij fouten in back-ups en applicatie-instellingen geeft de API veilige uitleg
+in plaats van ongecontroleerde foutdetails. Bewuste debugrapporten achter een
+toegangstoken behouden hun eigen diagnose- en afschermingsgedrag.
+
 ## Back-ups herstellen zonder werkend account
 
 Back-upbeheer vereist een beheerderslogin, ook op een nieuwe server. Maak op

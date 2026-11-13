@@ -167,7 +167,7 @@ class GrimmoryApp(SimpleApplication):
                 "fi",
                 '_mariadb_up() { mariadb-admin --socket="$MARIADB_SOCK" ping >/dev/null 2>&1 || mysqladmin --socket="$MARIADB_SOCK" ping >/dev/null 2>&1; }',
                 "if ! _mariadb_up; then",
-                '  "$MYSQLD" --user=root --datadir="$MARIADB_DATA" --socket="$MARIADB_SOCK" --port="$MARIADB_PORT" --bind-address=127.0.0.1 &',
+                '  "$MYSQLD" --user=root --datadir="$MARIADB_DATA" --socket="$MARIADB_SOCK" --port="$MARIADB_PORT" --bind-address=127.0.0.1 --expire-logs-days=0 --binlog-expire-logs-seconds=0 &',
                 "  MYSQLD_PID=$!",
                 "  trap 'kill $MYSQLD_PID 2>/dev/null || true' EXIT",
                 "  i=0",
@@ -178,7 +178,7 @@ class GrimmoryApp(SimpleApplication):
                 "  done",
                 "fi",
                 'mariadb --socket="$MARIADB_SOCK" -e "CREATE DATABASE IF NOT EXISTS grimmory; CREATE USER IF NOT EXISTS \'grimmory\'@\'127.0.0.1\' IDENTIFIED BY \'grimmory\'; GRANT ALL ON grimmory.* TO \'grimmory\'@\'127.0.0.1\'; FLUSH PRIVILEGES;" >/dev/null 2>&1 || true',
-                'exec "$JAVA_BIN" --enable-preview -jar "$JAR"',
+                'exec "$JAVA_BIN" --enable-preview --enable-native-access=ALL-UNNAMED -jar "$JAR"',
             ],
         )
 

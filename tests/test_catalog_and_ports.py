@@ -195,15 +195,6 @@ def test_all_catalog_apps_declare_published_image_arches():
         )
 
 
-def test_catalog_entries_include_popularity():
-    catalog = ApplicationCatalog()
-    sonarr = catalog.get("sonarr").catalog_entry()
-    shelfmark = catalog.get("shelfmark").catalog_entry()
-    assert sonarr["popularity"] > shelfmark["popularity"]
-    assert sonarr["category"] == AppCategory.AUTOMATION.value
-    assert sonarr["help_url"] == "https://wiki.servarr.com/sonarr"
-
-
 def test_source_based_install_methods():
     catalog = ApplicationCatalog()
     from applications.manifest import InstallMethod

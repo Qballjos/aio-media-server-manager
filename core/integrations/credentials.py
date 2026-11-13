@@ -98,9 +98,19 @@ def _read_bazarr_api_key(config_dir: Path) -> Optional[str]:
         content = yaml_path.read_text(encoding="utf-8")
     except OSError:
         return None
-    match = re.search(r"(?ms)^auth:\n(?:  .*\n)*?  apikey: ([A-Za-z0-9]+)", content)
-    if match:
-        return match.group(1)
+    in_auth = False
+    for line in content.splitlines():
+        if line == "auth:":
+            in_auth = True
+            continue
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if in_auth:
+            if not line.startswith("  "):
+                break
+            match = re.fullmatch(r"  apikey:[ \t]*([A-Za-z0-9]+)[ \t]*", line)
+            if match:
+                return match.group(1)
     return None
 
 

@@ -720,23 +720,6 @@
   display: flex;
   gap: 0.35rem;
 }
-.home-request-pages {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  color: var(--text-muted);
-  font-size: var(--text-kicker);
-}
-.has-request-pages .home-rail-head,
-.has-request-pages .home-rail-tools {
-  flex-wrap: nowrap;
-}
-.hg.is-editing .home-request-pages {
-  visibility: hidden;
-}
 .home-trending-head {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -751,14 +734,6 @@
 }
 /* In a narrow card you swipe the rail, so the arrows go and the filter keeps the head on one line. */
 @container (max-width: 400px) {
-  .home-request-pages > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
   .home-rail-nav {
     display: none;
   }
@@ -787,6 +762,10 @@
   scroll-snap-type: x proximity;
   scrollbar-width: none;
   -ms-overflow-style: none;
+}
+.home-requests-rail {
+  overflow-anchor: none;
+  scroll-snap-type: none;
 }
 .home-rail::-webkit-scrollbar {
   display: none;

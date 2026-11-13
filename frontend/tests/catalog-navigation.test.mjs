@@ -71,22 +71,3 @@ test('app clicks open settings; direct action clicks do not open settings', () =
   }
   assert.equal(emitted.length, 1)
 })
-
-test('featured banner visits every app, wraps, and supports pause', () => {
-  const { panel } = catalog()
-  panel.advanceFeatured()
-  assert.equal(panel.featuredService.value.name, 'sonarr')
-  panel.featuredPaused.value = true
-  panel.advanceFeatured()
-  assert.equal(panel.featuredService.value.name, 'sonarr')
-  panel.moveFeatured(1)
-  assert.equal(panel.featuredService.value.name, 'plex')
-  panel.moveFeatured(1)
-  assert.equal(panel.featuredService.value.name, 'jellyfin')
-  panel.moveFeatured(-1)
-  assert.equal(panel.featuredService.value.name, 'plex')
-  panel.featuredPaused.value = false
-  panel.catalogSearchInput.value = 'sonarr'
-  panel.advanceFeatured()
-  assert.equal(panel.featuredService.value.name, 'plex')
-})

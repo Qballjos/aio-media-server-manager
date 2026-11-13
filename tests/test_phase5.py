@@ -1290,3 +1290,28 @@ def test_house_interface_comes_from_the_main_default_route(tmp_path: Path, monke
     assert mgr._house_interface() == "eth0"
     monkeypatch.setattr(mgr, "_ip", lambda args: CompletedProcess(["ip", *args], 0, "", ""))
     assert mgr._house_interface() is None
+
+
+@pytest.mark.parametrize('escape', ['absolute', 'traversal', 'symlink', 'root_symlink'])
+def test_vpn_upload_rejects_destinations_outside_managed_directory(tmp_path, escape):
+    cfg = Settings(config_dir=tmp_path / 'config')
+    root = cfg.config_dir / 'vpn'
+    root.mkdir(parents=True)
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    victim = outside / 'profile.conf'
+    victim.write_text('preserve')
+    dest = str(victim) if escape == 'absolute' else '../outside/profile.conf'
+    if escape == 'symlink':
+        (root / 'link').symlink_to(outside, target_is_directory=True)
+        dest = str(root / 'link' / 'profile.conf')
+    if escape == 'root_symlink':
+        root.rmdir()
+        root.symlink_to(outside, target_is_directory=True)
+        dest = None
+    original = cfg.vpn_config_path
+    with pytest.raises(ValueError):
+        save_vpn_config_text(cfg, '[Interface]\nPrivateKey = test\n', path=dest)
+    assert victim.read_text() == 'preserve'
+    assert cfg.vpn_config_path == original
+    assert not (cfg.config_dir / 'outside').exists()

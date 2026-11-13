@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from applications.catalog import ApplicationCatalog
+from core.file_io import write_private_text
 from core.integrations.credentials import get_application_api_key
 from core.settings import settings
 
@@ -284,6 +285,8 @@ def write_recyclarr_config(
     path = yaml_path(root)
     stored = load_prefs(root) if prefs is None else {**default_prefs(), **prefs}
     if load_prefs(root).get("manual_override") or stored.get("manual_override"):
+        if path.is_file():
+            path.chmod(0o600)
         return path
     if path.is_file() and not force and (stored.get("user_edited") or _is_foreign(path)):
         _refresh_endpoints(path, sonarr_url, sonarr_key, radarr_url, radarr_key)
@@ -297,7 +300,7 @@ def write_recyclarr_config(
         radarr_key=radarr_key,
         naming=naming,
     )
-    path.write_text(body, encoding="utf-8")
+    write_private_text(path, body)
     save_prefs(root, {**stored, "user_edited": False})
     logger.info("Wrote TRaSH Recyclarr config at %s", path)
     return path
@@ -309,7 +312,7 @@ def save_yaml(config_dir: Path, text: str) -> Path:
     cleaned = text.replace("\r\n", "\n")
     if not cleaned.endswith("\n"):
         cleaned += "\n"
-    path.write_text(cleaned, encoding="utf-8")
+    write_private_text(path, cleaned)
     save_prefs(config_dir, {**load_prefs(config_dir), "user_edited": True, "manual_override": True})
     return path
 
@@ -528,7 +531,7 @@ def _refresh_endpoints(path: Path, sonarr_url: str, sonarr_key: str, radarr_url:
     text = re.sub(r"(radarr:[\s\S]*?)base_url:\s*.*", rf"\1base_url: {radarr_url}", text, count=1)
     if radarr_key:
         text = re.sub(r"(radarr:[\s\S]*?)api_key:\s*.*", rf"\1api_key: {radarr_key}", text, count=1)
-    path.write_text(text, encoding="utf-8")
+    write_private_text(path, text)
 
 
 def _naming_block(kind: str, style: str) -> str:

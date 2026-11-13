@@ -234,7 +234,8 @@ async def test_scheduled_backup_exports_and_keeps_local_copy_on_remote_failure(c
     result = await jobs.wait()
     assert result["status"] == "error"
     assert jobs.manager.list_backups()
-    assert "destination unavailable" in jobs.public_status()["last_error"]
+    assert jobs.public_status()["last_error"]
+    assert "destination unavailable" not in jobs.public_status()["last_error"]
     assert notifications.incident_history()[-1]["event"] == "backups"
 
 

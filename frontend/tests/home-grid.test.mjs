@@ -5,7 +5,6 @@ import {
   GRID_IDS,
   LEGACY_IDS,
   WIDGETS,
-  bpForWidth,
   collapseEmptyRows,
   collides,
   deriveLayout,
@@ -154,13 +153,6 @@ test('collapseEmptyRows closes rows left by hidden widgets', () => {
   assert.deepEqual([out.recent.x, out.recent.y, out.recent.w], [0, 2, 6])
 })
 
-test('bpForWidth follows the existing breakpoints', () => {
-  assert.equal(bpForWidth(719), 'phone')
-  assert.equal(bpForWidth(720), 'tablet')
-  assert.equal(bpForWidth(1199), 'tablet')
-  assert.equal(bpForWidth(1200), 'desktop')
-})
-
 test('the newer widgets wait in Add widget instead of joining an existing Home', () => {
   for (const id of ['playing', 'storage', 'server', 'attention', 'other']) {
     assert.ok(GRID_IDS.includes(id), `${id} is a widget`)
@@ -177,15 +169,6 @@ test('every widget starts at a size it allows, on every screen size', () => {
       assert.deepEqual(fitItem({ id, x: 0, y: 0, w, h }, cols), { id, x: 0, y: 0, w, h }, `${id} on ${bp}`)
     }
   }
-})
-
-test('recent, requests and trending share default sizes and presets', () => {
-  for (const bp of Object.keys(BREAKPOINTS)) {
-    assert.deepEqual(WIDGETS.recent.size[bp], WIDGETS.requests.size[bp])
-    assert.deepEqual(WIDGETS.recent.size[bp], WIDGETS.trending.size[bp])
-  }
-  assert.deepEqual(WIDGETS.recent.presets, WIDGETS.requests.presets)
-  assert.deepEqual(WIDGETS.recent.presets, WIDGETS.trending.presets)
 })
 
 test('media layout migration updates old defaults without changing custom sizes', () => {

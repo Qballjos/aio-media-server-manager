@@ -216,9 +216,10 @@ class StorageManager:
         writable = False
         if exists and is_dir:
             try:
-                test_file = path / ".amm_write_test"
-                test_file.touch()
-                test_file.unlink()
+                # Concurrent status requests must not delete each other's probe.
+                with tempfile.NamedTemporaryFile(dir=path, prefix=".amm-write-") as test_file:
+                    test_file.write(b"1")
+                    test_file.flush()
                 writable = True
             except OSError:
                 writable = False

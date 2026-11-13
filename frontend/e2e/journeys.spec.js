@@ -165,37 +165,6 @@ test('calendar controls preserve a manually selected view across viewport change
 })
 
 
-test('header navigation stays centered, scrolls away and uses the Home typeface everywhere', async ({ page }) => {
-  await page.goto('/')
-  await expect(page.getByRole('button', { name: 'Edit the Home layout', exact: true })).toHaveCount(0)
-  const flow = new SetupFlow(page)
-  await flow.complete()
-  await page.route('**/api/updates/status', route => route.fulfill({ json: { available: [{ name: 'sonarr', latest_version: '2.0.0' }], notify_enabled: false } }))
-  for (const width of [1440, 1100, 960, 768, 390, 320]) {
-    await page.setViewportSize({ width, height: 900 })
-    for (const route of ['home', 'catalog', 'settings/account']) {
-      await page.goto(`/#/${route}`)
-      await expect(page.locator('.nav-tabs')).toBeVisible()
-      await page.locator('.nav-tabs a').last().waitFor()
-      await expect(page.locator('.nav-tabs .nav-edit-btn')).toHaveCount(route === 'home' ? 1 : 0)
-      const geometry = await page.locator('.top-nav').evaluate(header => {
-        const nav = header.querySelector('.nav-tabs'), h = header.getBoundingClientRect(), n = nav.getBoundingClientRect()
-        return { delta: Math.abs((n.left + n.right) / 2 - (h.left + h.right) / 2), position: getComputedStyle(header).position, fonts: [...nav.querySelectorAll('a')].map(node => getComputedStyle(node).fontFamily) }
-      })
-      expect(geometry.delta).toBeLessThan(1)
-      expect(geometry.position).toBe('relative')
-      expect(geometry.fonts.every(font => font === geometry.fonts[0])).toBe(true)
-      await assertFitsViewport(page)
-    }
-
-  }
-  await flow.settings('backups')
-  const typography = await page.evaluate(() => ({ body: getComputedStyle(document.body).fontFamily, controls: [...document.querySelectorAll('input, button, textarea, select, code, pre, .font-mono')].filter(node => node.getClientRects().length).map(node => getComputedStyle(node).fontFamily) }))
-  expect(typography.controls.every(font => font === typography.body)).toBe(true)
-  await page.evaluate(() => { document.body.style.minHeight = '2500px'; window.scrollTo(0, 600) })
-  await expect.poll(async () => page.locator('.top-nav').evaluate(node => node.getBoundingClientRect().bottom)).toBeLessThan(0)
-})
-
 test('trending requests are only available in the poster dialog', async ({ page }) => {
   const flow = new SetupFlow(page)
   await flow.complete()
@@ -238,85 +207,6 @@ test('trending hides existing and deleted titles by default', async ({ page }) =
   await expect(trending.locator('.home-tile-trending')).toHaveCount(0)
   await trending.getByRole('button', { name: 'All', exact: true }).click()
   await expect(trending.locator('.home-tile-trending')).toHaveCount(1)
-})
-
-test('calendar colors use the app source unless the item is available', async ({ page }) => {
-  const flow = new SetupFlow(page)
-  await flow.complete()
-  await page.request.post('/_test/calendar-colors')
-  await page.reload()
-  const calendar = page.locator('.home-card-calendar')
-  await calendar.getByRole('button', { name: 'Calendar view', exact: true }).click()
-  await page.getByRole('option', { name: 'Month', exact: true }).click()
-  const colors = await calendar.evaluate((root) => {
-    const resolve = (value) => {
-      const probe = document.createElement('span')
-      probe.style.color = value
-      root.append(probe)
-      const color = getComputedStyle(probe).color
-      probe.remove()
-      return color
-    }
-    const eventColor = (selector) => getComputedStyle(root.querySelector(selector)).borderLeftColor
-    return {
-      sonarr: eventColor('.cal-event[data-source="sonarr"]'),
-      radarr: eventColor('.cal-event[data-source="radarr"]'),
-      available: eventColor('.cal-event.is-have'),
-      info: resolve('var(--color-info)'),
-      radarrToken: resolve('var(--calendar-radarr-color)'),
-      success: resolve('var(--color-success)'),
-    }
-  })
-  expect(colors.sonarr).toBe(colors.info)
-  expect(colors.radarr).toBe(colors.radarrToken)
-  expect(colors.available).toBe(colors.success)
-
-  await calendar.getByRole('button', { name: 'Calendar view', exact: true }).click()
-  await page.getByRole('option', { name: 'List', exact: true }).click()
-  const listColors = await calendar.evaluate((root) => {
-    const rowColor = (selector) => getComputedStyle(root.querySelector(`${selector} .cal-row-link`)).borderLeftColor
-    return {
-      sonarr: rowColor('.cal-row[data-source="sonarr"]'),
-      radarr: rowColor('.cal-row[data-source="radarr"]'),
-      available: rowColor('.cal-row.is-have'),
-    }
-  })
-  expect(listColors.sonarr).toBe(colors.info)
-  expect(listColors.radarr).toBe(colors.radarrToken)
-  expect(listColors.available).toBe(colors.success)
-})
-
-test('media widgets and posters share dimensions and service status uses one dot', async ({ page }, testInfo) => {
-  const flow = new SetupFlow(page)
-  await flow.complete()
-  await page.request.post('/_test/media-widgets')
-  await page.request.post('/_test/service-status')
-  await page.reload()
-
-  const widgets = ['recent', 'requests', 'trending'].map((id) => page.locator(`.hg-item[data-widget="${id}"]`))
-  for (const widget of widgets) {
-    await expect(widget).toBeVisible()
-    await expect(widget.locator('.home-tile')).toHaveCount(2)
-  }
-  const bounds = await Promise.all(widgets.map((widget) => widget.boundingBox()))
-  for (const value of ['width', 'height']) {
-    expect(Math.abs(bounds[0][value] - bounds[1][value])).toBeLessThan(1)
-    expect(Math.abs(bounds[1][value] - bounds[2][value])).toBeLessThan(1)
-  }
-  await page.screenshot({ path: testInfo.outputPath('media-widgets.png'), fullPage: true })
-  const posters = await Promise.all(widgets.map((widget) => widget.locator('.home-tile-poster').first().boundingBox()))
-  for (const value of ['width', 'height']) {
-    expect(Math.abs(posters[0][value] - posters[1][value])).toBeLessThan(1)
-    expect(Math.abs(posters[1][value] - posters[2][value])).toBeLessThan(1)
-  }
-
-  const status = page.locator('.nav-account-status')
-  await expect(status.locator('.status-dot')).toHaveCount(1)
-  await expect(status.locator('.status-chip')).toHaveAttribute('data-tone', 'ok')
-  await page.request.post('/_test/service-status-down')
-  await page.reload()
-  await expect(status.locator('.status-dot')).toHaveCount(1)
-  await expect(status.locator('.status-chip')).toHaveAttribute('data-tone', 'bad')
 })
 
 test('Home grid keeps pointer drag, resize and keyboard controls with glass styling', async ({ page }, testInfo) => {

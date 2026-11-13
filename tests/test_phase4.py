@@ -178,6 +178,8 @@ def test_grimmory_runner_starts_mariadb_as_root(catalog: ApplicationCatalog):
     assert "--user=root" in script
     assert "command -v java" in script
     assert "--enable-preview" in script
+    assert "--enable-native-access=ALL-UNNAMED" in script
+    assert "--expire-logs-days=0 --binlog-expire-logs-seconds=0" in script
     assert "if ! _mariadb_up" in script
 
 

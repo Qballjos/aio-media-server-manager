@@ -82,4 +82,4 @@ Report vulnerabilities through [GitHub private advisories](https://github.com/Qb
 - Add or update tests when behaviour changes.
 - Squash merge is preferred.
 
-Browser journeys and their real/synthetic boundaries are documented in [verification](docs/testing.md). Run them locally before pushing beta; GitHub Actions does not run these browser journeys.
+Browser journeys and their real/synthetic boundaries are documented in [verification](docs/testing.md). Run affected journeys locally for changes to user flows or browser behavior; a full browser run is not required for every beta push. GitHub Actions does not run these browser journeys.
