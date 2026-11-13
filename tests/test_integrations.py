@@ -302,7 +302,7 @@ def test_sabnzbd_post_install_seeds_ini_and_api_key(tmp_path: Path, monkeypatch)
     assert key
     assert len(key) >= 32
     mode = ini.stat().st_mode & 0o777
-    assert mode == 0o664
+    assert mode == 0o600
 
 
 @patch("requests.Session.post")

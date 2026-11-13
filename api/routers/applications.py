@@ -503,7 +503,6 @@ async def patch_application_settings(
         plugin.apply_listen_port(body.port)
         try:
             from core.cloudflare_api import (
-                CloudflareApiError,
                 api_token_configured,
                 sync_published_app_port,
             )
@@ -522,12 +521,17 @@ async def patch_application_settings(
                             "so the tunnel points at the new port."
                         ),
                     }
-        except CloudflareApiError as exc:
-            logger.warning("Cloudflare port sync for %s failed: %s", name, exc)
-            tunnel_sync = {"ok": False, "detail": str(exc)}
         except Exception as exc:
-            logger.warning("Cloudflare port sync for %s failed: %s", name, exc)
-            tunnel_sync = {"ok": False, "detail": str(exc)}
+            logger.warning(
+                "Cloudflare port sync for %s failed (%s)", name, type(exc).__name__
+            )
+            tunnel_sync = {
+                "ok": False,
+                "detail": (
+                    "Port saved, but the Cloudflare tunnel could not be updated. "
+                    "Check its settings and publish again."
+                ),
+            }
 
     vuetorrent_changed = False
     if body.vuetorrent is not None or body.vuetorrent_update:
@@ -565,10 +569,10 @@ async def patch_application_settings(
             )
             vuetorrent_changed = True
         except Exception as exc:
-            logger.warning("VueTorrent install/apply failed: %s", exc)
+            logger.warning("VueTorrent install/apply failed (%s)", type(exc).__name__)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Could not apply VueTorrent: {exc}",
+                detail="Could not apply VueTorrent. Check its installation and try again.",
             ) from exc
 
     if body.api_key is not None:

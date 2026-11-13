@@ -18,6 +18,7 @@ from core.vpn import VPN_TUNNELED_APPS, VpnIsolationError, vpn_manager
 logger = logging.getLogger(__name__)
 
 _STATE_NAME = "backup_state.json"
+_BACKUP_FAILURE = "Backup operation failed. Check storage access and external backup settings, then retry."
 
 
 class BackupBusyError(RuntimeError):
@@ -76,9 +77,9 @@ class BackupJobs:
                 job["result"] = await work()
                 job["status"] = "done"
             except Exception as exc:
-                logger.exception("Backup %s failed", job["kind"])
+                logger.error("Backup %s failed (%s)", job["kind"], type(exc).__name__)
                 job["status"] = "error"
-                job["error"] = str(exc) or exc.__class__.__name__
+                job["error"] = _BACKUP_FAILURE
                 from core.notifications import notify
                 await asyncio.to_thread(notify, "backups", f"Backup {job['kind']} failed", "Open Settings → Backups for details and retry.", "problem")
             finally:
@@ -114,8 +115,8 @@ class BackupJobs:
                 if external.config().get("enabled"):
                     job["stage"] = "encrypting and verifying external copy"
                     result["external"] = await asyncio.to_thread(external.export, result["name"])
-        except Exception as exc:
-            self._record(kind, ok=False, error=str(exc))
+        except Exception:
+            self._record(kind, ok=False, error=_BACKUP_FAILURE)
             raise
         job["name"] = result["name"]
         self._record(kind, ok=True, name=result["name"], warnings=len(result.get("warnings") or []))
@@ -284,7 +285,7 @@ class BackupJobs:
             "timezone": self.settings.timezone,
             "last_backup_at": state.get("last_backup_at"),
             "last_name": state.get("last_name") or "",
-            "last_error": state.get("last_error") or "",
+            "last_error": _BACKUP_FAILURE if state.get("last_error") else "",
             "last_warnings": state.get("last_warnings") or 0,
         }
 

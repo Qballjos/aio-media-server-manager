@@ -14,6 +14,8 @@ from typing import Any, Optional
 
 import requests
 
+from core.file_io import write_private_text
+
 logger = logging.getLogger(__name__)
 
 _JUNK_SERVER_NAMES = frozenset(
@@ -310,7 +312,7 @@ def strip_junk_servers_ini(path: Path) -> int:
             continue
         out.append(line)
     if removed:
-        path.write_text("".join(out), encoding="utf-8")
+        write_private_text(path, "".join(out))
         logger.info("Stripped %s extra Usenet server block(s) from %s", removed, path)
     return removed
 
@@ -338,6 +340,7 @@ def write_bootstrap_ini(
 
     path = Path(path)
     if path.exists():
+        path.chmod(0o600)
         return path
     key = (api_key or secrets.token_hex(16)).strip()
     lines = [
@@ -413,7 +416,7 @@ def write_bootstrap_ini(
             ]
         )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_private_text(path, "\n".join(lines) + "\n")
     return path
 
 
@@ -506,6 +509,7 @@ def ensure_sabnzbd_public_access(config_dir: Path | None, *, api_key: str | None
     path = Path(config_dir) / "sabnzbd.ini"
     if not path.is_file():
         return False
+    path.chmod(0o600)
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -528,7 +532,7 @@ def ensure_sabnzbd_public_access(config_dir: Path | None, *, api_key: str | None
 
     if changed:
         try:
-            path.write_text(text, encoding="utf-8")
+            write_private_text(path, text)
             logger.info(
                 "Updated SABnzbd public access (inet_exposure=%s, host_whitelist=%s)",
                 exposure,

@@ -32,7 +32,6 @@ COOKIE_ACCESS = "amm_access"
 COOKIE_CSRF = "amm_csrf"
 CSRF_HEADER = "X-CSRF-Token"
 JWT_ALGORITHM = "HS256"
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 JWT_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_BYTES = 72
@@ -44,7 +43,14 @@ _SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 
 def normalize_email(value: str) -> str:
     email = (value or "").strip()
-    if not _EMAIL_RE.match(email):
+    local, separator, domain = email.partition("@")
+    if (
+        not local
+        or not separator
+        or "@" in domain
+        or "." not in domain[1:-1]
+        or any(char.isspace() for char in email)
+    ):
         raise HTTPException(
             status_code=_UNPROCESSABLE,
             detail="A valid email address is required.",

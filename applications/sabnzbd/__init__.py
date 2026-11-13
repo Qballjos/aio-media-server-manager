@@ -213,7 +213,7 @@ class SabnzbdApp(BaseApplication):
             return
         mgr.apply_permissions(ini, self.puid, self.pgid)
         try:
-            os.chmod(ini, 0o664)
+            os.chmod(ini, 0o600)
         except OSError:
             pass
 
