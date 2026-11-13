@@ -580,7 +580,18 @@ class ProcessSupervisor:
                                 entry.state = ProcessState.STOPPED
                                 entry.process = None
                                 continue
-                            raise
+                            entry.state = (
+                                ProcessState.CRASH_LOOP
+                                if entry.restart_attempts >= _RESTART_MAX_ATTEMPTS
+                                else ProcessState.FAILED
+                            )
+                            entry.process = None
+                            entry.exit_code = -1
+                            logger.error(
+                                "Auto-restart failed for '%s' (%s); other apps remain supervised.",
+                                entry.spec.name,
+                                type(exc).__name__,
+                            )
         except asyncio.CancelledError:
             pass
 

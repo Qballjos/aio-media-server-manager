@@ -4,12 +4,13 @@ Beoordeelde basis: branch `beta`, commit `e409be3`.
 
 Dit is een puntenlijst op basis van statische broncodecontrole. De genoemde
 foutpaden zijn niet als live aanval of storing gereproduceerd. Alle punten
-staan open; dit document voert geen oplossingen door. Regelverwijzingen gelden
-voor de beoordeelde commit.
+waren bij die inspectie open. De vinkjes hieronder zijn bijgewerkt op basis van
+de huidige broncode; zij zijn geen verklaring van volledige appliance-acceptatie.
+Regelverwijzingen gelden voor de oorspronkelijke beoordeelde commit.
 
 ## Prioriteit 1 — beveiliging en herstel
 
-- [ ] **Backupbeheer tijdens setup beveiligen.**
+- [x] **Backupbeheer tijdens setup beveiligen.**
   - Bron: `api/routers/backups.py:40–42`, upload/download/restore/delete.
   - Zolang setup vereist is, wordt authenticatie overgeslagen. Dit geldt ook
     wanneer de authenticatieconfiguratie ontbreekt of onleesbaar/corrupt is.
@@ -19,7 +20,7 @@ voor de beoordeelde commit.
   - Acceptatie: zonder bewijs geen backupbeheer vóór setup; na setup alleen
     geauthenticeerde beheerders. Test ook corrupte en ontbrekende authconfiguratie.
 
-- [ ] **Restorepaden valideren vóór elke filesystembewerking.**
+- [x] **Restorepaden valideren vóór elke filesystembewerking.**
   - Bron: `core/backup_manager.py:460–465`.
   - SQLite-bijbestanden worden verwijderd voordat de extractiefilter het
     archiefpad controleert. Traversal of absolute paden kunnen hierdoor buiten
@@ -29,7 +30,7 @@ voor de beoordeelde commit.
   - Acceptatie: kwaadaardige archieven kunnen geen bestanden buiten de
     configuratiemap wijzigen of verwijderen, ook geen SQLite-bijbestanden.
 
-- [ ] **Restart-watcher bestand maken tegen fouten per applicatie.**
+- [x] **Restart-watcher bestand maken tegen fouten per applicatie.**
   - Bron: `core/supervisor.py:562–578`.
   - Andere startfouten dan `VpnIsolationError` beëindigen de gezamenlijke watcher.
   - Aanpak: fouten per proces afhandelen, expliciete foutstatus bewaren en een
@@ -37,7 +38,7 @@ voor de beoordeelde commit.
   - Acceptatie: een ontbrekend executable bij één app verhindert de automatische
     herstart van een andere app niet; VPN-weigeringen blijven veilig afgehandeld.
 
-- [ ] **Vorige installatie behouden wanneer rollback mislukt.**
+- [x] **Vorige installatie behouden wanneer rollback mislukt.**
   - Bron: `core/installer/installer.py:544–568`.
   - De `finally`-opruiming verwijdert de vorige installatie ook als het
     terugplaatsen daarvan mislukt.
@@ -46,9 +47,13 @@ voor de beoordeelde commit.
   - Acceptatie: foutinjectie op activatie én terugplaatsen laat een intacte,
     vindbare herstelkopie achter.
 
+De restart-watcher handelt spawnfouten nu per app af met begrensde retries;
+een andere app behoudt haar bewaking. VPN-weigeringen blijven stoppen zonder
+terugval naar onbeveiligd netwerkverkeer.
+
 ## Prioriteit 2 — betrouwbaarheid en sessiebeveiliging
 
-- [ ] **Synchrone updatechecks van de API-eventloop halen.**
+- [x] **Synchrone updatechecks van de API-eventloop halen.**
   - Bron: `core/update_schedule.py:297,338,357`; netwerkwerk in
     `core/installer/github.py`.
   - Risico: langzame HTTP-aanroepen en retries houden API en bewaking op.
@@ -56,7 +61,7 @@ voor de beoordeelde commit.
   - Acceptatie: API en bewaking blijven responsief bij vertraagde of falende
     updatechecks, inclusief rate limiting.
 
-- [ ] **Gedeeltelijk of mislukt herstel eerlijk rapporteren.**
+- [x] **Gedeeltelijk of mislukt herstel eerlijk rapporteren.**
   - Bron: `core/updater.py:134–155`.
   - Na fouten bij configuratieherstel of herstart wordt toch `rolled_back`
     geretourneerd met de melding dat de vorige versie terugstaat.
@@ -65,7 +70,7 @@ voor de beoordeelde commit.
   - Acceptatie: falend snapshotherstel of falende herstart kan niet als volledig
     geslaagde rollback eindigen. Test met een daemon en post-update healthcheck.
 
-- [ ] **Beheersessies server-side kunnen intrekken.**
+- [x] **Beheersessies server-side kunnen intrekken.**
   - Bron: `core/auth.py:32,178–189,221–225,288–307`;
     `api/routers/auth.py:189–193`.
   - Een reeds buitgemaakt JWT blijft na wachtwoordwijziging en logout geldig
@@ -74,7 +79,7 @@ voor de beoordeelde commit.
   - Acceptatie: beveiligingswijzigingen trekken oude tokens in volgens een
     expliciet beleid; logout maakt de betreffende sessie ongeldig.
 
-- [ ] **Secure-cookies voor HTTPS ondersteunen.**
+- [x] **Secure-cookies voor HTTPS ondersteunen.**
   - Bron: `core/auth.py:233–252`.
   - Cookies worden altijd met `secure=False` gezet. Bij HTTP-verkeer naar
     dezelfde host kan het sessietoken onderschept worden.

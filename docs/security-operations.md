@@ -16,6 +16,14 @@ HTTP installations. Configure `AMM_TRUSTED_PROXIES` with only the actual proxy
 addresses and enforce HTTPS at the proxy. Forwarded headers do not automatically
 change cookie security. Restart the manager after changing these environment settings.
 
+## VPN profile storage
+
+Uploaded and pasted VPN profiles may only be written inside `AMM_CONFIG_DIR/vpn`.
+Absolute paths outside that directory, parent traversal and symlink escapes are
+rejected before filesystem changes. Profiles are replaced atomically using private
+files with mode `0600`. Existing external profiles can still be selected using
+`AMM_VPN_CONFIG` or the Settings path field, but uploads cannot overwrite them.
+
 ## Backup recovery before login
 
 Backup endpoints require administrator authentication, including on a new server.

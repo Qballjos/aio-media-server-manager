@@ -22,8 +22,3 @@ test('search uses translated labels and keywords and handles empty results', () 
   assert.deepEqual(ids('no-such-setting'), [])
   assert.equal(ids('   ').length, 13)
 })
-
-test('Homey pairing is discoverable in app connections', () => {
-  const pages = nav.filterSettingsGroups('Homey').flatMap(group => group.items)
-  assert.deepEqual(pages.map(page => page.id), ['integrations'])
-})

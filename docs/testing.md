@@ -44,7 +44,7 @@ WebKit device emulation does not reproduce physical iPhone memory limits.
 
 `npm run test:webkit` also checks Home's title/filter layout and phone Day default,
 Catalog's collapsible category filters, and the Settings section picker at mobile,
-small-mobile and desktop sizes. These UI checks use Dutch labels and synthetic
+small-mobile and desktop sizes. These UI checks use Dutch and German labels and synthetic
 API responses; they do not exercise real media services.
 
 ## Repeatable desktop and mobile journeys
@@ -59,8 +59,20 @@ npx --no-install playwright install chromium
 npm run test:e2e
 ```
 
-Run these browser journeys locally before pushing to beta. GitHub Actions runs
-the Python tests and frontend unit/build checks, but does not run Playwright.
+Choose verification by risk, rather than running every suite for each edit:
+
+- Run focused unit tests for changed logic. Keep coverage for authentication,
+  data loss, recovery, native dependencies and non-trivial state handling.
+- Run the affected browser journey for interaction or persistence changes, using
+  `npm run test:e2e -- --grep "<flow>"`. Use WebKit for the iPhone poster and mobile
+  navigation regressions. The Chromium suite runs only the application journeys;
+  the independent synthetic layout/poster checks belong to the WebKit suite.
+- Inspect reversible styling and wording changes instead of adding tests for
+  exact CSS, labels, fixed constants or duplicated viewport/language combinations.
+- Use the full suites for broad changes or release acceptance. Stop after the
+  relevant checks pass unless new failures or changes justify another run.
+
+GitHub Actions runs Python tests and frontend unit/build checks, but not Playwright.
 
 The default Python executable is the repository's `.venv/bin/python`. If Poetry
 uses a different environment, set `E2E_PYTHON` to the absolute path returned by
@@ -113,15 +125,6 @@ and traces under `frontend/test-results` and an HTML report under
 `frontend/playwright-report`. These folders are ignored by Git. After a failure,
 use `npx --no-install playwright show-report` or `playwright show-trace` to inspect
 artifacts. Avoid storing real credentials in these test fixtures or reports.
-
-### Header and typography checks
-
-A separate desktop/mobile scenario checks Home, Catalog and Settings at widths
-1440, 1100, 960, 768, 390 and 320 px. It compares the page-link center with the
-entire header center, checks that the header scrolls out of view, and compares
-visible control/code font families with the body font. The layout button is
-absent before login and setup. These are computed-style and geometry checks;
-they do not verify delivery of the Google-hosted Figtree font.
 
 ## Architecture and target acceptance
 

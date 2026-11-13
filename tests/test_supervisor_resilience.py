@@ -189,3 +189,31 @@ async def test_restart_watcher_does_not_bring_qbittorrent_back_off_vpn(
     await asyncio.sleep(1.5)
     assert entry.state == ProcessState.STOPPED
     supervisor.forget("qbittorrent")
+
+
+@pytest.mark.asyncio
+async def test_restart_watcher_isolates_spawn_failure(monkeypatch):
+    from core.supervisor import ProcessEntry, ProcessSpec
+
+    supervisor = ProcessSupervisor.get()
+    broken = ProcessEntry(ProcessSpec('broken', ['missing']), state=ProcessState.FAILED, exit_code=1)
+    healthy = ProcessEntry(ProcessSpec('healthy', ['valid']), state=ProcessState.FAILED, exit_code=1)
+    monkeypatch.setattr(supervisor, '_entries', {'broken': broken, 'healthy': healthy})
+    monkeypatch.setattr(supervisor, '_shutting_down', False)
+    ticks = 0
+    async def tick(_delay):
+        nonlocal ticks
+        ticks += 1
+        if ticks == 2:
+            supervisor._shutting_down = True
+    async def start(entry):
+        if entry is broken:
+            raise OSError('spawn failed')
+        entry.state = ProcessState.RUNNING
+    monkeypatch.setattr('core.supervisor.asyncio.sleep', tick)
+    monkeypatch.setattr(supervisor, '_do_start', start)
+    await supervisor._restart_watcher()
+    assert broken.state == ProcessState.FAILED
+    assert broken.restart_attempts == 1
+    assert broken.next_restart_at > time.monotonic()
+    assert healthy.state == ProcessState.RUNNING

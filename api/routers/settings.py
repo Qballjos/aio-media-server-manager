@@ -275,21 +275,21 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         if proto not in {"wireguard", "openvpn"}:
             raise HTTPException(status_code=422, detail="vpn_protocol must be wireguard or openvpn.")
         settings.vpn_protocol = proto
-    if body.vpn_config_path is not None:
-        requested = body.vpn_config_path.strip()
-        if requested:
-            settings.vpn_config_path = Path(requested).expanduser()
+    requested_vpn_path = body.vpn_config_path.strip() if body.vpn_config_path is not None else ""
     if body.vpn_config_text:
         try:
             dest = save_vpn_config_text(
                 settings,
                 body.vpn_config_text,
                 protocol=settings.vpn_protocol,
-                path=str(settings.vpn_config_path) if settings.vpn_config_path else None,
+                path=requested_vpn_path or (str(settings.vpn_config_path) if settings.vpn_config_path else None),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         notes.append(f"Wrote VPN config to {dest}.")
+    elif requested_vpn_path:
+        # An externally mounted profile may be selected for reading, never uploaded over.
+        settings.vpn_config_path = Path(requested_vpn_path).expanduser()
     if body.trusted_proxies is not None:
         settings.trusted_proxies = body.trusted_proxies.strip()
         notes.append(

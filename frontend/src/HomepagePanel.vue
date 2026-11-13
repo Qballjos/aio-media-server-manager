@@ -1580,7 +1580,6 @@ onUnmounted(() => {
               <span class="home-tile-art">
                 <HomePoster v-if="item.poster" :src="item.poster" class="home-tile-poster" />
                 <span v-else class="home-tile-fallback">{{ item.title.slice(0, 1) }}</span>
-                <span class="home-status-dot" :class="requestStatusDot(item).cls" :title="requestStatusDot(item).label" role="img" :aria-label="requestStatusDot(item).label"></span>
                 <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>

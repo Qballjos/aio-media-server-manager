@@ -23,6 +23,14 @@ en dwing HTTPS op die proxy af. Doorgestuurde headers veranderen de
 cookiebeveiliging niet automatisch. Herstart de manager na het aanpassen van
 deze omgevingsvariabelen.
 
+## VPN-profielen opslaan
+
+Geüploade en geplakte VPN-profielen worden alleen binnen `AMM_CONFIG_DIR/vpn`
+geschreven. Externe paden, `..` en symlinkroutes naar buiten worden vooraf geweigerd.
+Vervanging gebeurt atomisch met een privébestand met rechten `0600`.
+Externe profielen blijven selecteerbaar via `AMM_VPN_CONFIG` of het padveld in
+Instellingen, maar kunnen niet via uploaden worden overschreven.
+
 ## Back-ups herstellen zonder werkend account
 
 Back-upbeheer vereist een beheerderslogin, ook op een nieuwe server. Maak op

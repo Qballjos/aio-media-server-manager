@@ -979,6 +979,10 @@ def test_seerr_media_status_mapping():
     assert seerr_media_status({"mediaInfo": {"status": 7}}) == "deleted"
     assert seerr_media_status({"status": 2}) == "requested"
     assert seerr_media_status({"status": 5}) == "available"
+    assert seerr_media_status({"mediaInfo": {"status": 1, "mediaAddedAt": "2026-10-11T22:17:21Z"}}) == "deleted"
+    assert seerr_media_status({"mediaInfo": {"status": 1, "hasActiveRequest": True}}) == "requested"
+    assert seerr_media_status({"mediaInfo": {"status": 1, "requests": [{"status": 5}]}}) == "requested"
+    assert seerr_media_status({"mediaInfo": {"status": 1}}) == "missing"
 
 
 def test_jellyfin_auth_header_carries_token():

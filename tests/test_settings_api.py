@@ -165,6 +165,21 @@ def test_settings_saves_pasted_vpn_config(tmp_path: Path, monkeypatch):
         headers=headers,
     )
     assert bad.status_code == 422
+    outside = tmp_path / "mounted.conf"
+    outside.write_text("preserve")
+    rejected = client.patch(
+        "/api/settings",
+        json={"vpn_config_path": str(outside), "vpn_config_text": profile},
+        headers=headers,
+    )
+    assert rejected.status_code == 422
+    assert outside.read_text() == "preserve"
+    assert cfg.vpn_config_path == dest
+    selected = client.patch(
+        "/api/settings", json={"vpn_config_path": str(outside)}, headers=headers,
+    )
+    assert selected.status_code == 200
+    assert cfg.vpn_config_path == outside
 
 
 def test_settings_vpn_switch_starts_and_stops(tmp_path: Path, monkeypatch):
