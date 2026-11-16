@@ -1,12 +1,16 @@
 version: 2
+# Version updates go through beta before a stable release.
+# GitHub security-update PRs always target the repository's default branch.
 updates:
   - package-ecosystem: pip
+    target-branch: beta
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
 
   - package-ecosystem: npm
+    target-branch: beta
     directory: /frontend
     schedule:
       interval: weekly
@@ -17,6 +21,7 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
+    target-branch: beta
     directory: /
     schedule:
       interval: weekly
@@ -27,6 +32,7 @@ updates:
           - "github/codeql-action*"
 
   - package-ecosystem: docker
+    target-branch: beta
     directory: /
     schedule:
       interval: weekly
