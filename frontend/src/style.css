@@ -32,6 +32,11 @@
   --radius-control: 999px;
   --radius-inset: 14px;
   --btn-h: 2.5rem;
+  --button-glass-reflection: linear-gradient(155deg, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0.07) 38%, transparent 65%);
+  --button-glass-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 rgb(0 0 0 / 0.16), 0 5px 12px -6px rgb(0 0 0 / calc(0.5 * var(--glass-depth)));
+  --button-accent-bg: color-mix(in srgb, var(--color-primary) 10%, var(--control-bg));
+  --button-accent-hover: color-mix(in srgb, var(--color-primary) 16%, var(--control-bg));
+  --button-accent-border: color-mix(in srgb, var(--color-primary) 40%, var(--border-subtle));
   /* One type scale for every screen. Sizes are rem so they follow the fluid root below. */
   --text-kicker: 0.75rem;
   --text-body: 0.9375rem;
@@ -898,7 +903,7 @@ select.ui-input {
   font-weight: 600;
 }
 
-/* Buttons — one shape for the whole app: a glass pill, --btn-h high, 700 weight. The primary one is the accent;
+/* Buttons — one shape for the whole app: a glass pill, --btn-h high, 700 weight. Primary actions use a subtle accent tint and rim;
    round icon buttons are the same pill squeezed to a circle. Text colour (not shape) hints at start/stop/open.
    Labels wrap inside the pill when a translation is longer than the row, so the words stay inside the border. */
 .ui-btn,
@@ -920,9 +925,11 @@ select.ui-input {
   padding: 0.35rem 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  background: var(--pill-bg);
+  background: var(--button-glass-reflection), var(--pill-bg);
   color: var(--text-main);
-  box-shadow: none;
+  box-shadow: var(--button-glass-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
   font-family: inherit;
   font-size: var(--btn-font);
   font-weight: 700;
@@ -950,7 +957,7 @@ select.ui-input {
 .theme-option:hover:not(:disabled),
 .settings-nav-btn:hover,
 .catalog-chip:hover {
-  background: var(--pill-active);
+  background: var(--button-glass-reflection), var(--pill-active);
   color: var(--text-heading);
   border-color: var(--border-strong);
 }
@@ -961,35 +968,28 @@ select.ui-input {
 .settings-nav-btn.active,
 .catalog-chip.active,
 .btn-more.open {
-  background: var(--pill-active);
+  background: var(--button-glass-reflection), var(--pill-active);
   color: var(--text-heading);
   border-color: rgba(var(--color-primary-rgb), 0.55);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 2px 8px rgb(0 0 0 / 0.08);
+  box-shadow: var(--button-glass-shadow);
 }
 
 .ui-btn-primary,
 .wizard-btn-main,
 .btn-primary,
 .btn-install {
-  background: var(--color-primary-button);
-  border-color: transparent;
-  color: var(--color-primary-contrast);
-  /* Soft glow in the button's own colour. The raw accent is brighter than the fill, so it read as a hard smear. */
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.45),
-    0 6px 14px -6px color-mix(in srgb, var(--color-primary-button) 75%, transparent);
+  background: var(--button-glass-reflection), var(--button-accent-bg);
+  border-color: var(--button-accent-border);
+  color: var(--text-main);
 }
 
 .ui-btn-primary:hover:not(:disabled),
 .wizard-btn-main:hover:not(:disabled),
 .btn-primary:hover:not(:disabled),
 .btn-install:hover:not(:disabled) {
-  background: var(--color-primary-button-hover);
-  border-color: transparent;
-  color: var(--color-primary-contrast);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.45),
-    0 8px 16px -6px color-mix(in srgb, var(--color-primary-button) 85%, transparent);
+  background: var(--button-glass-reflection), var(--button-accent-hover);
+  border-color: var(--button-accent-border);
+  color: var(--text-heading);
   transform: translateY(-1px);
 }
 

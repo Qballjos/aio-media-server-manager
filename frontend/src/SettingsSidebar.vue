@@ -2,7 +2,8 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { filterSettingsGroups, SETTINGS_GROUPS } from './settingsNavigation.js'
+import UiSelect from './UiSelect.vue'
+import { filterSettingsGroups, SETTINGS_PAGES } from './settingsNavigation.js'
 defineProps({ section: { type: String, required: true } })
 const { t } = useI18n()
 const router = useRouter()
@@ -19,6 +20,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => headerObserver?.disconnect())
 const groups = computed(() => filterSettingsGroups(query.value, t))
+const sectionOptions = computed(() => SETTINGS_PAGES.map(item => ({ value: item.id, label: t(item.label) })))
 const paths = {
   user: 'M20 21v-2a7 7 0 0 0-14 0v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   palette: 'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7 1.5 1.5 0 0 1 1-2.8h2a4 4 0 0 0 4-4A9 9 0 0 0 12 3M7 10h.01M10 6h.01M15 6h.01M18 10h.01',
@@ -40,11 +42,13 @@ const paths = {
   <aside class="settings-sidebar" :style="{ '--settings-header-height': `${headerHeight}px` }">
     <label class="settings-mobile-picker" for="settings-section-select">
         <span>{{ $t('Choose a settings section') }}</span>
-        <select id="settings-section-select" class="ui-input settings-mobile-select" :value="section" @change="router.push({ name: 'settings', params: { section: $event.target.value } })">
-          <optgroup v-for="group in SETTINGS_GROUPS" :key="group.label" :label="$t(group.label)">
-            <option v-for="item in group.items" :key="item.id" :value="item.id">{{ $t(item.label) }}</option>
-          </optgroup>
-        </select>
+        <UiSelect
+          id="settings-section-select"
+          :model-value="section"
+          :options="sectionOptions"
+          :aria-label="$t('Choose a settings section')"
+          @update:model-value="router.push({ name: 'settings', params: { section: $event } })"
+        />
     </label>
     <div id="settings-navigation" class="settings-navigation">
       <h2 class="settings-sidebar-title">{{ $t('Settings') }}</h2>
@@ -87,7 +91,6 @@ const paths = {
 @media (max-width: 760px) {
   .settings-sidebar { padding:.875rem 1rem; border-right:0; border-bottom:1px solid var(--border-subtle); border-radius:var(--radius-glass) var(--radius-glass) 0 0; }
   .settings-mobile-picker { display:grid; gap:.5rem; color:var(--text-muted); font-size:var(--text-kicker); }
-  .settings-mobile-select { appearance:auto; min-height:44px; width:100%; border-color:var(--border-strong); border-radius:var(--radius-inset); color:var(--text-heading); }
   .settings-sidebar-title { display:none; }
   .settings-navigation { position:static; display:none; max-height:min(55dvh,28rem); margin-top:.75rem; padding: .75rem .15rem .15rem; border-top:1px solid var(--border-subtle); }
   .settings-sidebar-link, .settings-search { min-height:2.75rem; }

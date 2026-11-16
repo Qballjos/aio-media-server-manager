@@ -76,11 +76,19 @@ test('Home, Catalog and Settings controls fit their screen size', async ({ page 
   }
 
   await page.goto('/#/settings/account')
-  const settingsPicker = page.locator('.settings-mobile-select')
+  const settingsPicker = page.locator('#settings-section-select')
   if (mobile) {
-    await expect(settingsPicker).toHaveValue('account')
+    await expect(settingsPicker).toContainText(tr('Profile'))
     await page.screenshot({ path: testInfo.outputPath('settings.png'), animations: 'disabled' })
-    await settingsPicker.selectOption('visuals')
+    await settingsPicker.click()
+    await expect(page.getByRole('listbox')).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('settings-picker.png'), animations: 'disabled' })
+    await settingsPicker.press('Escape')
+    await expect(page.getByRole('listbox')).toBeHidden()
+    await expect(settingsPicker).toBeFocused()
+    await settingsPicker.press('Enter')
+    await settingsPicker.press('ArrowDown')
+    await settingsPicker.press('Enter')
     await expect(page).toHaveURL(/settings\/visuals/)
     await expect(page.locator('#settings-navigation')).toBeHidden()
     await page.getByRole('heading', { name: tr('Display size'), exact: true }).waitFor()

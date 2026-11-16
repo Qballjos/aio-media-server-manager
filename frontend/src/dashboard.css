@@ -103,8 +103,8 @@
 }
 
 .nav-tabs .metric-pill.nav-edit-btn.is-active {
-  background: var(--color-primary-button, var(--color-primary));
-  color: var(--color-primary-contrast);
+  background: var(--button-accent-bg);
+  color: var(--color-primary-text);
 }
 
 .nav-tabs .metric-pill.is-active {
