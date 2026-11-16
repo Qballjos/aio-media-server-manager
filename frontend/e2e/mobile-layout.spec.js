@@ -100,3 +100,25 @@ test('Home, Catalog and Settings controls fit their screen size', async ({ page 
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
+
+test('Catalog installation history stays inside its dialog', async ({ page }, testInfo) => {
+  await page.route('**/api/catalog/install-jobs', route => route.fulfill({ json: { jobs: [{
+    name: 'cleanup', status: 'installing', message: 'Downloading',
+    history: Array.from({ length: 200 }, (_, i) => ({ at: 1700000000 + i, message: `Downloading ${i}: ${'long-download-path/'.repeat(12)}` })),
+  }] } }))
+  await page.goto('/#/catalog')
+  await page.locator('button').filter({ hasText: TABLE['Installation activity'][0] }).click()
+  const dialog = page.locator('.activity-dialog')
+  const body = dialog.locator('.activity-body')
+  await expect(dialog).toBeVisible()
+  expect(await body.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true)
+  await body.evaluate(el => { el.scrollTop = el.scrollHeight })
+  const bounds = await dialog.boundingBox()
+  expect(bounds.y).toBeGreaterThanOrEqual(0)
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(page.viewportSize().height)
+  expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  await expect(dialog.locator('.share-row button')).toBeInViewport()
+  await page.screenshot({ path: testInfo.outputPath('installation-history.png'), animations: 'disabled' })
+  await dialog.locator('.share-row button').click()
+  await expect(dialog).toBeHidden()
+})
