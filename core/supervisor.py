@@ -335,6 +335,9 @@ class ProcessSupervisor:
                 cleanup_stale_plex_pid(Path(support_dir))
 
         try:
+            from core.process_identity import prepare_process_identity
+
+            spawn_options = await asyncio.to_thread(prepare_process_identity, spec.name, process_env)
             proc = await asyncio.create_subprocess_exec(
                 *spec.cmd,
                 cwd=str(spec.cwd) if spec.cwd else None,
@@ -342,6 +345,7 @@ class ProcessSupervisor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 start_new_session=True,
+                **spawn_options,
             )
         except FileNotFoundError as exc:
             logger.error("Cannot start '%s': executable not found — %s", spec.name, exc)
@@ -353,6 +357,10 @@ class ProcessSupervisor:
             entry.state = ProcessState.FAILED
             entry.exit_code = -1
             raise RuntimeError(f"Cannot start '{spec.name}': {exc}") from exc
+        except RuntimeError:
+            entry.state = ProcessState.FAILED
+            entry.exit_code = -1
+            raise
 
         entry.process = proc
         entry.state = ProcessState.RUNNING

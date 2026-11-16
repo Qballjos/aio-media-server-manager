@@ -685,7 +685,13 @@ class VpnManager:
             raise VpnIsolationError(
                 "iproute2 (`ip`) is required for OpenVPN network-namespace isolation."
             )
-        return ["ip", "netns", "exec", TORRENT_NETNS, *cmd]
+        if shutil.which("setpriv") is None:
+            raise VpnIsolationError("setpriv (util-linux) is required to run VPN applications as PUID/PGID.")
+        return [
+            "ip", "netns", "exec", TORRENT_NETNS,
+            "setpriv", f"--reuid={self.settings.puid}", f"--regid={self.settings.pgid}",
+            "--clear-groups", "--", *cmd,
+        ]
 
     def _wrap_tunneled_resolv(self, cmd: list[str]) -> list[str]:
         """Show VPN apps a resolver of their own. Everyone else keeps the container file.
@@ -956,7 +962,9 @@ class VpnManager:
         if not exe:
             return self._fail("openvpn is not installed on this host.")
         inner = [exe, "--config", str(self.config_path), "--daemon"]
-        cmd = self.wrap_isolated_command(inner) if self._is_linux() else inner
+        # The tunnel daemon needs NET_ADMIN; only catalog applications drop to
+        # PUID/PGID after entering this namespace.
+        cmd = ["ip", "netns", "exec", TORRENT_NETNS, *inner] if self._is_linux() else inner
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60)
             self._active_wg_conf = None

@@ -168,19 +168,64 @@ def test_version_compare():
     assert _is_newer("v2.0.0", "1.9.9")
 
 
-def test_grimmory_runner_starts_mariadb_as_root(catalog: ApplicationCatalog):
+def test_grimmory_runner_uses_supervised_identity(catalog: ApplicationCatalog):
     app = catalog.get("grimmory")
     app.install_dir.mkdir(parents=True, exist_ok=True)
     app.data_dir.mkdir(parents=True, exist_ok=True)
     (app.install_dir / "grimmory.jar").write_bytes(b"jar")
     app.post_install()
     script = (app.install_dir / "run-grimmory").read_text(encoding="utf-8")
-    assert "--user=root" in script
     assert "command -v java" in script
     assert "--enable-preview" in script
     assert "--enable-native-access=ALL-UNNAMED" in script
     assert "--expire-logs-days=0 --binlog-expire-logs-seconds=0" in script
     assert "if ! _mariadb_up" in script
+
+
+def test_grimmory_bootstrap_uses_sql_root_without_running_daemon_as_root(catalog, tmp_path, monkeypatch):
+    import os
+    import subprocess
+
+    app = catalog.get("grimmory")
+    app.install_dir.mkdir(parents=True)
+    (app.data_dir / "mysql" / "mysql").mkdir(parents=True)
+    (app.install_dir / "grimmory.jar").write_bytes(b"jar")
+    app.post_install()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    started = tmp_path / "db-started"
+    bootstrapped = tmp_path / "db-bootstrapped"
+    commands = {
+        "mariadbd": f'case " $* " in *" --user=root "*) exit 1;; esac\ntouch "{started}"',
+        "mariadb-admin": f'[ "$1" = "--user=root" ] && test -f "{started}"',
+        "mysqladmin": "exit 1",
+        "mariadb": f'[ "$1" = "--user=root" ] && touch "{bootstrapped}"',
+        "java": f'test -f "{started}" && test -f "{bootstrapped}"',
+    }
+    for name, content in commands.items():
+        target = bin_dir / name
+        target.write_text("#!/bin/sh\n" + content + "\n")
+        target.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    result = subprocess.run([str(app.install_dir / "run-grimmory")], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
+    assert bootstrapped.is_file()
+
+
+def test_neutarr_retains_legacy_state_in_its_owned_directory(catalog):
+    app = catalog.get("neutarr")
+    legacy = app.config_dir.parent / "stateful" / "sonarr"
+    legacy.mkdir(parents=True)
+    (legacy / "processed.json").write_text('{"id": 42}')
+    env = app.extra_env()
+    stateful = Path(env["STATEFUL_DIR"])
+    assert stateful == app.config_dir / "stateful"
+    copied = stateful / "sonarr" / "processed.json"
+    assert copied.read_text() == '{"id": 42}'
+    copied.write_text('{"id": 43}')
+    app.extra_env()
+    assert copied.read_text() == '{"id": 43}'
+    assert (legacy / "processed.json").read_text() == '{"id": 42}'
 
 
 def test_grimmory_bookdrop_matches_shelfmark_ingest(tmp_path: Path, monkeypatch):

@@ -561,10 +561,12 @@ def test_vpn_wraps_openvpn_with_netns(tmp_path: Path, monkeypatch):
     )
     mgr = VpnManager(cfg)
     monkeypatch.setattr(mgr, "_is_linux", lambda: True)
-    monkeypatch.setattr("core.vpn.shutil.which", lambda name: "/sbin/ip" if name == "ip" else None)
+    monkeypatch.setattr("core.vpn.shutil.which", lambda name: f"/usr/bin/{name}")
     wrapped = mgr.wrap_isolated_command(["Prowlarr", "-nobrowser"])
     assert wrapped[:4] == ["ip", "netns", "exec", TORRENT_NETNS]
-    assert wrapped[-1] == "-nobrowser"
+    assert wrapped[4:] == [
+        "setpriv", "--reuid=1000", "--regid=1000", "--clear-groups", "--", "Prowlarr", "-nobrowser",
+    ]
 
 
 def test_vpn_kill_switch_blocks_tunneled_apps_when_vpn_is_on(tmp_path: Path, monkeypatch):
