@@ -45,6 +45,22 @@ def test_internal_services_keep_manager_privileges(identity_context):
     assert env == {"HOME": "/root"}
 
 
+def test_unprivileged_manager_can_launch_with_its_configured_identity(identity_context, monkeypatch):
+    module, _ = identity_context
+    monkeypatch.setattr(module.os, "geteuid", lambda: 99)
+    monkeypatch.setattr(module.os, "getegid", lambda: 100)
+    assert module.prepare_process_identity("sonarr", {}) == {"umask": 0o002}
+
+
+@pytest.mark.parametrize("uid,gid", [(1001, 100), (99, 1001)])
+def test_unprivileged_manager_rejects_mismatched_identity(identity_context, monkeypatch, uid, gid):
+    module, _ = identity_context
+    monkeypatch.setattr(module.os, "geteuid", lambda: uid)
+    monkeypatch.setattr(module.os, "getegid", lambda: gid)
+    with pytest.raises(RuntimeError, match="PUID=99/PGID=100"):
+        module.prepare_process_identity("sonarr", {})
+
+
 def test_wireguard_wrapper_retains_privilege_to_enter_its_mount_namespace(identity_context, monkeypatch):
     from core.vpn import vpn_manager
 

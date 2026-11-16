@@ -170,6 +170,9 @@ async def test_restart_watcher_does_not_bring_qbittorrent_back_off_vpn(
 ):
     from core.vpn import VpnIsolationError
 
+    # Keep the dummy process on the test runner's UID; identity has separate coverage.
+    monkeypatch.setattr("core.process_identity.prepare_process_identity", lambda _name, _env: {})
+
     supervisor = ProcessSupervisor.get()
     await supervisor.start(
         name="qbittorrent",

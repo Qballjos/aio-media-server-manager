@@ -231,9 +231,12 @@ def test_plex_live_pid_with_unknown_executable_is_preserved(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_plex_supervisor_cleans_pid_on_every_start(tmp_path):
+async def test_plex_supervisor_cleans_pid_on_every_start(tmp_path, monkeypatch):
     import sys
     from core.supervisor import ProcessSupervisor, RestartPolicy
+
+    # This dummy Python process tests PID cleanup, not a catalog app's OS identity.
+    monkeypatch.setattr("core.process_identity.prepare_process_identity", lambda _name, _env: {})
 
     support = tmp_path / "Plex Media Server"
     support.mkdir()
