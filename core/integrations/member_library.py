@@ -141,10 +141,10 @@ def poster_for_member(provider: str, server_id: str, account_id: str, token: str
         raise missing from exc
 
 
-def member_availability(
+def member_inventory(
     provider: str, server_id: str, account_id: str, token: str, titles: dict[tuple[str, int], str],
-) -> dict[tuple[str, int], set[int]]:
-    """Return movie matches and series seasons with accessible episodes."""
+) -> dict[tuple[str, int], dict[int, set[int]]]:
+    """Return movie matches and accessible episode numbers per series season."""
     if not titles:
         return {}
     base = f"http://127.0.0.1:{ApplicationCatalog().get(provider).port}"
@@ -184,32 +184,38 @@ def member_availability(
             )
         return rows
 
-    def season_numbers(show: dict) -> set[int]:
+    def episode_numbers(show: dict) -> dict[int, set[int]]:
         if sections is None:
             item_id = str(show.get("Id") or "")
             if not re.fullmatch(r"[0-9a-fA-F]{32}|[0-9a-fA-F-]{36}", item_id):
-                return set()
+                return {}
             episodes = _get(
                 base, "/Items", headers, UserId=account_id, ParentId=item_id, Recursive="true",
                 IncludeItemTypes="Episode", IsMissing="false", Limit=2000,
             ).json()["Items"]
             numbers = (
-                row.get("ParentIndexNumber") for row in episodes
+                (row.get("ParentIndexNumber"), row.get("IndexNumber")) for row in episodes
                 if row.get("Type") == "Episode" and row.get("LocationType") != "Virtual"
             )
         else:
             item_id = str(show.get("ratingKey") or "")
             if not re.fullmatch(r"[0-9]{1,20}", item_id):
-                return set()
+                return {}
             episodes = _get(
                 base, f"/library/metadata/{item_id}/allLeaves", headers,
                 **{"X-Plex-Container-Start": 0, "X-Plex-Container-Size": 2000},
             ).json()["MediaContainer"].get("Metadata", [])
             numbers = (
-                row.get("parentIndex") for row in episodes
+                (row.get("parentIndex"), row.get("index")) for row in episodes
                 if row.get("type") == "episode" and str(row.get("grandparentRatingKey")) == item_id
             )
-        return {number for number in numbers if type(number) is int and number >= 0}
+        seasons: dict[int, set[int]] = {}
+        for season, episode in numbers:
+            if type(season) is int and season >= 0:
+                visible = seasons.setdefault(season, set())
+                if type(episode) is int and episode > 0:
+                    visible.add(episode)
+        return seasons
 
     def match(entry):
         key, title = entry
@@ -217,8 +223,11 @@ def member_availability(
         try:
             rows = matches(kind, media_id, title)
             if kind == "movie":
-                return key, set() if rows else None
-            seasons = set().union(*(season_numbers(row) for row in rows))
+                return key, {} if rows else None
+            seasons: dict[int, set[int]] = {}
+            for row in rows:
+                for season, numbers in episode_numbers(row).items():
+                    seasons.setdefault(season, set()).update(numbers)
             return key, seasons or None
         except failures:
             return key, None

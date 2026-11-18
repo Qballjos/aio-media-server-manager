@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
+import { youtubeIdFromUrl } from './trailer.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
@@ -9,6 +10,7 @@ import { BP_ORDER, BREAKPOINTS, GRID_IDS, WIDGETS, collapseEmptyRows, dockHidden
 import UiSelect from './UiSelect.vue'
 import { useHomeCalendar } from './composables/useHomeCalendar.js'
 import HomeEditBar from './HomeEditBar.vue'
+import HomeGreeting from './HomeGreeting.vue'
 import HomeGrid from './HomeGrid.vue'
 import HomePoster from './HomePoster.vue'
 import HomeGridSheet from './HomeGridSheet.vue'
@@ -416,13 +418,6 @@ function onArrangeKey(event) {
   if (editing.value && !sheet.value) editing.value = false
 }
 
-const todayLabel = computed(() => new Date().toLocaleDateString(i18nLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))
-const greeting = computed(() => {
-  const hour = new Date().getHours()
-  const part = t(hour < 6 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening')
-  const who = props.firstName.trim() || props.username
-  return who ? `${part}, ${who}.` : `${part}.`
-})
 /** One line under the greeting: what is moving and what needs a look. */
 const heroSummary = computed(() => {
   const parts = []
@@ -986,28 +981,6 @@ function closeTrailer() {
   trailerPlayer.value = null
 }
 
-/** Pull a YouTube id from a watch/share/embed URL so the Trailer button can open an in-app player. */
-function youtubeIdFromUrl(url) {
-  const raw = String(url || '').trim()
-  if (!raw) return ''
-  try {
-    const parsed = new URL(raw)
-    const host = parsed.hostname.replace(/^www\./, '').toLowerCase()
-    let ident = ''
-    if (host === 'youtu.be') {
-      ident = parsed.pathname.replace(/^\/+/, '').split('/')[0] || ''
-    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
-      ident = parsed.searchParams.get('v') || ''
-      if (!ident && parsed.pathname.startsWith('/embed/')) {
-        ident = parsed.pathname.split('/').filter(Boolean)[1] || ''
-      }
-    }
-    return /^[A-Za-z0-9_-]{6,32}$/.test(ident) ? ident : ''
-  } catch {
-    return ''
-  }
-}
-
 function openTrailer(item) {
   const ident = youtubeIdFromUrl(item?.trailer || trendingDetail.value?.data?.trailer)
   if (!ident) return
@@ -1485,11 +1458,7 @@ onUnmounted(() => {
         @open="openWidget"
       >
       <template #greeting>
-      <section class="home-hero">
-        <span class="home-hero-date">{{ todayLabel }}</span>
-        <h2 class="home-hero-title">{{ greeting }}</h2>
-        <p class="home-hero-sub">{{ heroSummary }}</p>
-      </section>
+        <HomeGreeting :name="firstName.trim() || username" :summary="heroSummary" />
       </template>
 
       <template #searchbar>

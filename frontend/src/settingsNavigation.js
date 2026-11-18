@@ -29,6 +29,17 @@ export const SETTINGS_GROUPS = [
 export const SETTINGS_PAGES = SETTINGS_GROUPS.flatMap(group => group.items)
 export const SETTINGS_SECTIONS = SETTINGS_PAGES.map(item => item.id)
 export const SETTINGS_NAV = SETTINGS_PAGES.map(item => [item.id, item.label])
+export const MEMBER_SETTINGS_GROUPS = SETTINGS_GROUPS.map(group => ({
+  ...group,
+  items: group.items.filter(item => ['account', 'visuals', 'homepage', 'support'].includes(item.id)).map(item => {
+    if (item.id === 'account') return { ...item, description: 'View your linked media account.' }
+    if (item.id === 'support') return { ...item, description: 'Report problems and follow replies.' }
+    if (item.id === 'homepage') return { ...item, description: 'Arrange the widgets on your start page.' }
+    return item
+  }),
+})).filter(group => group.items.length)
+export const MEMBER_SETTINGS_PAGES = MEMBER_SETTINGS_GROUPS.flatMap(group => group.items)
+
 export const SETTINGS_ALIASES = {
   general: 'system', storage: 'system', permissions: 'system', github: 'updates',
   network: 'vpn', debug: 'diagnostics', theming: 'visuals', appearance: 'visuals', branding: 'visuals',
@@ -38,9 +49,9 @@ export function resolveSettingsSection(section) {
   if (SETTINGS_SECTIONS.includes(value)) return value
   return Object.hasOwn(SETTINGS_ALIASES, value) ? SETTINGS_ALIASES[value] : 'account'
 }
-export function filterSettingsGroups(query, translate = value => value) {
+export function filterSettingsGroups(query, translate = value => value, groups = SETTINGS_GROUPS) {
   const terms = String(query || '').trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
-  return SETTINGS_GROUPS.map(group => ({
+  return groups.map(group => ({
     ...group,
     items: group.items.filter(item => {
       const text = [translate(group.label), translate(item.label), translate(item.description), item.keywords].join(' ').toLocaleLowerCase()

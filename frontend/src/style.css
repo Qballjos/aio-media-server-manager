@@ -187,6 +187,12 @@
   padding: 0;
 }
 
+dialog:modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+}
+
 button, input, select, textarea, code, pre, kbd, samp {
   font-family: inherit;
 }

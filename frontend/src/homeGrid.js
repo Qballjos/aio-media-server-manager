@@ -100,8 +100,8 @@ export function resolve(layout, id, rect, cols, origin = null) {
 }
 
 /** Keep a widget within its own minimum and maximum and inside the columns. */
-export function fitItem(item, cols) {
-  const spec = WIDGETS[item.id]
+export function fitItem(item, cols, specs = WIDGETS) {
+  const spec = specs[item.id]
   const [minW, minH] = spec ? spec.min : [1, 1]
   const [maxW, maxH] = spec ? spec.max : [cols, 12]
   const w = clamp(item.w, Math.min(minW, cols), Math.min(maxW, cols))
@@ -110,7 +110,7 @@ export function fitItem(item, cols) {
 }
 
 /** Saved data made safe: known widgets once each (the old greeting-and-search as two), whole numbers, inside the grid, nothing on top of anything else. */
-export function normalizeLayout(list, bp) {
+export function normalizeLayout(list, bp, specs = WIDGETS) {
   const cols = BREAKPOINTS[bp].cols
   const seen = new Set()
   const items = []
@@ -118,11 +118,11 @@ export function normalizeLayout(list, bp) {
     raw?.id === 'search' ? splitSearch({ x: Number(raw.x), y: Number(raw.y), w: Number(raw.w), h: Number(raw.h) }) : [raw],
   )
   for (const raw of saved) {
-    if (!raw || !WIDGETS[raw.id] || seen.has(raw.id)) continue
+    if (!raw || !Object.hasOwn(specs, raw.id) || seen.has(raw.id)) continue
     const [x, y, w, h] = ['x', 'y', 'w', 'h'].map((key) => Math.round(Number(raw[key])))
     if (![x, y, w, h].every(Number.isFinite)) continue
     seen.add(raw.id)
-    items.push(fitItem({ id: raw.id, x, y, w, h }, cols))
+    items.push(fitItem({ id: raw.id, x, y, w, h }, cols, specs))
   }
   items.sort((a, b) => a.y - b.y || a.x - b.x)
   const placed = []

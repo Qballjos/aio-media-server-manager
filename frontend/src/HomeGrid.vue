@@ -5,10 +5,11 @@
  * resizes it and the keyboard does both. The parent saves what `change` hands it.
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { BREAKPOINTS, GRID_IDS, WIDGETS, resolve } from './homeGrid.js'
+import { BREAKPOINTS, WIDGETS, resolve } from './homeGrid.js'
 import { displayScale } from './displaySize.js'
 
 const props = defineProps({
+  widgetSpecs: { type: Object, default: () => WIDGETS },
   layout: { type: Array, required: true },
   bp: { type: String, required: true },
   editing: { type: Boolean, default: false },
@@ -40,14 +41,16 @@ const MAX_ROW = 104
 const rowCell = computed(() => Math.min(cell.value, MAX_ROW) * displayScale.value)
 const rowPitch = computed(() => rowCell.value + gap.value)
 // Render in a fixed order: a node Vue moves loses its running transition and keyboard focus.
-const shown = computed(() => [...(live.value || props.layout)].sort((a, b) => GRID_IDS.indexOf(a.id) - GRID_IDS.indexOf(b.id)))
+const widgetIds = computed(() => Object.keys(props.widgetSpecs))
+const shown = computed(() => [...(live.value || props.layout)].sort((a, b) =>
+  widgetIds.value.indexOf(a.id) - widgetIds.value.indexOf(b.id)))
 const rowCount = computed(() => shown.value.reduce((most, item) => Math.max(most, item.y + item.h), 0) + (props.editing ? 3 : 0))
 const height = computed(() => (rowCount.value ? rowCount.value * rowPitch.value - gap.value : 0))
 
 const span = (n) => n * cell.value + (n - 1) * gap.value
 const spanRows = (n) => n * rowCell.value + (n - 1) * gap.value
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value))
-const label = (id) => WIDGETS[id]?.label || id
+const label = (id) => props.widgetSpecs[id]?.label || id
 
 function box(item) {
   return { x: item.x * pitch.value, y: item.y * rowPitch.value, w: span(item.w), h: spanRows(item.h) }
@@ -174,7 +177,7 @@ function beginResize() {
 }
 
 function limits(id, x) {
-  const spec = WIDGETS[id]
+  const spec = props.widgetSpecs[id]
   const room = cols.value - x
   return {
     minW: Math.min(spec?.min[0] || 1, room),

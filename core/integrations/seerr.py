@@ -275,12 +275,39 @@ class SeerrClient:
         if not isinstance(result, dict) or result.get("id") != request_id or result.get("status") != expected:
             raise HTTPException(502, "Seerr did not confirm the decision.")
 
+    def trending_request_coverage(self, titles: set[tuple[str, int]]) -> dict[tuple[str, int], set[int]]:
+        """Match pending and approved requests without returning request identities."""
+        covered: dict[tuple[str, int], set[int]] = {}
+        skip = 0
+        while True:
+            payload = self._media_users_api(f"/request?take=100&skip={skip}&filter=all")
+            rows = payload["results"]
+            for row in rows:
+                if row.get("status") not in (1, 2):
+                    continue
+                media = row.get("media") or {}
+                key = (row.get("type") or media.get("mediaType"), media.get("tmdbId"))
+                if key not in titles:
+                    continue
+                seasons = covered.setdefault(key, set())
+                seasons.update(
+                    season["seasonNumber"] for season in (row.get("seasons") or [])
+                    if isinstance(season, dict) and type(season.get("seasonNumber")) is int and season["seasonNumber"] >= 0
+                )
+            skip += len(rows)
+            if not rows or skip >= payload["pageInfo"]["results"]:
+                return covered
+
     def request_seasons(self, media_id: int) -> list[int]:
+        return sorted(self.request_season_counts(media_id))
+
+    def request_season_counts(self, media_id: int) -> dict[int, int | None]:
         details = self._media_users_api(f"/tv/{media_id}")
-        return sorted({
-            season["seasonNumber"] for season in details.get("seasons", [])
+        return {
+            season["seasonNumber"]: season.get("episodeCount")
+            for season in details.get("seasons", [])
             if isinstance(season, dict) and type(season.get("seasonNumber")) is int and season["seasonNumber"] >= 0
-        })
+        }
 
     def submit_member_request(self, user_id: int, payload: dict) -> int:
         actor = self._media_users_api("/auth/me", as_user=user_id)

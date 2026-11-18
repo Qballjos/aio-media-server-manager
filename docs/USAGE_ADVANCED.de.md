@@ -191,6 +191,10 @@ Medienkonten können über **Suche** und **Trending** Filme und Staffeln anfrage
 
 **Neu verfügbar** und die Verfügbarkeitsanzeigen berücksichtigen die Bibliotheksrechte des angemeldeten Kontos. Eine genehmigte Serienanfrage wird als verfügbar angezeigt, sobald jede angefragte Staffel mindestens eine zugängliche Folge enthält. Benutzer mit einer älteren AIO-Sitzung müssen sich erneut anmelden.
 
+**Trending** blendet Filme und Serien aus, die das Konto bereits vollständig ansehen kann. Offene und genehmigte Anfragen aller Konten werden berücksichtigt. Über das Poster kannst du fehlende oder unvollständige Staffeln anfragen, für die noch keine Anfrage vorliegt.
+
+**Kalender** zeigt Veröffentlichungen, die das angemeldete Konto in Jellyfin oder Plex sehen darf. Kommende Veröffentlichungen aus Sonarr und Radarr erscheinen, wenn AIO den Zielordner einer freigegebenen Bibliothek zuordnen kann und keine zusätzlichen Inhaltsfilter gelten.
+
 Benutzer können über die Titeldetails oder **Einstellungen → Support** ein Problem melden. Administratoren sehen die Meldungen im Support-Posteingang und können antworten und den Status ändern.
 
 ### App-Verbindungen

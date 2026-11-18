@@ -191,7 +191,11 @@ Media accounts can request films and individual series seasons from **Search** a
 
 **Newly available** uses the signed-in media account's library permissions in Jellyfin or Plex. Existing AIO media sessions created before this feature need a fresh media sign-in.
 
+**Trending** hides films and series the account can already watch in full. Pending and approved requests from any account also count. Open a series poster to request missing or incomplete seasons that have not been requested.
+
 Search and Trending show TV seasons with episodes visible to the signed-in media account. An approved series request shows as available once each requested season has a visible episode.
+
+**Calendar** shows releases already visible in the signed-in account’s Jellyfin or Plex library. It also shows upcoming Sonarr and Radarr releases when AIO can match the destination folder to a shared library and verify that no additional content restrictions apply.
 
 ### Support
 

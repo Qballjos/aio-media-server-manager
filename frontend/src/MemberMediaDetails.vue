@@ -88,6 +88,10 @@ defineExpose({ open })
         </div>
       </header>
       <p v-if="request.overview">{{ request.overview }}</p>
+      <a v-if="libraryTitle && request.playUrl" class="ui-btn ui-btn-primary member-play"
+         :href="request.playUrl" target="_blank" rel="noopener noreferrer">
+        {{ $t(request.playProvider === 'plex' ? 'Open in Plex' : 'Open in Jellyfin') }}
+      </a>
       <form @submit.prevent="sendReport">
         <h3>{{ $t('Report a problem') }}</h3>
         <p v-if="sent" role="status">{{ $t('Report sent to the administrator.') }}</p>
@@ -115,6 +119,7 @@ defineExpose({ open })
 .request-details h2 { margin-block-start: 0; }
 .request-details dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .25rem .75rem; }
 .request-details dd { margin: 0; }
+.member-play { display: inline-flex; margin-block-start: .75rem; }
 .request-details form { border-block-start: 1px solid var(--border-subtle); margin-block-start: 1rem; }
 .request-details textarea { resize: vertical; }
 .request-details footer { display: flex; flex-wrap: wrap; gap: .5rem; margin-block-start: .75rem; }

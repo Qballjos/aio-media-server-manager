@@ -1,50 +1,50 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import SettingsSidebar from './SettingsSidebar.vue'
 import SupportSettings from './settings/SupportSettings.vue'
+import MemberAppearance from './settings/MemberAppearance.vue'
 import MediaDiscovery from './MediaDiscovery.vue'
-import LanguageSelect from './LanguageSelect.vue'
-import { getThemePreference, setThemePreference } from './theme.js'
+import { MEMBER_SETTINGS_GROUPS, MEMBER_SETTINGS_PAGES } from './settingsNavigation.js'
+import { homeEditing } from './homeLayout.js'
 
-defineProps({ settings: Boolean, support: Boolean, accountId: String })
+const props = defineProps({ settings: Boolean, section: String, accountId: String })
+const router = useRouter()
+const page = computed(() => MEMBER_SETTINGS_PAGES.find(item => item.id === props.section) || MEMBER_SETTINGS_PAGES[0])
 
-const theme = ref(getThemePreference())
-const themes = { system: 'System', light: 'Light', dark: 'Dark' }
-
-function chooseTheme(value) {
-  theme.value = setThemePreference(value)
+async function arrangeHome() {
+  await router.push({ name: 'home' })
+  await nextTick()
+  homeEditing.value = true
 }
 </script>
 
 <template>
-  <section v-if="settings" class="member-page glass-card">
-    <h2>{{ $t('Settings') }}</h2>
-    <nav class="member-themes" :aria-label="$t('Settings sections')">
-      <RouterLink :to="{ name: 'settings', params: { section: 'account' } }" class="ui-btn ui-btn-ghost">{{ $t('Profile') }}</RouterLink>
-      <RouterLink :to="{ name: 'settings', params: { section: 'support' } }" class="ui-btn ui-btn-ghost">{{ $t('Support') }}</RouterLink>
-    </nav>
-    <SupportSettings v-if="support" class="member-support" />
-    <template v-else>
-      <dl>
-        <dt>{{ $t('Media account ID') }}</dt>
-        <dd>{{ accountId }}</dd>
-      </dl>
-      <h3>{{ $t('Language') }}</h3>
-      <LanguageSelect />
-      <h3>{{ $t('Theme') }}</h3>
-      <div class="member-themes" role="group" :aria-label="$t('Theme')">
-        <button v-for="(label, value) in themes" :key="value" type="button"
-                class="theme-option" :class="{ 'is-active': theme === value }"
-                :aria-pressed="theme === value" @click="chooseTheme(value)">{{ $t(label) }}</button>
+  <section v-if="settings" class="settings-page glass-card animate-fade" :aria-label="$t('Settings')">
+    <SettingsSidebar :section="page.id" :navigation="MEMBER_SETTINGS_GROUPS" />
+    <div class="settings-content">
+      <header class="settings-header">
+        <h2 class="section-title">{{ $t(page.label) }}</h2>
+        <p class="section-subtitle">{{ $t(page.description) }}</p>
+      </header>
+      <SupportSettings v-if="page.id === 'support'" class="settings-card" />
+      <MemberAppearance v-else-if="page.id === 'visuals'" />
+      <div v-else-if="page.id === 'homepage'" class="glass-card settings-card">
+        <button type="button" class="ui-btn ui-btn-ghost" @click="arrangeHome">{{ $t('Edit the Home layout') }}</button>
       </div>
-    </template>
+      <div v-else class="glass-card settings-card">
+        <dl class="member-profile">
+          <dt>{{ $t('Media account ID') }}</dt>
+          <dd>{{ accountId }}</dd>
+        </dl>
+      </div>
+    </div>
   </section>
-  <MediaDiscovery v-else />
+  <MediaDiscovery v-else :account-id="accountId" />
 </template>
 
+<style scoped src="./settingsPanel.css"></style>
 <style scoped>
-.member-page { max-inline-size: 42rem; margin-inline: auto; padding: 1.25rem; }
-.member-page h2 { margin-block-start: 0; }
-.member-page dd { margin-inline-start: 0; overflow-wrap: anywhere; }
-.member-support { margin-block-start: 1rem; }
-.member-themes { display: flex; flex-wrap: wrap; gap: .5rem; }
+.member-profile { margin: 0; }
+.member-profile dd { margin-inline-start: 0; overflow-wrap: anywhere; }
 </style>

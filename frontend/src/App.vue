@@ -9,6 +9,7 @@ import WallpaperLayer from './WallpaperLayer.vue'
 import AppLoader from './AppLoader.vue'
 import MediaAccountView from './MediaAccountView.vue'
 import { isLocale, readStoredLocale, t } from './i18n/index.js'
+import { MEMBER_SETTINGS_PAGES } from './settingsNavigation.js'
 import { homeEditing } from './homeLayout.js'
 import { startGuardedInterval } from './pageVisible.js'
 import {
@@ -376,7 +377,7 @@ async function runAutomatedWiring() {
 watch([isMember, () => route.fullPath], ([member]) => {
   if (!member) return
   if (route.name === 'catalog') router.replace({ name: 'home' })
-  if (route.name === 'settings' && !['account', 'support'].includes(route.params.section)) {
+  if (route.name === 'settings' && !MEMBER_SETTINGS_PAGES.some(page => page.id === route.params.section)) {
     router.replace({ name: 'settings', params: { section: 'account' } })
   }
 })
@@ -470,7 +471,7 @@ onUnmounted(() => {
         >
           {{ $t('Settings') }}
         </RouterLink>
-        <template v-if="!isMember && currentView === 'home'">
+        <template v-if="currentView === 'home'">
           <span class="nav-tabs-divider" aria-hidden="true"></span>
           <button
             type="button"
@@ -581,7 +582,7 @@ onUnmounted(() => {
         @status="onAuthStatus"
         @session="onAuthSession"
       />
-      <MediaAccountView v-else-if="isMember" :settings="currentView === 'settings'" :account-id="authStatus.account_id" :support="route.params.section === 'support'" />
+      <MediaAccountView v-else-if="isMember" :settings="currentView === 'settings'" :account-id="authStatus.account_id" :section="String(route.params.section || 'account')" />
       <section v-else-if="!wizardStatusLoaded" class="auth-card-wrapper animate-fade">
         <AppLoader :label="$t('Loading setup')" />
       </section>

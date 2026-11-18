@@ -527,6 +527,10 @@ def test_support_reports_are_private_and_reach_admin(client):
 def test_member_discovery_uses_shared_filter_and_hides_library_status(client, monkeypatch):
     from api.routers import media_discovery
 
+    from core.integrations.seerr import SeerrClient
+
+    monkeypatch.setattr(media_discovery, "_seerr_client", SeerrClient)
+    monkeypatch.setattr(SeerrClient, "trending_request_coverage", lambda *_: {})
     auth_manager.create_admin("admin", "StrongPassword123!")
     admin = {"Authorization": f"Bearer {auth_manager.issue_token('admin')}"}
     auth_manager.media_users.grant("plex", "server-a", "42")
@@ -712,7 +716,11 @@ def test_recent_media_uses_member_token_and_authorized_plex_sections(client, mon
 
     monkeypatch.setattr(requests, "get", plex_get)
     response = client.get("/api/media-discovery/recent", headers={"Authorization": f"Bearer {token}"})
-    assert response.json() == {"items": [{"id": "3", "title": "Shared", "mediaType": "movie"}]}
+    [item] = response.json()["items"]
+    assert item == {
+        "id": "3", "title": "Shared", "mediaType": "movie", "playProvider": "plex",
+        "playUrl": "http://testserver:32400/web/index.html#!/server/server-a/details?key=%2Flibrary%2Fmetadata%2F3",
+    }
     assert seen == ["/identity", "/library/sections", "/library/sections/1/recentlyAdded"]
 
 
@@ -738,7 +746,11 @@ def test_recent_media_queries_jellyfin_as_the_signed_in_viewer(client, monkeypat
 
     monkeypatch.setattr(requests, "get", jellyfin_get)
     response = client.get("/api/media-discovery/recent?user_id=9", headers={"Authorization": f"Bearer {token}"})
-    assert response.json() == {"items": [{"id": "3", "title": "Shared", "mediaType": "tv"}]}
+    [item] = response.json()["items"]
+    assert item == {
+        "id": "3", "title": "Shared", "mediaType": "tv", "playProvider": "jellyfin",
+        "playUrl": "http://testserver:8096/web/#/details?id=3",
+    }
 
 
 def test_member_poster_checks_jellyfin_item_access_before_fetching_image(client, monkeypatch):
@@ -921,3 +933,94 @@ def test_series_availability_requires_every_requested_season(client, monkeypatch
     own = client.get("/api/media-discovery/requests", headers=headers).json()["items"]
     assert own[0]["availableSeasons"] == [1] and "available" not in own[0]
     assert own[1]["availableSeasons"] == [1] and own[1]["available"] is True
+
+
+def test_member_calendar_uses_session_account_and_token(client, monkeypatch):
+    from datetime import date
+
+    from api.routers import media_discovery
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    auth_manager.media_users.grant("plex", "server-a", "42")
+    token = auth_manager.issue_member_token("plex", "server-a", "42", library_token="calendar-token")
+
+    def scoped_calendar(provider, server, account, credential, start, end):
+        assert (provider, server, account, credential) == ("plex", "server-a", "42", "calendar-token")
+        assert (start, end) == (date(2026, 11, 16), date(2026, 11, 22))
+        return []
+
+    monkeypatch.setattr(media_discovery, "member_calendar", scoped_calendar)
+    path = "/api/media-discovery/calendar?start=2026-11-16&user_id=99"
+    assert client.get(path).status_code == 401
+    response = client.get(path, headers={"Authorization": f"Bearer {token}"})
+    assert response.json() == {"items": []}
+    assert response.headers["cache-control"] == "private, no-store"
+
+
+def test_member_title_returns_catalog_metadata_only(client, monkeypatch):
+    from api.routers import media_discovery
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    auth_manager.media_users.grant("plex", "server-a", "42")
+    token = auth_manager.issue_member_token("plex", "server-a", "42")
+
+    def upstream(_host, _scheme, kind, media_id):
+        assert (kind, media_id) == ("tv", 5)
+        return {
+            "ok": True, "title": "Series", "overview": "Synopsis",
+            "trailer": "https://www.youtube.com/watch?v=abcdefghijk",
+            "status": "available", "can_request": False, "url": "private-seerr-url", "voteAverage": 8.5,
+        }
+
+    monkeypatch.setattr(media_discovery, "homepage_title", upstream)
+    path = "/api/media-discovery/titles/tv/5"
+    assert client.get(path).status_code == 401
+    response = client.get(path, headers={"Authorization": f"Bearer {token}"})
+    assert response.json() == {
+        "title": "Series", "overview": "Synopsis",
+        "trailer": "https://www.youtube.com/watch?v=abcdefghijk", "voteAverage": 8.5,
+    }
+
+
+def test_trending_omits_complete_movies_and_series_but_keeps_incomplete_seasons(client, monkeypatch):
+    from api.routers import media_discovery
+    from core.integrations.seerr import SeerrClient
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    auth_manager.media_users.grant("plex", "server-a", "42")
+    token = auth_manager.issue_member_token("plex", "server-a", "42", library_token="fixture-token")
+    titles = [
+        {"mediaType": kind, "mediaId": media_id, "title": title}
+        for kind, media_id, title in [
+            ("movie", 1, "Complete film"), ("tv", 2, "Complete show"),
+            ("tv", 3, "Partial show"), ("movie", 4, "Private film"),
+            ("movie", 5, "Requested film"), ("tv", 6, "Requested show"),
+        ]
+    ]
+    monkeypatch.setattr(media_discovery, "homepage_trending", lambda *args: {"items": titles})
+    monkeypatch.setattr(media_discovery, "_seerr_client", SeerrClient)
+    monkeypatch.setattr(SeerrClient, "request_season_counts", lambda self, media_id: {1: 2, 2: 1} if media_id == 3 else {1: 2})
+
+    def seerr_requests(_self, path):
+        assert path == "/request?take=100&skip=0&filter=all"
+        rows = [
+            {"type": "movie", "media": {"tmdbId": 5}, "status": 1, "requestedBy": {"id": 99}},
+            {"type": "tv", "media": {"tmdbId": 6}, "status": 1, "seasons": [{"seasonNumber": 1}]},
+            {"type": "tv", "media": {"tmdbId": 3}, "status": 2, "seasons": [{"seasonNumber": 2}]},
+            {"type": "movie", "media": {"tmdbId": 4}, "status": 3},
+        ]
+        return {"results": rows, "pageInfo": {"results": len(rows)}}
+
+    monkeypatch.setattr(SeerrClient, "_media_users_api", seerr_requests)
+
+    def inventory(provider, server, account, library_token, requested):
+        assert (provider, server, account, library_token) == ("plex", "server-a", "42", "fixture-token")
+        return {("movie", 1): {}, ("tv", 2): {1: {1, 2}}, ("tv", 3): {1: {1}}}
+
+    monkeypatch.setattr(media_discovery, "member_inventory", inventory)
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get("/api/media-discovery/trending", headers=headers)
+    assert response.json() == {
+        "items": [{**titles[2], "availableSeasons": [1], "requestableSeasons": [1]}, titles[3]],
+        "has_more": True,
+    }

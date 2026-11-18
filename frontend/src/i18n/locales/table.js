@@ -1,5 +1,17 @@
 /** English source text → [Nederlands, Deutsch, Français]. */
 export const TABLE = {
+  "Request remaining seasons": ["Resterende seizoenen aanvragen", "Fehlende Staffeln anfragen", "Demander les saisons restantes"],
+  "Select remaining seasons": ["Resterende seizoenen selecteren", "Fehlende Staffeln auswählen", "Sélectionner les saisons restantes"],
+  "Open in Jellyfin": ["Openen in Jellyfin", "In Jellyfin öffnen", "Ouvrir dans Jellyfin"],
+  "Open in Plex": ["Openen in Plex", "In Plex öffnen", "Ouvrir dans Plex"],
+  "Personal background image": ["Eigen achtergrondafbeelding", "Eigenes Hintergrundbild", "Image de fond personnelle"],
+  "View your linked media account.": ["Bekijk je gekoppelde media-account.", "Sieh dir dein verknüpftes Medienkonto an.", "Consultez votre compte multimédia associé."],
+  "Report problems and follow replies.": ["Meld problemen en volg antwoorden.", "Melde Probleme und verfolge Antworten.", "Signalez les problèmes et suivez les réponses."],
+  "Arrange the widgets on your start page.": ["Richt de widgets op je startpagina in.", "Ordne die Widgets auf deiner Startseite an.", "Organisez les widgets de votre page d’accueil."],
+  "Upcoming": ["Verwacht", "Demnächst", "À venir"],
+  "Loading calendar…": ["Agenda laden…", "Kalender wird geladen…", "Chargement du calendrier…"],
+  "Could not load your calendar.": ["Je agenda kon niet worden geladen.", "Dein Kalender konnte nicht geladen werden.", "Impossible de charger votre calendrier."],
+  "No releases in your calendar this week.": ["Deze week staan er geen releases in je agenda.", "Diese Woche stehen keine Veröffentlichungen in deinem Kalender.", "Aucune sortie dans votre calendrier cette semaine."],
   "Sign-in attempt expired.": ["De aanmeldpoging is verlopen.", "Der Anmeldeversuch ist abgelaufen.", "La tentative de connexion a expiré."],
   "Sign-in attempt not found or expired.": ["De aanmeldpoging is niet gevonden of verlopen.", "Der Anmeldeversuch wurde nicht gefunden oder ist abgelaufen.", "La tentative de connexion est introuvable ou a expiré."],
   "This provider is not the configured media source in Seerr.": ["Deze provider is niet ingesteld als mediabron in Seerr.", "Dieser Anbieter ist in Seerr nicht als Medienquelle eingerichtet.", "Ce fournisseur n’est pas la source multimédia configurée dans Seerr."],

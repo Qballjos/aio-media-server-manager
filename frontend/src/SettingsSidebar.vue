@@ -3,8 +3,11 @@ import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import UiSelect from './UiSelect.vue'
-import { filterSettingsGroups, SETTINGS_PAGES } from './settingsNavigation.js'
-defineProps({ section: { type: String, required: true } })
+import { filterSettingsGroups, SETTINGS_GROUPS } from './settingsNavigation.js'
+const props = defineProps({
+  section: { type: String, required: true },
+  navigation: { type: Array, default: () => SETTINGS_GROUPS },
+})
 const { t } = useI18n()
 const router = useRouter()
 const query = ref('')
@@ -19,8 +22,8 @@ onMounted(() => {
   headerObserver.observe(header)
 })
 onBeforeUnmount(() => headerObserver?.disconnect())
-const groups = computed(() => filterSettingsGroups(query.value, t))
-const sectionOptions = computed(() => SETTINGS_PAGES.map(item => ({ value: item.id, label: t(item.label) })))
+const groups = computed(() => filterSettingsGroups(query.value, t, props.navigation))
+const sectionOptions = computed(() => props.navigation.flatMap(group => group.items).map(item => ({ value: item.id, label: t(item.label) })))
 const paths = {
   user: 'M20 21v-2a7 7 0 0 0-14 0v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   palette: 'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7 1.5 1.5 0 0 1 1-2.8h2a4 4 0 0 0 4-4A9 9 0 0 0 12 3M7 10h.01M10 6h.01M15 6h.01M18 10h.01',

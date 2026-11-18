@@ -191,6 +191,10 @@ Les comptes multimédias peuvent demander des films et des saisons depuis **Rech
 
 **Nouveautés disponibles** et les indicateurs de disponibilité suivent les droits du compte connecté sur les bibliothèques. Une demande de série approuvée est disponible dès que chaque saison demandée contient au moins un épisode accessible. Les utilisateurs qui ont une ancienne session AIO doivent se reconnecter.
 
+**Tendances** masque les films et séries que le compte peut déjà regarder intégralement. Les demandes en attente ou approuvées de tous les comptes sont prises en compte. Ouvrez l’affiche d’une série pour demander les saisons manquantes ou incomplètes qui ne font pas déjà l’objet d’une demande.
+
+**Calendrier** affiche les sorties visibles dans Jellyfin ou Plex pour le compte connecté. Les prochaines sorties de Sonarr et Radarr apparaissent si AIO peut associer le dossier de destination à une bibliothèque partagée et vérifier l’absence de restrictions de contenu supplémentaires.
+
 Les utilisateurs peuvent signaler un problème dans les détails d’un titre ou dans **Paramètres → Assistance**. Les administrateurs reçoivent les signalements dans la boîte de réception de l’assistance et peuvent répondre et modifier leur statut.
 
 ### Connexions des apps

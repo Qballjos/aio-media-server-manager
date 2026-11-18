@@ -475,10 +475,30 @@ test.describe('media-account login', () => {
           return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="30"/>' })
         }
         if (path === '/api/media-discovery/recent') {
-          return route.fulfill({ json: { items: [{ id: 'shared-3', title: 'Shared library title', mediaType: 'tv', overview: 'A shared series.' }] } })
+          return route.fulfill({ json: { items: [{
+            id: 'shared-3', title: 'Shared library title', mediaType: 'tv', overview: 'A shared series.',
+            playProvider: provider, playUrl: `https://${provider}.example.test/web/#/details?id=shared-3`,
+          }] } })
+        }
+        if (path === '/api/media-discovery/calendar') {
+          const start = new URL(route.request().url()).searchParams.get('start')
+          expect(start).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+          return route.fulfill({ json: { items: [{
+            kind: 'movie', title: 'Shared future film', detail: '2026', when: start, available: false,
+          }] } })
+        }
+        if (path === '/api/media-discovery/titles/tv/5') {
+          return route.fulfill({ json: {
+            title: 'Trending title', overview: 'The trending series synopsis.',
+            poster: '/api/media-discovery/recent/art/shared-3',
+            trailer: 'https://www.youtube.com/watch?v=abcdefghijk', voteAverage: 8.5,
+          } })
         }
         if (path === '/api/media-discovery/trending') {
-          return route.fulfill({ json: { items: [{ mediaType: 'tv', mediaId: 5, title: 'Trending title', availableSeasons: [1] }], has_more: false } })
+          const items = requestSent ? [] : [{
+            mediaType: 'tv', mediaId: 5, title: 'Trending title', availableSeasons: [1], requestableSeasons: [2],
+          }]
+          return route.fulfill({ json: { items, has_more: false } })
         }
         if (path === '/api/media-discovery/search') {
           expect(new URL(route.request().url()).searchParams.get('q')).toBe('Test film')
@@ -517,12 +537,29 @@ test.describe('media-account login', () => {
       await expect(page.getByText('Approval is still pending.')).toBeVisible()
       await page.getByRole('button', { name: 'Check approval' }).click()
       await expect(page).toHaveURL(/#\/home$/)
+      const greeting = page.getByRole('region', { name: 'Greeting' })
+      await expect(greeting.getByRole('heading')).toHaveText(/Good (night|morning|afternoon|evening)/)
+      const searchWidget = page.getByRole('region', { name: 'Search', exact: true })
+      await expect(greeting).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await expect(searchWidget).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await expect(searchWidget.getByRole('button', { name: 'Search in' })).toHaveCount(0)
       await expect(page.getByText('Trending title', { exact: true })).toBeVisible()
-      await expect(page.getByText('Available seasons: Season 1', { exact: true })).toBeVisible()
+      const calendar = page.getByRole('region', { name: 'Calendar', exact: true })
+      await expect(calendar.getByText('Shared future film')).toBeVisible()
+      await expect(calendar.getByText(/Upcoming/)).toBeVisible()
+      await calendar.getByRole('button', { name: 'Next' }).click()
+      await expect(calendar.getByText('Shared future film')).toBeVisible()
+      await expect(page.getByRole('region', { name: 'Trending', exact: true }).getByText('Partially available')).toBeVisible()
       const recentTile = page.getByRole('region', { name: 'Newly available' }).getByRole('button', { name: /Shared library title/ })
       await recentTile.locator('img').click()
       const titleDetails = page.getByRole('dialog', { name: 'Title details' })
       await expect(titleDetails.getByText('A shared series.')).toBeVisible()
+      const bounds = await titleDetails.boundingBox()
+      const viewport = page.viewportSize()
+      expect(Math.abs(bounds.x + bounds.width / 2 - viewport.width / 2)).toBeLessThan(3)
+      expect(Math.abs(bounds.y + bounds.height / 2 - viewport.height / 2)).toBeLessThan(3)
+      await expect(titleDetails.getByRole('link', { name: `Open in ${provider === 'plex' ? 'Plex' : 'Jellyfin'}` }))
+        .toHaveAttribute('href', `https://${provider}.example.test/web/#/details?id=shared-3`)
       await titleDetails.getByLabel('Description', { exact: true }).fill('Subtitles missing.')
       await titleDetails.getByRole('button', { name: 'Send report' }).click()
       await expect(titleDetails.getByText('Report sent to the administrator.')).toBeVisible()
@@ -534,17 +571,34 @@ test.describe('media-account login', () => {
       await expect(limits.getByText('0 of 5 remaining per 7 days')).toBeVisible()
       await expect(limits.getByText('No limit', { exact: true })).toBeVisible()
       await expect(page.getByText('Open reports: 1')).toBeVisible()
-      await expect(page.getByRole('link', { name: 'Open support' })).toHaveAttribute('href', '#/settings/support')
+      const support = page.getByRole('region', { name: 'Support', exact: true })
+      const supportLink = support.getByRole('link', { name: 'Open support' })
+      await expect(supportLink).toHaveAttribute('href', '#/settings/support')
+      const supportTextBox = await support.getByText('Open reports: 1').boundingBox()
+      const supportLinkBox = await supportLink.boundingBox()
+      expect(supportLinkBox.y - (supportTextBox.y + supportTextBox.height)).toBeGreaterThanOrEqual(12)
       await page.getByRole('searchbox', { name: 'Search films and series' }).fill('Test film')
       await page.getByRole('button', { name: 'Search', exact: true }).click()
       await expect(page.getByText('Test film', { exact: true })).toBeVisible()
       const searchResults = page.getByRole('region', { name: 'Search', exact: true })
       await expect(searchResults.getByText('Available', { exact: true })).toBeVisible()
-      await page.getByRole('button', { name: 'Request Trending title' }).click()
+      await searchResults.getByRole('button', { name: 'Close' }).click()
+      const trendingTile = page.getByRole('region', { name: 'Trending', exact: true })
+      await expect(trendingTile.getByRole('button', { name: /Request Trending title/ })).toHaveCount(0)
+      await trendingTile.getByRole('button', { name: 'Trending title', exact: true }).click()
+      const trendingDetails = page.getByRole('dialog', { name: 'Title details' })
+      await expect(trendingDetails.getByText('The trending series synopsis.')).toBeVisible()
+      await expect(trendingDetails.locator('img')).toBeVisible()
+      await expect(trendingDetails.getByText('8.5')).toBeVisible()
+      await trendingDetails.getByRole('button', { name: 'Trailer', exact: true }).click()
+      await expect(trendingDetails.locator('iframe')).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/abcdefghijk/)
+      await trendingDetails.getByRole('button', { name: 'Request remaining seasons', exact: true }).click()
       const requestDialog = page.getByRole('dialog', { name: 'Request media' })
+      await expect(requestDialog.getByRole('checkbox', { name: 'Season 1' })).toHaveCount(0)
       await requestDialog.getByRole('checkbox', { name: 'Season 2' }).check()
       await requestDialog.getByRole('button', { name: 'Send request' }).click()
       await expect(ownRequests.getByText('Waiting for approval')).toBeVisible()
+      await expect(trendingTile.getByRole('button', { name: 'Trending title', exact: true })).toHaveCount(0)
       await ownRequests.getByRole('button', { name: 'Open request details for Trending title' }).click()
       const details = page.getByRole('dialog', { name: 'Request details' })
       await expect(details.getByText('Waiting for approval')).toBeVisible()
@@ -557,13 +611,29 @@ test.describe('media-account login', () => {
       await details.getByRole('button', { name: 'Close', exact: true }).click()
       await assertFitsViewport(page)
       await expect(page.getByRole('link', { name: 'Catalog' })).toHaveCount(0)
+      const edit = page.getByRole('button', { name: 'Edit the Home layout' })
+      await edit.click()
+      await page.getByRole('button', { name: 'Remove Trending' }).click()
+      await expect(page.getByRole('region', { name: 'Trending' })).toHaveCount(0)
+      await page.getByRole('button', { name: 'Trending', exact: true }).click()
+      await page.getByRole('button', { name: 'Done arranging Home' }).click()
+      await expect(page.getByRole('region', { name: 'Trending' })).toBeVisible()
       await page.getByRole('link', { name: 'Settings', exact: true }).click()
       await expect(page.getByText('Media account ID')).toBeVisible()
       await assertFitsViewport(page)
+      const picker = page.locator('#settings-section-select')
+      if (await picker.isVisible()) {
+        await picker.click()
+        await page.getByRole('option', { name: 'Language and appearance' }).click()
+      } else {
+        await page.getByRole('link', { name: 'Language and appearance' }).click()
+      }
+      await expect(page.getByRole('group', { name: 'Themes', exact: true })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Brand name and icons' })).toHaveCount(0)
       await page.getByRole('button', { name: 'Light', exact: true }).click()
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
       await page.reload()
-      await expect(page.getByText('Media account ID')).toBeVisible()
+      await expect(page.getByRole('group', { name: 'Themes', exact: true })).toBeVisible()
       await expect(page.getByRole('link', { name: 'Catalog' })).toHaveCount(0)
       expect(adminRequests).toEqual([])
     })
@@ -637,7 +707,13 @@ test.describe('support settings', () => {
     })
 
     await page.goto('/#/settings/account')
-    await page.getByRole('link', { name: 'Support', exact: true }).click()
+    const picker = page.locator('#settings-section-select')
+    if (await picker.isVisible()) {
+      await picker.click()
+      await page.getByRole('option', { name: 'Support', exact: true }).click()
+    } else {
+      await page.getByRole('link', { name: 'Support', exact: true }).click()
+    }
     await page.getByLabel('Subject', { exact: true }).fill('Playback')
     await page.getByLabel('Description', { exact: true }).fill('Audio stops.')
     await page.getByRole('button', { name: 'Send report' }).click()

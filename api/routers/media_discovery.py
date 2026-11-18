@@ -1,17 +1,21 @@
 """Catalog-only discovery and the shared Trending preference."""
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 from typing import Annotated, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.routers.media_users import _client as _seerr_client
 from applications.catalog import ApplicationCatalog
+from core.app_web_url import app_web_ui_url_for_request
 from core.auth import auth_manager
 from core.file_io import write_private_text
-from core.integrations.member_library import member_availability, poster_for_member, recent_for_member
-from core.homepage import _seerr_search, homepage_trending, seerr_catalog_details
+from core.integrations.member_calendar import member_calendar
+from core.integrations.member_library import member_inventory, poster_for_member, recent_for_member
+from core.homepage import _seerr_search, homepage_title, homepage_trending, seerr_catalog_details
 
 router = APIRouter(prefix="/api/media-discovery", tags=["Media discovery"])
 TrendingFilter = Literal["all", "movie", "tv"]
@@ -38,7 +42,10 @@ def _catalog_items(rows: list[dict]) -> list[dict]:
     return [{key: row[key] for key in _CATALOG_FIELDS if key in row} for row in rows]
 
 
-def _mark_availability(request: Request, rows: list[dict], *, own_requests: bool = False) -> None:
+def _mark_availability(
+    request: Request, rows: list[dict], *, own_requests: bool = False,
+    trending_requests: dict[tuple[str, int], set[int]] | None = None,
+) -> None:
     titles = {
         (row["mediaType"], row["mediaId"]): row["title"] for row in rows
         if row.get("mediaType") in ("movie", "tv") and type(row.get("mediaId")) is int and row.get("title")
@@ -51,7 +58,8 @@ def _mark_availability(request: Request, rows: list[dict], *, own_requests: bool
             if exc.status_code != 409:
                 raise
         else:
-            available = member_availability(*request.state.media_account, token, titles)
+            available = member_inventory(*request.state.media_account, token, titles)
+    series = []
     for row in rows:
         key = (row.get("mediaType"), row.get("mediaId"))
         seasons = available.get(key)
@@ -60,13 +68,47 @@ def _mark_availability(request: Request, rows: list[dict], *, own_requests: bool
                 row["available"] = True
             elif own_requests:
                 requested = set(row["seasons"])
-                row["availableSeasons"] = sorted(requested & seasons)
-                if requested and requested <= seasons:
+                visible = set(seasons)
+                row["availableSeasons"] = sorted(requested & visible)
+                if requested and requested <= visible:
                     row["available"] = True
             else:
                 row["availableSeasons"] = sorted(seasons)
+        if trending_requests is not None:
+            requested = trending_requests.get(key)
+            if key[0] == "movie" and requested is not None:
+                row["hideFromTrending"] = True
+            elif key[0] == "tv" and (seasons or requested):
+                series.append((row, seasons or {}, requested or set()))
         if own_requests:
             row.pop("mediaId", None)
+    if series:
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            list(pool.map(lambda entry: _mark_trending_series(*entry), series))
+
+
+def _mark_trending_series(row: dict, episodes: dict[int, set[int]], requested: set[int]) -> None:
+    try:
+        with _seerr_client() as client:
+            counts = client.request_season_counts(row["mediaId"])
+    except (HTTPException, TypeError, AttributeError):
+        counts = {}
+    # Specials are optional when a show has regular seasons.
+    expected = {season: count for season, count in counts.items() if season > 0} or counts
+    if not expected:
+        if requested:
+            row["hideFromTrending"] = True
+        return
+    missing = [
+        season for season, count in sorted(expected.items())
+        if type(count) is not int or count <= 0
+        or sum(1 for number in episodes.get(season, ()) if number <= count) < count
+    ]
+    remaining = [season for season in missing if season not in requested]
+    if remaining:
+        row["requestableSeasons"] = remaining
+    else:
+        row["hideFromTrending"] = True
 
 
 @router.get("/trending-filter")
@@ -108,9 +150,17 @@ def trending_catalog(request: Request, response: Response, page: Annotated[int, 
         raise HTTPException(502, "Trending is temporarily unavailable.")
     rows = result["items"]
     items = _catalog_items([row for row in rows if selected in ("all", row["mediaType"])])
-    _mark_availability(request, items)
+    requested = {}
+    if items:
+        titles = {(item["mediaType"], item["mediaId"]) for item in items}
+        try:
+            with _seerr_client() as client:
+                requested = client.trending_request_coverage(titles)
+        except (HTTPException, KeyError, TypeError, AttributeError) as exc:
+            raise HTTPException(502, "Trending is temporarily unavailable.") from exc
+    _mark_availability(request, items, trending_requests=requested)
     return {
-        "items": items,
+        "items": [item for item in items if not item.get("available") and not item.get("hideFromTrending")],
         "has_more": bool(rows) and page < 100,
     }
 
@@ -223,7 +273,19 @@ def submit_member_request(body: MemberRequestBody, request: Request):
 @router.get("/recent")
 def member_recent(request: Request, response: Response):
     token = auth_manager.member_library_token(request)
-    items = recent_for_member(*request.state.media_account, token)
+    provider, server_id, account_id = request.state.media_account
+    items = recent_for_member(provider, server_id, account_id, token)
+    port = ApplicationCatalog().get(provider).port
+    base = app_web_ui_url_for_request(request, app_name=provider, port=port).rstrip("/")
+    for item in items:
+        item_id = quote(item["id"], safe="")
+        if provider == "jellyfin":
+            item["playUrl"] = f"{base}/web/#/details?id={item_id}"
+        elif provider == "plex":
+            server = quote(server_id, safe="")
+            key = quote(f"/library/metadata/{item['id']}", safe="")
+            item["playUrl"] = f"{base}/web/index.html#!/server/{server}/details?key={key}"
+        item["playProvider"] = provider
     response.headers["Cache-Control"] = "no-store"
     return {"items": items}
 
@@ -233,3 +295,23 @@ def member_recent_art(request: Request, item_id: Annotated[str, Path(max_length=
     token = auth_manager.member_library_token(request)
     body, media_type = poster_for_member(*request.state.media_account, token, item_id)
     return Response(body, media_type=media_type, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/calendar")
+def get_member_calendar(request: Request, response: Response, start: date):
+    token = auth_manager.member_library_token(request)
+    end = start + timedelta(days=6) if start <= date.max - timedelta(days=6) else date.max
+    items = member_calendar(*request.state.media_account, token, start, end)
+    response.headers["Cache-Control"] = "private, no-store"
+    return {"items": items}
+
+
+@router.get("/titles/{kind}/{media_id}")
+def member_title(request: Request, response: Response, kind: Literal["movie", "tv"], media_id: Annotated[int, Path(gt=0)]):
+    auth_manager.authenticate_member_request(request)
+    details = homepage_title("127.0.0.1", "http", kind, media_id)
+    if not details.get("ok"):
+        raise HTTPException(502, "Could not load this title from Seerr.")
+    fields = ("title", "poster", "overview", "year", "voteAverage", "imdb", "rtCritics", "rtAudience", "trailer")
+    response.headers["Cache-Control"] = "no-store"
+    return {key: details[key] for key in fields if key in details}

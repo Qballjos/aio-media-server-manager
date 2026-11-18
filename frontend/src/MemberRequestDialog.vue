@@ -13,10 +13,10 @@ const error = ref('')
 
 async function open(item) {
   title.value = item
-  seasons.value = []
+  seasons.value = item.requestableSeasons || []
   selected.value = []
   error.value = ''
-  loading.value = item.mediaType === 'tv'
+  loading.value = item.mediaType === 'tv' && !seasons.value.length
   await nextTick()
   dialog.value.showModal()
   if (!loading.value) return
@@ -67,7 +67,7 @@ defineExpose({ open })
       <h2>{{ title.title }}</h2>
       <p v-if="loading" role="status">{{ $t('Loading seasons…') }}</p>
       <fieldset v-else-if="title.mediaType === 'tv' && seasons.length">
-        <legend>{{ $t('Select seasons') }}</legend>
+        <legend>{{ $t(title.requestableSeasons?.length ? 'Select remaining seasons' : 'Select seasons') }}</legend>
         <label v-for="season in seasons" :key="season">
           <input v-model="selected" type="checkbox" :value="season" :disabled="submitting" />
           {{ season === 0 ? $t('Specials') : $t('Season {number}', { number: season }) }}

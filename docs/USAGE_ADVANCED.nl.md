@@ -191,6 +191,10 @@ Media-accounts kunnen vanuit **Zoeken** en **Trending** films en seizoenen aanvr
 
 **Nieuw beschikbaar** en de beschikbaarheidslabels volgen de bibliotheekrechten van het ingelogde account. Een goedgekeurde serieaanvraag krijgt de status Beschikbaar zodra elk aangevraagd seizoen ten minste één toegankelijke aflevering heeft. Gebruikers met een oudere AIO-sessie moeten opnieuw inloggen.
 
+**Trending** verbergt films en series die het account al volledig kan bekijken. Openstaande en goedgekeurde aanvragen van alle accounts tellen mee. Via de poster kun je ontbrekende of onvolledige seizoenen aanvragen waarvoor nog geen aanvraag loopt.
+
+**Agenda** toont releases die het ingelogde account in Jellyfin of Plex mag zien. Aankomende releases uit Sonarr en Radarr verschijnen als AIO de doelmap aan een gedeelde bibliotheek kan koppelen en kan verifiëren dat er geen extra inhoudsfilters gelden.
+
 Gebruikers kunnen via de titelpopup of **Instellingen → Support** een probleem melden. Beheerders zien de meldingen in hun Support-inbox en kunnen antwoorden en de status aanpassen.
 
 ### App-koppelingen
