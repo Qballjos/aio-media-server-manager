@@ -183,6 +183,16 @@ Interface actuelle avec données fictives. Clair à gauche, sombre à droite. Ac
 |---|---|
 | ![Accès externe](screenshots/light/settings-remote.png?v=app-store-20261102) | ![Accès externe](screenshots/dark/settings-remote.png?v=app-store-20261102) |
 
+### Utilisateurs et assistance
+
+Ouvrez **Paramètres → Utilisateurs** pour importer des comptes Jellyfin ou Plex via Seerr et leur accorder l’accès à AIO. La révocation ferme leurs sessions AIO. Seerr conserve l’historique de leurs demandes.
+
+Les comptes multimédias peuvent demander des films et des saisons depuis **Recherche** et **Tendances**. L’administrateur définit le filtre commun des tendances et peut examiner les demandes en attente sur l’accueil. Seerr applique les droits, les limites et l’approbation automatique du compte.
+
+**Nouveautés disponibles** et les indicateurs de disponibilité suivent les droits du compte connecté sur les bibliothèques. Une demande de série approuvée est disponible dès que chaque saison demandée contient au moins un épisode accessible. Les utilisateurs qui ont une ancienne session AIO doivent se reconnecter.
+
+Les utilisateurs peuvent signaler un problème dans les détails d’un titre ou dans **Paramètres → Assistance**. Les administrateurs reçoivent les signalements dans la boîte de réception de l’assistance et peuvent répondre et modifier leur statut.
+
 ### Connexions des apps
 
 | Light | Dark |

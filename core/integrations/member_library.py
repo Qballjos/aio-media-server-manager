@@ -1,0 +1,227 @@
+"""Recent media read with the signed-in viewer's own library permissions."""
+
+import re
+from concurrent.futures import ThreadPoolExecutor
+from xml.etree import ElementTree as ET
+
+import requests
+from fastapi import HTTPException
+
+from applications.catalog import ApplicationCatalog
+from core.integrations.jellyfin import jellyfin_auth_headers
+
+
+def _get(base: str, path: str, headers: dict, **params) -> requests.Response:
+    response = requests.get(f"{base}{path}", headers=headers, params=params, timeout=5, allow_redirects=False)
+    if response.status_code in (401, 403):
+        raise HTTPException(409, "Sign in again to access your media library.")
+    if response.status_code != 200:
+        raise ValueError("Unexpected media server response")
+    return response
+
+
+def _card(item_id, title, kind, overview) -> dict:
+    item = {"id": str(item_id), "title": title, "mediaType": kind}
+    if isinstance(overview, str) and overview.strip():
+        item["overview"] = overview.strip()[:4000]
+    return item
+
+
+def _jellyfin_headers(base: str, server_id: str, token: str) -> dict:
+    headers = jellyfin_auth_headers(token)
+    if _get(base, "/System/Info/Public", headers).json().get("Id") != server_id:
+        raise HTTPException(409, "The configured media server changed. Sign in again.")
+    return headers
+
+
+def _jellyfin_recent(base: str, server_id: str, account_id: str, token: str) -> list[dict]:
+    headers = _jellyfin_headers(base, server_id, token)
+    rows = _get(
+        base, "/Items", headers, UserId=account_id, Recursive="true",
+        IncludeItemTypes="Movie,Series", SortBy="DateCreated", SortOrder="Descending", Limit=20, Fields="Overview",
+    ).json()["Items"]
+    return [
+        _card(row["Id"], row["Name"], "movie" if row["Type"] == "Movie" else "tv", row.get("Overview"))
+        for row in rows if row.get("Type") in ("Movie", "Series") and row.get("Id") and row.get("Name")
+    ]
+
+
+def _plex_sections(base: str, server_id: str, token: str) -> tuple[dict, set[str]]:
+    headers = {"Accept": "application/json", "X-Plex-Token": token}
+    identity = _get(base, "/identity", {**headers, "Accept": "application/xml"})
+    if ET.fromstring(identity.text).get("machineIdentifier") != server_id:
+        raise HTTPException(409, "The configured media server changed. Sign in again.")
+    directories = _get(base, "/library/sections", headers).json()["MediaContainer"].get("Directory", [])
+    keys = {
+        str(row.get("key")) for row in directories
+        if row.get("type") in ("movie", "show") and str(row.get("key")).isascii() and str(row.get("key")).isdigit()
+    }
+
+    return headers, keys
+
+
+def _plex_recent(base: str, server_id: str, token: str) -> list[dict]:
+    headers, keys = _plex_sections(base, server_id, token)
+
+    def recent(section):
+        return _get(
+            base, f"/library/sections/{section}/recentlyAdded", headers,
+            **{"X-Plex-Container-Start": 0, "X-Plex-Container-Size": 20},
+        ).json()["MediaContainer"].get("Metadata", [])
+
+    items = {}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        rows = [row for section in pool.map(recent, keys) for row in section]
+    for row in sorted(rows, key=lambda row: int(row.get("addedAt") or 0), reverse=True):
+        kind = row.get("type")
+        if kind not in ("movie", "show", "season", "episode"):
+            continue
+        parent = {"season": "parent", "episode": "grandparent"}.get(kind)
+        item_id = row.get(f"{parent}RatingKey" if parent else "ratingKey")
+        title = row.get(f"{parent}Title" if parent else "title")
+        if item_id and title:
+            items.setdefault(str(item_id), _card(item_id, title, "movie" if kind == "movie" else "tv", row.get("summary") if not parent else None))
+        if len(items) >= 20:
+            break
+    return list(items.values())
+
+
+def recent_for_member(provider: str, server_id: str, account_id: str, token: str) -> list[dict]:
+    port = ApplicationCatalog().get(provider).port
+    base = f"http://127.0.0.1:{port}"
+    try:
+        if provider == "jellyfin":
+            return _jellyfin_recent(base, server_id, account_id, token)
+        if provider == "plex":
+            return _plex_recent(base, server_id, token)
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError, ET.ParseError) as exc:
+        raise HTTPException(502, "Recently added media is temporarily unavailable.") from exc
+    raise HTTPException(409, "This media server is not supported.")
+
+
+def poster_for_member(provider: str, server_id: str, account_id: str, token: str, item_id: str) -> tuple[bytes, str]:
+    port = ApplicationCatalog().get(provider).port
+    base = f"http://127.0.0.1:{port}"
+    missing = HTTPException(404, "Artwork not found.")
+    try:
+        if provider == "jellyfin" and re.fullmatch(r"[0-9a-fA-F]{32}|[0-9a-fA-F-]{36}", item_id):
+            headers = _jellyfin_headers(base, server_id, token)
+            rows = _get(base, "/Items", headers, UserId=account_id, Ids=item_id, Recursive="true").json()["Items"]
+            if not any(str(row.get("Id", "")).replace("-", "").lower() == item_id.replace("-", "").lower() for row in rows):
+                raise missing
+            path = f"/Items/{item_id}/Images/Primary"
+            params = {"MaxWidth": 360, "MaxHeight": 540}
+        elif provider == "plex" and re.fullmatch(r"[0-9]{1,20}", item_id):
+            headers, sections = _plex_sections(base, server_id, token)
+            metadata = _get(base, f"/library/metadata/{item_id}", headers).json()["MediaContainer"]
+            if not any(
+                str(row.get("ratingKey")) == item_id and
+                str(row.get("librarySectionID") or metadata.get("librarySectionID")) in sections
+                for row in metadata.get("Metadata", [])
+            ):
+                raise missing
+            path = f"/library/metadata/{item_id}/thumb"
+            params = {}
+        else:
+            raise missing
+        image = requests.get(f"{base}{path}", headers=headers, params=params, timeout=5, stream=True, allow_redirects=False)
+        try:
+            mime = image.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+            if image.status_code != 200 or mime not in ("image/jpeg", "image/png", "image/webp", "image/avif"):
+                raise missing
+            body = bytearray()
+            for chunk in image.iter_content(chunk_size=65536):
+                body.extend(chunk)
+                if len(body) > 2 * 1024 * 1024:
+                    raise missing
+            return bytes(body), mime
+        finally:
+            image.close()
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError, ET.ParseError) as exc:
+        raise missing from exc
+
+
+def member_availability(
+    provider: str, server_id: str, account_id: str, token: str, titles: dict[tuple[str, int], str],
+) -> dict[tuple[str, int], set[int]]:
+    """Return movie matches and series seasons with accessible episodes."""
+    if not titles:
+        return {}
+    base = f"http://127.0.0.1:{ApplicationCatalog().get(provider).port}"
+    failures = (HTTPException, requests.RequestException, ValueError, KeyError, TypeError, AttributeError)
+    try:
+        if provider == "jellyfin":
+            headers = _jellyfin_headers(base, server_id, token)
+            sections = None
+        elif provider == "plex":
+            headers, sections = _plex_sections(base, server_id, token)
+        else:
+            return {}
+    except (*failures, ET.ParseError):
+        return {}
+
+    def matches(kind: str, media_id: int, title: str):
+        if sections is None:
+            item_type = "Movie" if kind == "movie" else "Series"
+            rows = _get(
+                base, "/Items", headers, UserId=account_id, Recursive="true", IncludeItemTypes=item_type,
+                SearchTerm=title, Fields="ProviderIds", Limit=50,
+            ).json()["Items"]
+            return [
+                row for row in rows if row.get("Type") == item_type
+                and str((row.get("ProviderIds") or {}).get("Tmdb")) == str(media_id)
+            ]
+
+        rows = []
+        for section in sections:
+            metadata = _get(
+                base, f"/library/sections/{section}/all", headers, type=1 if kind == "movie" else 2,
+                title=title, includeGuids=1, **{"X-Plex-Container-Start": 0, "X-Plex-Container-Size": 50},
+            ).json()["MediaContainer"].get("Metadata", [])
+            rows.extend(
+                row for row in metadata if row.get("type") == ("movie" if kind == "movie" else "show")
+                and any(guid.get("id") == f"tmdb://{media_id}" for guid in row.get("Guid", []))
+            )
+        return rows
+
+    def season_numbers(show: dict) -> set[int]:
+        if sections is None:
+            item_id = str(show.get("Id") or "")
+            if not re.fullmatch(r"[0-9a-fA-F]{32}|[0-9a-fA-F-]{36}", item_id):
+                return set()
+            episodes = _get(
+                base, "/Items", headers, UserId=account_id, ParentId=item_id, Recursive="true",
+                IncludeItemTypes="Episode", IsMissing="false", Limit=2000,
+            ).json()["Items"]
+            numbers = (
+                row.get("ParentIndexNumber") for row in episodes
+                if row.get("Type") == "Episode" and row.get("LocationType") != "Virtual"
+            )
+        else:
+            item_id = str(show.get("ratingKey") or "")
+            if not re.fullmatch(r"[0-9]{1,20}", item_id):
+                return set()
+            episodes = _get(
+                base, f"/library/metadata/{item_id}/allLeaves", headers,
+                **{"X-Plex-Container-Start": 0, "X-Plex-Container-Size": 2000},
+            ).json()["MediaContainer"].get("Metadata", [])
+            numbers = (
+                row.get("parentIndex") for row in episodes
+                if row.get("type") == "episode" and str(row.get("grandparentRatingKey")) == item_id
+            )
+        return {number for number in numbers if type(number) is int and number >= 0}
+
+    def match(entry):
+        key, title = entry
+        kind, media_id = key
+        try:
+            rows = matches(kind, media_id, title)
+            if kind == "movie":
+                return key, set() if rows else None
+            seasons = set().union(*(season_numbers(row) for row in rows))
+            return key, seasons or None
+        except failures:
+            return key, None
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        return {key: value for key, value in pool.map(match, titles.items()) if value is not None}

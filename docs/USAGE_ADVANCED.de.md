@@ -183,6 +183,16 @@ Aktuelle App mit fiktiven Beispieldaten. Links hell, rechts dunkel. Die gefüllt
 |---|---|
 | ![Externer Zugriff](screenshots/light/settings-remote.png?v=app-store-20261102) | ![Externer Zugriff](screenshots/dark/settings-remote.png?v=app-store-20261102) |
 
+### Benutzer und Support
+
+Öffne **Einstellungen → Benutzer**, um Jellyfin- oder Plex-Konten über Seerr zu importieren und ihnen AIO-Zugang zu gewähren. Beim Entzug enden ihre AIO-Sitzungen. Seerr behält den Anfrageverlauf.
+
+Medienkonten können über **Suche** und **Trending** Filme und Staffeln anfragen. Der Administrator legt den gemeinsamen Trendfilter fest und kann offene Anfragen auf der Startseite prüfen. Seerr wendet die Rechte, Limits und automatische Genehmigung des Kontos an.
+
+**Neu verfügbar** und die Verfügbarkeitsanzeigen berücksichtigen die Bibliotheksrechte des angemeldeten Kontos. Eine genehmigte Serienanfrage wird als verfügbar angezeigt, sobald jede angefragte Staffel mindestens eine zugängliche Folge enthält. Benutzer mit einer älteren AIO-Sitzung müssen sich erneut anmelden.
+
+Benutzer können über die Titeldetails oder **Einstellungen → Support** ein Problem melden. Administratoren sehen die Meldungen im Support-Posteingang und können antworten und den Status ändern.
+
 ### App-Verbindungen
 
 | Light | Dark |

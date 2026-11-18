@@ -1915,3 +1915,21 @@ a.cal-row-link:hover {
     display: none;
   }
 }
+
+button.home-request-tile {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.home-review-dialog {
+  inline-size: min(28rem, calc(100% - 2rem));
+  max-block-size: calc(100dvh - 2rem);
+  color: var(--text-main);
+  padding: 1.25rem;
+}
+.home-review-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.home-review-dialog h2 { margin-block-start: 0; overflow-wrap: anywhere; }
+.home-review-actions { display: flex; flex-wrap: wrap; gap: .5rem; }

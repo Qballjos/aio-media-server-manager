@@ -65,8 +65,8 @@ Home is a grid. Phone, tablet, and desktop each keep their own layout (4, 8, and
 | Calendar | Upcoming episodes and movies. A season that lands on one day is one entry |
 | Downloading | Active downloads, with pause all / resume all. Stuck items can be removed |
 | Recently added | New shows and movies. Scrolling loads further Jellyfin pages. Plex stays on its latest 20 |
-| Requests | Seerr requests that are not finished, plus ones marked available or declined in the last 30 days |
-| Trending | Seerr's trending list. Scrolling keeps loading |
+| Requests | Seerr requests that are not finished, plus ones marked available or declined in the last 30 days. Open a pending request to approve or decline it |
+| Trending | Seerr's trending list. The administrator's All, Movies or Series selection is shared with media accounts. Scrolling keeps loading |
 | Now playing | Who is watching on Jellyfin or Plex, including direct play |
 | Storage | Disk use for config, downloads, and media |
 | Server | CPU, memory, and network. With host `/sys` mounted at `/host/sys`, this is the server's network cards. Without that mount it is only this container's traffic |
@@ -182,6 +182,20 @@ Current app interface with fictional example data. Light is on the left, dark on
 | Light | Dark |
 |---|---|
 | ![External access](screenshots/light/settings-remote.png?v=app-store-20261102) | ![External access](screenshots/dark/settings-remote.png?v=app-store-20261102) |
+
+### Users
+
+Open **Settings → Users** to select Jellyfin or Plex accounts from the server configured in Seerr. **Grant access** imports selected accounts that are new to Seerr and lets them sign in to AIO with their media account. **Revoke access** ends their AIO sessions and keeps their account and request history in Seerr.
+
+Media accounts can request films and individual series seasons from **Search** and **Trending**. Seerr applies the account's request permissions, quotas and auto-approval settings. Leave auto-approval off in Seerr for accounts whose requests should wait for review.
+
+**Newly available** uses the signed-in media account's library permissions in Jellyfin or Plex. Existing AIO media sessions created before this feature need a fresh media sign-in.
+
+Search and Trending show TV seasons with episodes visible to the signed-in media account. An approved series request shows as available once each requested season has a visible episode.
+
+### Support
+
+Media accounts can file a report in **Settings → Support**, track its status and reply. The administrator’s inbox in the same section shows new reports and lets the administrator respond or mark a report in progress or resolved.
 
 ### App connections
 

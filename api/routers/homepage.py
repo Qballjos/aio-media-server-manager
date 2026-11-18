@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, HTTPException, Path, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
+from api.routers.media_users import _client as _seerr_client
 from core.auth import auth_manager
 from core.tv_devices import is_tv_request
 from core.debug_access import require_local_or_session
 from core.homepage import (
+    clear_homepage_snapshot_cache,
     homepage_art,
     homepage_downloads,
     homepage_prowlarr_grab,
@@ -162,6 +164,17 @@ async def request_media(request: Request, body: HomepageRequestBody) -> dict[str
     if not result.get("ok"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("detail"))
     return result
+
+
+@router.post("/requests/{request_id}/{action}")
+def review_media_request(
+    request: Request, request_id: Annotated[int, Path(gt=0)], action: Literal["approve", "decline"],
+):
+    auth_manager.authenticate_request(request)
+    with _seerr_client() as client:
+        client.review_request(request_id, action)
+    clear_homepage_snapshot_cache()
+    return {"ok": True}
 
 
 @router.post("/grab", summary="Send a Prowlarr search result to a download client")

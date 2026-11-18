@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { apiError, apiJson, applySession } from './api.js'
+import { apiError, apiJson, applySession, clearSession } from './api.js'
 import { canUsePasskeys, usePasskey } from './passkeys.js'
 import { brandLogoUrl, brandLoginMessage, brandTitle } from './branding.js'
 import { useToasts } from './useToasts.js'
@@ -39,6 +39,72 @@ async function resetLogin() {
   usernameInput.value?.focus()
 }
 const authLoading = ref(false)
+const mediaProvider = ref('')
+const mediaAttempt = ref(null)
+const mediaBusy = ref(false)
+const mediaMessage = ref('')
+const mediaLabel = computed(() => mediaProvider.value === 'plex' ? t('Sign in with Plex') : t('Sign in with Jellyfin'))
+
+async function checkMediaSession() {
+  try {
+    const res = await fetch('/api/media-login/session', { cache: 'no-store' })
+    if (!res.ok) return false
+    const data = await res.json()
+    if (!data.account_id) return false
+    openMediaSession(data)
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
+function openMediaSession(data) {
+  clearSession()
+  emit('session', { ...data, username: t('Media account'), role: 'member' })
+}
+
+async function loadMediaProvider() {
+  try {
+    const { res, data } = await apiJson('/api/media-login/options')
+    if (res.ok && ['jellyfin', 'plex'].includes(data.provider)) mediaProvider.value = data.provider
+  } catch (_) {}
+}
+
+async function startMediaSignIn() {
+  mediaBusy.value = true
+  mediaMessage.value = ''
+  try {
+    const { res, data } = await apiJson(`/api/media-login/${mediaProvider.value}`, { method: 'POST' })
+    if (!res.ok || !data.attempt) throw new Error(apiError(data, t('Could not start media sign-in.')))
+    mediaAttempt.value = data
+  } catch (error) {
+    mediaMessage.value = t(error.message)
+  } finally {
+    mediaBusy.value = false
+  }
+}
+
+async function completeMediaSignIn() {
+  mediaBusy.value = true
+  mediaMessage.value = ''
+  try {
+    const { res, data } = await apiJson(`/api/media-login/${mediaProvider.value}/complete`, {
+      method: 'POST',
+      headers: { 'X-AIO-Media-Attempt': mediaAttempt.value.attempt },
+    })
+    if (res.status === 202) {
+      mediaMessage.value = t('Approval is still pending.')
+      return
+    }
+    if (!res.ok || !data.account_id) throw new Error(apiError(data, t('Could not complete media sign-in.')))
+    openMediaSession(data)
+  } catch (error) {
+    mediaAttempt.value = null
+    mediaMessage.value = t(error.message)
+  } finally {
+    mediaBusy.value = false
+  }
+}
 const cardRef = ref(null)
 const tiltOn = ref(false)
 const tilt = ref('1 0 0 0deg')
@@ -93,6 +159,7 @@ async function checkAuthStatus({ retries = 6 } = {}) {
         applySession(data)
         emit('status', data)
         if (data.authenticated) emit('session', data)
+        else if (!data.setup_required && !await checkMediaSession()) loadMediaProvider()
         authReady.value = true
         return
       }
@@ -382,6 +449,35 @@ onUnmounted(() => {
               {{ $t('Back') }}
             </button>
           </form>
+          <div v-if="mediaProvider && !factorRequired" class="media-sign-in">
+            <button v-if="!mediaAttempt" type="button" class="ui-btn ui-btn-ghost btn-block"
+                    :disabled="mediaBusy || authLoading" @click="startMediaSignIn">
+              {{ mediaBusy ? $t('Starting sign-in…') : mediaLabel }}
+            </button>
+            <template v-else>
+              <p v-if="mediaAttempt.code">
+                {{ $t('Enter this code in Jellyfin under Settings → Quick Connect.') }}
+                <strong class="media-code">{{ mediaAttempt.code }}</strong>
+              </p>
+              <a v-else :href="mediaAttempt.authorize_url" target="_blank" rel="noopener noreferrer"
+                 class="ui-btn ui-btn-ghost btn-block">{{ $t('Open Plex to approve') }}</a>
+              <div class="media-sign-in-actions">
+                <button type="button" class="ui-btn ui-btn-primary" :disabled="mediaBusy" @click="completeMediaSignIn">
+                  {{ mediaBusy ? $t('Checking approval…') : $t('Check approval') }}
+                </button>
+                <button type="button" class="ui-btn ui-btn-ghost" :disabled="mediaBusy"
+                        @click="mediaAttempt = null; mediaMessage = ''">{{ $t('Cancel') }}</button>
+              </div>
+            </template>
+            <p v-if="mediaMessage" class="media-message" role="status">{{ mediaMessage }}</p>
+          </div>
         </div>
       </section>
 </template>
+
+<style scoped>
+.media-sign-in { display: grid; gap: .75rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); }
+.media-sign-in p { margin: 0; }
+.media-code { display: block; margin-top: .35rem; font-variant-numeric: tabular-nums; letter-spacing: .12em; }
+.media-sign-in-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+</style>

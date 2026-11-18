@@ -2080,6 +2080,8 @@ _REQUEST_DONE_DAYS = 30
 
 def _seerr_request_visible(row: dict[str, Any], cutoff: datetime) -> bool:
     """Unfinished requests stay; available or declined ones drop off after 30 days."""
+    if row.get("status") == 1:  # Pending decisions remain visible even if another request made the title available.
+        return True
     media = row.get("media") if isinstance(row.get("media"), dict) else {}
     if seerr_media_status(media) != "available" and row.get("status") != 3:  # 3 = declined
         return True
@@ -2133,9 +2135,12 @@ def _seerr_request_cards(
     seen: set[tuple[str, int]] = set()
     for row, media_type, tmdb_id in jobs:
         ident = (media_type, tmdb_id)
-        if ident in seen:
-            continue
-        seen.add(ident)
+        request_id = row.get("id")
+        pending = type(request_id) is int and request_id > 0 and row.get("status") == 1
+        if not pending:
+            if ident in seen:
+                continue
+            seen.add(ident)
         info = details.get(ident) or {}
         who = row.get("requestedBy") if isinstance(row.get("requestedBy"), dict) else {}
         requester = who.get("displayName") or who.get("username") or ""
@@ -2151,6 +2156,8 @@ def _seerr_request_cards(
                 "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
                 "mediaType": media_type,
                 "mediaId": tmdb_id,
+                "requestId": request_id,
+                "requestStatus": row.get("status"),
                 "status": seerr_media_status(media),
             }
         )
@@ -2163,9 +2170,12 @@ def _seerr_media_details(
     media_type: str,
     tmdb_id: int,
 ) -> dict[str, Any]:
-    kind = "tv" if media_type == "tv" else "movie"
+    return seerr_catalog_details(f"http://127.0.0.1:{plugin.port}/api/v1", headers, media_type, tmdb_id)
+
+
+def seerr_catalog_details(base_url: str, headers: dict[str, str], media_type: str, tmdb_id: int) -> dict:
     data, _error = _fetch_json(
-        f"http://127.0.0.1:{plugin.port}/api/v1/{kind}/{tmdb_id}",
+        f"{base_url}/{media_type}/{tmdb_id}",
         headers=headers,
         timeout=2.0,
     )

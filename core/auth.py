@@ -23,6 +23,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, Request, Response, status
 
 from core import two_factor
+from core.file_io import write_private_text
+from core.media_users import MediaUsers
 from core.settings import Settings, settings
 from core.tv_devices import TvDevices
 from core.homey_connections import HomeyConnections
@@ -288,6 +290,40 @@ class AuthManager:
         return self._session_version()
 
     def issue_token(self, username: str) -> str:
+        return self._issue_token(username, member=False)
+
+    @property
+    def media_users(self) -> MediaUsers:
+        return MediaUsers(self._settings.config_dir)
+
+    def issue_member_token(
+        self, provider: str, server_id: str, account_id: str, *, library_token: str = "",
+    ) -> str:
+        """Issue a session after the caller verifies the media account."""
+        version = self.media_users.version(provider, server_id, account_id)
+        if not version:
+            raise HTTPException(status_code=403, detail="Media account has no AIO access.")
+        return self._issue_token(
+            account_id, member=True, grant=[provider, server_id, version], library_token=library_token,
+        )
+
+    def _library_cipher(self) -> Fernet:
+        key = hashlib.sha256(b"amm:media-library:" + self.jwt_secret().encode()).digest()
+        return Fernet(base64.urlsafe_b64encode(key))
+
+    def member_library_token(self, request: Request) -> str:
+        self.authenticate_member_request(request)
+        session_id = request.state.manager_session_id
+        session = self._settings.config_dir / ".sessions" / session_id
+        try:
+            encrypted = session.read_bytes()
+            return self._library_cipher().decrypt(encrypted, ttl=JWT_TTL_SECONDS).decode()
+        except (FileNotFoundError, InvalidToken, UnicodeError) as exc:
+            raise HTTPException(409, "Sign in again to access your media library.") from exc
+
+    def _issue_token(
+        self, username: str, *, member: bool, grant: list[str] | None = None, library_token: str = "",
+    ) -> str:
         now = int(time.time())
         session_id = secrets.token_hex(32)
         sessions = self._settings.config_dir / ".sessions"
@@ -299,17 +335,24 @@ class AuthManager:
             except OSError:
                 pass
         session = sessions / session_id
-        session.touch(mode=0o600)
+        if library_token:
+            encrypted = self._library_cipher().encrypt(library_token.encode()).decode("ascii")
+            write_private_text(session, encrypted)
+        else:
+            session.touch(mode=0o600)
         payload = {
             "jti": session_id,
             "ver": self._session_version(),
             "sub": username,
+            "role": "member" if member else "admin",
             "iat": now,
             "exp": now + JWT_TTL_SECONDS,
         }
+        if grant is not None:
+            payload["grant"] = grant
         return jwt.encode(payload, self.jwt_secret(), algorithm=JWT_ALGORITHM)
 
-    def decode_token(self, token: str) -> dict[str, Any]:
+    def decode_token(self, token: str, *, member: bool = False) -> dict[str, Any]:
         try:
             if not self._secret_path.is_file():
                 raise jwt.InvalidTokenError("No configured session secret")
@@ -319,6 +362,13 @@ class AuthManager:
                 raise jwt.InvalidTokenError("Missing session")
             if payload.get("ver") != self._session_version() or not (self._settings.config_dir / ".sessions" / session_id).is_file():
                 raise jwt.InvalidTokenError("Session revoked")
+            expected_role = "member" if member else "admin"
+            if payload.get("role", "admin") != expected_role:
+                raise HTTPException(status_code=403, detail="This session cannot access this resource.")
+            if member:
+                provider, server_id, version = payload["grant"]
+                if self.media_users.version(provider, server_id, payload["sub"]) != version:
+                    raise jwt.InvalidTokenError("Media account access revoked")
             return payload
         except jwt.PyJWTError as exc:
             raise HTTPException(
@@ -333,11 +383,11 @@ class AuthManager:
             [data.get(key, "") for key in ("username", "password_hash", "session_version")]
         ).encode()).hexdigest()
 
-    def revoke_request_session(self, request: Request) -> None:
-        self.authenticate_request(request)
+    def revoke_request_session(self, request: Request, *, member: bool = False) -> None:
+        self._authenticate_request(request, member=member)
         header = request.headers.get("Authorization", "")
         token = header[7:].strip() if header.startswith("Bearer ") else request.cookies.get(COOKIE_ACCESS, "")
-        payload = self.decode_token(token)
+        payload = self.decode_token(token, member=member)
         (self._settings.config_dir / ".sessions" / payload["jti"]).unlink(missing_ok=True)
 
     def update_profile(
@@ -434,6 +484,12 @@ class AuthManager:
             )
 
     def authenticate_request(self, request: Request) -> str:
+        return self._authenticate_request(request, member=False)
+
+    def authenticate_member_request(self, request: Request) -> str:
+        return self._authenticate_request(request, member=True)
+
+    def _authenticate_request(self, request: Request, *, member: bool) -> str:
         auth_header = request.headers.get("Authorization", "").strip()
         cookie_token = request.cookies.get(COOKIE_ACCESS)
         using_bearer = False
@@ -453,11 +509,11 @@ class AuthManager:
                 detail="Authentication required.",
             )
 
-        if using_bearer and token.startswith("tv_"):
+        if not member and using_bearer and token.startswith("tv_"):
             return self.tv_devices.authenticate(request, token)
-        if using_bearer and token.startswith("homey_"):
+        if not member and using_bearer and token.startswith("homey_"):
             return self.homey_connections.authenticate(request, token)
-        payload = self.decode_token(token)
+        payload = self.decode_token(token, member=member)
         username = str(payload.get("sub") or "")
         if not username:
             raise HTTPException(
@@ -474,6 +530,9 @@ class AuthManager:
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="CSRF token missing or invalid.",
                 )
+        if member:
+            provider, server_id, _ = payload["grant"]
+            request.state.media_account = (provider, server_id, username)
         request.state.manager_session_id = payload["jti"]
         return username
 

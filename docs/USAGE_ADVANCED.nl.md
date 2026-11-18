@@ -183,6 +183,16 @@ De huidige app met fictieve voorbeeldgegevens. Licht staat links, donker rechts.
 |---|---|
 | ![Externe toegang](screenshots/light/settings-remote.png?v=app-store-20261102) | ![Externe toegang](screenshots/dark/settings-remote.png?v=app-store-20261102) |
 
+### Gebruikers en support
+
+Open **Instellingen → Gebruikers** om Jellyfin- of Plex-accounts via Seerr te importeren en toegang tot AIO te geven. Intrekken beëindigt hun AIO-sessies. Seerr bewaart hun aanvraaggeschiedenis.
+
+Media-accounts kunnen vanuit **Zoeken** en **Trending** films en seizoenen aanvragen. De beheerder stelt het gedeelde Trending-filter in en kan openstaande aanvragen beoordelen op Start. Seerr past de rechten, limieten en automatische goedkeuring van het account toe.
+
+**Nieuw beschikbaar** en de beschikbaarheidslabels volgen de bibliotheekrechten van het ingelogde account. Een goedgekeurde serieaanvraag krijgt de status Beschikbaar zodra elk aangevraagd seizoen ten minste één toegankelijke aflevering heeft. Gebruikers met een oudere AIO-sessie moeten opnieuw inloggen.
+
+Gebruikers kunnen via de titelpopup of **Instellingen → Support** een probleem melden. Beheerders zien de meldingen in hun Support-inbox en kunnen antwoorden en de status aanpassen.
+
 ### App-koppelingen
 
 | Light | Dark |

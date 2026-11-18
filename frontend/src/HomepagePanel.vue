@@ -185,9 +185,73 @@ const pausedLabel = computed(() => {
   return t('Paused · resumes {time}', { time })
 })
 const requestsFilter = ref('all')
+const reviewDialog = ref(null)
+const pendingReview = ref(null)
+const reviewBusy = ref(false)
+const reviewError = ref('')
+const reviewNotice = ref('')
+
+async function openRequestReview(item) {
+  pendingReview.value = item
+  reviewError.value = ''
+  reviewNotice.value = ''
+  await nextTick()
+  reviewDialog.value.showModal()
+}
+
+async function reviewRequest(action) {
+  const item = pendingReview.value
+  if (!item || reviewBusy.value) return
+  reviewBusy.value = true
+  reviewError.value = ''
+  try {
+    const res = await apiRequest(`/api/homepage/requests/${item.requestId}/${action}`, { method: 'POST' })
+    if (!res.ok) throw new Error()
+    const requestStatus = action === 'approve' ? 2 : 3
+    snapshot.value.requests = snapshot.value.requests.map(row =>
+      row.requestId === item.requestId ? { ...row, requestStatus } : row,
+    )
+    reviewNotice.value = t(action === 'approve' ? 'Request approved.' : 'Request declined.')
+    reviewDialog.value.close()
+    await loadSnapshot(true)
+  } catch (_) {
+    reviewError.value = t('Could not update the request.')
+  } finally {
+    reviewBusy.value = false
+  }
+}
+
 const requestsWindowStart = ref(0)
 const REQUESTS_WINDOW_SIZE = 20
 const trendingFilter = ref('all')
+const trendingFilterBusy = ref(false)
+const trendingFilterError = ref('')
+
+async function loadTrendingFilter() {
+  try {
+    const response = await apiRequest('/api/media-discovery/trending-filter')
+    if (!response.ok) return
+    const data = await readJson(response)
+    if (!trendingFilterBusy.value && ['all', 'movie', 'tv'].includes(data.filter)) trendingFilter.value = data.filter
+  } catch (_) {}
+}
+
+async function setTrendingFilter(filter) {
+  if (filter === trendingFilter.value || trendingFilterBusy.value) return
+  trendingFilterBusy.value = true
+  trendingFilterError.value = ''
+  try {
+    const response = await apiRequest('/api/media-discovery/trending-filter', {
+      method: 'PUT', body: JSON.stringify({ filter }),
+    })
+    if (!response.ok) throw new Error()
+    trendingFilter.value = filter
+  } catch (_) {
+    trendingFilterError.value = t('Could not save the shared Trending filter.')
+  } finally {
+    trendingFilterBusy.value = false
+  }
+}
 let poll = null
 let downloadsPoll = null
 let statusPoll = null
@@ -657,6 +721,7 @@ function requestStatusDot(item) {
   const status = String(item?.status || 'missing')
   if (status === 'available') return { cls: 'is-available', label: t('Available') }
   if (status === 'partial') return { cls: 'is-partial', label: t('Partially available') }
+  if (item.requestStatus === 2) return { cls: 'is-requested', label: t('Approved') }
   if (status === 'requested' || status === 'monitored') return { cls: 'is-requested', label: t('Requested') }
   return { cls: 'is-missing', label: t('Not available') }
 }
@@ -1307,6 +1372,7 @@ function onWidgetDebugEvent(event) {
 }
 
 onMounted(() => {
+  loadTrendingFilter()
   try {
     const params = new URLSearchParams(window.location.search)
     widgetDebug.value =
@@ -1567,15 +1633,20 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
+          <p v-if="reviewNotice" class="home-muted" role="status">{{ reviewNotice }}</p>
           <div v-if="requestItems.length" ref="requestsRail" class="home-rail home-requests-rail" @scroll.passive="scrollRequests">
-            <a
+            <component
+              :is="item.requestStatus === 1 && item.requestId ? 'button' : 'a'"
               v-for="(item, idx) in requestsWindowItems"
-              :key="`${requestsWindowStart + idx}-${item.mediaType}-${item.mediaId || item.title}`"
-              class="home-tile"
-              :href="item.url || seerrHomeUrl || undefined"
-              :target="item.url || seerrHomeUrl ? '_blank' : undefined"
+              :key="item.requestId || `${requestsWindowStart + idx}-${item.mediaType}-${item.mediaId || item.title}`"
+              class="home-tile home-request-tile"
+              :type="item.requestStatus === 1 && item.requestId ? 'button' : undefined"
+              :href="item.requestStatus === 1 && item.requestId ? undefined : item.url || seerrHomeUrl || undefined"
+              :target="item.requestStatus === 1 && item.requestId ? undefined : '_blank'"
               rel="noopener noreferrer"
-              @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
+              @click="item.requestStatus === 1 && item.requestId
+                ? openRequestReview(item)
+                : (item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
             >
               <span class="home-tile-art">
                 <HomePoster v-if="item.poster" :src="item.poster" class="home-tile-poster" />
@@ -1583,8 +1654,11 @@ onUnmounted(() => {
                 <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
-              <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
-            </a>
+              <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">
+                {{ item.requestStatus === 1 && item.requestId ? $t('Review request')
+                  : item.requestStatus === 3 ? $t('Declined') : requestStatusDot(item).label }}
+              </span>
+            </component>
           </div>
           <template v-else-if="isPending('requests')">
             <div class="home-rail" aria-hidden="true">
@@ -1596,6 +1670,19 @@ onUnmounted(() => {
             {{ requestsFilter === 'movie' ? $t('No movie requests in this filter.') : requestsFilter === 'tv' ? $t('No series requests in this filter.') : $t('No requests in this filter.') }}
           </p>
           <p v-else class="home-muted">{{ $t('No Seerr requests yet. Search above to request a title.') }}</p>
+          <dialog ref="reviewDialog" class="glass-card home-review-dialog" :aria-label="$t('Review request')"
+                  @close="pendingReview = null" @cancel="reviewBusy && $event.preventDefault()">
+            <template v-if="pendingReview">
+              <h2>{{ pendingReview.title }}</h2>
+              <p v-if="pendingReview.detail">{{ $t('Requested by {name}', { name: pendingReview.detail }) }}</p>
+              <p v-if="reviewError" role="alert" class="ui-alert ui-alert-error">{{ reviewError }}</p>
+              <div class="home-review-actions">
+                <button type="button" class="ui-btn ui-btn-ghost" :disabled="reviewBusy" @click="reviewDialog.close()">{{ $t('Cancel') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :disabled="reviewBusy" @click="reviewRequest('decline')">{{ $t('Decline') }}</button>
+                <button type="button" class="ui-btn ui-btn-primary" :disabled="reviewBusy" @click="reviewRequest('approve')">{{ $t('Approve') }}</button>
+              </div>
+            </template>
+          </dialog>
           <ul v-if="widgetDebug && notesFor('requests').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('requests')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1610,10 +1697,11 @@ onUnmounted(() => {
             <h3>{{ $t('Trending') }}</h3>
             <div class="home-rail-tools home-trending-tools">
               <div v-if="snapshot.trending.length" class="home-type-filter" role="group" :aria-label="$t('Filter trending')">
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">{{ $t('All') }}</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">{{ $t('Movies') }}</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" @click="trendingFilter = 'tv'">{{ $t('Series') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" :disabled="trendingFilterBusy" :aria-pressed="trendingFilter === 'all'" @click="setTrendingFilter('all')">{{ $t('All') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" :disabled="trendingFilterBusy" :aria-pressed="trendingFilter === 'movie'" @click="setTrendingFilter('movie')">{{ $t('Movies') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" :disabled="trendingFilterBusy" :aria-pressed="trendingFilter === 'tv'" @click="setTrendingFilter('tv')">{{ $t('Series') }}</button>
               </div>
+              <p v-if="trendingFilterError" role="alert">{{ trendingFilterError }}</p>
               <div v-if="trendingItems.length" class="home-rail-nav">
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous trending')" @click="scrollRail('trending', -1)">‹</button>
                 <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next trending')" @click="scrollRail('trending', 1)">›</button>

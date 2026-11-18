@@ -9,6 +9,8 @@ import BackupSettings from './settings/BackupSettings.vue'
 import TwoFactorSettings from './settings/TwoFactorSettings.vue'
 import PasskeySettings from './settings/PasskeySettings.vue'
 import { useBackups } from './composables/useBackups.js'
+import SupportSettings from './settings/SupportSettings.vue'
+import MediaUsersSettings from './settings/MediaUsersSettings.vue'
 import NotificationSettings from './settings/NotificationSettings.vue'
 import PreflightReview from './PreflightReview.vue'
 const { t } = useI18n()
@@ -2318,6 +2320,10 @@ onBeforeUnmount(() => {
         </form>
       </div>
     </template>
+
+    <SupportSettings v-else-if="section === 'support'" administrator />
+
+    <MediaUsersSettings v-else-if="section === 'users'" />
 
     <NotificationSettings v-else-if="section === 'notifications'" />
 

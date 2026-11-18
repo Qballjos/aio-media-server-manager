@@ -10,6 +10,7 @@ export const SETTINGS_GROUPS = [
   { label: 'Connections', items: [
     { id: 'vpn', label: 'VPN', icon: 'shield', description: 'Manage the secure connection for your apps.', keywords: 'wireguard openvpn provider tunnel privadovpn' },
     { id: 'remote', label: 'External access', icon: 'globe', description: 'Reach your apps securely outside your home.', keywords: 'cloudflare tunnel domain subdomain dns proxy access externe toegang domein' },
+    { id: 'users', label: 'Users', icon: 'user', description: 'Import media accounts through Seerr and manage their AIO access.', keywords: 'users members plex jellyfin seerr gebruikers importeren toegang' },
     { id: 'integrations', label: 'App connections', icon: 'link', description: 'Connect media services and pair your TV or Homey.', keywords: 'jellyfin seerr api key token tv homey pairing koppelingen sleutel' },
     { id: 'usenet', label: 'Usenet', icon: 'download', description: 'Configure your Usenet provider and download clients.', keywords: 'nzb sabnzbd nzbget server provider download' },
   ] },
@@ -20,6 +21,7 @@ export const SETTINGS_GROUPS = [
   ] },
   { label: 'System', items: [
     { id: 'system', label: 'Server and storage', icon: 'server', description: 'Manage your server, file permissions and storage.', keywords: 'puid pgid timezone logs permissions storage tijdzone rechten opslag' },
+    { id: 'support', label: 'Support', icon: 'help', description: 'Read and respond to user reports.', keywords: 'support reports tickets meldingen problemen' },
     { id: 'diagnostics', label: 'Help and diagnostics', icon: 'help', description: 'Find problems and share diagnostics with support.', keywords: 'debug errors support widgets help fouten diagnose' },
     { id: 'about', label: 'About this app', icon: 'info', description: 'Install the manager on your device and support the project.', keywords: 'pwa install donate paypal ko-fi installeren doneren' },
   ] },

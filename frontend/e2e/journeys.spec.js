@@ -432,3 +432,272 @@ test('passkey registration, sign-in, and removal', async ({ page, context, baseU
   await card.getByRole('button', { name: 'Remove passkey', exact: true }).click()
   await expect(card.getByRole('button', { name: 'Add passkey', exact: true })).toBeVisible()
 })
+
+test.describe('media-account login', () => {
+  test.use({ serviceWorkers: 'block' })
+
+  for (const provider of ['jellyfin', 'plex']) {
+    test(`media sign-in with ${provider} stays in the limited dashboard`, async ({ page }) => {
+      let signedIn = false
+      let approvals = 0
+      let requestSent = false
+      const adminRequests = []
+      await page.route('**/api/**', async route => {
+        const path = new URL(route.request().url()).pathname
+        if (path === '/api/auth/status') return route.fulfill({ json: { authenticated: false, setup_required: false } })
+        if (path === '/api/media-login/options') return route.fulfill({ json: { provider } })
+        if (path === '/api/media-discovery/quota') {
+          return route.fulfill({ json: { movie: { limit: 5, remaining: 0, days: 7 }, tv: null } })
+        }
+        if (path === '/api/support' && route.request().method() === 'POST') {
+          const payload = route.request().postDataJSON()
+          if (payload.subject === 'Shared library title') {
+            expect(payload).toEqual({ subject: 'Shared library title', message: 'Subtitles missing.' })
+          } else {
+            expect(payload).toEqual({ subject: 'Trending title', message: 'Request #2\n\nWrong season.' })
+          }
+          return route.fulfill({ status: 201, json: { id: 'report-1' } })
+        }
+        if (path === '/api/support') return route.fulfill({ json: { reports: [{ status: 'in_progress' }], new_count: 0 } })
+        if (path === '/api/media-discovery/tv/5/seasons') return route.fulfill({ json: { seasons: [1, 2] } })
+        if (path === '/api/media-discovery/requests' && route.request().method() === 'POST') {
+          expect(route.request().postDataJSON()).toEqual({ mediaType: 'tv', mediaId: 5, seasons: [2] })
+          requestSent = true
+          return route.fulfill({ status: 201, json: { id: 2 } })
+        }
+        if (path === '/api/media-discovery/requests') {
+          const item = requestSent
+            ? { id: 2, title: 'Trending title', status: 'pending', mediaType: 'tv', seasons: [2], createdAt: '2026-11-18T12:00:00Z' }
+            : { id: 1, title: 'My requested film', status: 'approved' }
+          return route.fulfill({ json: { items: [item], has_more: false } })
+        }
+        if (path === '/api/media-discovery/recent/art/shared-3') {
+          return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="30"/>' })
+        }
+        if (path === '/api/media-discovery/recent') {
+          return route.fulfill({ json: { items: [{ id: 'shared-3', title: 'Shared library title', mediaType: 'tv', overview: 'A shared series.' }] } })
+        }
+        if (path === '/api/media-discovery/trending') {
+          return route.fulfill({ json: { items: [{ mediaType: 'tv', mediaId: 5, title: 'Trending title', availableSeasons: [1] }], has_more: false } })
+        }
+        if (path === '/api/media-discovery/search') {
+          expect(new URL(route.request().url()).searchParams.get('q')).toBe('Test film')
+          return route.fulfill({ json: { items: [{ mediaType: 'movie', mediaId: 4, title: 'Test film', available: true }] } })
+        }
+        if (path === '/api/media-login/session') {
+          return route.fulfill({ status: signedIn ? 200 : 401, json: signedIn ? { account_id: '42' } : {} })
+        }
+        if (path === `/api/media-login/${provider}`) {
+          const prompt = provider === 'plex' ? { authorize_url: 'https://app.plex.tv/auth' } : { code: '123456' }
+          return route.fulfill({ json: { attempt: 'fixture-attempt', ...prompt } })
+        }
+        if (path === `/api/media-login/${provider}/complete`) {
+          expect(route.request().headers()['x-aio-media-attempt']).toBe('fixture-attempt')
+          if (!approvals++) return route.fulfill({ status: 202, json: { status: 'pending' } })
+          signedIn = true
+          return route.fulfill({ json: { account_id: '42' } })
+        }
+        if (path === '/api/media-login/logout') {
+          signedIn = false
+          return route.fulfill({ status: 204 })
+        }
+        if (/^\/api\/(catalog|applications|system|wizard|settings)/.test(path)) adminRequests.push(path)
+        return route.fulfill({ json: {} })
+      })
+
+      await page.goto('/#/catalog')
+      await page.getByRole('button', { name: new RegExp(`Sign in with ${provider}`, 'i') }).click()
+      if (provider === 'plex') {
+        await expect(page.getByRole('link', { name: 'Open Plex to approve' })).toHaveAttribute('href', 'https://app.plex.tv/auth')
+      } else {
+        await expect(page.getByText('123456', { exact: true })).toBeVisible()
+      }
+      await assertFitsViewport(page)
+      await page.getByRole('button', { name: 'Check approval' }).click()
+      await expect(page.getByText('Approval is still pending.')).toBeVisible()
+      await page.getByRole('button', { name: 'Check approval' }).click()
+      await expect(page).toHaveURL(/#\/home$/)
+      await expect(page.getByText('Trending title', { exact: true })).toBeVisible()
+      await expect(page.getByText('Available seasons: Season 1', { exact: true })).toBeVisible()
+      const recentTile = page.getByRole('region', { name: 'Newly available' }).getByRole('button', { name: /Shared library title/ })
+      await recentTile.locator('img').click()
+      const titleDetails = page.getByRole('dialog', { name: 'Title details' })
+      await expect(titleDetails.getByText('A shared series.')).toBeVisible()
+      await titleDetails.getByLabel('Description', { exact: true }).fill('Subtitles missing.')
+      await titleDetails.getByRole('button', { name: 'Send report' }).click()
+      await expect(titleDetails.getByText('Report sent to the administrator.')).toBeVisible()
+      await titleDetails.getByRole('button', { name: 'Close', exact: true }).click()
+      const ownRequests = page.getByRole('region', { name: 'My requests' })
+      await expect(ownRequests.getByText('My requested film')).toBeVisible()
+      await expect(ownRequests.getByText('Approved', { exact: true })).toBeVisible()
+      const limits = page.getByRole('region', { name: 'Request limits' })
+      await expect(limits.getByText('0 of 5 remaining per 7 days')).toBeVisible()
+      await expect(limits.getByText('No limit', { exact: true })).toBeVisible()
+      await expect(page.getByText('Open reports: 1')).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Open support' })).toHaveAttribute('href', '#/settings/support')
+      await page.getByRole('searchbox', { name: 'Search films and series' }).fill('Test film')
+      await page.getByRole('button', { name: 'Search', exact: true }).click()
+      await expect(page.getByText('Test film', { exact: true })).toBeVisible()
+      const searchResults = page.getByRole('region', { name: 'Search', exact: true })
+      await expect(searchResults.getByText('Available', { exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Request Trending title' }).click()
+      const requestDialog = page.getByRole('dialog', { name: 'Request media' })
+      await requestDialog.getByRole('checkbox', { name: 'Season 2' }).check()
+      await requestDialog.getByRole('button', { name: 'Send request' }).click()
+      await expect(ownRequests.getByText('Waiting for approval')).toBeVisible()
+      await ownRequests.getByRole('button', { name: 'Open request details for Trending title' }).click()
+      const details = page.getByRole('dialog', { name: 'Request details' })
+      await expect(details.getByText('Waiting for approval')).toBeVisible()
+      await expect(details.getByText('Season 2', { exact: true })).toBeVisible()
+      await expect(details.getByText('Requested on', { exact: true })).toBeVisible()
+      await assertFitsViewport(page)
+      await details.getByLabel('Description', { exact: true }).fill('Wrong season.')
+      await details.getByRole('button', { name: 'Send report', exact: true }).click()
+      await expect(details.getByText('Report sent to the administrator.')).toBeVisible()
+      await details.getByRole('button', { name: 'Close', exact: true }).click()
+      await assertFitsViewport(page)
+      await expect(page.getByRole('link', { name: 'Catalog' })).toHaveCount(0)
+      await page.getByRole('link', { name: 'Settings', exact: true }).click()
+      await expect(page.getByText('Media account ID')).toBeVisible()
+      await assertFitsViewport(page)
+      await page.getByRole('button', { name: 'Light', exact: true }).click()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+      await page.reload()
+      await expect(page.getByText('Media account ID')).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Catalog' })).toHaveCount(0)
+      expect(adminRequests).toEqual([])
+    })
+  }
+})
+
+test.describe('media user administration', () => {
+  test.use({ serviceWorkers: 'block' })
+
+  test('grants and revokes media access', async ({ page }) => {
+    await page.route('**/api/**', async route => {
+      const request = route.request()
+      const path = new URL(request.url()).pathname
+      if (path === '/api/auth/status') return route.fulfill({ json: { authenticated: true, username: 'admin' } })
+      if (path === '/api/wizard/status') return route.fulfill({ json: { completed: true } })
+      if (path === '/api/settings/media-users' && request.method() === 'GET') {
+        return route.fulfill({ json: { provider: 'jellyfin', users: [{ id: '42', name: 'Viewer', imported: false, enabled: false }] } })
+      }
+      if (path === '/api/settings/media-users' && request.method() === 'POST') {
+        expect(request.postDataJSON()).toEqual({ account_ids: ['42'] })
+        return route.fulfill({ json: { enabled: ['42'] } })
+      }
+      if (path === '/api/settings/media-users/42' && request.method() === 'DELETE') return route.fulfill({ status: 204 })
+      return route.fulfill({ json: {} })
+    })
+
+    await page.goto('/#/settings/users')
+    await expect(page.getByRole('heading', { name: 'Jellyfin accounts' })).toBeVisible()
+    await assertFitsViewport(page)
+    await page.getByRole('checkbox', { name: 'Viewer' }).check()
+    await page.getByRole('button', { name: 'Grant access', exact: true }).click()
+    await expect(page.getByText('AIO access enabled', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Revoke access for Viewer' }).click()
+    await expect(page.getByText('Imported in Seerr', { exact: true })).toBeVisible()
+    await expect(page.getByRole('status').filter({ hasText: 'Access revoked for Viewer.' })).toBeVisible()
+  })
+})
+
+test.describe('support settings', () => {
+  test.use({ serviceWorkers: 'block' })
+
+  test('delivers a member report and shows the administrator reply', async ({ page }) => {
+    let admin = false
+    let report
+    await page.route('**/api/**', async route => {
+      const request = route.request()
+      const path = new URL(request.url()).pathname
+      if (path === '/api/auth/status') return route.fulfill({ json: { authenticated: admin, username: admin ? 'admin' : null } })
+      if (path === '/api/wizard/status') return route.fulfill({ json: { completed: true } })
+      if (path === '/api/media-login/session') return route.fulfill({ json: { account_id: '42' } })
+      if (path === '/api/support' && request.method() === 'POST') {
+        expect(request.postDataJSON()).toEqual({ subject: 'Playback', message: 'Audio stops.' })
+        report = {
+          ...request.postDataJSON(), id: 'report-1', status: 'new', replies: [],
+          provider: 'jellyfin', account_id: '42', created_at: '2026-11-18 12:00:00',
+        }
+        return route.fulfill({ status: 201, json: report })
+      }
+      if (path === '/api/support') {
+        return route.fulfill({ json: { reports: report ? [report] : [], new_count: admin && report?.status === 'new' ? 1 : 0 } })
+      }
+      if (path === '/api/support/report-1/replies') {
+        report.replies.push({ id: 1, author: 'admin', message: request.postDataJSON().message, created_at: report.created_at })
+        return route.fulfill({ status: 201, json: report })
+      }
+      if (path === '/api/support/report-1') {
+        if (request.method() === 'PATCH') report.status = request.postDataJSON().status
+        return route.fulfill({ json: report })
+      }
+      return route.fulfill({ json: {} })
+    })
+
+    await page.goto('/#/settings/account')
+    await page.getByRole('link', { name: 'Support', exact: true }).click()
+    await page.getByLabel('Subject', { exact: true }).fill('Playback')
+    await page.getByLabel('Description', { exact: true }).fill('Audio stops.')
+    await page.getByRole('button', { name: 'Send report' }).click()
+    await expect(page.getByText('Audio stops.')).toBeVisible()
+    await assertFitsViewport(page)
+
+    admin = true
+    await page.reload()
+    await expect(page.getByText('New reports: 1')).toBeVisible()
+    await page.getByRole('button', { name: 'Playback', exact: true }).click()
+    await page.getByLabel('Reply', { exact: true }).fill('Please retry.')
+    await page.getByRole('button', { name: 'Send reply' }).click()
+    await expect(page.getByText('Please retry.')).toBeVisible()
+    await page.getByRole('button', { name: 'Resolved', exact: true }).click()
+    await expect(page.getByText('New reports: 0')).toBeVisible()
+    await assertFitsViewport(page)
+
+    admin = false
+    await page.reload()
+    await page.getByRole('button', { name: 'Playback', exact: true }).click()
+    await expect(page.getByText('Please retry.')).toBeVisible()
+  })
+})
+
+test.describe('request review', () => {
+  test.use({ serviceWorkers: 'block' })
+
+  test('administrator approves and declines pending requests from Home', async ({ page }) => {
+    const decisions = new Map()
+    await page.route('**/api/**', async route => {
+      const request = route.request()
+      const path = new URL(request.url()).pathname
+      if (path === '/api/auth/status') return route.fulfill({ json: { authenticated: true, username: 'admin' } })
+      if (path === '/api/wizard/status') return route.fulfill({ json: { completed: true } })
+      if (path === '/api/homepage') {
+        const requests = [4, 5].map(id => ({
+          requestId: id, requestStatus: decisions.get(id) || 1, mediaType: 'movie', mediaId: id,
+          title: `Fixture Film ${id}`, detail: 'Viewer', status: 'requested',
+        }))
+        return route.fulfill({ json: { apps: [{ name: 'seerr', display_name: 'Seerr' }], requests, seerr: { available: true } } })
+      }
+      const match = path.match(/^\/api\/homepage\/requests\/(\d+)\/(approve|decline)$/)
+      if (match) {
+        expect(request.method()).toBe('POST')
+        decisions.set(Number(match[1]), match[2] === 'approve' ? 2 : 3)
+        return route.fulfill({ json: { ok: true } })
+      }
+      return route.fulfill({ json: {} })
+    })
+
+    await page.goto('/#/home')
+    const dialog = page.getByRole('dialog', { name: 'Review request' })
+    await page.getByRole('button', { name: /Fixture Film 4.*Review request/ }).click()
+    await expect(dialog.getByText('Requested by Viewer')).toBeVisible()
+    await assertFitsViewport(page)
+    await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
+    await expect(page.getByText('Request approved.', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /Fixture Film 5.*Review request/ }).click()
+    await dialog.getByRole('button', { name: 'Decline', exact: true }).click()
+    await expect(page.getByText('Request declined.', { exact: true })).toBeVisible()
+    expect([...decisions]).toEqual([[4, 2], [5, 3]])
+  })
+})

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import requests
+from fastapi import HTTPException
 
 from core.shared_credentials import admin_email, shared_admin_credentials
 
@@ -188,6 +189,116 @@ class SeerrClient:
         self.http = http or requests.Session()
         self.logged_in = False
         self.media_server = ""  # "jellyfin" or "plex" after a successful login
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        self.http.close()
+
+    def _media_users_api(self, path: str, payload: dict | None = None, *, as_user: int | None = None) -> Any:
+        headers = self._headers()
+        if as_user is not None:
+            headers["X-API-User"] = str(as_user)
+        try:
+            response = self.http.request(
+                "GET" if payload is None else "POST", f"{self.base_url}{path}",
+                headers=headers, json=payload, timeout=20, allow_redirects=False,
+            )
+            if as_user is not None and 400 <= response.status_code < 500:
+                raise HTTPException(409, "This title could not be requested.")
+            if response.status_code not in (200, 201):
+                raise ValueError("Unexpected Seerr response status")
+            return response.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise HTTPException(502, "Seerr could not complete the media user operation.") from exc
+
+    def media_user_source(self) -> tuple[str, str]:
+        kind = self._media_users_api("/settings/main").get("mediaServerType")
+        if kind not in (1, MEDIA_SERVER_JELLYFIN):
+            raise HTTPException(409, "Connect Jellyfin or Plex in Seerr first.")
+        provider, key = ("plex", "machineId") if kind == 1 else ("jellyfin", "serverID")
+        source = self._media_users_api(f"/settings/{provider}")
+        server_id = source.get(key) if provider == "plex" else source.get("serverId") or source.get(key)
+        if not isinstance(server_id, str) or not server_id:
+            raise HTTPException(409, "Seerr did not identify its media server.")
+        return provider, server_id
+
+    def _users(self):
+        skip = 0
+        while True:
+            page = self._media_users_api(f"/user?take=50&skip={skip}")
+            rows = page["results"]
+            yield from rows
+            skip += len(rows)
+            if not rows or skip >= page["pageInfo"]["results"]:
+                return
+
+    @staticmethod
+    def _provider_user(provider: str, row: dict) -> str:
+        id_key, user_type = ("plexId", 1) if provider == "plex" else ("jellyfinUserId", 3)
+        account_id = row.get(id_key)
+        if row.get("userType") == user_type and account_id and row.get("id") != 1:
+            return str(account_id)
+        return ""
+
+    def media_user_accounts(self, provider: str) -> tuple[dict[str, str], dict[str, str]]:
+        candidates = {}
+        for row in self._media_users_api(f"/settings/{provider}/users"):
+            if row.get("id") is not None:
+                candidates[str(row["id"])] = row.get("username") or row.get("title") or str(row["id"])
+        imported = {}
+        for row in self._users():
+            account_id = self._provider_user(provider, row)
+            if account_id:
+                imported[account_id] = (
+                    row.get("displayName") or row.get("username") or row.get("plexUsername") or account_id
+                )
+            elif row.get("id") == 1:
+                candidates.pop(str(row.get("plexId" if provider == "plex" else "jellyfinUserId")), None)
+        return candidates, imported
+
+    def member_user_id(self, provider: str, server_id: str, account_id: str) -> int:
+        if self.media_user_source() == (provider, server_id):
+            for row in self._users():
+                user_id = row.get("id")
+                if self._provider_user(provider, row) == account_id and type(user_id) is int and user_id > 1:
+                    return user_id
+        raise HTTPException(403, "The media account is no longer linked to Seerr.")
+
+    def user_requests(self, user_id: int, take: int, skip: int) -> dict:
+        return self._media_users_api(f"/user/{user_id}/requests?take={take}&skip={skip}")
+
+    def review_request(self, request_id: int, action: str) -> None:
+        result = self._media_users_api(f"/request/{request_id}/{action}", {})
+        expected = 2 if action == "approve" else 3
+        if not isinstance(result, dict) or result.get("id") != request_id or result.get("status") != expected:
+            raise HTTPException(502, "Seerr did not confirm the decision.")
+
+    def request_seasons(self, media_id: int) -> list[int]:
+        details = self._media_users_api(f"/tv/{media_id}")
+        return sorted({
+            season["seasonNumber"] for season in details.get("seasons", [])
+            if isinstance(season, dict) and type(season.get("seasonNumber")) is int and season["seasonNumber"] >= 0
+        })
+
+    def submit_member_request(self, user_id: int, payload: dict) -> int:
+        actor = self._media_users_api("/auth/me", as_user=user_id)
+        if not isinstance(actor, dict) or actor.get("id") != user_id:
+            raise HTTPException(502, "Seerr could not verify the request account.")
+        request = self._media_users_api("/request", payload, as_user=user_id)
+        owner = request.get("requestedBy") if isinstance(request, dict) else None
+        request_id = request.get("id") if isinstance(request, dict) else None
+        if not isinstance(owner, dict) or owner.get("id") != user_id or type(request_id) is not int:
+            raise HTTPException(502, "Seerr could not confirm the request.")
+        return request_id
+
+    def user_quota(self, user_id: int) -> dict:
+        return self._media_users_api(f"/user/{user_id}/quota")
+
+    def import_media_users(self, provider: str, account_ids: list[str]) -> None:
+        key = "plexIds" if provider == "plex" else "jellyfinUserIds"
+        self._media_users_api(f"/user/import-from-{provider}", {key: account_ids})
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
