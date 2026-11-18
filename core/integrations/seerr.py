@@ -258,13 +258,20 @@ class SeerrClient:
                 candidates.pop(str(row.get("plexId" if provider == "plex" else "jellyfinUserId")), None)
         return candidates, imported
 
-    def member_user_id(self, provider: str, server_id: str, account_id: str) -> int:
+    def _linked_member(self, provider: str, server_id: str, account_id: str) -> dict:
         if self.media_user_source() == (provider, server_id):
             for row in self._users():
                 user_id = row.get("id")
                 if self._provider_user(provider, row) == account_id and type(user_id) is int and user_id > 1:
-                    return user_id
+                    return row
         raise HTTPException(403, "The media account is no longer linked to Seerr.")
+
+    def member_user_id(self, provider: str, server_id: str, account_id: str) -> int:
+        return self._linked_member(provider, server_id, account_id)["id"]
+
+    def member_username(self, provider: str, server_id: str, account_id: str) -> str:
+        row = self._linked_member(provider, server_id, account_id)
+        return row.get("plexUsername") or row.get("username") or row.get("displayName") or ""
 
     def user_requests(self, user_id: int, take: int, skip: int) -> dict:
         return self._media_users_api(f"/user/{user_id}/requests?take={take}&skip={skip}")

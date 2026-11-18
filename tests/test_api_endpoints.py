@@ -724,6 +724,54 @@ def test_recent_media_uses_member_token_and_authorized_plex_sections(client, mon
     assert seen == ["/identity", "/library/sections", "/library/sections/1/recentlyAdded"]
 
 
+def test_recent_media_pages_merge_plex_sections_without_repeating_series(client, monkeypatch):
+    from unittest.mock import Mock
+
+    import requests
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    auth_manager.media_users.grant("plex", "server-a", "42")
+    token = auth_manager.issue_member_token("plex", "server-a", "42", library_token="viewer-token")
+    headers = {"Authorization": f"Bearer {token}"}
+    sections = {
+        "1": [
+            {"ratingKey": str(index), "title": f"Movie {index}", "type": "movie", "addedAt": index}
+            for index in range(24, 0, -2)
+        ],
+        "2": [
+            {"ratingKey": str(100 + index), "grandparentRatingKey": str(index), "grandparentTitle": f"Show {index}",
+             "type": "episode", "addedAt": index}
+            for index in range(23, 0, -2)
+        ],
+    }
+    sections["2"].insert(0, {**sections["2"][0], "ratingKey": "200", "addedAt": 25})
+
+    def plex_get(url, *, params, **_kwargs):
+        if url.endswith("/identity"):
+            return Mock(status_code=200, text='<MediaContainer machineIdentifier="server-a" />')
+        if url.endswith("/library/sections"):
+            return Mock(status_code=200, **{"json.return_value": {"MediaContainer": {"Directory": [
+                {"key": "1", "type": "movie"}, {"key": "2", "type": "show"},
+            ]}}})
+        rows = sections[url.split("/")[-2]]
+        start = params["X-Plex-Container-Start"]
+        # Simulate a server returning fewer rows than requested while more remain.
+        return Mock(status_code=200, **{
+            "json.return_value": {"MediaContainer": {"Metadata": rows[start:start + 5], "totalSize": len(rows)}},
+        })
+
+    monkeypatch.setattr(requests, "get", plex_get)
+    path = "/api/media-discovery/recent"
+    first = client.get(f"{path}?page=1", headers=headers).json()
+    second = client.get(f"{path}?page=2", headers=headers).json()
+    assert first["has_more"] is True
+    assert second["has_more"] is False
+    assert len(first["items"]) == 20
+    assert [row["id"] for row in first["items"] + second["items"]] == [
+        "23", "24", *(str(index) for index in range(22, 0, -1)),
+    ]
+
+
 def test_recent_media_queries_jellyfin_as_the_signed_in_viewer(client, monkeypatch):
     from unittest.mock import Mock
 
@@ -741,11 +789,14 @@ def test_recent_media_queries_jellyfin_as_the_signed_in_viewer(client, monkeypat
         else:
             assert url.endswith("/Items")
             assert params["UserId"] == "42"
-            body = {"Items": [{"Id": "3", "Name": "Shared", "Type": "Series", "Path": "private-field"}]}
+            assert params["Limit"] == 20
+            assert params["StartIndex"] == 20
+            body = {"TotalRecordCount": 21, "Items": [{"Id": "3", "Name": "Shared", "Type": "Series", "Path": "private-field"}]}
         return Mock(status_code=200, **{"json.return_value": body})
 
     monkeypatch.setattr(requests, "get", jellyfin_get)
-    response = client.get("/api/media-discovery/recent?user_id=9", headers={"Authorization": f"Bearer {token}"})
+    response = client.get("/api/media-discovery/recent?page=2&user_id=9", headers={"Authorization": f"Bearer {token}"})
+    assert response.json()["has_more"] is False
     [item] = response.json()["items"]
     assert item == {
         "id": "3", "title": "Shared", "mediaType": "tv", "playProvider": "jellyfin",
@@ -808,9 +859,10 @@ def test_member_poster_checks_plex_section_before_fetching_image(client, monkeyp
         if url.endswith("/library/sections"):
             payload = {"Directory": [{"key": "1", "type": "movie"}]}
         elif url.endswith("/library/metadata/3"):
-            payload = {"librarySectionID": section, "Metadata": [{"ratingKey": "3"}]}
+            payload = {"librarySectionID": section, "Metadata": [{"ratingKey": "3", "thumb": "/library/metadata/3/thumb/123"}]}
         else:
-            assert section == "1" and url.endswith("/library/metadata/3/thumb")
+            assert section == "1" and url.endswith("/library/metadata/3/thumb/123")
+            assert headers["Accept"].startswith("image/")
             image = Mock(status_code=200, headers={"Content-Type": "image/jpeg"})
             image.iter_content.return_value = [b"fixture-image"]
             return image
@@ -946,15 +998,18 @@ def test_member_calendar_uses_session_account_and_token(client, monkeypatch):
 
     def scoped_calendar(provider, server, account, credential, start, end):
         assert (provider, server, account, credential) == ("plex", "server-a", "42", "calendar-token")
-        assert (start, end) == (date(2026, 11, 16), date(2026, 11, 22))
-        return []
+        assert start == date(2026, 11, 16)
+        return [{"end": end.isoformat()}]
 
     monkeypatch.setattr(media_discovery, "member_calendar", scoped_calendar)
     path = "/api/media-discovery/calendar?start=2026-11-16&user_id=99"
     assert client.get(path).status_code == 401
-    response = client.get(path, headers={"Authorization": f"Bearer {token}"})
-    assert response.json() == {"items": []}
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get(path, headers=headers)
+    assert response.json() == {"items": [{"end": "2026-11-22"}]}
     assert response.headers["cache-control"] == "private, no-store"
+    assert client.get(f"{path}&days=42", headers=headers).json() == {"items": [{"end": "2026-12-27"}]}
+    assert client.get(f"{path}&days=43", headers=headers).status_code == 422
 
 
 def test_member_title_returns_catalog_metadata_only(client, monkeypatch):
@@ -1024,3 +1079,58 @@ def test_trending_omits_complete_movies_and_series_but_keeps_incomplete_seasons(
         "items": [{**titles[2], "availableSeasons": [1], "requestableSeasons": [1]}, titles[3]],
         "has_more": True,
     }
+
+
+def test_member_profile_is_scoped_to_linked_account(client, monkeypatch):
+    from api.routers import media_discovery
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    for account in ("42", "99"):
+        auth_manager.media_users.grant("plex", "server-a", account)
+    monkeypatch.setattr(media_discovery, "_member_username", lambda account: f"user-{account[2]}")
+    path = "/api/media-discovery/profile"
+
+    def headers(account):
+        return {"Authorization": f"Bearer {auth_manager.issue_member_token('plex', 'server-a', account)}"}
+
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=headers("42")).json() == {"username": "user-42", "display_name": "", "avatar_url": None}
+    assert client.patch(path, headers=headers("42"), json={"display_name": "  Sam  "}).json() == {"display_name": "Sam"}
+    assert client.get(path, headers=headers("42")).json()["display_name"] == "Sam"
+    assert client.get(path, headers=headers("99")).json()["display_name"] == ""
+    assert client.patch(path, headers=headers("42"), json={"display_name": ""}).status_code == 200
+    assert client.get(path, headers=headers("42")).json()["display_name"] == ""
+
+def test_member_avatar_is_private_and_can_be_replaced_or_removed(client, monkeypatch):
+    from base64 import b64decode
+
+    from api.routers import media_discovery
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    monkeypatch.setattr(media_discovery, "_member_username", lambda account: f"user-{account[2]}")
+    for account in ("42", "99"):
+        auth_manager.media_users.grant("plex", "server-a", account)
+    owner, other = [
+        {"Authorization": f"Bearer {auth_manager.issue_member_token('plex', 'server-a', account)}"}
+        for account in ("42", "99")
+    ]
+    path = "/api/media-discovery/profile/avatar"
+    png = b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jf2sAAAAASUVORK5CYII=")
+    assert client.put(path, content=png).status_code == 401
+    assert client.put(path, headers=owner, content=b"<svg></svg>").status_code == 422
+    assert client.put(path, headers=owner, content=b"x" * (2 * 1024 * 1024 + 1)).status_code == 422
+    first = client.put(path, headers=owner, content=png)
+    assert first.status_code == 200
+    url = first.json()["avatar_url"]
+    assert client.get("/api/media-discovery/profile", headers=owner).json()["avatar_url"] == url
+    image = client.get(url, headers=owner)
+    assert image.content == png
+    assert image.headers["content-type"] == "image/png"
+    assert image.headers["cache-control"] == "private, no-store"
+    assert client.get(url, headers=other).status_code == 404
+    assert client.delete(path, headers=other).status_code == 200
+    replacement = client.put(path, headers=owner, content=png).json()["avatar_url"]
+    assert replacement != url
+    assert client.get(replacement, headers=owner).content == png
+    assert client.delete(path, headers=owner).json() == {"avatar_url": None}
+    assert client.get(url, headers=owner).status_code == 404

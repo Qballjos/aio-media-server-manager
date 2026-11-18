@@ -7,9 +7,11 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from starlette.concurrency import run_in_threadpool
 
 from api.routers.media_users import _client as _seerr_client
 from applications.catalog import ApplicationCatalog
+from core import profile as profile_mod
 from core.app_web_url import app_web_ui_url_for_request
 from core.auth import auth_manager
 from core.file_io import write_private_text
@@ -270,11 +272,87 @@ def submit_member_request(body: MemberRequestBody, request: Request):
     return {"id": request_id}
 
 
+class MemberProfilePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(max_length=80)
+
+
+def _member_username(account: tuple[str, str, str]) -> str:
+    with _seerr_client() as seerr:
+        return seerr.member_username(*account)
+
+
+@router.get("/profile")
+def member_profile(request: Request, response: Response):
+    auth_manager.authenticate_member_request(request)
+    account = request.state.media_account
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        username = _member_username(account)
+    except HTTPException:
+        username = ""
+    people = auth_manager.media_users
+    return {
+        "username": username,
+        "display_name": people.display_name(account),
+        "avatar_url": _member_avatar_url(people.avatar_version(account)),
+    }
+
+
+@router.patch("/profile")
+def update_member_profile(body: MemberProfilePatch, request: Request, response: Response):
+    auth_manager.authenticate_member_request(request)
+    name = body.display_name.strip()
+    auth_manager.media_users.set_display_name(request.state.media_account, name)
+    response.headers["Cache-Control"] = "private, no-store"
+    return {"display_name": name}
+
+
+def _member_avatar_url(version: str | None) -> str | None:
+    return f"/api/media-discovery/profile/avatar?v={version}" if version else None
+
+
+@router.get("/profile/avatar")
+def get_member_avatar(request: Request):
+    auth_manager.authenticate_member_request(request)
+    image = auth_manager.media_users.avatar(request.state.media_account)
+    if image is None:
+        raise HTTPException(404, "No profile image set.")
+    data, mime = image
+    return Response(data, media_type=mime, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.put("/profile/avatar")
+async def put_member_avatar(request: Request, response: Response):
+    await run_in_threadpool(auth_manager.authenticate_member_request, request)
+    data = bytearray()
+    async for chunk in request.stream():
+        if len(data) + len(chunk) > profile_mod.MAX_BYTES:
+            raise HTTPException(422, f"Image must be at most {profile_mod.MAX_BYTES // (1024 * 1024)} MB.")
+        data.extend(chunk)
+    try:
+        _, mime = profile_mod.validate_avatar(data)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    version = await run_in_threadpool(auth_manager.media_users.set_avatar, request.state.media_account, data, mime)
+    response.headers["Cache-Control"] = "private, no-store"
+    return {"avatar_url": _member_avatar_url(version)}
+
+
+@router.delete("/profile/avatar")
+def delete_member_avatar(request: Request, response: Response):
+    auth_manager.authenticate_member_request(request)
+    auth_manager.media_users.clear_avatar(request.state.media_account)
+    response.headers["Cache-Control"] = "private, no-store"
+    return {"avatar_url": None}
+
+
 @router.get("/recent")
-def member_recent(request: Request, response: Response):
+def member_recent(request: Request, response: Response, page: Annotated[int, Query(ge=1, le=100)] = 1):
     token = auth_manager.member_library_token(request)
     provider, server_id, account_id = request.state.media_account
-    items = recent_for_member(provider, server_id, account_id, token)
+    items, has_more = recent_for_member(provider, server_id, account_id, token, page)
     port = ApplicationCatalog().get(provider).port
     base = app_web_ui_url_for_request(request, app_name=provider, port=port).rstrip("/")
     for item in items:
@@ -287,7 +365,7 @@ def member_recent(request: Request, response: Response):
             item["playUrl"] = f"{base}/web/index.html#!/server/{server}/details?key={key}"
         item["playProvider"] = provider
     response.headers["Cache-Control"] = "no-store"
-    return {"items": items}
+    return {"items": items, "has_more": has_more and page < 100}
 
 
 @router.get("/recent/art/{item_id}")
@@ -298,9 +376,9 @@ def member_recent_art(request: Request, item_id: Annotated[str, Path(max_length=
 
 
 @router.get("/calendar")
-def get_member_calendar(request: Request, response: Response, start: date):
+def get_member_calendar(request: Request, response: Response, start: date, days: Annotated[int, Query(ge=1, le=42)] = 7):
     token = auth_manager.member_library_token(request)
-    end = start + timedelta(days=6) if start <= date.max - timedelta(days=6) else date.max
+    end = start + timedelta(days=min(days - 1, (date.max - start).days))
     items = member_calendar(*request.state.media_account, token, start, end)
     response.headers["Cache-Control"] = "private, no-store"
     return {"items": items}

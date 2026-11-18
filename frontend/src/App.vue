@@ -582,7 +582,8 @@ onUnmounted(() => {
         @status="onAuthStatus"
         @session="onAuthSession"
       />
-      <MediaAccountView v-else-if="isMember" :settings="currentView === 'settings'" :account-id="authStatus.account_id" :section="String(route.params.section || 'account')" />
+      <MediaAccountView v-else-if="isMember" :settings="currentView === 'settings'" :account-id="authStatus.account_id"
+                        :section="String(route.params.section || 'account')" @session="onSettingsSession" />
       <section v-else-if="!wizardStatusLoaded" class="auth-card-wrapper animate-fade">
         <AppLoader :label="$t('Loading setup')" />
       </section>

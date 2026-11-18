@@ -21,7 +21,70 @@ class MediaUsers:
                     PRIMARY KEY (provider, server_id, account_id)
                 )
             """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS profiles (
+                    provider TEXT NOT NULL, server_id TEXT NOT NULL,
+                    account_id TEXT NOT NULL, display_name TEXT NOT NULL,
+                    PRIMARY KEY (provider, server_id, account_id)
+                )
+            """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS avatars (
+                    provider TEXT NOT NULL, server_id TEXT NOT NULL, account_id TEXT NOT NULL,
+                    data BLOB NOT NULL, mime TEXT NOT NULL, version TEXT NOT NULL,
+                    PRIMARY KEY (provider, server_id, account_id)
+                )
+            """)
             yield db
+
+    def display_name(self, account: tuple[str, str, str]) -> str:
+        with self._database() as db:
+            row = db.execute(
+                "SELECT display_name FROM profiles WHERE provider = ? AND server_id = ? AND account_id = ?",
+                account,
+            ).fetchone()
+            return row[0] if row else ""
+
+    def set_display_name(self, account: tuple[str, str, str], name: str) -> None:
+        with self._database() as db:
+            db.execute(
+                "INSERT INTO profiles VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(provider, server_id, account_id) DO UPDATE SET display_name = excluded.display_name",
+                (*account, name),
+            )
+
+    def avatar_version(self, account: tuple[str, str, str]) -> str | None:
+        with self._database() as db:
+            row = db.execute(
+                "SELECT version FROM avatars WHERE provider = ? AND server_id = ? AND account_id = ?",
+                account,
+            ).fetchone()
+            return row[0] if row else None
+
+    def avatar(self, account: tuple[str, str, str]) -> tuple[bytes, str] | None:
+        with self._database() as db:
+            return db.execute(
+                "SELECT data, mime FROM avatars WHERE provider = ? AND server_id = ? AND account_id = ?",
+                account,
+            ).fetchone()
+
+    def set_avatar(self, account: tuple[str, str, str], data: bytearray, mime: str) -> str:
+        version = secrets.token_hex(12)
+        with self._database() as db:
+            db.execute(
+                "INSERT INTO avatars VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(provider, server_id, account_id) DO UPDATE SET "
+                "data = excluded.data, mime = excluded.mime, version = excluded.version",
+                (*account, data, mime, version),
+            )
+        return version
+
+    def clear_avatar(self, account: tuple[str, str, str]) -> None:
+        with self._database() as db:
+            db.execute(
+                "DELETE FROM avatars WHERE provider = ? AND server_id = ? AND account_id = ?",
+                account,
+            )
 
     def grant(self, provider: str, server_id: str, account_id: str) -> str:
         with self._database() as db:

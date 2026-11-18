@@ -11,6 +11,9 @@ from applications.catalog import ApplicationCatalog
 from core.integrations.jellyfin import jellyfin_auth_headers
 
 
+_RECENT_PAGE_SIZE = 20
+
+
 def _get(base: str, path: str, headers: dict, **params) -> requests.Response:
     response = requests.get(f"{base}{path}", headers=headers, params=params, timeout=5, allow_redirects=False)
     if response.status_code in (401, 403):
@@ -34,16 +37,20 @@ def _jellyfin_headers(base: str, server_id: str, token: str) -> dict:
     return headers
 
 
-def _jellyfin_recent(base: str, server_id: str, account_id: str, token: str) -> list[dict]:
+def _jellyfin_recent(base: str, server_id: str, account_id: str, token: str, offset: int) -> tuple[list[dict], bool]:
     headers = _jellyfin_headers(base, server_id, token)
-    rows = _get(
+    payload = _get(
         base, "/Items", headers, UserId=account_id, Recursive="true",
-        IncludeItemTypes="Movie,Series", SortBy="DateCreated", SortOrder="Descending", Limit=20, Fields="Overview",
-    ).json()["Items"]
-    return [
+        IncludeItemTypes="Movie,Series", SortBy="DateCreated,SortName", SortOrder="Descending",
+        StartIndex=offset, Limit=_RECENT_PAGE_SIZE, Fields="Overview",
+    ).json()
+    rows = payload["Items"]
+    items = [
         _card(row["Id"], row["Name"], "movie" if row["Type"] == "Movie" else "tv", row.get("Overview"))
         for row in rows if row.get("Type") in ("Movie", "Series") and row.get("Id") and row.get("Name")
     ]
+    total = payload.get("TotalRecordCount")
+    return items, bool(rows) and (offset + len(rows) < total if type(total) is int else len(rows) == _RECENT_PAGE_SIZE)
 
 
 def _plex_sections(base: str, server_id: str, token: str) -> tuple[dict, set[str]]:
@@ -60,40 +67,58 @@ def _plex_sections(base: str, server_id: str, token: str) -> tuple[dict, set[str
     return headers, keys
 
 
-def _plex_recent(base: str, server_id: str, token: str) -> list[dict]:
+def _plex_recent(base: str, server_id: str, token: str, offset: int) -> tuple[list[dict], bool]:
     headers, keys = _plex_sections(base, server_id, token)
+    end = offset + _RECENT_PAGE_SIZE
+    batch_size = 50
 
-    def recent(section):
-        return _get(
-            base, f"/library/sections/{section}/recentlyAdded", headers,
-            **{"X-Plex-Container-Start": 0, "X-Plex-Container-Size": 20},
-        ).json()["MediaContainer"].get("Metadata", [])
+    def recent(section: str) -> list[tuple[int, dict]]:
+        # Plex can return multiple episodes for one series. Keep reading each section
+        # until it can supply the requested number of distinct titles plus one lookahead.
+        cards = {}
+        start = 0
+        while len(cards) <= end:
+            payload = _get(
+                base, f"/library/sections/{section}/recentlyAdded", headers,
+                **{"X-Plex-Container-Start": start, "X-Plex-Container-Size": batch_size},
+            ).json()["MediaContainer"]
+            rows = payload.get("Metadata", [])
+            for row in rows:
+                kind = row.get("type")
+                if kind not in ("movie", "show", "season", "episode"):
+                    continue
+                parent = {"season": "parent", "episode": "grandparent"}.get(kind)
+                item_id = row.get(f"{parent}RatingKey" if parent else "ratingKey")
+                title = row.get(f"{parent}Title" if parent else "title")
+                if item_id and title:
+                    added = int(row.get("addedAt") or 0)
+                    card = _card(item_id, title, "movie" if kind == "movie" else "tv", row.get("summary") if not parent else None)
+                    key = str(item_id)
+                    if key not in cards or added > cards[key][0]:
+                        cards[key] = (added, card)
+            start += len(rows)
+            total = payload.get("totalSize")
+            if not rows or (start >= total if type(total) is int else len(rows) < batch_size):
+                break
+        return sorted(cards.values(), key=lambda row: (-row[0], row[1]["id"]))[:end + 1]
 
-    items = {}
     with ThreadPoolExecutor(max_workers=6) as pool:
-        rows = [row for section in pool.map(recent, keys) for row in section]
-    for row in sorted(rows, key=lambda row: int(row.get("addedAt") or 0), reverse=True):
-        kind = row.get("type")
-        if kind not in ("movie", "show", "season", "episode"):
-            continue
-        parent = {"season": "parent", "episode": "grandparent"}.get(kind)
-        item_id = row.get(f"{parent}RatingKey" if parent else "ratingKey")
-        title = row.get(f"{parent}Title" if parent else "title")
-        if item_id and title:
-            items.setdefault(str(item_id), _card(item_id, title, "movie" if kind == "movie" else "tv", row.get("summary") if not parent else None))
-        if len(items) >= 20:
-            break
-    return list(items.values())
+        rows = [row for section in pool.map(recent, sorted(keys)) for row in section]
+    items = {}
+    for _, item in sorted(rows, key=lambda row: (-row[0], row[1]["id"])):
+        items.setdefault(item["id"], item)
+    return list(items.values())[offset:end], len(items) > end
 
 
-def recent_for_member(provider: str, server_id: str, account_id: str, token: str) -> list[dict]:
+def recent_for_member(provider: str, server_id: str, account_id: str, token: str, page: int) -> tuple[list[dict], bool]:
     port = ApplicationCatalog().get(provider).port
     base = f"http://127.0.0.1:{port}"
+    offset = (page - 1) * _RECENT_PAGE_SIZE
     try:
         if provider == "jellyfin":
-            return _jellyfin_recent(base, server_id, account_id, token)
+            return _jellyfin_recent(base, server_id, account_id, token, offset)
         if provider == "plex":
-            return _plex_recent(base, server_id, token)
+            return _plex_recent(base, server_id, token, offset)
     except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError, ET.ParseError) as exc:
         raise HTTPException(502, "Recently added media is temporarily unavailable.") from exc
     raise HTTPException(409, "This media server is not supported.")
@@ -110,21 +135,28 @@ def poster_for_member(provider: str, server_id: str, account_id: str, token: str
             if not any(str(row.get("Id", "")).replace("-", "").lower() == item_id.replace("-", "").lower() for row in rows):
                 raise missing
             path = f"/Items/{item_id}/Images/Primary"
-            params = {"MaxWidth": 360, "MaxHeight": 540}
+            params = {"MaxWidth": 360, "MaxHeight": 540, "Format": "jpg"}
         elif provider == "plex" and re.fullmatch(r"[0-9]{1,20}", item_id):
             headers, sections = _plex_sections(base, server_id, token)
             metadata = _get(base, f"/library/metadata/{item_id}", headers).json()["MediaContainer"]
-            if not any(
-                str(row.get("ratingKey")) == item_id and
-                str(row.get("librarySectionID") or metadata.get("librarySectionID")) in sections
-                for row in metadata.get("Metadata", [])
-            ):
+            row = next((
+                row for row in metadata.get("Metadata", [])
+                if str(row.get("ratingKey")) == item_id
+                and str(row.get("librarySectionID") or metadata.get("librarySectionID")) in sections
+            ), None)
+            if row is None:
                 raise missing
             path = f"/library/metadata/{item_id}/thumb"
+            thumb = row.get("thumb")
+            if isinstance(thumb, str) and re.fullmatch(rf"{path}(?:/[0-9]+)?", thumb):
+                path = thumb
             params = {}
         else:
             raise missing
-        image = requests.get(f"{base}{path}", headers=headers, params=params, timeout=5, stream=True, allow_redirects=False)
+        image = requests.get(
+            f"{base}{path}", headers={**headers, "Accept": "image/*"}, params=params,
+            timeout=5, stream=True, allow_redirects=False,
+        )
         try:
             mime = image.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
             if image.status_code != 200 or mime not in ("image/jpeg", "image/png", "image/webp", "image/avif"):

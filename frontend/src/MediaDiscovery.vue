@@ -16,9 +16,14 @@ import MemberRequests from './MemberRequests.vue'
 import { t } from './i18n/index.js'
 import { apiJson } from './api.js'
 
-const props = defineProps({ accountId: { type: String, required: true } })
+const props = defineProps({ accountId: { type: String, required: true }, displayName: String })
 const layouts = ref(readMemberLayouts(props.accountId))
 const layout = computed(() => memberLayoutFor(layouts.value, viewportBp.value))
+const calendarPhone = computed(() => viewportBp.value === 'phone')
+const calendarWide = computed(() => {
+  const item = layout.value.find(entry => entry.id === 'calendar')
+  return !!item && !calendarPhone.value && item.w * 12 >= 7 * BREAKPOINTS[viewportBp.value].cols
+})
 const missingWidgets = computed(() => Object.keys(MEMBER_WIDGETS).filter(id => !layout.value.some(item => item.id === id)))
 const editingWidget = ref('')
 function saveLayout(next) {
@@ -123,7 +128,7 @@ function onRequestSubmitted() {
   loadTrending({ replace: true })
 }
 
-onMounted(loadTrending)
+onMounted(() => loadTrending())
 </script>
 
 <template>
@@ -149,7 +154,7 @@ onMounted(loadTrending)
     <HomeGrid :layout="layout" :bp="viewportBp" :editing="homeEditing" :widget-specs="MEMBER_WIDGETS"
               :raise="!homeEditing && (searched || searchBusy || searchError) ? 'searchbar' : ''"
               @change="saveLayout" @remove="removeWidget" @open="editingWidget = $event">
-      <template #greeting><HomeGreeting /></template>
+      <template #greeting><HomeGreeting :name="displayName" /></template>
       <template #searchbar>
         <section class="home-search member-search" :aria-label="$t('Search')">
           <form class="home-search-pill glass-pill" role="search" @submit.prevent="search">
@@ -196,15 +201,12 @@ onMounted(loadTrending)
       </template>
       <template #requests><MemberRequests :key="requestRevision" @report-sent="reportRevision += 1" /></template>
       <template #recent><MemberRecent @report-sent="reportRevision += 1" /></template>
-      <template #calendar><MemberCalendar /></template>
+      <template #calendar><MemberCalendar :wide="calendarWide" :phone="calendarPhone" /></template>
       <template #limits><MemberUtilityWidgets :key="requestRevision" widget="limits" /></template>
       <template #support><MemberUtilityWidgets :key="reportRevision" widget="support" /></template>
       <template #trending>
-        <MemberPosterRail :title="$t('Trending')" :has-items="!!trending.length">
-          <template #tools>
-            <button v-if="hasMore || trendingError" type="button" class="ui-btn ui-btn-ghost"
-                    :disabled="trendingBusy" @click="loadTrending">{{ trendingError ? $t('Retry') : $t('Load more') }}</button>
-          </template>
+        <MemberPosterRail :title="$t('Trending')" :has-items="!!trending.length"
+                          :auto-load="hasMore && !trendingBusy && !trendingError" @load-more="loadTrending()">
           <MemberPosterTile v-for="item in trending" :key="`${item.mediaType}:${item.mediaId}`"
                             :title="item.title" :poster="item.poster" :media-type="item.mediaType"
                             :meta="item.availableSeasons?.length ? $t('Partially available') : item.detail"
@@ -213,7 +215,10 @@ onMounted(loadTrending)
                             @open="trendingDialog.open(item)" />
           <template #status>
             <p v-if="trendingBusy" class="home-muted" role="status">{{ $t('Loading Trending…') }}</p>
-            <p v-else-if="trendingError" class="home-muted" role="alert">{{ $t('Trending is temporarily unavailable.') }}</p>
+            <template v-else-if="trendingError">
+              <p class="home-muted" role="alert">{{ $t('Trending is temporarily unavailable.') }}</p>
+              <button type="button" class="ui-btn ui-btn-ghost" @click="loadTrending()">{{ $t('Retry') }}</button>
+            </template>
             <p v-else-if="!trending.length && !hasMore" class="home-muted">{{ $t('No trending titles.') }}</p>
           </template>
         </MemberPosterRail>

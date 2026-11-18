@@ -8,7 +8,7 @@ import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
 import { BP_ORDER, BREAKPOINTS, GRID_IDS, WIDGETS, collapseEmptyRows, dockHidden, firstFree, fitItem, homeEditing, homeGrid, homeGridSaves, layoutFor, resolve, restoreGrid, saveGridLayout, viewportBp } from './homeLayout.js'
 import UiSelect from './UiSelect.vue'
-import { useHomeCalendar } from './composables/useHomeCalendar.js'
+import HomeCalendarWidget from './HomeCalendarWidget.vue'
 import HomeEditBar from './HomeEditBar.vue'
 import HomeGreeting from './HomeGreeting.vue'
 import HomeGrid from './HomeGrid.vue'
@@ -575,12 +575,6 @@ const downloadsProgress = computed(() => {
   if (!list.length) return 0
   return Math.round(list.reduce((sum, item) => sum + (Number(item.progress) || 0), 0) / list.length)
 })
-function chipDay(dt) {
-  return dt.toLocaleDateString(i18nLocale(), { weekday: 'short' }).replace('.', '').toUpperCase()
-}
-function isToday(dt) {
-  return dayKey(dt) === dayKey(new Date())
-}
 const widgetNotes = computed(() => snapshot.value.widgets || [])
 const CATEGORY_LABELS = {
   media: 'Media',
@@ -1217,29 +1211,6 @@ const calendarWide = computed(() => {
   const item = gridLayout.value.find((entry) => entry.id === 'calendar')
   return !!item && activeBp.value !== 'phone' && item.w * 12 >= 7 * BREAKPOINTS[activeBp.value].cols
 })
-const {
-  dayKey,
-  formatEventTime,
-  weekdayLabels,
-  calView,
-  calFilter,
-  selectedDayKey,
-  setCalView,
-  selectCalDay,
-  syncCalViewToViewport,
-  eventKind,
-  calendarTarget,
-  calendarLinkTitle,
-  openCalendarItem,
-  calendarRangeLabel,
-  calendarDays,
-  calendarWeeks,
-  calendarList,
-  calOnToday,
-  shiftCalendar,
-  goToday
-} = useHomeCalendar({ snapshot, calendarWide, calendarPhone })
-
 watch(statusWanted, (wanted) => {
   if (wanted) loadStatus()
 })
@@ -1275,14 +1246,6 @@ const vpnNotice = computed(() => {
     const error = vpn.last_error ? ` ${t('Last VPN error: {message}', { message: vpn.last_error })}` : ''
   return t('VPN is on but not connected yet. {names} will remain stopped until it connects.', { names: names.join(', ') }) + error
 })
-
-function scrollRail(which, direction) {
-  const node =
-    which === 'requests' ? requestsRail.value : which === 'trending' ? trendingRail.value : recentRail.value
-  if (!node) return
-  const step = Math.max(node.clientWidth * 0.72, 232)
-  node.scrollBy({ left: direction * step, behavior: 'smooth' })
-}
 
 // Seerr's trending and Jellyfin's titles come up to 500 pages at a time; fetch the next once the rail
 // is within a screen of its end. `shown` is the page the snapshot already covers.
@@ -1353,8 +1316,6 @@ onMounted(() => {
   } catch (_) {
     widgetDebug.value = debugFlagFromRoute() || readHomepageWidgetDebug()
   }
-  syncCalViewToViewport()
-  window.addEventListener('resize', syncCalViewToViewport)
   window.addEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.addEventListener('keydown', onArrangeKey)
   document.addEventListener('pointerdown', onSearchPointerDown)
@@ -1380,7 +1341,6 @@ watch(
 onUnmounted(() => {
   homeEditing.value = false
   dockObserver?.disconnect()
-  window.removeEventListener('resize', syncCalViewToViewport)
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.removeEventListener('keydown', onArrangeKey)
   document.removeEventListener('pointerdown', onSearchPointerDown)
@@ -1545,14 +1505,8 @@ onUnmounted(() => {
         <article class="home-card glass-card">
           <div class="home-rail-head">
             <h3>{{ $t('Recently added') }}</h3>
-            <div class="home-rail-tools">
-              <div v-if="snapshot.recent.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous recently added')" @click="scrollRail('recent', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next recently added')" @click="scrollRail('recent', 1)">›</button>
-              </div>
-            </div>
           </div>
-          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail" @scroll.passive="loadMoreRecent">
+          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail" tabindex="0" role="group" :aria-label="$t('Recently added')" @scroll.passive="loadMoreRecent">
             <a
               v-for="(item, idx) in recentItems"
               :key="idx"
@@ -1596,14 +1550,10 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">{{ $t('Movies') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
-              <div v-if="requestItems.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous requests')" @click="scrollRail('requests', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next requests')" @click="scrollRail('requests', 1)">›</button>
-              </div>
             </div>
           </div>
           <p v-if="reviewNotice" class="home-muted" role="status">{{ reviewNotice }}</p>
-          <div v-if="requestItems.length" ref="requestsRail" class="home-rail home-requests-rail" @scroll.passive="scrollRequests">
+          <div v-if="requestItems.length" ref="requestsRail" class="home-rail home-requests-rail" tabindex="0" role="group" :aria-label="$t('Requests')" @scroll.passive="scrollRequests">
             <component
               :is="item.requestStatus === 1 && item.requestId ? 'button' : 'a'"
               v-for="(item, idx) in requestsWindowItems"
@@ -1671,13 +1621,9 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" :disabled="trendingFilterBusy" :aria-pressed="trendingFilter === 'tv'" @click="setTrendingFilter('tv')">{{ $t('Series') }}</button>
               </div>
               <p v-if="trendingFilterError" role="alert">{{ trendingFilterError }}</p>
-              <div v-if="trendingItems.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous trending')" @click="scrollRail('trending', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next trending')" @click="scrollRail('trending', 1)">›</button>
-              </div>
             </div>
           </div>
-          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" @scroll.passive="loadMoreTrending">
+          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" tabindex="0" role="group" :aria-label="$t('Trending')" @scroll.passive="loadMoreTrending">
             <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
               <button
                 type="button"
@@ -1723,124 +1669,7 @@ onUnmounted(() => {
         </article>
       </template>
       <template #calendar>
-        <article class="home-card glass-card home-card-calendar">
-          <div class="cal-head">
-            <h3>{{ calendarRangeLabel }}</h3>
-            <div class="cal-tools">
-              <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">{{ $t('Today') }}</button>
-              <UiSelect
-                v-model="calFilter"
-                class="cal-select"
-                variant="inline"
-                :aria-label="$t('Filter calendar')"
-                :options="[
-                  { value: 'all', label: $t('All') },
-                  { value: 'tv', label: $t('TV') },
-                  { value: 'movies', label: $t('Movies') },
-                  { value: 'missing', label: $t('Not downloaded') },
-                ]"
-              />
-              <UiSelect
-                :model-value="calView"
-                class="cal-select"
-                variant="inline"
-                :aria-label="$t('Calendar view')"
-                :options="[
-                  { value: 'list', label: $t('List') },
-                  { value: 'day', label: $t('Day') },
-                  { value: 'week', label: $t('Week') },
-                  { value: 'month', label: $t('Month') },
-                ]"
-                @update:model-value="setCalView"
-              />
-              <div class="cal-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" :aria-label="$t('Previous')">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" :aria-label="$t('Next')">›</button>
-              </div>
-            </div>
-          </div>
-          <div class="home-card-body">
-          <div v-if="calView === 'list'" class="cal-list">
-            <div v-if="!calendarList.length && isPending('calendar')" aria-hidden="true">
-              <span v-for="n in 4" :key="n" class="home-skel home-skel-line"></span>
-            </div>
-            <p v-else-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
-            <ul v-else>
-              <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :data-source="row.item.source" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
-                <component
-                  :is="calendarTarget(row.item) ? 'a' : 'div'"
-                  class="cal-row-link"
-                  :href="calendarTarget(row.item)?.url"
-                  :target="calendarTarget(row.item) ? '_blank' : undefined"
-                  rel="noopener noreferrer"
-                  :title="calendarLinkTitle(row.item)"
-                  @click="openCalendarItem($event, row.item)"
-                >
-                  <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
-                  <span class="cal-row-body">
-                    <span class="cal-row-title">
-                      <strong>{{ row.item.title }}</strong>
-                      <span v-if="mediaKind(row.item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(row.item)]) }}</span>
-                    </span>
-                    <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
-                  </span>
-                </component>
-              </li>
-            </ul>
-          </div>
-          <div v-else class="cal" :class="'cal-mode-' + calView" role="grid" :aria-label="$t('Upcoming releases calendar')">
-            <div v-if="calView === 'week'" class="cal-weekdays">
-              <span v-for="day in calendarDays" :key="day.key">{{ day.weekday }} {{ day.date }}-{{ day.month }}</span>
-            </div>
-            <div v-else-if="calView === 'month'" class="cal-weekdays">
-              <span v-for="label in weekdayLabels" :key="label">{{ label }}</span>
-            </div>
-            <div class="cal-weeks" :class="{ 'is-week': calView === 'week', 'is-day': calView === 'day' }">
-              <div
-                v-for="week in calendarWeeks"
-                :key="week.key"
-                class="cal-week"
-                :class="{ 'is-current': week.isCurrent, 'is-single': calView !== 'month' }"
-              >
-                <div
-                  v-for="day in week.days"
-                  :key="day.key"
-                  class="cal-day"
-                  :class="{
-                    'is-today': day.isToday,
-                    'is-selected': day.key === selectedDayKey,
-                    'is-outside': !day.inMonth,
-                  }"
-                  @click="selectCalDay(day)"
-                >
-                  <span class="cal-num">{{ calView === 'week' ? day.weekday + ' ' + day.date : day.date }}</span>
-                  <ul v-if="day.events.length" class="cal-events">
-                    <li v-for="(item, idx) in day.events" :key="idx">
-                      <component
-                        :is="calendarTarget(item) ? 'a' : 'div'"
-                        class="cal-event"
-                        :data-kind="eventKind(item)"
-                        :data-source="item.source"
-                        :class="{ 'is-have': item.has_file }"
-                        :href="calendarTarget(item)?.url"
-                        :target="calendarTarget(item) ? '_blank' : undefined"
-                        rel="noopener noreferrer"
-                        :title="calendarLinkTitle(item)"
-                        @click="openCalendarItem($event, item)"
-                      >
-                        <span class="cal-event-top">
-                          <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
-                          <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
-                        </span>
-                        <strong>{{ item.title }}</strong>
-                        <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
-                      </component>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
+        <HomeCalendarWidget :snapshot="snapshot" :wide="calendarWide" :phone="calendarPhone" :pending="isPending('calendar')">
           <p v-if="!snapshot.calendar.length && widgetDebug" class="home-muted">{{ $t('Nothing on the calendar.') }}</p>
           <ul v-if="widgetDebug && notesFor('calendar').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('calendar')" :key="idx">
@@ -1848,8 +1677,7 @@ onUnmounted(() => {
               <span>{{ note.source }} — {{ note.detail }}</span>
             </li>
           </ul>
-          </div>
-        </article>
+        </HomeCalendarWidget>
       </template>
       <template #downloads>
         <article class="home-card glass-card home-card-downloads">

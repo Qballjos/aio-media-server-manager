@@ -126,15 +126,6 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.home-rail-nav {
-  display: flex;
-  gap: 0.35rem;
-}
-@container (max-width: 400px) {
-  .home-rail-nav {
-    display: none;
-  }
-}
 .cal-nav-btn {
   width: var(--btn-h);
   min-width: var(--btn-h);
@@ -155,6 +146,10 @@
   scroll-snap-type: x proximity;
   scrollbar-width: none;
   -ms-overflow-style: none;
+}
+.home-rail:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
 }
 .home-rail::-webkit-scrollbar {
   display: none;
@@ -186,6 +181,10 @@
   position: relative;
   display: block;
   width: 100%;
+  aspect-ratio: 2 / 3;
+}
+.home-tile-poster {
+  display: block;
 }
 .home-tile-poster,
 .home-tile-fallback {

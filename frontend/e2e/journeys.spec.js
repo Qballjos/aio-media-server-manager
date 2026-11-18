@@ -172,6 +172,9 @@ test('trending requests are only available in the poster dialog', async ({ page 
   await page.reload()
   const tile = page.locator('.home-tile-trending').filter({ hasText: 'Trending Fixture' })
   await expect(tile).toBeVisible()
+  const rail = tile.locator('..')
+  await expect(rail).toHaveAttribute('tabindex', '0')
+  await expect(page.getByRole('button', { name: /^(Previous|Next) trending$/ })).toHaveCount(0)
   await expect(tile.locator('.home-tile-request')).toHaveCount(0)
   await tile.locator('.home-tile-link').click()
   const dialog = page.getByRole('dialog')
@@ -441,11 +444,47 @@ test.describe('media-account login', () => {
       let signedIn = false
       let approvals = 0
       let requestSent = false
+      let displayName = ''
+      let avatarUrl = null
+      const avatarPath = '/api/media-discovery/profile/avatar'
+      const avatar = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jf2sAAAAASUVORK5CYII=', 'base64')
+      const paged = (page, first, last, extra) => ({
+        items: page === '2' ? [last] : [first, ...Array.from({ length: 15 }, (_, index) => extra(index))],
+        has_more: page === '1',
+      })
       const adminRequests = []
+      const fixturePoster = '/poster-fixture/catalog.png'
+      await page.route('**/poster-fixture/catalog.png', route => route.fulfill({ contentType: 'image/png', body: avatar }))
+      // Exercise browsers that give an image no layout box until a source is assigned.
+      await page.addInitScript(() => {
+        document.addEventListener('DOMContentLoaded', () => {
+          const style = document.createElement('style')
+          style.textContent = '.home-tile-poster:not([src]) { display: none }'
+          document.head.append(style)
+        })
+      })
       await page.route('**/api/**', async route => {
-        const path = new URL(route.request().url()).pathname
+        const url = new URL(route.request().url())
+        const path = url.pathname
+        const pageNumber = url.searchParams.get('page')
         if (path === '/api/auth/status') return route.fulfill({ json: { authenticated: false, setup_required: false } })
         if (path === '/api/media-login/options') return route.fulfill({ json: { provider } })
+        if (path === avatarPath) {
+          if (route.request().method() === 'GET') return route.fulfill({ contentType: 'image/png', body: avatar })
+          if (route.request().method() === 'PUT') {
+            expect(route.request().postDataBuffer()).toEqual(avatar)
+            avatarUrl = `${avatarPath}?v=fixture`
+          } else {
+            avatarUrl = null
+          }
+          return route.fulfill({ json: { avatar_url: avatarUrl } })
+        }
+        if (path === '/api/media-discovery/profile') {
+          if (route.request().method() === 'PATCH') {
+            displayName = route.request().postDataJSON().display_name
+          }
+          return route.fulfill({ json: { username: 'media-viewer', display_name: displayName, avatar_url: avatarUrl } })
+        }
         if (path === '/api/media-discovery/quota') {
           return route.fulfill({ json: { movie: { limit: 5, remaining: 0, days: 7 }, tv: null } })
         }
@@ -468,23 +507,28 @@ test.describe('media-account login', () => {
         if (path === '/api/media-discovery/requests') {
           const item = requestSent
             ? { id: 2, title: 'Trending title', status: 'pending', mediaType: 'tv', seasons: [2], createdAt: '2026-11-18T12:00:00Z' }
-            : { id: 1, title: 'My requested film', status: 'approved' }
-          return route.fulfill({ json: { items: [item], has_more: false } })
+            : { id: 1, title: 'My requested film', status: 'approved', poster: fixturePoster }
+          return route.fulfill({ json: requestSent ? { items: [item], has_more: false } : paged(
+            pageNumber, item, { id: 90, title: 'Older request', status: 'approved' },
+            index => ({ id: 100 + index, title: `Request filler ${index}`, status: 'approved' }),
+          ) })
         }
-        if (path === '/api/media-discovery/recent/art/shared-3') {
+        if (path.startsWith('/api/media-discovery/recent/art/')) {
           return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="30"/>' })
         }
         if (path === '/api/media-discovery/recent') {
-          return route.fulfill({ json: { items: [{
+          return route.fulfill({ json: paged(pageNumber, {
             id: 'shared-3', title: 'Shared library title', mediaType: 'tv', overview: 'A shared series.',
             playProvider: provider, playUrl: `https://${provider}.example.test/web/#/details?id=shared-3`,
-          }] } })
+          }, { id: 'older-31', title: 'Older library title', mediaType: 'movie' },
+          index => ({ id: `recent-filler-${index}`, title: `Recent filler ${index}`, mediaType: 'movie' })) })
         }
         if (path === '/api/media-discovery/calendar') {
-          const start = new URL(route.request().url()).searchParams.get('start')
+          const params = new URL(route.request().url()).searchParams
+          const start = params.get('start')
           expect(start).toMatch(/^\d{4}-\d{2}-\d{2}$/)
           return route.fulfill({ json: { items: [{
-            kind: 'movie', title: 'Shared future film', detail: '2026', when: start, available: false,
+            kind: 'movie', title: 'Shared future film', detail: '2026', when: `${start}T12:00:00`, available: false,
           }] } })
         }
         if (path === '/api/media-discovery/titles/tv/5') {
@@ -496,13 +540,16 @@ test.describe('media-account login', () => {
         }
         if (path === '/api/media-discovery/trending') {
           const items = requestSent ? [] : [{
-            mediaType: 'tv', mediaId: 5, title: 'Trending title', availableSeasons: [1], requestableSeasons: [2],
+            mediaType: 'tv', mediaId: 5, title: 'Trending title', poster: fixturePoster, availableSeasons: [1], requestableSeasons: [2],
           }]
-          return route.fulfill({ json: { items, has_more: false } })
+          return route.fulfill({ json: requestSent ? { items, has_more: false } : paged(
+            pageNumber, items[0], { mediaType: 'movie', mediaId: 99, title: 'More trending' },
+            index => ({ mediaType: 'movie', mediaId: 100 + index, title: `Trending filler ${index}` }),
+          ) })
         }
         if (path === '/api/media-discovery/search') {
           expect(new URL(route.request().url()).searchParams.get('q')).toBe('Test film')
-          return route.fulfill({ json: { items: [{ mediaType: 'movie', mediaId: 4, title: 'Test film', available: true }] } })
+          return route.fulfill({ json: { items: [{ mediaType: 'movie', mediaId: 4, title: 'Test film', available: true, poster: fixturePoster }] } })
         }
         if (path === '/api/media-login/session') {
           return route.fulfill({ status: signedIn ? 200 : 401, json: signedIn ? { account_id: '42' } : {} })
@@ -544,13 +591,48 @@ test.describe('media-account login', () => {
       await expect(searchWidget).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
       await expect(searchWidget.getByRole('button', { name: 'Search in' })).toHaveCount(0)
       await expect(page.getByText('Trending title', { exact: true })).toBeVisible()
+      for (const [railName, secondPageTitle] of [
+        ['Trending', 'More trending'], ['My requests', 'Older request'], ['Newly available', 'Older library title'],
+      ]) {
+        const widget = page.getByRole('region', { name: railName, exact: true })
+        const rail = widget.locator('.home-rail')
+        await expect(widget.getByRole('button', { name: /^(Previous|Next|Refresh|Load more)$/ })).toHaveCount(0)
+        await expect(rail).toHaveCSS('scrollbar-width', 'none')
+        await expect(rail.getByText(secondPageTitle, { exact: true })).toHaveCount(0)
+        await rail.scrollIntoViewIfNeeded()
+        const firstPoster = rail.locator('img').first()
+        await expect.poll(() => firstPoster.evaluate(img => img.naturalWidth)).toBeGreaterThan(0)
+        await rail.press('ArrowRight')
+        await expect.poll(() => rail.evaluate(node => node.scrollLeft)).toBeGreaterThan(0)
+        await rail.evaluate(node => { node.scrollLeft = node.scrollWidth })
+        await expect(rail.getByText(secondPageTitle, { exact: true })).toHaveCount(1)
+        await expect(widget.getByRole('button', { name: 'Load more' })).toHaveCount(0)
+        if (railName === 'Newly available') {
+          await rail.evaluate(node => { node.scrollLeft = node.scrollWidth })
+          const poster = rail.getByRole('button', { name: secondPageTitle, exact: true }).locator('img')
+          await expect.poll(() => poster.evaluate(img => img.naturalWidth)).toBeGreaterThan(0)
+        }
+        await rail.evaluate(node => { node.scrollLeft = 0 })
+      }
       const calendar = page.getByRole('region', { name: 'Calendar', exact: true })
+      await calendar.getByRole('button', { name: 'Calendar view' }).click()
+      const monthResponse = page.waitForResponse(response => {
+        const params = new URL(response.url()).searchParams
+        return response.url().includes('/api/media-discovery/calendar?') && Number(params.get('days')) >= 28
+      })
+      await page.getByRole('option', { name: 'Month' }).click()
+      await monthResponse
+      await expect(calendar.locator('.cal-mode-month .cal-day')).not.toHaveCount(0)
+      await calendar.getByRole('button', { name: 'Calendar view' }).click()
+      await page.getByRole('option', { name: 'Day', exact: true }).click()
       await expect(calendar.getByText('Shared future film')).toBeVisible()
       await expect(calendar.getByText(/Upcoming/)).toBeVisible()
       await calendar.getByRole('button', { name: 'Next' }).click()
       await expect(calendar.getByText('Shared future film')).toBeVisible()
       await expect(page.getByRole('region', { name: 'Trending', exact: true }).getByText('Partially available')).toBeVisible()
       const recentTile = page.getByRole('region', { name: 'Newly available' }).getByRole('button', { name: /Shared library title/ })
+      await recentTile.scrollIntoViewIfNeeded()
+      await expect.poll(() => recentTile.locator('img').evaluate(img => img.naturalWidth)).toBeGreaterThan(0)
       await recentTile.locator('img').click()
       const titleDetails = page.getByRole('dialog', { name: 'Title details' })
       await expect(titleDetails.getByText('A shared series.')).toBeVisible()
@@ -566,7 +648,8 @@ test.describe('media-account login', () => {
       await titleDetails.getByRole('button', { name: 'Close', exact: true }).click()
       const ownRequests = page.getByRole('region', { name: 'My requests' })
       await expect(ownRequests.getByText('My requested film')).toBeVisible()
-      await expect(ownRequests.getByText('Approved', { exact: true })).toBeVisible()
+      await expect(ownRequests.getByRole('button', { name: 'Open request details for My requested film' })
+        .getByText('Approved', { exact: true })).toBeVisible()
       const limits = page.getByRole('region', { name: 'Request limits' })
       await expect(limits.getByText('0 of 5 remaining per 7 days')).toBeVisible()
       await expect(limits.getByText('No limit', { exact: true })).toBeVisible()
@@ -582,6 +665,7 @@ test.describe('media-account login', () => {
       await expect(page.getByText('Test film', { exact: true })).toBeVisible()
       const searchResults = page.getByRole('region', { name: 'Search', exact: true })
       await expect(searchResults.getByText('Available', { exact: true })).toBeVisible()
+      await expect.poll(() => searchResults.locator('img').evaluate(img => img.naturalWidth)).toBeGreaterThan(0)
       await searchResults.getByRole('button', { name: 'Close' }).click()
       const trendingTile = page.getByRole('region', { name: 'Trending', exact: true })
       await expect(trendingTile.getByRole('button', { name: /Request Trending title/ })).toHaveCount(0)
@@ -619,7 +703,20 @@ test.describe('media-account login', () => {
       await page.getByRole('button', { name: 'Done arranging Home' }).click()
       await expect(page.getByRole('region', { name: 'Trending' })).toBeVisible()
       await page.getByRole('link', { name: 'Settings', exact: true }).click()
-      await expect(page.getByText('Media account ID')).toBeVisible()
+      await expect(page.getByLabel('Username', { exact: true })).toHaveValue('media-viewer')
+      await page.getByLabel('Display name').fill('Sam')
+      await page.getByRole('button', { name: 'Save profile' }).click()
+      await expect(page.getByText('Account updated.')).toBeVisible()
+      await page.getByLabel('Upload profile image').setInputFiles({ name: 'avatar.png', mimeType: 'image/png', buffer: avatar })
+      await expect(page.getByText('Profile image updated.')).toBeVisible()
+      const topAvatar = page.locator('.nav-account .user-avatar-img')
+      await expect(topAvatar).toHaveAttribute('src', `${avatarPath}?v=fixture`)
+      await page.reload()
+      await expect(page.getByLabel('Display name')).toHaveValue('Sam')
+      await expect.poll(() => topAvatar.evaluate(img => img.naturalWidth)).toBeGreaterThan(0)
+      await page.getByRole('button', { name: 'Remove', exact: true }).click()
+      await expect(page.getByText('Profile image removed.')).toBeVisible()
+      await expect(topAvatar).toHaveCount(0)
       await assertFitsViewport(page)
       const picker = page.locator('#settings-section-select')
       if (await picker.isVisible()) {

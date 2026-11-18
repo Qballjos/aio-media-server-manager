@@ -1,8 +1,8 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import HomePoster from './HomePoster.vue'
 
-defineProps({
+const props = defineProps({
   title: String,
   poster: String,
   mediaType: String,
@@ -12,6 +12,7 @@ defineProps({
 })
 const emit = defineEmits(['open'])
 const missing = ref(false)
+watch(() => props.poster, () => { missing.value = false })
 </script>
 
 <template>
