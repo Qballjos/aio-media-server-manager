@@ -36,6 +36,7 @@ from core.installer.arch import (
     filename_has_cpu_arch,
     score_asset_match,
 )
+from core.installer.download_cache import temporary_package
 from core.installer.extractor import ArchiveExtractor
 from core.installer.github import GitHubReleaseClient
 from core.settings import Settings, settings
@@ -146,74 +147,72 @@ class AppInstaller:
             logger.debug("No published checksum found for %s", asset_name)
 
         # 4. Download file
-        cache_dir = self.settings.cache_dir / "downloads"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = cache_dir / asset_name
+        with temporary_package(self.settings.cache_dir, asset_name) as archive_path:
 
-        update_job(app_name, "Downloading package…")
-        computed_sha = self.download_file(
-            url=download_url,
-            destination=archive_path,
-            expected_sha256=expected_sha,
-            progress_callback=progress_callback if progress_callback is not None else _download_progress(app_name),
-        )
-
-        # 5. Extract and atomically activate (or copy a raw binary)
-        install_root = self.settings.install_dir / app_name
-        if _looks_like_archive(archive_path):
-            executable_path = self.activate_archive(
-                archive_path=archive_path,
-                target_install_dir=install_root,
-                executable_name=executable_name,
-                app_name=app_name,
-            )
-        else:
-            executable_path = self.activate_binary(
-                binary_path=archive_path,
-                target_install_dir=install_root,
-                executable_name=executable_name,
-                app_name=app_name,
+            update_job(app_name, "Downloading package…")
+            computed_sha = self.download_file(
+                url=download_url,
+                destination=archive_path,
+                expected_sha256=expected_sha,
+                progress_callback=progress_callback if progress_callback is not None else _download_progress(app_name),
             )
 
-        # 6. Save installation metadata
-        metadata = {
-            "app_name": app_name,
-            "version": version,
-            "asset_name": asset_name,
-            "sha256": computed_sha,
-            "repo": repo,
-            "installed_at": time.time(),
-            "arch": arch.value,
-        }
-        metadata_file = install_root / ".amm_installed.json"
-        with open(metadata_file, "w", encoding="utf-8") as fh:
-            json.dump(metadata, fh, indent=2)
+            # 5. Extract and atomically activate (or copy a raw binary)
+            install_root = self.settings.install_dir / app_name
+            if _looks_like_archive(archive_path):
+                executable_path = self.activate_archive(
+                    archive_path=archive_path,
+                    target_install_dir=install_root,
+                    executable_name=executable_name,
+                    app_name=app_name,
+                )
+            else:
+                executable_path = self.activate_binary(
+                    binary_path=archive_path,
+                    target_install_dir=install_root,
+                    executable_name=executable_name,
+                    app_name=app_name,
+                )
 
-        # 7. Apply permissions
-        update_job(app_name, "Setting file permissions…")
-        self.storage_manager.apply_permissions(
-            install_root,
-            puid=self.settings.puid,
-            pgid=self.settings.pgid,
-            recursive=True,
-        )
+            # 6. Save installation metadata
+            metadata = {
+                "app_name": app_name,
+                "version": version,
+                "asset_name": asset_name,
+                "sha256": computed_sha,
+                "repo": repo,
+                "installed_at": time.time(),
+                "arch": arch.value,
+            }
+            metadata_file = install_root / ".amm_installed.json"
+            with open(metadata_file, "w", encoding="utf-8") as fh:
+                json.dump(metadata, fh, indent=2)
 
-        logger.info(
-            "Successfully installed '%s' %s to %s",
-            app_name,
-            version,
-            executable_path,
-        )
+            # 7. Apply permissions
+            update_job(app_name, "Setting file permissions…")
+            self.storage_manager.apply_permissions(
+                install_root,
+                puid=self.settings.puid,
+                pgid=self.settings.pgid,
+                recursive=True,
+            )
 
-        return InstallResult(
-            app_name=app_name,
-            version=version,
-            install_dir=install_root,
-            executable_path=executable_path,
-            asset_name=asset_name,
-            sha256=computed_sha,
-            installed_at=metadata["installed_at"],
-        )
+            logger.info(
+                "Successfully installed '%s' %s to %s",
+                app_name,
+                version,
+                executable_path,
+            )
+
+            return InstallResult(
+                app_name=app_name,
+                version=version,
+                install_dir=install_root,
+                executable_path=executable_path,
+                asset_name=asset_name,
+                sha256=computed_sha,
+                installed_at=metadata["installed_at"],
+            )
 
     def install_from_url(
         self,
@@ -239,55 +238,53 @@ class AppInstaller:
                 f"Refusing to install '{filename}' for '{app_name}': "
                 f"it does not match host arch={arch.value} os={sys_os.value}."
             )
-        cache_dir = self.settings.cache_dir / "downloads"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = cache_dir / filename
+        with temporary_package(self.settings.cache_dir, filename) as archive_path:
 
-        update_job(app_name, "Downloading package…")
-        computed_sha = self.download_file(
-            url=url,
-            destination=archive_path,
-            expected_sha256=expected_sha256,
-            progress_callback=progress_callback if progress_callback is not None else _download_progress(app_name),
-        )
+            update_job(app_name, "Downloading package…")
+            computed_sha = self.download_file(
+                url=url,
+                destination=archive_path,
+                expected_sha256=expected_sha256,
+                progress_callback=progress_callback if progress_callback is not None else _download_progress(app_name),
+            )
 
-        install_root = self.settings.install_dir / app_name
-        executable_path = self.activate_archive(
-            archive_path=archive_path,
-            target_install_dir=install_root,
-            executable_name=executable_name,
-            app_name=app_name,
-        )
+            install_root = self.settings.install_dir / app_name
+            executable_path = self.activate_archive(
+                archive_path=archive_path,
+                target_install_dir=install_root,
+                executable_name=executable_name,
+                app_name=app_name,
+            )
 
-        metadata = {
-            "app_name": app_name,
-            "version": version,
-            "asset_name": filename,
-            "sha256": computed_sha,
-            "url": url,
-            "installed_at": time.time(),
-            "arch": detect_system_arch().value,
-        }
-        with open(install_root / ".amm_installed.json", "w", encoding="utf-8") as fh:
-            json.dump(metadata, fh, indent=2)
+            metadata = {
+                "app_name": app_name,
+                "version": version,
+                "asset_name": filename,
+                "sha256": computed_sha,
+                "url": url,
+                "installed_at": time.time(),
+                "arch": detect_system_arch().value,
+            }
+            with open(install_root / ".amm_installed.json", "w", encoding="utf-8") as fh:
+                json.dump(metadata, fh, indent=2)
 
-        update_job(app_name, "Setting file permissions…")
-        self.storage_manager.apply_permissions(
-            install_root,
-            puid=self.settings.puid,
-            pgid=self.settings.pgid,
-            recursive=True,
-        )
+            update_job(app_name, "Setting file permissions…")
+            self.storage_manager.apply_permissions(
+                install_root,
+                puid=self.settings.puid,
+                pgid=self.settings.pgid,
+                recursive=True,
+            )
 
-        return InstallResult(
-            app_name=app_name,
-            version=version,
-            install_dir=install_root,
-            executable_path=executable_path,
-            asset_name=filename,
-            sha256=computed_sha,
-            installed_at=metadata["installed_at"],
-        )
+            return InstallResult(
+                app_name=app_name,
+                version=version,
+                install_dir=install_root,
+                executable_path=executable_path,
+                asset_name=filename,
+                sha256=computed_sha,
+                installed_at=metadata["installed_at"],
+            )
 
     def install_from_pypi(
         self,
@@ -394,50 +391,48 @@ class AppInstaller:
         if not zipball:
             raise ValueError(f"Release '{version}' for {repo} has no zipball_url")
 
-        cache_dir = self.settings.cache_dir / "downloads"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = cache_dir / f"{app_name}-{version}.zip"
-        update_job(app_name, "Downloading package…")
-        computed_sha = self.download_file(
-            url=zipball,
-            destination=archive_path,
-            progress_callback=progress_callback if progress_callback is not None else _download_progress(app_name),
-        )
-        install_root = self.settings.install_dir / app_name
-        executable_path = self.activate_archive(
-            archive_path=archive_path,
-            target_install_dir=install_root,
-            executable_name=executable_name,
-            app_name=app_name,
-        )
-        metadata = {
-            "app_name": app_name,
-            "version": version,
-            "asset_name": archive_path.name,
-            "sha256": computed_sha,
-            "repo": repo,
-            "source": "github_zipball",
-            "installed_at": time.time(),
-            "arch": detect_system_arch().value,
-        }
-        with open(install_root / ".amm_installed.json", "w", encoding="utf-8") as fh:
-            json.dump(metadata, fh, indent=2)
-        update_job(app_name, "Setting file permissions…")
-        self.storage_manager.apply_permissions(
-            install_root,
-            puid=self.settings.puid,
-            pgid=self.settings.pgid,
-            recursive=True,
-        )
-        return InstallResult(
-            app_name=app_name,
-            version=version,
-            install_dir=install_root,
-            executable_path=executable_path,
-            asset_name=archive_path.name,
-            sha256=computed_sha,
-            installed_at=metadata["installed_at"],
-        )
+        with temporary_package(self.settings.cache_dir, f"{app_name}-{version}.zip") as archive_path:
+            update_job(app_name, "Downloading package…")
+            computed_sha = self.download_file(
+                url=zipball,
+                destination=archive_path,
+                progress_callback=progress_callback if progress_callback is not None else _download_progress(app_name),
+            )
+            install_root = self.settings.install_dir / app_name
+            executable_path = self.activate_archive(
+                archive_path=archive_path,
+                target_install_dir=install_root,
+                executable_name=executable_name,
+                app_name=app_name,
+            )
+            metadata = {
+                "app_name": app_name,
+                "version": version,
+                "asset_name": archive_path.name,
+                "sha256": computed_sha,
+                "repo": repo,
+                "source": "github_zipball",
+                "installed_at": time.time(),
+                "arch": detect_system_arch().value,
+            }
+            with open(install_root / ".amm_installed.json", "w", encoding="utf-8") as fh:
+                json.dump(metadata, fh, indent=2)
+            update_job(app_name, "Setting file permissions…")
+            self.storage_manager.apply_permissions(
+                install_root,
+                puid=self.settings.puid,
+                pgid=self.settings.pgid,
+                recursive=True,
+            )
+            return InstallResult(
+                app_name=app_name,
+                version=version,
+                install_dir=install_root,
+                executable_path=executable_path,
+                asset_name=archive_path.name,
+                sha256=computed_sha,
+                installed_at=metadata["installed_at"],
+            )
 
     # ------------------------------------------------------------------
     # Streaming Downloader

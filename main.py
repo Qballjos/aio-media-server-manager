@@ -107,6 +107,11 @@ async def main() -> None:
         )
         # Non-fatal: continue startup; individual apps will fail if their dirs are missing
 
+    # No install jobs are running yet; remove interrupted installation downloads.
+    from core.installer.download_cache import cleanup_download_cache
+
+    cleanup_download_cache(settings.cache_dir)
+
     # ------------------------------------------------------------------
     # API server (background thread)
     # ------------------------------------------------------------------

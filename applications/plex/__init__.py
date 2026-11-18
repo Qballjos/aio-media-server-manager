@@ -187,16 +187,16 @@ class PlexApp(BaseApplication):
                 f"Refusing to install Plex asset '{filename}': "
                 f"it does not match host arch={host_arch.value}."
             )
-        cache_dir = installer.settings.cache_dir / "downloads"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = cache_dir / filename
-        sha = installer.download_file(url, archive_path)
-        exe = installer.activate_archive(
-            archive_path=archive_path,
-            target_install_dir=self.install_dir,
-            executable_name=self.executable_name,
-            app_name=self.name,
-        )
+        from core.installer.download_cache import temporary_package
+
+        with temporary_package(installer.settings.cache_dir, filename) as archive_path:
+            sha = installer.download_file(url, archive_path)
+            exe = installer.activate_archive(
+                archive_path=archive_path,
+                target_install_dir=self.install_dir,
+                executable_name=self.executable_name,
+                app_name=self.name,
+            )
         metadata_path = self.metadata_path()
         metadata_path.write_text(
             __import__("json").dumps(

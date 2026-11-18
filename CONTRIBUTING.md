@@ -58,6 +58,12 @@ Agents and Dependabot often treat “not on the newest version” as a bug. In t
 
 **Catalog apps** (Sonarr, Radarr, Seerr, …) are updated by the operator (dashboard **Update**) or by Settings update schedules. Those schedules default to **Off**. AIO does not silently bump child apps in CI or on image rebuild. Seeing an older installed app version is expected until someone applies an update.
 
+Installation packages under `cache/downloads` are temporary: each install or update
+removes its package on completion or failure. Before starting install jobs, manager
+startup removes legacy package files and interrupted installer workspaces from that
+directory. Other runtime caches, media downloads, libraries and rollback snapshots
+are retained.
+
 **Pinned runtimes in the appliance image / CI:**
 
 | Runtime | Pin | Reason |
