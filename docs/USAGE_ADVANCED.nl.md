@@ -197,6 +197,10 @@ De huidige app met fictieve voorbeeldgegevens. Licht staat links, donker rechts.
 
 ### Profiel
 
+Ga naar **Instellingen → Profiel → Tweestapsverificatie**. Voer je huidige wachtwoord in, scan de QR-code met een TOTP-authenticator (of voer de instelsleutel in) en bevestig met een zescijferige code. Bewaar de eenmalige herstelcodes op een veilige plek. Bij volgende aanmeldingen bij de manager heb je je wachtwoord en een authenticator- of herstelcode nodig. In- en uitschakelen meldt andere managersessies af. Voor uitschakelen zijn je wachtwoord en een geldige tweede factor vereist. Bij het terugzetten van een managerback-up wordt ook de status van tweestapsverificatie en herstelcodes teruggezet naar het moment van de back-up.
+
+Open het dashboard in Safari op je Mac via het HTTPS-adres en ga naar **Instellingen → Profiel → Passkey**. Bevestig je huidige wachtwoord en, als die aanstaat, je tweede factor. Kies **Passkey toevoegen** en volg de browsermelding voor Touch ID. Kies daarna **Aanmelden met een passkey** op het aanmeldscherm. De manager bewaart één passkey voor dat exacte dashboardadres. Bewaar je wachtwoord en eventuele 2FA-herstelcodes als terugvaloptie. Een reverse proxy die HTTPS afhandelt moet de openbare Host-header doorgeven.
+
 | Licht | Donker |
 | --- | --- |
 | ![Account in Instellingen, licht thema](screenshots/light/settings.png?v=app-store-20261102) | ![Account in Instellingen, donker thema](screenshots/dark/settings.png?v=app-store-20261102) |

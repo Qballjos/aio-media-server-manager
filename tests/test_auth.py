@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
+from core import two_factor
 from core.auth import (
     COOKIE_ACCESS,
     COOKIE_CSRF,
@@ -162,3 +163,10 @@ def test_bearer_skips_csrf_when_session_cookie_also_present(auth_mgr: AuthManage
     request.headers = {"Authorization": f"Bearer {token}"}
     request.method = "POST"
     assert auth_mgr.authenticate_request(request) == "admin"
+
+
+@pytest.mark.parametrize(("timestamp", "code"), [(59, "287082"), (1111111109, "081804")])
+def test_totp_rfc6238_sha1_vectors(timestamp: int, code: str):
+    # Appendix B sample key, with the published result reduced to six digits.
+    secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+    assert two_factor.totp_code(secret, timestamp // 30) == code

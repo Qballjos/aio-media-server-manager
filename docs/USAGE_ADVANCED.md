@@ -197,6 +197,10 @@ Current app interface with fictional example data. Light is on the left, dark on
 
 ### Profile
 
+Under **Settings → Profile → Two-factor authentication**, enter your current password, scan the QR code with a TOTP authenticator (or enter the setup key), then confirm with a six-digit code. Store the one-time recovery codes somewhere safe. Subsequent manager logins require your password and an authenticator or recovery code. Enabling or disabling 2FA signs out other manager sessions. To disable it, provide your password and a valid second factor. Restoring a Manager backup also restores 2FA and recovery-code state as of the backup.
+
+To use Touch ID on a Mac, open the dashboard in Safari at its HTTPS address and go to **Settings → Profile → Passkey**. Confirm your current password and, if enabled, your second factor. Select **Add passkey** and follow the browser prompt. On the sign-in screen, choose **Sign in with a passkey**. The manager stores one passkey for that exact dashboard address. Keep your password and any 2FA recovery codes for fallback. If a reverse proxy terminates HTTPS, it must forward the public Host header.
+
 | Light | Dark |
 | --- | --- |
 | ![Settings account, light theme](screenshots/light/settings.png?v=app-store-20261102) | ![Settings account, dark theme](screenshots/dark/settings.png?v=app-store-20261102) |

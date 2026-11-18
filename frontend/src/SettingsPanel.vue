@@ -6,6 +6,8 @@ import { resolveSettingsSection, SETTINGS_PAGES } from './settingsNavigation.js'
 import SettingsSidebar from './SettingsSidebar.vue'
 import IntegrationCheck from './IntegrationCheck.vue'
 import BackupSettings from './settings/BackupSettings.vue'
+import TwoFactorSettings from './settings/TwoFactorSettings.vue'
+import PasskeySettings from './settings/PasskeySettings.vue'
 import { useBackups } from './composables/useBackups.js'
 import NotificationSettings from './settings/NotificationSettings.vue'
 import PreflightReview from './PreflightReview.vue'
@@ -80,6 +82,7 @@ const errors = ref([])
 const copied = ref(false)
 const passwordForm = ref({ current_password: '', new_password: '', confirm_password: '' })
 const passwordSaving = ref(false)
+const passkeyRevision = ref(0)
 const form = ref({
   username: '',
   first_name: '',
@@ -1777,6 +1780,8 @@ onBeforeUnmount(() => {
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="passwordSaving">{{ passwordSaving ? $t('Saving…') : $t('Change password') }}</button>
         </form>
       </div>
+      <TwoFactorSettings @changed="passkeyRevision++" />
+      <PasskeySettings :key="passkeyRevision" />
     </template>
 
     <template v-else-if="section === 'system'">

@@ -4,9 +4,9 @@ const password = 'FixturePassword123!'
 
 class SetupFlow {
   constructor(page) { this.page = page }
-  async complete() {
+  async complete(url = '/') {
     const page = this.page
-    await page.goto('/')
+    await page.goto(url)
     await page.getByLabel('Username', { exact: true }).fill('admin')
     await page.getByLabel('Email address', { exact: true }).fill('fixture@example.test')
     await page.getByLabel('Password (minimum 8 characters)', { exact: true }).fill(password)
@@ -328,4 +328,107 @@ test('display size previews, persists locally and preserves usable controls', as
   await flow.settings('visuals')
   await choices.getByRole('button', { name: 'Standard · 100%', exact: true }).click()
   await expect(choices.getByRole('button', { name: 'Standard · 100%', exact: true })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('two-factor authentication setup and recovery login', async ({ page }) => {
+  const { createHmac } = await import('node:crypto')
+  const flow = new SetupFlow(page)
+  await flow.complete()
+  await flow.settings('account')
+
+  const card = page.getByRole('heading', { name: 'Two-factor authentication', exact: true }).locator('../..')
+  await card.getByLabel('Current password', { exact: true }).fill(password)
+  await card.getByRole('button', { name: 'Set up authenticator' }).click()
+  const qr = card.getByRole('img', { name: 'Authenticator setup QR code' })
+  await expect(qr).toBeVisible()
+  await expect.poll(() => qr.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true)
+  await assertFitsViewport(page)
+
+  const secret = await card.getByLabel('Setup key').inputValue()
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  const bits = [...secret].map(char => alphabet.indexOf(char).toString(2).padStart(5, '0')).join('')
+  const key = Buffer.from(bits.match(/.{8}/g).map(byte => Number.parseInt(byte, 2)))
+  const message = Buffer.alloc(8)
+  message.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)))
+  const digest = createHmac('sha1', key).update(message).digest()
+  const code = ((digest.readUInt32BE(digest.at(-1) & 15) & 0x7fffffff) % 1000000).toString().padStart(6, '0')
+  await card.getByLabel('Authenticator code', { exact: true }).fill(code)
+  let releaseEnable
+  const waitToEnable = new Promise(resolve => { releaseEnable = resolve })
+  await page.route('**/api/auth/two-factor/enable', async route => {
+    await waitToEnable
+    await route.continue()
+  })
+  const response = page.waitForResponse('**/api/auth/two-factor/enable')
+  await card.getByRole('button', { name: 'Enable two-factor authentication' }).click()
+  await flow.settings('system')
+  await expect(card).toHaveCount(0)
+  releaseEnable()
+  expect((await response).ok()).toBe(true)
+  await flow.settings('account')
+  const recovery = card.getByLabel('Recovery codes', { exact: true })
+  await expect(recovery).toBeVisible()
+  const [recoveryCode] = (await recovery.inputValue()).split('\n')
+  await assertFitsViewport(page)
+  await card.getByRole('button', { name: 'I saved my recovery codes' }).click()
+  await expect(recovery).toHaveCount(0)
+
+  await page.evaluate(async () => {
+    const token = localStorage.getItem('amm_token')
+    await fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    localStorage.removeItem('amm_token')
+    sessionStorage.removeItem('amm_csrf')
+  })
+  await page.goto('/')
+  await page.getByLabel('Username', { exact: true }).fill('admin')
+  await page.getByLabel('Password', { exact: true }).fill(password)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  const factor = page.getByLabel('Authenticator or recovery code')
+  await expect(factor).toBeFocused()
+  await assertFitsViewport(page)
+  await factor.fill('0000000000')
+  await page.getByRole('button', { name: 'Verify and sign in' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Invalid or already used verification code.' })).toBeVisible()
+  await factor.fill(recoveryCode)
+  await page.getByRole('button', { name: 'Verify and sign in' }).click()
+  await expect(page.getByRole('searchbox', { name: 'Search', exact: true })).toBeVisible({ timeout: 30000 })
+})
+
+test('passkey registration, sign-in, and removal', async ({ page, context, baseURL }) => {
+  const url = new URL(baseURL)
+  url.hostname = 'localhost'
+  await page.route('**/*', route => new URL(route.request().url()).origin === url.origin ? route.continue() : route.abort())
+  await page.goto(url.origin)
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('WebAuthn.enable')
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2', transport: 'internal', hasResidentKey: true,
+      hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true,
+    },
+  })
+
+  const flow = new SetupFlow(page)
+  await flow.complete(url.origin)
+  await page.evaluate(() => { location.hash = '/settings/account' })
+  const card = page.getByRole('heading', { name: 'Passkey', exact: true }).locator('../..')
+  await card.getByLabel('Current password', { exact: true }).fill(password)
+  await card.getByRole('button', { name: 'Add passkey', exact: true }).click()
+  await expect(card.getByText(/A passkey is registered/)).toBeVisible()
+  await assertFitsViewport(page)
+
+  await page.evaluate(async () => {
+    const token = localStorage.getItem('amm_token')
+    await fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    localStorage.removeItem('amm_token')
+    sessionStorage.removeItem('amm_csrf')
+  })
+  await page.goto(url.origin)
+  await page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click()
+  await expect(page.getByRole('searchbox', { name: 'Search', exact: true })).toBeVisible({ timeout: 30000 })
+
+  await page.evaluate(() => { location.hash = '/settings/account' })
+  await card.getByLabel('Current password', { exact: true }).fill(password)
+  await card.getByRole('button', { name: 'Remove passkey', exact: true }).click()
+  await expect(card.getByRole('button', { name: 'Add passkey', exact: true })).toBeVisible()
 })

@@ -4,6 +4,7 @@ core/auth.py — Local admin authentication, JWT sessions, CSRF, rate limiting.
 
 from __future__ import annotations
 
+import base64
 import json
 import hashlib
 import logging
@@ -18,11 +19,14 @@ from typing import Any
 
 import bcrypt
 import jwt
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, Request, Response, status
 
+from core import two_factor
 from core.settings import Settings, settings
 from core.tv_devices import TvDevices
 from core.homey_connections import HomeyConnections
+from core.passkeys import PasskeyChallenges
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +101,8 @@ class AuthManager:
     def __init__(self, app_settings: Settings = settings) -> None:
         self._settings = app_settings
         self._rate = RateLimiter()
+        self._factor_rate = RateLimiter()
+        self.passkey_challenges = PasskeyChallenges()
         self.tv_devices = TvDevices(app_settings.config_dir)
         self.homey_connections = HomeyConnections(app_settings.config_dir)
 
@@ -195,6 +201,91 @@ class AuthManager:
             )
         except ValueError:
             return False
+
+    def two_factor_enabled(self) -> bool:
+        return "two_factor" in self._read_auth()
+
+    def _factor_cipher(self) -> Fernet:
+        key = hashlib.sha256(b"amm:two-factor:" + self.jwt_secret().encode()).digest()
+        return Fernet(base64.urlsafe_b64encode(key))
+
+    def begin_two_factor(self) -> tuple[str, str]:
+        if self.two_factor_enabled():
+            raise HTTPException(status_code=409, detail="Two-factor authentication is already enabled.")
+        secret = two_factor.new_secret()
+        enrollment = self._factor_cipher().encrypt(f"{self._session_version()}:{secret}".encode())
+        return secret, enrollment.decode("ascii")
+
+    def enable_two_factor(self, enrollment: str, code: str) -> list[str]:
+        data = self._read_auth()
+        if "two_factor" in data:
+            raise HTTPException(status_code=409, detail="Two-factor authentication is already enabled.")
+        cipher = self._factor_cipher()
+        try:
+            version, secret = cipher.decrypt(enrollment.encode(), ttl=600).decode().split(":", 1)
+        except (InvalidToken, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Setup expired. Start again.") from exc
+        if version != self._session_version():
+            raise HTTPException(status_code=400, detail="Setup expired. Start again.")
+
+        counter = two_factor.match_counter(secret, code.strip())
+        if counter is None:
+            raise HTTPException(status_code=400, detail="Invalid authenticator code.")
+        codes = two_factor.recovery_codes()
+        data["two_factor"] = {
+            "secret": cipher.encrypt(secret.encode()).decode("ascii"),
+            "last_counter": counter,
+            "recovery": [two_factor.recovery_digest(item) for item in codes],
+        }
+        data["session_version"] = secrets.token_urlsafe(32)
+        self._write_auth(data)
+        return codes
+
+    def verify_two_factor(self, code: str, *, disable: bool = False) -> bool:
+        data = self._read_auth()
+        if "two_factor" not in data:
+            return not disable
+
+        # One administrator account. Limit guesses across source addresses.
+        if not self._factor_rate.allow("admin"):
+            raise HTTPException(status_code=429, detail="Too many verification attempts. Try again later.")
+
+        factor = data["two_factor"]
+        code = code.strip()
+        digest = two_factor.recovery_digest(code)
+        matched = next((item for item in factor["recovery"] if secrets.compare_digest(item, digest)), None)
+        if matched is not None:
+            factor["recovery"].remove(matched)
+        else:
+            try:
+                secret = self._factor_cipher().decrypt(factor["secret"].encode()).decode("ascii")
+            except InvalidToken:
+                return False
+            counter = two_factor.match_counter(secret, code, factor["last_counter"])
+            if counter is None:
+                return False
+            factor["last_counter"] = counter
+
+        if disable:
+            del data["two_factor"]
+            data["session_version"] = secrets.token_urlsafe(32)
+        self._write_auth(data)
+        self._factor_rate._hits.pop("admin", None)
+        return True
+
+    def passkey(self) -> dict[str, Any] | None:
+        return self._read_auth().get("passkey")
+
+    def save_passkey(self, credential: dict[str, Any] | None) -> None:
+        data = self._read_auth()
+        if credential is None:
+            data.pop("passkey", None)
+        else:
+            data["passkey"] = credential
+        self._write_auth(data)
+
+    def passkey_session_version(self) -> str:
+        return self._session_version()
 
     def issue_token(self, username: str) -> str:
         now = int(time.time())
@@ -383,6 +474,7 @@ class AuthManager:
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="CSRF token missing or invalid.",
                 )
+        request.state.manager_session_id = payload["jti"]
         return username
 
     @staticmethod

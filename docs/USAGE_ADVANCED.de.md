@@ -197,6 +197,10 @@ Aktuelle App mit fiktiven Beispieldaten. Links hell, rechts dunkel. Die gefüllt
 
 ### Profil
 
+Öffne **Einstellungen → Profil → Zwei-Faktor-Authentifizierung**. Gib dein aktuelles Passwort ein, scanne den QR-Code mit einer TOTP-App (oder gib den Einrichtungsschlüssel ein) und bestätige mit einem sechsstelligen Code. Bewahre die einmaligen Wiederherstellungscodes sicher auf. Weitere Manager-Anmeldungen benötigen dein Passwort und einen Authenticator- oder Wiederherstellungscode. Beim Aktivieren oder Deaktivieren werden andere Manager-Sitzungen abgemeldet. Zum Deaktivieren brauchst du dein Passwort und einen gültigen zweiten Faktor. Beim Wiederherstellen eines Manager-Backups werden auch die Zwei-Faktor-Einstellungen und der Stand der Wiederherstellungscodes aus dem Backup übernommen.
+
+Öffne das Dashboard auf deinem Mac in Safari unter seiner HTTPS-Adresse. Unter **Einstellungen → Profil → Passkey** bestätigst du dein Passwort und bei aktivierter Zwei-Faktor-Authentifizierung den zweiten Faktor. Wähle **Passkey hinzufügen** und folge der Touch-ID-Abfrage. Wähle später **Mit einem Passkey anmelden**. Der Manager speichert einen Passkey für diese genaue Adresse. Bewahre dein Passwort und gegebenenfalls die Wiederherstellungscodes auf. Ein Reverse Proxy, der HTTPS terminiert, muss den öffentlichen Host-Header weiterleiten.
+
 | Hell | Dunkel |
 | --- | --- |
 | ![Konto in den Einstellungen, helles Thema](screenshots/light/settings.png?v=app-store-20261102) | ![Konto in den Einstellungen, dunkles Thema](screenshots/dark/settings.png?v=app-store-20261102) |

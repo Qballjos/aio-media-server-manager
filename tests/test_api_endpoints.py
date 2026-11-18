@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.app import create_app
+from core import two_factor
 from core.auth import auth_manager
 from core.settings import Settings, settings
 
@@ -25,8 +26,10 @@ def clean_auth_for_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     test_settings.initialise()
     monkeypatch.setattr(auth_manager, "_settings", test_settings)
     auth_manager._rate._hits.clear()
+    auth_manager._factor_rate._hits.clear()
     yield
     auth_manager._rate._hits.clear()
+    auth_manager._factor_rate._hits.clear()
 
 
 @pytest.fixture
@@ -174,3 +177,120 @@ def test_system_info_endpoint(client: TestClient):
     media = data["storage"].get("media_dir") or next(iter(data["storage"].values()), {})
     assert "fs_type" in media
     assert "disk_total" in media
+
+
+def test_two_factor_enrollment_and_recovery(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    credentials = {"username": "admin", "password": "StrongPassword123!"}
+    monkeypatch.setattr("api.routers.auth.save_shared_admin_credentials", lambda *args, **kwargs: None)
+    setup = client.post("/api/auth/setup", json={**credentials, "email": "admin@example.com"})
+    initial = {"Authorization": f"Bearer {setup.json()['access_token']}"}
+    path = "/api/auth/two-factor"
+    assert client.get(path, headers=initial).json() == {"enabled": False}
+    assert client.post(f"{path}/setup", json={"password": credentials["password"]}).status_code == 403
+
+    enrollment = client.post(f"{path}/setup", headers=initial, json={"password": credentials["password"]})
+    assert enrollment.status_code == 200
+    assert enrollment.headers["cache-control"] == "no-store"
+    pending = enrollment.json()
+    assert client.get(path, headers=initial).json() == {"enabled": False}
+
+    counter = 60_000_000
+    monkeypatch.setattr(two_factor, "current_counter", lambda: counter)
+    code = two_factor.totp_code(pending["secret"], counter)
+    confirmation = {"enrollment": pending["enrollment"], "code": code}
+    enabled = client.post(f"{path}/enable", headers=initial, json=confirmation)
+    assert enabled.status_code == 200
+    data = enabled.json()
+    assert len(set(data["recovery_codes"])) == 10
+    recovery_code = data["recovery_codes"][0]
+    assert recovery_code not in auth_manager._auth_path.read_text()
+    assert pending["secret"] not in auth_manager._auth_path.read_text()
+
+    assert client.get(path, headers=initial).status_code == 401
+    client.cookies.clear()
+    challenge = client.post("/api/auth/login", json=credentials)
+    assert challenge.json() == {"status": "two_factor_required"}
+    assert "set-cookie" not in challenge.headers
+    assert client.get("/api/auth/status").json()["authenticated"] is False
+    assert client.post("/api/auth/login", json={**credentials, "code": code}).status_code == 401
+
+    next_code = two_factor.totp_code(pending["secret"], counter + 1)
+    success = client.post("/api/auth/login", json={**credentials, "code": next_code})
+    assert success.status_code == 200
+    assert client.post("/api/auth/login", json={**credentials, "code": next_code}).status_code == 401
+
+    success = client.post("/api/auth/login", json={**credentials, "code": recovery_code})
+    assert success.status_code == 200
+    assert client.post("/api/auth/login", json={**credentials, "code": recovery_code}).status_code == 401
+
+    headers = {"Authorization": f"Bearer {success.json()['access_token']}"}
+    disabled = client.post(f"{path}/disable", headers=headers, json={
+        "password": credentials["password"], "code": data["recovery_codes"][1],
+    })
+    assert disabled.status_code == 200
+    assert client.get(path, headers=headers).status_code == 401
+    replacement = {"Authorization": f"Bearer {disabled.json()['access_token']}"}
+    assert client.get(path, headers=replacement).json() == {"enabled": False}
+    assert "access_token" in client.post("/api/auth/login", json=credentials).json()
+
+
+def test_auth_does_not_echo_invalid_verification_data(client: TestClient):
+    code = "private-input" * 20
+    response = client.post("/api/auth/login", json={"username": "admin", "password": "unused", "code": code})
+    assert response.status_code == 422
+    assert code not in response.text
+
+
+def test_passkey_options_require_local_session_and_secure_origin(client, monkeypatch):
+    monkeypatch.setattr("api.routers.auth.save_shared_admin_credentials", lambda *args, **kwargs: None)
+    password = "FixturePasskeyPassword123!"
+    setup = client.post("/api/auth/setup", json={
+        "username": "admin", "password": password, "email": "admin@example.test",
+    })
+    auth = {"Authorization": f"Bearer {setup.json()['access_token']}"}
+    endpoint = "/api/auth/passkeys/register/options"
+    assert client.post(endpoint, headers={**auth, "Origin": "https://elsewhere.example"},
+                       json={"password": password}).status_code == 400
+    assert client.post(endpoint, headers={**auth, "Origin": "http://testserver"},
+                       json={"password": password}).status_code == 400
+    origin = {"Origin": "https://testserver"}
+    assert client.post(endpoint, headers=origin, json={"password": password}).status_code == 403
+    response = client.post(endpoint, headers={**auth, **origin}, json={"password": password})
+    assert response.status_code == 200
+    options = response.json()
+    assert options["rp"]["id"] == "testserver"
+    assert options["authenticatorSelection"]["residentKey"] == "required"
+    assert options["authenticatorSelection"]["userVerification"] == "required"
+    assert response.headers["cache-control"] == "no-store"
+    other = {"Authorization": f"Bearer {auth_manager.issue_token('admin')}"}
+    pending = {"challenge": options["challenge"], "credential": "{}"}
+    verify_url = "/api/auth/passkeys/register"
+    wrong_session = client.post(verify_url, headers={**other, **origin}, json=pending)
+    assert wrong_session.json()["detail"] == "Passkey request expired. Try again."
+    same_session = client.post(verify_url, headers={**auth, **origin}, json=pending)
+    assert same_session.json()["detail"] == "Could not verify the passkey."
+
+
+def test_passkey_registration_requires_second_factor_when_enabled(client, monkeypatch):
+    monkeypatch.setattr("api.routers.auth.save_shared_admin_credentials", lambda *args, **kwargs: None)
+    password = "FixturePasskeyPassword123!"
+    auth_manager.create_admin("admin", password, email="admin@example.test")
+    counter = 60_000_000
+    monkeypatch.setattr(two_factor, "current_counter", lambda: counter)
+    secret, enrollment = auth_manager.begin_two_factor()
+    recovery = auth_manager.enable_two_factor(enrollment, two_factor.totp_code(secret, counter))
+    token = auth_manager.issue_token("admin")
+    headers = {"Authorization": f"Bearer {token}", "Origin": "https://testserver"}
+    endpoint = "/api/auth/passkeys/register/options"
+
+    assert client.post(endpoint, headers=headers, json={"password": password}).status_code == 400
+    next_code = two_factor.totp_code(secret, counter + 1)
+    assert client.post(endpoint, headers=headers, json={"password": password, "code": next_code}).status_code == 200
+    assert client.post(endpoint, headers=headers, json={"password": password, "code": next_code}).status_code == 400
+
+    auth_manager.save_passkey({"origin": "https://testserver"})
+    assert client.post(endpoint, headers=headers, json={"password": password, "code": recovery[0]}).status_code == 409
+    removed = client.post("/api/auth/passkeys/remove", headers={"Authorization": f"Bearer {token}"},
+                          json={"password": password, "code": recovery[0]})
+    assert removed.json() == {"origin": None}
+    assert auth_manager.passkey() is None

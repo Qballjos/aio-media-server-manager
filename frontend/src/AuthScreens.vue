@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { apiError, apiJson, applySession } from './api.js'
+import { canUsePasskeys, usePasskey } from './passkeys.js'
 import { brandLogoUrl, brandLoginMessage, brandTitle } from './branding.js'
 import { useToasts } from './useToasts.js'
 import AppLoader from './AppLoader.vue'
@@ -24,6 +25,19 @@ const authForm = ref({
   confirmPassword: '',
 })
 const authError = ref('')
+const factorRequired = ref(false)
+const factorCode = ref('')
+const factorInput = ref(null)
+const usernameInput = ref(null)
+
+async function resetLogin() {
+  factorRequired.value = false
+  factorCode.value = ''
+  authForm.value.password = ''
+  authError.value = ''
+  await nextTick()
+  usernameInput.value?.focus()
+}
 const authLoading = ref(false)
 const cardRef = ref(null)
 const tiltOn = ref(false)
@@ -135,6 +149,28 @@ async function handleSetup() {
   }
 }
 
+const passkeysAvailable = canUsePasskeys()
+
+function completeLogin(data) {
+  applySession(data)
+  authForm.value.password = ''
+  factorCode.value = ''
+  showToast(t('Welcome back, {name}!', { name: data.username }), 'success')
+  emit('session', data)
+}
+
+async function handlePasskeyLogin() {
+  authError.value = ''
+  authLoading.value = true
+  try {
+    completeLogin(await usePasskey('login'))
+  } catch (err) {
+    authError.value = err.message
+  } finally {
+    authLoading.value = false
+  }
+}
+
 async function handleLogin() {
   authError.value = ''
   authLoading.value = true
@@ -144,18 +180,23 @@ async function handleLogin() {
       body: JSON.stringify({
         username: authForm.value.username.trim(),
         password: authForm.value.password,
+        code: factorCode.value,
       }),
     })
 
     if (!res.ok) {
-      authError.value = apiError(data, t('Invalid username or password.'))
+      authError.value = t(apiError(data, 'Invalid username or password.'))
       return
     }
 
-    applySession(data)
-    authForm.value.password = ''
-    showToast(t('Welcome back, {name}!', { name: data.username }), 'success')
-    emit('session', data)
+    if (data.status === 'two_factor_required') {
+      factorRequired.value = true
+      await nextTick()
+      factorInput.value?.focus()
+      return
+    }
+
+    completeLogin(data)
   } catch (err) {
     authError.value = t('Login error: {message}', { message: err.message })
   } finally {
@@ -291,13 +332,14 @@ onUnmounted(() => {
           </div>
 
           <form @submit.prevent="handleLogin" class="auth-form">
-            <div v-if="authError" class="alert-banner alert-error">
+            <div v-if="authError" class="alert-banner alert-error" role="alert">
               {{ authError }}
             </div>
 
-            <div class="form-group">
+            <div v-show="!factorRequired" class="form-group">
               <label class="ui-field">{{ $t('Username') }}
               <input
+                ref="usernameInput"
                 v-model="authForm.username"
                 type="text"
                 placeholder="admin"
@@ -309,7 +351,7 @@ onUnmounted(() => {
               </label>
             </div>
 
-            <div class="form-group">
+            <div v-show="!factorRequired" class="form-group">
               <label class="ui-field">{{ $t('Password') }}
               <input
                 v-model="authForm.password"
@@ -321,9 +363,23 @@ onUnmounted(() => {
               </label>
             </div>
 
+            <div v-if="factorRequired" class="form-group">
+              <label class="ui-field">{{ $t('Authenticator or recovery code') }}
+                <input ref="factorInput" v-model="factorCode" class="ui-input" autocomplete="one-time-code"
+                       autocapitalize="off" spellcheck="false" maxlength="128" required />
+              </label>
+            </div>
+
             <button type="submit" :disabled="authLoading" class="ui-btn ui-btn-primary btn-block">
               <span v-if="authLoading" class="spinner"></span>
-              <span v-else>{{ $t('Sign in') }}</span>
+              <span v-else>{{ factorRequired ? $t('Verify and sign in') : $t('Sign in') }}</span>
+            </button>
+            <button v-if="passkeysAvailable && !factorRequired" type="button" class="ui-btn ui-btn-ghost"
+                    :disabled="authLoading" @click="handlePasskeyLogin">
+              {{ $t('Sign in with a passkey') }}
+            </button>
+            <button v-if="factorRequired" type="button" class="ui-btn ui-btn-ghost" :disabled="authLoading" @click="resetLogin">
+              {{ $t('Back') }}
             </button>
           </form>
         </div>

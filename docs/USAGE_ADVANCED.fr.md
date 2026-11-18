@@ -197,6 +197,10 @@ Interface actuelle avec données fictives. Clair à gauche, sombre à droite. Ac
 
 ### Profil
 
+Dans **Paramètres → Profil → Authentification à deux facteurs**, saisissez votre mot de passe actuel, scannez le code QR avec une application TOTP (ou saisissez la clé de configuration), puis confirmez avec un code à six chiffres. Conservez les codes de récupération à usage unique en lieu sûr. Pour les prochaines connexions au gestionnaire, utilisez votre mot de passe et un code d’authentification ou de récupération. L’activation ou la désactivation ferme les autres sessions du gestionnaire. Pour désactiver cette option, fournissez votre mot de passe et un second facteur valide. La restauration d’une sauvegarde du gestionnaire rétablit aussi l’état de l’authentification à deux facteurs et des codes de récupération à la date de la sauvegarde.
+
+Sur votre Mac, ouvrez le tableau de bord dans Safari à son adresse HTTPS. Dans **Paramètres → Profil → Clé d’accès**, confirmez votre mot de passe et, si l’option est activée, votre second facteur. Sélectionnez **Ajouter une clé d’accès** et suivez l’invite Touch ID. Choisissez ensuite **Se connecter avec une clé d’accès**. Le gestionnaire conserve une clé d’accès pour cette adresse exacte. Gardez votre mot de passe et vos éventuels codes de récupération. Si un proxy inverse termine HTTPS, il doit transmettre l’en-tête Host public.
+
 | Clair | Sombre |
 | --- | --- |
 | ![Compte dans Réglages, thème clair](screenshots/light/settings.png?v=app-store-20261102) | ![Compte dans Réglages, thème sombre](screenshots/dark/settings.png?v=app-store-20261102) |
