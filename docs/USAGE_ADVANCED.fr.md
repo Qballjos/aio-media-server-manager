@@ -315,7 +315,7 @@ L’image ne met pas ces apps à jour toute seule. Lisez les notes de version su
 
 **Cleanuparr** est une application optionnelle du catalogue et de l’assistant pour Linux amd64/arm64, port **11011**, configuration `/config/cleanuparr`. Les installations Compose existantes doivent ajouter `11011:11011` et recréer le conteneur AIO. Les fichiers supplémentaires de test et GPU héritent de ce port.
 
-Auto-Wire crée l’administrateur AIO sur une nouvelle installation et connecte Sonarr, Radarr, Lidarr, qBittorrent et SABnzbd installés avec leurs ports et identifiants configurés. Cleanuparr ne prend pas en charge NZBGet. Les nouvelles installations démarrent en **simulation (dry-run)** avant l’ajout des connexions. AIO active des contrôles prudents de la file et des logiciels malveillants en simulation ; le nettoyage des téléchargements terminés et les recherches proactives restent désactivés. Vérifiez les règles avant d’autoriser les suppressions et évitez les recherches en double avec NeutArr. Les connexions externes, choix désactivés et règles existantes sont conservés.
+Auto-Wire crée l’administrateur AIO sur une nouvelle installation et connecte Sonarr, Radarr, Lidarr, qBittorrent et SABnzbd installés avec leurs ports et identifiants configurés. Cleanuparr ne prend pas en charge NZBGet. Les nouvelles installations utilisent la **simulation pendant la configuration**, puis la désactivent une fois les règles enregistrées et vérifiées. AIO active des contrôles prudents de la file et des logiciels malveillants ; le nettoyage des téléchargements terminés et les recherches proactives restent désactivés. Vérifiez les règles de suppression actives et évitez les recherches en double avec NeutArr. Les connexions externes, choix désactivés et règles existantes sont conservés.
 
 **Open UI** connecte l’administrateur partagé sur le même hôte LAN ; les sous-domaines publics et comptes avec 2FA gardent leur connexion. Les mots de passe et clés API restent côté serveur ; aucun jeton de session ne figure dans une URL. Pour un compte existant différent, terminez la configuration, enregistrez sa clé API dans **Catalogue → Cleanuparr → Paramètres**, puis lancez Auto-Wire. AIO ne reprend pas un compte inconnu inachevé.
 
@@ -327,7 +327,7 @@ Ces **choix prudents d’AIO** reposent sur la documentation officielle ; ce ne 
 
 | Paramètre | Valeur AIO |
 | --- | --- |
-| Simulation (dry-run) | Activée ; examiner d’abord les résultats simulés |
+| Simulation (dry-run) | Désactivée après une configuration réussie |
 | Contrôle Internet / TLS | HTTPS vers GitHub et Cloudflare ; validation des certificats activée |
 | Queue Cleaner | Toutes les 5 minutes |
 | Torrents publics bloqués | 12 avertissements, environ 1 heure ; remise à zéro à la reprise ; torrents privés ignorés |
@@ -336,9 +336,10 @@ Ces **choix prudents d’AIO** reposent sur la documentation officielle ; ce ne 
 | Règles métadonnées, erreurs client et lenteur | Désactivées |
 | Malware Blocker | Chaque minute ; blacklist officielle permissive pour Sonarr/Radarr, pas pour la musique |
 | Suppression liée aux logiciels malveillants | Ignorer les torrents privés ; ne pas supprimer tout un torrent pour un seul fichier bloqué |
+| Blacklist Sync | Activée, chaque heure ; liste permissive officielle. Globale pour qBittorrent ; y activer les exclusions de fichiers |
 | Download Cleaner | Désactivé ; aucune suppression selon le ratio ou de fichiers orphelins |
 | Seeker | Recherches de remplacement toutes les 10 minutes ; recherche proactive désactivée |
 
-Motifs d’import : `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing`, `Unable to parse`. Les problèmes temporaires de décompression, d’espace disque et de chemins sont exclus. La règle globale des métadonnées reste désactivée pour protéger les torrents privés. AIO ne modifie pas les exclusions qBittorrent hors du mode simulation.
+Motifs d’import : `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing`, `Unable to parse`. Les problèmes temporaires de décompression, d’espace disque et de chemins sont exclus. La règle globale des métadonnées reste désactivée pour protéger les torrents privés. Après la configuration, Cleanuparr peut appliquer les exclusions qBittorrent. Prowlarr gère les valeurs publiques : ratio 1, durée 2880 minutes et durée des packs 10080 minutes.
 
 Sources : [Queue Cleaner](https://cleanuparr.github.io/docs/configuration/queue-cleaner/), [Malware Blocker](https://cleanuparr.github.io/docs/configuration/malware-blocker/), [General](https://cleanuparr.github.io/docs/configuration/general/), [Seeker](https://cleanuparr.github.io/docs/configuration/seeker/). Champs API vérifiés pour Cleanuparr v2.11.0 ; la documentation en ligne peut décrire des champs plus récents.

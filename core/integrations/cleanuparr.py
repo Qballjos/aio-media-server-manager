@@ -132,9 +132,15 @@ class CleanuparrClient:
             "ignorePrivate": True, "deletePrivate": False, "processNoContentId": False,
             "deleteIfAnyFileBlocked": False, "sonarr": blocklist, "radarr": blocklist,
         })
+        self._save_defaults("blacklist_sync", {
+            "enabled": True, "cronExpression": "0 0 * * * ?",
+            "blacklistPath": blocklist["blocklistPath"],
+        })
         # Seeding/orphan deletion and proactive searching need operator-specific choices.
         self._save_defaults("download_cleaner", {"enabled": False})
         self._save_defaults("seeker", {"searchEnabled": True, "proactiveSearchEnabled": False, "searchInterval": 10})
+        # Go live only after the complete profile has been saved and verified.
+        self._save_defaults("general", {"dryRun": False})
 
     def ensure_arr(self, name: str, *, url: str, api_key: str, version: int) -> bool:
         path = f"configuration/{name}"

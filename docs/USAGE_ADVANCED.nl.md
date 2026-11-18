@@ -315,7 +315,7 @@ De image werkt die apps niet vanzelf bij. Lees de release-opmerkingen op GitHub 
 
 Installeer **Cleanuparr** via Catalogus of selecteer de app bij de optionele wizard-apps. AIO beheert de app als proces op Linux amd64/arm64, op poort **11011**, met configuratie in `/config/cleanuparr`. Voeg bij bestaande Compose-installaties `11011:11011` toe en maak de AIO-container opnieuw aan. De test- en GPU-overlays nemen deze poort over.
 
-Auto-Wire maakt bij een nieuwe installatie de AIO-beheerder aan en koppelt geïnstalleerde Sonarr, Radarr, Lidarr, qBittorrent en SABnzbd met hun ingestelde poorten en aanmeldgegevens. Cleanuparr ondersteunt NZBGet niet. Nieuwe installaties starten in **dry-run** voordat koppelingen worden toegevoegd. AIO schakelt conservatieve wachtrij- en malwarecontroles in dry-run in, maar laat het opruimen van afgeronde downloads en proactief zoeken uit. Controleer de regels voordat je verwijderen toestaat en voorkom overlappende zoektaken met NeutArr. Bestaande externe koppelingen, uitgeschakelde keuzes en opruimregels blijven behouden.
+Auto-Wire maakt bij een nieuwe installatie de AIO-beheerder aan en koppelt geïnstalleerde Sonarr, Radarr, Lidarr, qBittorrent en SABnzbd met hun ingestelde poorten en aanmeldgegevens. Cleanuparr ondersteunt NZBGet niet. Nieuwe installaties gebruiken **dry-run tijdens de configuratie** en schakelen dit uit zodra alle standaardregels zijn opgeslagen en gecontroleerd. AIO schakelt conservatieve wachtrij- en malwarecontroles in, maar laat het opruimen van afgeronde downloads en proactief zoeken uit. Controleer de actieve verwijderregels en voorkom overlappende zoektaken met NeutArr. Bestaande externe koppelingen, uitgeschakelde keuzes en opruimregels blijven behouden.
 
 **Open UI** meldt de gedeelde beheerder aan op dezelfde LAN-host; openbare subdomeinen en accounts met 2FA behouden hun eigen aanmelding. Wachtwoorden en API-sleutels blijven op de server en sessietokens komen niet in URL’s. Heeft Cleanuparr al een ander account, voltooi dan de setup en bewaar de API-sleutel via **Catalogus → Cleanuparr → Instellingen**. Voer daarna Auto-Wire uit. AIO neemt geen onbekend onvoltooid account over.
 
@@ -327,7 +327,7 @@ Dit zijn conservatieve **AIO-keuzes**, gebaseerd op de officiële documentatie. 
 
 | Instelling | AIO-standaard |
 | --- | --- |
-| Dry-run | Aan; controleer eerst de gesimuleerde resultaten |
+| Dry-run | Uit na een geslaagde configuratie |
 | Internetcontrole | Aan, via HTTPS naar GitHub en Cloudflare; certificaatcontrole aan |
 | Queue Cleaner | Elke 5 minuten |
 | Vastgelopen publieke torrents | 12 meldingen, ongeveer 1 uur; teller reset bij voortgang; private torrents overslaan |
@@ -336,9 +336,10 @@ Dit zijn conservatieve **AIO-keuzes**, gebaseerd op de officiële documentatie. 
 | Metadata-, clientfout- en traagheidsregels | Uit; geen aannames over snelheid of schijfproblemen |
 | Malware Blocker | Elke minuut; officiële permissieve blacklist voor Sonarr/Radarr, niet voor muziek |
 | Malwareverwijdering | Private torrents overslaan; niet de hele torrent verwijderen vanwege één geblokkeerd bestand |
+| Blacklist Sync | Aan, elk uur; officiële permissieve lijst. Globaal voor qBittorrent; schakel daar bestandsuitsluitingen in |
 | Download Cleaner | Uit; geen automatisch verwijderen op seedratio of weesbestanden |
 | Seeker | Alleen vervangende zoekopdrachten, elke 10 minuten; proactief zoeken uit |
 
-De importpatronen zijn `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing` en `Unable to parse`. Uitpakken, onvoldoende schijfruimte en onjuiste padkoppelingen vallen daar niet onder. De globale metadataregel blijft uit om private torrents te beschermen. AIO verandert geen qBittorrent-uitsluitingen buiten Cleanuparrs dry-run om.
+De importpatronen zijn `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing` en `Unable to parse`. Uitpakken, onvoldoende schijfruimte en onjuiste padkoppelingen vallen daar niet onder. De globale metadataregel blijft uit om private torrents te beschermen. Na de configuratie kan Cleanuparr qBittorrent-uitsluitingen toepassen. Prowlarr beheert de openbare seedstandaarden: ratio 1, seedtijd 2880 minuten en pack-seedtijd 10080 minuten.
 
 Bronnen: [Queue Cleaner](https://cleanuparr.github.io/docs/configuration/queue-cleaner/), [Malware Blocker](https://cleanuparr.github.io/docs/configuration/malware-blocker/), [General](https://cleanuparr.github.io/docs/configuration/general/), [Seeker](https://cleanuparr.github.io/docs/configuration/seeker/). API-velden gecontroleerd voor Cleanuparr v2.11.0; de online documentatie kan nieuwere velden beschrijven.

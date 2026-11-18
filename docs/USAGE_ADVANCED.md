@@ -315,7 +315,7 @@ The image does not bump those apps on its own. Read release notes on GitHub if s
 
 Install **Cleanuparr** from Catalog or select it in the optional wizard apps. AIO manages it as a process on Linux amd64/arm64, with port **11011** and persistent configuration under `/config/cleanuparr` (or `<AMM_CONFIG_DIR>/cleanuparr` on native Linux). Existing Compose installations must add `11011:11011` and recreate the AIO container. The test and GPU overlays inherit this mapping.
 
-Auto-Wire creates the AIO administrator in a fresh Cleanuparr installation and connects installed Sonarr, Radarr, Lidarr, qBittorrent and SABnzbd using their selected ports and credentials. NZBGet is not supported upstream. Repeated wiring updates the AIO-named connections and preserves other connections, disabled choices, cleanup rules and schedules. New setups start in **dry-run** before connections are added; AIO enables conservative Queue Cleaner and Malware Blocker checks in dry-run, but leaves completed-download cleanup and proactive searches off. Review the rules in Cleanuparr before allowing deletions, and avoid overlapping Seeker and NeutArr search schedules.
+Auto-Wire creates the AIO administrator in a fresh Cleanuparr installation and connects installed Sonarr, Radarr, Lidarr, qBittorrent and SABnzbd using their selected ports and credentials. NZBGet is not supported upstream. Repeated wiring updates the AIO-named connections and preserves other connections, disabled choices, cleanup rules and schedules. New setups use **dry-run during setup**, then disable it after all defaults are saved and verified. Queue Cleaner and Malware Blocker run live; completed-download cleanup and proactive searches stay off. Review the rules in Cleanuparr, and avoid overlapping Seeker and NeutArr search schedules.
 
 **Open UI** signs the shared administrator in on the same LAN host. Passwords and API keys remain server-side; transient login sessions are handed only to the opened Cleanuparr origin, without tokens in URLs. Public subdomains and accounts with 2FA keep their own sign-in. Authentication is never disabled. If Cleanuparr already uses a different account, complete its setup and save its API key in **Catalog → Cleanuparr → Settings**, then run Auto-Wire. AIO does not take over unrelated unfinished accounts.
 
@@ -327,7 +327,7 @@ These are conservative **AIO choices**, based on the upstream documentation, not
 
 | Setting | AIO default | Reason |
 | --- | --- | --- |
-| Dry-run | On | Review logs before allowing live changes |
+| Dry-run | Off after setup | Setup stays in dry-run until all defaults are saved and verified |
 | Internet connectivity check | On; HTTPS to GitHub and Cloudflare | Avoid queue strikes during an internet outage |
 | TLS certificate validation | Enabled | Keep HTTPS verification |
 | Queue Cleaner | Every 5 minutes | Regular checks with low overhead |
@@ -337,9 +337,10 @@ These are conservative **AIO choices**, based on the upstream documentation, not
 | Metadata / client-error / slow-download rules | Off | Avoid guessing acceptable speeds, tracker delays or disk failures |
 | Malware Blocker | Every minute; official permissive blacklist for Sonarr/Radarr | Block known unwanted patterns while allowing archives; do not apply a video list to music |
 | Malware deletion | Ignore private; do not delete a mixed torrent merely for one blocked file | Preserve tracker obligations and legitimate files |
+| Blacklist Sync | On, hourly; official permissive list | Global qBittorrent exclusions; enable “Excluded file names” in qBittorrent for filtering |
 | Download Cleaner | Off | Seeding ratios, orphaned files and deletion policies need individual choices |
 | Seeker | Reactive replacements every 10 minutes; proactive searching off | Replace removed downloads without duplicating NeutArr's library searches |
 
-Failed-import patterns: `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing`, `Unable to parse`. Temporary unpacking, disk-space and path-mapping errors are not included. The downloading-metadata rule is off because it is global rather than restricted by the public-only stall rule. No qBittorrent exclusions are changed outside Cleanuparr's dry-run control.
+Failed-import patterns: `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing`, `Unable to parse`. Temporary unpacking, disk-space and path-mapping errors are not included. The downloading-metadata rule is off because it is global rather than restricted by the public-only stall rule. Cleanuparr can apply qBittorrent exclusions once setup finishes. Public-tracker seeding defaults are managed through Prowlarr: ratio **1**, seed time **2880 minutes** (48 hours), pack seed time **10080 minutes** (7 days). Cleanuparr Download Cleaner stays off so it does not override that policy.
 
 Sources: [Queue Cleaner](https://cleanuparr.github.io/docs/configuration/queue-cleaner/), [Malware Blocker](https://cleanuparr.github.io/docs/configuration/malware-blocker/), [General](https://cleanuparr.github.io/docs/configuration/general/), [Seeker](https://cleanuparr.github.io/docs/configuration/seeker/). Verified API field compatibility against Cleanuparr v2.11.0; the live documentation can describe newer fields.
