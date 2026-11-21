@@ -1,6 +1,7 @@
 <script setup>
 import { computed, toRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import CalendarMilestones from './CalendarMilestones.vue'
 import UiSelect from './UiSelect.vue'
 import { useHomeCalendar } from './composables/useHomeCalendar.js'
 
@@ -104,6 +105,7 @@ function mediaLabel(item) {
               <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
               <span class="cal-row-body">
                 <span class="cal-row-title">
+                  <CalendarMilestones :milestones="row.item.milestones" />
                   <strong>{{ row.item.title }}</strong>
                   <span v-if="mediaLabel(row.item)" class="media-badge">{{ $t(mediaLabel(row.item)) }}</span>
                 </span>
@@ -157,6 +159,7 @@ function mediaLabel(item) {
                       <span class="cal-event-time">{{ member ? $t(item.has_file ? 'Available' : 'Upcoming') : formatEventTime(item.when) }}</span>
                       <span v-if="mediaLabel(item)" class="media-badge">{{ $t(mediaLabel(item)) }}</span>
                     </span>
+                    <CalendarMilestones :milestones="item.milestones" />
                     <strong>{{ item.title }}</strong>
                     <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
                   </component>

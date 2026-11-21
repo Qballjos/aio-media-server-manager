@@ -63,10 +63,12 @@ test('a group of episodes only links to the library when every episode is availa
     const rows = [1, 2].map((episode) => ({ dt: new Date(2026, 10, 2, 12 + episode), item: {
       title: 'Test series', detail: `S01E0${episode}`, has_file: episode === 1,
       play_url: 'episode', series_play_url: 'series',
+      milestones: [episode === 1 ? 'series-premiere' : 'season-finale'],
     } }))
     let grouped = state.groupSameDay(rows)
     assert.equal(grouped.length, 1)
     assert.equal(grouped[0].item.has_file, false)
+    assert.deepEqual(grouped[0].item.milestones, ['series-premiere', 'season-finale'])
     rows[1].item.has_file = true
     grouped = state.groupSameDay(rows)
     assert.equal(grouped[0].item.has_file, true)

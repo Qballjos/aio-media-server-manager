@@ -312,7 +312,14 @@ def test_homepage_downloads_include_speed(tmp_path):
     assert snap["downloads"][0]["speed_bps"] == 1_500_000
 
 
-def test_homepage_calendar_from_sonarr(tmp_path):
+@pytest.mark.parametrize(("season", "episode", "finale_type", "milestones"), [
+    (1, 1, "series", ["series-premiere", "series-finale"]),
+    (2, 1, None, ["season-premiere"]),
+    (2, 8, "season", ["season-finale"]),
+    (0, 1, None, []),
+    (1, 2, None, []),
+])
+def test_homepage_calendar_from_sonarr(tmp_path, season, episode, finale_type, milestones):
     catalog = FakeCatalog([_plugin("sonarr", 8989, tmp_path)])
     with (
         patch("core.homepage.ApplicationCatalog", return_value=catalog),
@@ -324,8 +331,9 @@ def test_homepage_calendar_from_sonarr(tmp_path):
                 [
                     {
                         "title": "Pilot",
-                        "seasonNumber": 1,
-                        "episodeNumber": 2,
+                        "seasonNumber": season,
+                        "episodeNumber": episode,
+                        "finaleType": finale_type,
                         "airDateUtc": "2026-09-24T20:00:00Z",
                         "hasFile": False,
                         "series": {"title": "Example Show", "titleSlug": "example-show", "tvdbId": 10},
@@ -337,7 +345,8 @@ def test_homepage_calendar_from_sonarr(tmp_path):
     ):
         snap = homepage_snapshot("host.local", force=True)
     assert snap["calendar"][0]["title"] == "Example Show"
-    assert "S01E02" in snap["calendar"][0]["detail"]
+    assert f"S{season:02d}E{episode:02d}" in snap["calendar"][0]["detail"]
+    assert snap["calendar"][0].get("milestones", []) == milestones
     assert "Pilot" in snap["calendar"][0]["detail"]
     assert snap["calendar"][0]["has_file"] is False
     assert snap["calendar"][0]["when"].startswith("2026-09-24T20:00:00")

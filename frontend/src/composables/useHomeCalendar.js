@@ -251,9 +251,10 @@ export function useHomeCalendar({ snapshot, calendarWide, calendarPhone = ref(fa
         prev.count += 1
         prev.last = row
         prev.have = prev.have && row.item.has_file
+        for (const milestone of row.item.milestones || []) prev.milestones.add(milestone)
         continue
       }
-      out.push({ ...row, count: 1, last: row, have: row.item.has_file })
+      out.push({ ...row, count: 1, last: row, have: row.item.has_file, milestones: new Set(row.item.milestones) })
     }
     return out.map((row) => {
       if (row.count === 1) return row
@@ -261,6 +262,7 @@ export function useHomeCalendar({ snapshot, calendarWide, calendarPhone = ref(fa
       const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
       // Downloaded only when every episode in the group is.
       const item = { ...row.item, detail: `${span}${t('{count} episodes', { count: row.count })}`, has_file: row.have }
+      if (row.milestones.size) item.milestones = [...row.milestones]
       // A run of episodes opens the series, not the first episode.
       if (row.have && item.series_play_url) item.play_url = item.series_play_url
       return { ...row, item }

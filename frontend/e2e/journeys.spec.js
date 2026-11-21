@@ -156,7 +156,10 @@ test('calendar controls preserve a manually selected view across viewport change
   await expect(calendar.locator('.cal-mode-month')).toBeVisible()
   const today = calendar.getByRole('button', { name: 'Today', exact: true })
   if (await today.isVisible()) await today.click()
-  await expect(calendar.getByText('Calendar fixture', { exact: true })).toBeVisible()
+  const event = calendar.getByRole('link', { name: /Calendar fixture/ })
+  await event.scrollIntoViewIfNeeded()
+  await expect(event.getByText('Calendar fixture', { exact: true })).toBeVisible()
+  await expect(event.getByRole('img', { name: 'Series premiere' })).toBeVisible()
   const viewport = page.viewportSize()
   await page.setViewportSize({ width: viewport.width < 600 ? 1100 : 390, height: viewport.height })
   await expect(calendar.locator('.cal-mode-month')).toBeVisible()
@@ -529,6 +532,9 @@ test.describe('media-account login', () => {
           expect(start).toMatch(/^\d{4}-\d{2}-\d{2}$/)
           return route.fulfill({ json: { items: [{
             kind: 'movie', title: 'Shared future film', detail: '2026', when: `${start}T12:00:00`, available: false,
+          }, {
+            kind: 'episode', title: 'Shared season', detail: 'S02E08', when: `${start}T12:00:00`,
+            available: false, milestones: ['season-finale'],
           }] } })
         }
         if (path === '/api/media-discovery/titles/tv/5') {
@@ -626,7 +632,8 @@ test.describe('media-account login', () => {
       await calendar.getByRole('button', { name: 'Calendar view' }).click()
       await page.getByRole('option', { name: 'Day', exact: true }).click()
       await expect(calendar.getByText('Shared future film')).toBeVisible()
-      await expect(calendar.getByText(/Upcoming/)).toBeVisible()
+      await expect(calendar.getByRole('img', { name: 'Season finale' })).toBeVisible()
+      await expect(calendar.getByText('Upcoming', { exact: true }).first()).toBeVisible()
       await calendar.getByRole('button', { name: 'Next' }).click()
       await expect(calendar.getByText('Shared future film')).toBeVisible()
       await expect(page.getByRole('region', { name: 'Trending', exact: true }).getByText('Partially available')).toBeVisible()

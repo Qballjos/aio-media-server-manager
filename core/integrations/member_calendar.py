@@ -223,7 +223,10 @@ def member_calendar(provider: str, server_id: str, account_id: str, token: str, 
                 return None
             if not available:
                 return None
-        return {key: event[key] for key in ("kind", "title", "detail", "when")} | {"available": available}
+        result = {key: event[key] for key in ("kind", "title", "detail", "when")} | {"available": available}
+        if event.get("milestones"):
+            result["milestones"] = event["milestones"]
+        return result
 
     with ThreadPoolExecutor(max_workers=6) as pool:
         events = [event for event in pool.map(visible, _calendar_rows(catalog, start, end)) if event]

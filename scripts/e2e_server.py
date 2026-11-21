@@ -133,7 +133,7 @@ def build_app(root: Path):
                 {"title": "Missing Trending", "source": "seerr", "mediaType": "movie", "mediaId": 9103, "status": "missing", "can_request": True, "poster": ""},
             ]
         queue = [{"title": "Synthetic Journey", "source": "qbittorrent", "id": "fixture-download", "progress": 42, "size": 100, "downloaded": 42, "speed": 1000, "eta": 60, "state": "downloading", "moving": True}] if state["requested"] and not state["downloaded"] else []
-        calendar = [{"title": "Calendar fixture", "when": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), "detail": "S01E01", "kind": "episode", "source": "sonarr", "has_file": False, "url": "http://127.0.0.1:8989/series/fixture"}]
+        calendar = [{"title": "Calendar fixture", "when": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), "detail": "S01E01", "milestones": ["series-premiere"], "kind": "episode", "source": "sonarr", "has_file": False, "url": "http://127.0.0.1:8989/series/fixture"}]
         return {"apps": apps, "calendar": calendar, "downloads": queue, "recent": recent, "requests": requests_list, "trending": trending, "widgets": [], "waiting": [], "seerr": {"available": True, "url": "http://127.0.0.1:5055"}, "partial": False}
     homepage.homepage_snapshot = snapshot
     homepage.homepage_title = lambda *a, **kw: {"ok": False, "detail": "Synthetic title detail failure"} if state["trending_detail_fail"] else {"ok": True, "title": "Trending Fixture", "overview": "Synthetic title overview", "year": "2026"}

@@ -1021,9 +1021,15 @@ def _parse_sonarr_calendar(data: Any) -> list[dict[str, Any]]:
             continue
         series = row.get("series") if isinstance(row.get("series"), dict) else {}
         title = series.get("title") or row.get("title") or "Episode"
-        season = row.get("seasonNumber")
-        episode = row.get("episodeNumber")
-        ep = f"S{int(season):02d}E{int(episode):02d}" if season is not None and episode is not None else ""
+        season = _as_int(row.get("seasonNumber"))
+        episode = _as_int(row.get("episodeNumber"))
+        ep = f"S{season:02d}E{episode:02d}" if season is not None and episode is not None else ""
+        milestones = []
+        if episode == 1 and season is not None and season > 0:
+            milestones.append("series-premiere" if season == 1 else "season-premiere")
+        finale_type = row.get("finaleType")
+        if finale_type in ("season", "series"):
+            milestones.append(f"{finale_type}-finale")
         items.append(
             {
                 "source": "sonarr",
@@ -1032,11 +1038,12 @@ def _parse_sonarr_calendar(data: Any) -> list[dict[str, Any]]:
                 "detail": " ".join(part for part in (ep, row.get("title") or "") if part),
                 "when": _iso_when(row.get("airDateUtc") or row.get("airDate")),
                 "has_file": bool(row.get("hasFile")),
+                "milestones": milestones,
                 "_slug": str(series.get("titleSlug") or "").strip(),
                 "_tvdb": _as_int(series.get("tvdbId")),
                 "_episode_tvdb": _as_int(row.get("tvdbId")),
-                "_season": _as_int(row.get("seasonNumber")),
-                "_episode": _as_int(row.get("episodeNumber")),
+                "_season": season,
+                "_episode": episode,
                 "_title_key": str(title).strip().lower(),
             }
         )
@@ -1389,6 +1396,8 @@ def _link_calendar(
             "has_file": bool(item.get("has_file")),
             "url": _arr_item_url(source, str(item.get("_slug") or ""), webs.get(source, "")),
         }
+        if item.get("milestones"):
+            row["milestones"] = item["milestones"]
         if row["has_file"] and play_app and home:
             play_url, series_url = _match_play(item, index)
             row["play_app"] = play_app

@@ -22,23 +22,27 @@ def test_calendar_shows_verified_existing_and_shared_future_titles(monkeypatch):
 
     today = date.today()
     planned = today + timedelta(days=1)
-    movies = [
+    releases = [
         ({"title": "Future shared", "when": str(planned), "kind": "movie", "detail": "", "has_file": False}, "/media/shared/A", planned),
         ({"title": "Future private", "when": str(planned), "kind": "movie", "detail": "", "has_file": False}, "/media/private/B", planned),
         ({"title": "Current private", "when": str(today), "kind": "movie", "detail": "", "has_file": True}, "/media/shared/C", today),
         ({"title": "Current shared", "when": str(today), "kind": "movie", "detail": "", "has_file": True}, "/media/private/D", today),
+        ({"title": "Shared series", "when": str(planned), "kind": "episode", "detail": "S02E08",
+          "has_file": False, "milestones": ["season-finale"], "_tvdb": 123}, "/media/shared/E", planned),
     ]
     monkeypatch.setattr(module, "_jellyfin_headers", lambda *_: {})
     monkeypatch.setattr(module, "_jellyfin_folders", lambda *_: _folder_grants(
         [("shared", ["/media/shared"]), ("private", ["/media/private"])], {"shared"},
     ))
-    monkeypatch.setattr(module, "_calendar_rows", lambda *_: movies)
+    monkeypatch.setattr(module, "_calendar_rows", lambda *_: releases)
     monkeypatch.setattr(module, "_visible_item", lambda *args: args[-1]["title"] == "Current shared")
     events = module.member_calendar("jellyfin", "server", "viewer", "viewer-token", today, planned)
     assert [(event["title"], event["available"]) for event in events] == [
-        ("Current shared", True), ("Future shared", False),
+        ("Current shared", True), ("Future shared", False), ("Shared series", False),
     ]
-    assert all(set(event) == {"title", "when", "kind", "detail", "available"} for event in events)
+    assert all(set(event) == {"title", "when", "kind", "detail", "available"} for event in events[:2])
+    assert events[2]["milestones"] == ["season-finale"]
+    assert "_tvdb" not in events[2]
 
 
 def test_plex_future_folders_require_explicitly_unrestricted_share(monkeypatch):
