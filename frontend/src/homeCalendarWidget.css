@@ -211,6 +211,7 @@ a.cal-row-link:hover {
   --calendar-radarr-color: #eab308;
 }
 .cal-event-top,
+.cal-event-title,
 .cal-row-title {
   display: flex;
   align-items: center;
@@ -220,6 +221,15 @@ a.cal-row-link:hover {
 .cal-event-top {
   flex-wrap: wrap;
   justify-content: space-between;
+}
+.cal-event-title {
+  flex-wrap: wrap;
+  gap: 0.15rem;
+}
+.cal-event-title strong {
+  flex: 1 1 7ch;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .cal-row-title strong {
   min-width: 0;
