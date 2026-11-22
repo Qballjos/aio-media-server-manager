@@ -1,23 +1,11 @@
 .cal-surface {
   touch-action: pan-y pinch-zoom;
   overflow-x: hidden;
+  overflow-anchor: none;
 }
-@media (prefers-reduced-motion: no-preference) {
-  .cal-slide-next, .cal-slide-previous {
-    animation: cal-slide-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  .cal-slide-next { --cal-slide-offset: 1rem; }
-  .cal-slide-previous { --cal-slide-offset: -1rem; }
-}
-@keyframes cal-slide-in {
-  from {
-    opacity: 0.55;
-    transform: translateX(var(--cal-slide-offset));
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+.cal-track {
+  position: relative;
+  flex: 0 0 auto;
 }
 .cal-tools {
   display: flex;

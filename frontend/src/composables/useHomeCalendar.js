@@ -307,8 +307,8 @@ export function useHomeCalendar({ snapshot, calendarWide, calendarPhone = ref(fa
     return { start: dayKey(start), days }
   }
 
-  function nextCalendarRange() {
-    const next = adjacentPage(1)
+  function nextCalendarRange(direction = 1) {
+    const next = adjacentPage(direction)
     return next <= lastCalendarDay() ? calendarRange(next) : null
   }
 

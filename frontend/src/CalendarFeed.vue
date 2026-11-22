@@ -37,10 +37,12 @@ function fetchRange({ start, days }, own) {
 
 let visibleRange
 let nextRange
+let previousRange
 let ownRequests = false
-async function load(range = visibleRange, next = nextRange, own = ownRequests) {
+async function load(range = visibleRange, next = nextRange, own = ownRequests, previous = previousRange) {
   visibleRange = range
   nextRange = next
+  previousRange = previous
   ownRequests = own
   const current = ++revision
   loading.value = true
@@ -51,6 +53,7 @@ async function load(range = visibleRange, next = nextRange, own = ownRequests) {
     if (current !== revision) return
     snapshot.value = data
     if (next) fetchRange(next, own).catch(() => {})
+    if (previous) fetchRange(previous, own).catch(() => {})
   } catch (_) {
     if (current === revision) error.value = true
   } finally {

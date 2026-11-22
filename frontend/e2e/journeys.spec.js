@@ -175,26 +175,44 @@ test('calendar controls preserve a manually selected view across viewport change
     return new Date(now.getFullYear(), now.getMonth() + 1, 1)
       .toLocaleDateString('en', { month: 'long', year: 'numeric' })
   })
-  if (testInfo.project.name === 'mobile') {
-    await surface.evaluate(target => {
-      const touch = clientX => new Touch({ identifier: 1, target, clientX, clientY: 80 })
-      for (let i = 0; i < 2; i++) {
+  const gesture = async (direction, repeats = 1) => surface.evaluate(async (target, { direction, repeats, mobile }) => {
+    const track = target.firstElementChild
+    const page = track.firstElementChild
+    for (let i = 0; i < repeats; i++) {
+      if (mobile) {
+        const touch = clientX => new Touch({ identifier: 1, target, clientX, clientY: 80 })
         target.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(150)], bubbles: true }))
-        target.dispatchEvent(new TouchEvent('touchend', { changedTouches: [touch(50)], bubbles: true }))
+        target.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(150 - direction * 65)], bubbles: true }))
+        if (i === 0 && !page.style.transform) throw new Error('The calendar must follow the finger before release')
+        target.dispatchEvent(new TouchEvent('touchend', { changedTouches: [touch(150 - direction * 65)], bubbles: true }))
+      } else {
+        target.dispatchEvent(new WheelEvent('wheel', { deltaX: direction * 115, cancelable: true, bubbles: true }))
       }
-    })
-  } else {
-    await surface.hover()
-    await page.mouse.wheel(115, 0)
-    await page.mouse.wheel(115, 0)
-  }
+    }
+    const start = target.scrollLeft
+    for (let frame = 0; frame < 8 && target.scrollLeft === start; frame++) {
+      await new Promise(resolve => requestAnimationFrame(resolve))
+    }
+    const outgoing = track.querySelector('[inert]')
+    return {
+      moved: direction * (target.scrollLeft - start),
+      bothPages: Boolean(outgoing && Math.abs(page.getBoundingClientRect().left -
+        outgoing.getBoundingClientRect().left) === page.clientWidth),
+    }
+  }, { direction, repeats, mobile: testInfo.project.name === 'mobile' })
+
+  const forward = await gesture(1, 2)
+  expect(forward.bothPages).toBe(true)
+  expect(forward.moved).toBeGreaterThan(0)
   await expect(heading).toHaveText(nextMonth)
-  const incoming = calendar.locator('.cal-mode-month.cal-slide-next')
-  await expect(incoming).toBeVisible()
-  await expect(incoming).toHaveCSS('animation-duration', '0.24s')
+  await expect(surface.locator('.cal-track > [inert]')).toHaveCount(0)
+  await expect(calendar.locator('.cal-mode-month')).toBeVisible()
+  const backward = await gesture(-1)
+  expect(backward.bothPages).toBe(true)
+  expect(backward.moved).toBeGreaterThan(0)
+  await expect(heading).toHaveText(month)
+  await expect(surface.locator('.cal-track > [inert]')).toHaveCount(0)
   await expect(surface).toHaveCSS('scrollbar-width', 'none')
-  await today.click()
-  await expect(calendar.getByRole('heading')).toHaveText(month)
   const viewport = page.viewportSize()
   await page.setViewportSize({ width: viewport.width < 600 ? 1100 : 390, height: viewport.height })
   await expect(calendar.locator('.cal-mode-month')).toBeVisible()
