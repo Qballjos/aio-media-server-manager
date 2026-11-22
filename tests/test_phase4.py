@@ -252,8 +252,8 @@ def test_grimmory_bookdrop_matches_shelfmark_ingest(tmp_path: Path, monkeypatch)
     assert g_env["APP_BOOKDROP_FOLDER"] == bookdrop
     assert s_env["INGEST_DIR"] == bookdrop
     assert s_env["DESTINATION"] == bookdrop
-    assert s_env["BOOKLORE_HOST"] == "http://127.0.0.1:6060"
-    assert s_env["AUDIOBOOK_LIBRARY_URL"] == "http://127.0.0.1:6060"
+    assert "BOOKLORE_HOST" not in s_env
+    assert "AUDIOBOOK_LIBRARY_URL" not in s_env
     assert s_env["QBITTORRENT_CATEGORY"] == "books"
     assert "DESTINATION_AUDIOBOOK" not in s_env
     assert "QBITTORRENT_CATEGORY_AUDIOBOOK" not in s_env
@@ -333,6 +333,7 @@ def test_shelfmark_updates_managed_usenet_url_when_openvpn_changes(tmp_path, mon
 @pytest.mark.parametrize("netns, host", [(False, "127.0.0.1"), (True, "10.200.200.1")])
 def test_shelfmark_grimmory_urls(tmp_path: Path, monkeypatch, netns, host):
     from applications.community import ShelfmarkApp
+    from applications.shelfmark_mirrors import sync_shelfmark_audiobook_library_url
     from core import settings as settings_mod
     from core.public_hostnames import save_hostnames
 
@@ -354,7 +355,9 @@ def test_shelfmark_grimmory_urls(tmp_path: Path, monkeypatch, netns, host):
     )
     monkeypatch.setattr("core.vpn.vpn_manager.uses_netns_isolation", lambda: netns)
     shelfmark = ShelfmarkApp(base_config_dir=cfg.config_dir, base_install_dir=cfg.install_dir)
+    monkeypatch.setattr("applications.shelfmark_mirrors._app_installed", lambda name: name == "grimmory")
     env = shelfmark.extra_env()
     assert env["BOOKLORE_HOST"] == f"http://{host}:6060"
-    assert env["AUDIOBOOK_LIBRARY_URL"] == "https://grimmory.example.com"
+    assert sync_shelfmark_audiobook_library_url(shelfmark.config_dir)
+    assert "https://grimmory.example.com" in (shelfmark.config_dir / "settings.json").read_text()
 

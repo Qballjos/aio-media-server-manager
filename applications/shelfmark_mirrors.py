@@ -20,6 +20,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from applications.install_helpers import create_venv, venv_bin, write_runner
+from core.file_io import write_private_text
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +206,7 @@ def sanitize_shelfmark_settings(config_dir: Path) -> bool:
     if not changed:
         return False
 
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_private_text(path, json.dumps(data, indent=2, sort_keys=True) + "\n")
     logger.info("Sanitized Shelfmark mirror settings in %s", path)
     return True
 
@@ -245,16 +246,12 @@ def sync_shelfmark_audiobook_library_url(config_dir: Path, *, port: int | None =
     """
     from core.app_web_url import grimmory_browser_url
 
+    if port is None and not _app_installed("grimmory"):
+        return False
+
     grimmory_port = int(port) if port else 6060
     if port is None:
-        try:
-            from applications.catalog import ApplicationCatalog
-
-            cat = ApplicationCatalog()
-            if cat.has("grimmory"):
-                grimmory_port = int(cat.get("grimmory").port or 6060)
-        except Exception:
-            grimmory_port = 6060
+        grimmory_port = _app_port("grimmory", 6060)
 
     desired = grimmory_browser_url(port=grimmory_port).rstrip("/")
     path = Path(config_dir) / "settings.json"
@@ -280,7 +277,7 @@ def sync_shelfmark_audiobook_library_url(config_dir: Path, *, port: int | None =
 
     data["AUDIOBOOK_LIBRARY_URL"] = desired
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_private_text(path, json.dumps(data, indent=2, sort_keys=True) + "\n")
     logger.info("Set Shelfmark AUDIOBOOK_LIBRARY_URL to %s", desired)
     return True
 
@@ -305,6 +302,75 @@ def _app_installed(name: str) -> bool:
         return cat.has(name) and bool(cat.get(name).is_installed())
     except Exception:
         return False
+
+
+def _read_shelfmark_settings(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        logger.warning("Could not read Shelfmark settings at %s", path)
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _fill_shelfmark_settings(path: Path, defaults: dict[str, Any]) -> None:
+    data = _read_shelfmark_settings(path)
+    if data is None:
+        return
+    missing = {key: value for key, value in defaults.items() if key not in data}
+    if missing:
+        write_private_text(path, json.dumps(data | missing, indent=2, sort_keys=True) + "\n")
+
+
+def _seed_shelfmark_defaults(config_dir: Path) -> None:
+    """Fill missing settings in the files read by Shelfmark's settings tabs."""
+    from core.integrations.credentials import get_application_api_key
+
+    settings_path = config_dir / "settings.json"
+    legacy = _read_shelfmark_settings(settings_path)
+    if legacy is None:
+        return
+
+    plugins = config_dir / "plugins"
+    _fill_shelfmark_settings(settings_path, {"SEARCH_MODE": "universal", "METADATA_PROVIDER": "openlibrary"})
+    _fill_shelfmark_settings(plugins / "downloads.json", {
+        "HARDLINK_TORRENTS": legacy.get("HARDLINK_TORRENTS", False),
+        "HARDLINK_TORRENTS_AUDIOBOOK": legacy.get("HARDLINK_TORRENTS_AUDIOBOOK", False),
+    })
+    _fill_shelfmark_settings(plugins / "download_sources.json", {
+        "DIRECT_DOWNLOAD_ENABLED": legacy.get("DIRECT_DOWNLOAD_ENABLED", True),
+    })
+
+    mirrors = _read_shelfmark_settings(plugins / "mirrors.json")
+    if mirrors is not None:
+        defaults = {"AA_BASE_URL": legacy.get("AA_BASE_URL", "auto")}
+        if "AA_ADDITIONAL_URLS" not in mirrors:
+            defaults["AA_MIRROR_URLS"] = legacy.get(
+                "AA_MIRROR_URLS", legacy.get("AA_ADDITIONAL_URLS", ["https://annas-archive.gl"])
+            )
+        _fill_shelfmark_settings(plugins / "mirrors.json", defaults)
+
+    if _app_installed("flaresolverr"):
+        _fill_shelfmark_settings(plugins / "cloudflare_bypass.json", {
+            "USING_EXTERNAL_BYPASSER": True,
+            "EXT_BYPASSER_URL": f"http://127.0.0.1:{_app_port('flaresolverr', 8191)}",
+            "EXT_BYPASSER_PATH": "/v1",
+        })
+
+    if _app_installed("prowlarr"):
+        prowlarr_path = plugins / "prowlarr_config.json"
+        prowlarr = _read_shelfmark_settings(prowlarr_path)
+        local_url = f"http://127.0.0.1:{_app_port('prowlarr', 9696)}"
+        if prowlarr is not None and prowlarr.get("PROWLARR_URL", local_url) == local_url:
+            key = get_application_api_key("prowlarr", config_dir.parent / "prowlarr")
+            if key:
+                _fill_shelfmark_settings(prowlarr_path, {
+                    "PROWLARR_ENABLED": True,
+                    "PROWLARR_URL": local_url,
+                    "PROWLARR_API_KEY": key,
+                })
 
 
 def shelfmark_download_client_env() -> dict[str, str]:
@@ -479,7 +545,7 @@ def sync_shelfmark_download_clients(config_dir: Path) -> bool:
         return False
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_private_text(path, json.dumps(data, indent=2, sort_keys=True) + "\n")
     logger.info("Synced Shelfmark download client settings from AIO")
     return True
 
@@ -597,6 +663,7 @@ def write_shelfmark_runner(install_dir: Path, *, port: int) -> Path:
 def prepare_shelfmark_runtime(config_dir: Path, install_dir: Path, *, port: int) -> None:
     """Sanitize settings and ensure the hardened launcher exists (install + each start)."""
     sanitize_shelfmark_settings(config_dir)
+    _seed_shelfmark_defaults(config_dir)
     sync_shelfmark_audiobook_library_url(config_dir)
     sync_shelfmark_download_clients(config_dir)
     if (Path(install_dir) / "shelfmark").is_dir() or (Path(install_dir) / "venv").is_dir():

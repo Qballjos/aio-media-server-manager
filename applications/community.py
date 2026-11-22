@@ -202,8 +202,7 @@ class ShelfmarkApp(SimpleApplication):
     )
 
     def extra_env(self) -> dict[str, str]:
-        from applications.shelfmark_mirrors import shelfmark_download_client_env
-        from core.app_web_url import grimmory_browser_url
+        from applications.shelfmark_mirrors import _app_installed, _app_port, shelfmark_download_client_env
         from core.vpn import TORRENT_BRIDGE_HOST, vpn_manager
 
         layout = LibraryLayout.from_settings(default_settings)
@@ -212,19 +211,6 @@ class ShelfmarkApp(SimpleApplication):
         bookdrop.mkdir(parents=True, exist_ok=True)
         layout.books.mkdir(parents=True, exist_ok=True)
 
-        # OpenVPN places Shelfmark in a separate namespace from Grimmory.
-        # AUDIOBOOK_LIBRARY_URL is a browser nav link → prefer public Grimmory URL.
-        grimmory_port = 6060
-        try:
-            from applications.catalog import ApplicationCatalog
-
-            cat = ApplicationCatalog()
-            if cat.has("grimmory"):
-                grimmory_port = int(cat.get("grimmory").port or 6060)
-        except Exception:
-            grimmory_port = 6060
-        host = TORRENT_BRIDGE_HOST if vpn_manager.uses_netns_isolation() else "127.0.0.1"
-        grimmory_lan = f"http://{host}:{grimmory_port}"
         env = {
             "FLASK_HOST": "0.0.0.0",
             "FLASK_PORT": str(self.port),
@@ -233,25 +219,12 @@ class ShelfmarkApp(SimpleApplication):
             "LOG_ROOT": str(self.config_dir / "logs"),
             "DESTINATION": str(bookdrop),
             "TZ": "Etc/UTC",
-            "SEARCH_MODE": "universal",
-            "USING_EXTERNAL_BYPASSER": "true",
-            "EXT_BYPASSER_URL": "http://127.0.0.1:8191",
-            "EXT_BYPASSER_PATH": "/v1",
-            "PROWLARR_ENABLED": "true",
-            "PROWLARR_URL": "http://127.0.0.1:9696",
-            "BOOKLORE_HOST": grimmory_lan,
-            "AUDIOBOOK_LIBRARY_URL": grimmory_browser_url(port=grimmory_port),
             "PYTHONPATH": str(self.install_dir),
         }
         env.update(shelfmark_download_client_env())
-        try:
-            from core.integrations.credentials import get_application_api_key
-
-            key = get_application_api_key("prowlarr")
-            if key:
-                env["PROWLARR_API_KEY"] = key
-        except Exception:
-            pass
+        if _app_installed("grimmory"):
+            host = TORRENT_BRIDGE_HOST if vpn_manager.uses_netns_isolation() else "127.0.0.1"
+            env["BOOKLORE_HOST"] = f"http://{host}:{_app_port('grimmory', 6060)}"
         return env
 
     def build_start_command(self, executable: Path) -> list[str]:

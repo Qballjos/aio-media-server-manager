@@ -133,6 +133,21 @@ Als **Open** faalt:
 
 ---
 
+## Shelfmark instellen na installatie {#shelfmark-setup}
+
+1. Klik bij Shelfmark in de **Catalogus** op **Open**. Controleer in de **Settings** van Shelfmark of de bestemming voor e-books verwijst naar `complete/books` onder de AIO-downloadmap. Gebruik je Grimmory, dan is dit de inbox voor automatische import. Houd deze map gescheiden van de permanente boekenbibliotheek.
+2. AIO vult Universal Search met Open Library als zoekprovider in. Controleer of de gewenste downloadbron beschikbaar is. Gebruik je Prowlarr, test dan de verbinding en controleer welke indexers beschikbaar zijn. Controleer ook de gekozen torrent- of Usenet-client en de boekencategorie. AIO kan de clientinstellingen voor qBittorrent, SABnzbd of NZBGet invullen als die beschikbaar zijn.
+3. Schakel authenticatie in voordat je Shelfmark deelt of publiceert. Wil je aanvragen van andere gebruikers eerst goedkeuren, maak dan hun accounts aan en stel per bron het aanvraagbeleid in. [Authenticatie en gebruikersrollen in Shelfmark](https://github.com/calibrain/shelfmark#-authentication)
+4. Test met een boek dat je mag downloaden. Controleer of Shelfmark de download voltooit en, als je Grimmory gebruikt, of het boek na import in de bibliotheek verschijnt. Herhaal dit met een audioboek als je die workflow gebruikt.
+
+### Direct Downloads en mirrors
+
+AIO schakelt Direct Download in en vult een Anna’s Archive-mirror in als die instellingen ontbreken. Een opgeslagen keuze om de bron uit te zetten of de mirrorlijst leeg te laten blijft behouden. Loop in dat geval deze stappen door als je Direct Download wilt gebruiken.
+
+1. Open in Shelfmark **Settings → Direct Download → Download Sources** en zet **Enable Direct Download Source** aan.
+2. Open **Mirrors**, voeg bij **Anna’s Archive** de basis-URL van je mirror toe, bijvoorbeeld `https://annas-archive.gl`, en druk op Enter. Laat **Primary Mirror** op **Auto** staan. Met meerdere mirrors probeert Shelfmark ze in de volgorde van je lijst. Mirroradressen kunnen veranderen. [Shelfmark-instellingen voor mirrors](https://github.com/calibrain/shelfmark/blob/main/docs/environment-variables.md#direct-download-mirrors)
+3. Sla op en controleer of **Direct Download** als bron verschijnt bij het zoeken naar een boek. Laat de bronvolgorde onder **Download Sources** eerst op de standaardwaarden staan.
+
 ## De nieuwe catalogus gebruiken {#catalog-menu}
 
 Open bovenaan **Catalogus**. Links kies je wat je wilt zien; rechts verschijnen de apps.

@@ -133,6 +133,21 @@ If **Open** fails:
 
 ---
 
+## Set up Shelfmark after installation {#shelfmark-setup}
+
+1. In **Catalog**, click **Open** for Shelfmark. In Shelfmark's own **Settings**, check that the ebook destination points to the AIO downloads folder under `complete/books`. If you use Grimmory, this is its automatic import inbox. Keep it separate from the permanent books library.
+2. AIO fills in Universal Search with Open Library as the metadata provider. Check that the download source you want is available. If you use Prowlarr, test its connection and check which indexers are available. Check the selected torrent or Usenet client and its book category. AIO can prefill client settings for qBittorrent, SABnzbd or NZBGet when available.
+3. Enable authentication before sharing or publishing Shelfmark. If other users should request books for approval, configure their accounts and the request policy for each source. [Shelfmark authentication and user roles](https://github.com/calibrain/shelfmark#-authentication)
+4. Try a book you have permission to download. Check that Shelfmark finishes the download and, if using Grimmory, that the book appears in the library after import. Repeat with an audiobook if you use that workflow.
+
+### Direct downloads and mirrors
+
+AIO enables Direct Download and adds an Anna’s Archive mirror when those settings are missing. A saved choice to disable the source or leave the mirror list empty is preserved. Follow these steps if you want to use Direct Download in that case.
+
+1. In Shelfmark, open **Settings → Direct Download → Download Sources** and turn on **Enable Direct Download Source**.
+2. Open **Mirrors**, enter the base URL for your **Anna’s Archive** mirror, for example `https://annas-archive.gl`, and press Enter. Leave **Primary Mirror** set to **Auto**. With multiple mirrors, Shelfmark tries them in list order. Mirror addresses can change. [Shelfmark mirror settings](https://github.com/calibrain/shelfmark/blob/main/docs/environment-variables.md#direct-download-mirrors)
+3. Save and check that **Direct Download** appears as a source when searching for a book. Start with the default source order under **Download Sources**.
+
 ## Using the new catalog {#catalog-menu}
 
 Open **Catalog** at the top. The left sidebar helps you choose what to see; the apps appear on the right.
