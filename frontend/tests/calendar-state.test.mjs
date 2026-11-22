@@ -99,3 +99,22 @@ test('downloaded calendar items prefer the media server and missing items use th
     assert.equal(state.calendarTarget({}), null)
   } finally { state.dispose() }
 })
+
+test('calendar stops requesting pages after the rolling three-month horizon', async () => {
+  const state = calendar([], false, true)
+  try {
+    const today = new Date()
+    const end = new Date(today.getFullYear(), today.getMonth() + 4, 0)
+    end.setDate(Math.min(end.getDate(), today.getDate()))
+    for (let n = 0; n < 100; n++) state.shiftCalendar(1)
+    assert.deepEqual(state.calendarRange(), { start: state.dayKey(end), days: 1 })
+    assert.equal(state.nextCalendarRange(), null)
+    state.setCalView('month')
+    await nextTick()
+    assert.equal(state.nextCalendarRange(), null)
+    const { start, days } = state.calendarRange()
+    const last = new Date(`${start}T00:00:00`)
+    last.setDate(last.getDate() + days - 1)
+    assert.equal(state.dayKey(last), state.dayKey(end))
+  } finally { state.dispose() }
+})

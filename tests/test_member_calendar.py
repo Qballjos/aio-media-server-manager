@@ -24,11 +24,11 @@ def test_calendar_shows_verified_existing_and_shared_future_titles(monkeypatch):
     planned = today + timedelta(days=1)
     releases = [
         ({"title": "Future shared", "when": str(planned), "kind": "movie", "detail": "", "has_file": False}, "/media/shared/A", planned),
-        ({"title": "Future private", "when": str(planned), "kind": "movie", "detail": "", "has_file": False}, "/media/private/B", planned),
+        ({"title": "Future private", "when": str(planned), "kind": "movie", "detail": "", "has_file": False, "_tmdb": 8}, "/media/private/B", planned),
         ({"title": "Current private", "when": str(today), "kind": "movie", "detail": "", "has_file": True}, "/media/shared/C", today),
         ({"title": "Current shared", "when": str(today), "kind": "movie", "detail": "", "has_file": True}, "/media/private/D", today),
         ({"title": "Shared series", "when": str(planned), "kind": "episode", "detail": "S02E08",
-          "has_file": False, "milestones": ["season-finale"], "_tvdb": 123}, "/media/shared/E", planned),
+          "has_file": False, "milestones": ["season-finale"], "_tvdb": 123, "_season": 2}, "/media/shared/E", planned),
     ]
     monkeypatch.setattr(module, "_jellyfin_headers", lambda *_: {})
     monkeypatch.setattr(module, "_jellyfin_folders", lambda *_: _folder_grants(
@@ -43,6 +43,12 @@ def test_calendar_shows_verified_existing_and_shared_future_titles(monkeypatch):
     assert all(set(event) == {"title", "when", "kind", "detail", "available"} for event in events[:2])
     assert events[2]["milestones"] == ["season-finale"]
     assert "_tvdb" not in events[2]
+    coverage = {("movie", 8): set(), ("episode", 123): {2}}
+    own = module.member_calendar("jellyfin", "server", "viewer", "viewer-token", today, planned, coverage=coverage)
+    assert [event["title"] for event in own] == ["Shared series"]
+    coverage[("episode", 123)] = {1}
+    assert module.member_calendar("jellyfin", "server", "viewer", "viewer-token", today, planned, coverage=coverage) == []
+
 
 
 def test_plex_future_folders_require_explicitly_unrestricted_share(monkeypatch):

@@ -1,4 +1,5 @@
 <script setup>
+import StreamingSettings from './settings/StreamingSettings.vue'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import SettingsSidebar from './SettingsSidebar.vue'
@@ -149,6 +150,7 @@ async function arrangeHome() {
         <p v-if="error" role="alert">{{ $t(error) }}</p>
         <p v-else-if="saved" role="status">{{ $t('Account updated.') }}</p>
       </div>
+      <StreamingSettings v-if="page.id === 'account'" scope="member" />
     </div>
   </section>
   <MediaDiscovery v-else :account-id="accountId" :display-name="profile?.display_name || profile?.username" />

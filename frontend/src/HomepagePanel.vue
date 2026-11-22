@@ -1,4 +1,5 @@
 <script setup>
+import StreamingAvailability from './StreamingAvailability.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
@@ -8,7 +9,7 @@ import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
 import { BP_ORDER, BREAKPOINTS, GRID_IDS, WIDGETS, collapseEmptyRows, dockHidden, firstFree, fitItem, homeEditing, homeGrid, homeGridSaves, layoutFor, resolve, restoreGrid, saveGridLayout, viewportBp } from './homeLayout.js'
 import UiSelect from './UiSelect.vue'
-import HomeCalendarWidget from './HomeCalendarWidget.vue'
+import CalendarFeed from './CalendarFeed.vue'
 import HomeEditBar from './HomeEditBar.vue'
 import HomeGreeting from './HomeGreeting.vue'
 import HomeGrid from './HomeGrid.vue'
@@ -119,6 +120,7 @@ const downloadPause = ref({ paused: false, resume_at: null })
 const pauseFor = ref('60')
 const pauseBusy = ref(false)
 const SORT_KEY = 'amm-downloads-sort'
+const downloadFilter = ref('all')
 const downloadSort = ref((() => {
   try {
     return localStorage.getItem(SORT_KEY) || 'queue'
@@ -139,18 +141,22 @@ const STUCK_STATUSES = { Stalled: 'stalled', 'Missing files': 'missing files', P
 const movingDownloads = computed(() =>
   downloadPause.value.paused ? sortedDownloads.value : sortedDownloads.value.filter((item) => !(item.status in STUCK_STATUSES)),
 )
+const problemDownloads = computed(() =>
+  sortedDownloads.value.filter(item => item.status in STUCK_STATUSES && item.status !== 'Paused'),
+)
+const stuckItems = computed(() => {
+  if (downloadFilter.value === 'problems') return problemDownloads.value
+  if (downloadPause.value.paused) return []
+  return [...problemDownloads.value, ...sortedDownloads.value.filter(item => item.status === 'Paused')]
+})
 const stuckSummary = computed(() => {
-  if (downloadPause.value.paused) return ''
   const counts = {}
-  for (const item of snapshot.value.downloads) {
+  for (const item of stuckItems.value) {
     const label = STUCK_STATUSES[item.status]
-    if (label) counts[label] = (counts[label] || 0) + 1
+    counts[label] = (counts[label] || 0) + 1
   }
   return Object.entries(counts).map(([label, n]) => `${n} ${t(label)}`).join(' · ')
 })
-const stuckItems = computed(() =>
-  downloadPause.value.paused ? [] : snapshot.value.downloads.filter((item) => item.status in STUCK_STATUSES),
-)
 const removeBusy = ref(new Set())
 
 /** Sonarr/Radarr blocklist a removed download and search for another release; the rest leave the client. */
@@ -187,6 +193,8 @@ const pausedLabel = computed(() => {
   return t('Paused · resumes {time}', { time })
 })
 const requestsFilter = ref('all')
+const requestAvailability = ref('all')
+const pendingRequests = computed(() => snapshot.value.requests.filter(item => item.requestStatus === 1 && item.requestId))
 const reviewDialog = ref(null)
 const pendingReview = ref(null)
 const reviewBusy = ref(false)
@@ -311,7 +319,8 @@ const widgetHasContent = computed(() => {
     recent: !!(s.recent.length || (hasMediaServer.value && isPending('recent'))),
     requests: !!(s.requests.length || (s.seerr.available && isPending('requests'))),
     trending: !!(s.trending.length || (s.seerr.available && isPending('trending'))),
-    calendar: !!(s.calendar.length || (hasCalendarSource.value && isPending('calendar'))),
+    calendar: hasCalendarSource.value,
+    approvals: s.seerr.available || pendingRequests.value.length > 0,
     downloads: !!(s.downloads.length || downloadPause.value.paused),
     playing: hasMediaServer.value,
     storage: true,
@@ -400,7 +409,7 @@ function resizeWidget(w, h) {
 function onArrangeKey(event) {
   if (event.key !== 'Escape' || event.defaultPrevented) return
   if (requestChoice.value) {
-    requestChoice.value = null
+    if (!requestBusy.value) requestChoice.value = null
     return
   }
   if (trailerPlayer.value) {
@@ -639,7 +648,8 @@ const recentItems = computed(() => {
 })
 const requestItems = computed(() =>
   (snapshot.value.requests || [])
-    .filter((item) => mediaTypeMatches(item, requestsFilter.value))
+    .filter((item) => mediaTypeMatches(item, requestsFilter.value)
+      && (requestAvailability.value === 'all' || (item.requestStatus === 2 && item.status !== 'available')))
     .map((item) => withPublicUrls(item, 'seerr')),
 )
 const requestsWindowItems = computed(() => requestItems.value.slice(
@@ -668,7 +678,7 @@ async function scrollRequests() {
   rail.scrollLeft = left - shift * pitch
   shiftingRequests = false
 }
-watch(requestsFilter, async () => {
+watch([requestsFilter, requestAvailability], async () => {
   requestsWindowStart.value = 0
   await nextTick()
   if (requestsRail.value) requestsRail.value.scrollLeft = 0
@@ -750,7 +760,7 @@ function debugFlagFromRoute() {
 
 async function loadSnapshot(force = false) {
   try {
-    const res = await apiRequest(force ? '/api/homepage?refresh=1' : '/api/homepage')
+    const res = await apiRequest(force ? '/api/homepage?include_calendar=false&refresh=1' : '/api/homepage?include_calendar=false')
     if (res.ok) {
       const data = await readJson(res)
       snapshot.value = {
@@ -1073,10 +1083,10 @@ function choiceFromServers(item, servers) {
   return {
     item,
     servers,
-    serverId: server.id,
-    profileId: preferredId(server.profiles, server.profileId),
-    rootFolder: preferredPath(server.folders, server.rootFolder),
-    languageProfileId: preferredId(server.languages, server.languageProfileId),
+    serverId: server?.id,
+    profileId: preferredId(server?.profiles, server?.profileId),
+    rootFolder: preferredPath(server?.folders, server?.rootFolder),
+    languageProfileId: preferredId(server?.languages, server?.languageProfileId),
   }
 }
 
@@ -1106,39 +1116,50 @@ async function requestTitle(item) {
     await downloadRelease(item)
     return
   }
-  const key = resultKey(item)
-  requestBusy.value = key
+  if (requestBusy.value) return
+  const choice = { ...choiceFromServers(item, []), loading: true, error: '', seasons: [], selected: [] }
+  requestChoice.value = choice
+  const current = requestChoice.value
   notice.value = ''
   try {
-    const opt = await apiRequest(`/api/homepage/request-options?mediaType=${encodeURIComponent(item.mediaType)}`)
-    if (opt.ok) {
-      const options = await readJson(opt)
-      if (options.needsChoice && options.servers?.length) {
-        requestChoice.value = choiceFromServers(item, options.servers)
-        requestBusy.value = ''
-        return
-      }
+    const query = new URLSearchParams({ mediaType: item.mediaType, mediaId: item.mediaId })
+    const response = await apiRequest(`/api/homepage/request-options?${query}`)
+    const options = await readJson(response)
+    if (requestChoice.value !== current) return
+    if (!response.ok || options.ok === false) {
+      current.error = apiError(options, t('Request failed.'))
+      return
     }
-    await submitRequest(item)
+    Object.assign(current, choiceFromServers(item, options.needsChoice ? options.servers || [] : []), {
+      seasons: options.seasons || [], ready: true,
+    })
   } catch (err) {
-    notice.value = err.message || t('Request failed.')
+    if (requestChoice.value === current) current.error = err.message || t('Request failed.')
   } finally {
-    if (!requestChoice.value) requestBusy.value = ''
+    current.loading = false
   }
 }
 
 async function confirmRequest() {
   const choice = requestChoice.value
   const server = choiceServer.value
-  if (!choice || !server) return
-  const extra = { serverId: choice.serverId }
-  if (choice.profileId != null && server.profiles?.length) extra.profileId = choice.profileId
-  if (choice.rootFolder && server.folders?.length) extra.rootFolder = choice.rootFolder
-  if (choice.languageProfileId != null && (server.languages?.length || 0) > 1) {
-    extra.languageProfileId = choice.languageProfileId
+  if (!choice?.ready || requestBusy.value) return
+  const extra = {}
+  if (choice.item.mediaType === 'tv') {
+    if (!choice.selected.length) return
+    extra.seasons = choice.selected
+  }
+  if (server) {
+    extra.serverId = choice.serverId
+    if (choice.profileId != null && server.profiles?.length) extra.profileId = choice.profileId
+    if (choice.rootFolder && server.folders?.length) extra.rootFolder = choice.rootFolder
+    if (choice.languageProfileId != null && (server.languages?.length || 0) > 1) {
+      extra.languageProfileId = choice.languageProfileId
+    }
   }
   const ok = await submitRequest(choice.item, extra)
   if (ok) requestChoice.value = null
+  else if (requestChoice.value) requestChoice.value.error = notice.value
 }
 
 async function submitRequest(item, extra = {}) {
@@ -1151,22 +1172,30 @@ async function submitRequest(item, extra = {}) {
       body: JSON.stringify({
         mediaType: item.mediaType,
         mediaId: item.mediaId,
-        seasons: item.mediaType === 'tv' ? 'all' : undefined,
         ...extra,
       }),
     })
     const data = await readJson(res)
     if (res.ok && data.ok !== false) {
       notice.value = data.detail || t('Request submitted.')
-      item.status = 'requested'
-      item.can_request = false
-      trendingMore.value = trendingMore.value.map((t) =>
-        resultKey(t) === key ? { ...t, status: 'requested', can_request: false } : t,
-      )
+      if (item.mediaType === 'movie') {
+        item.status = 'requested'
+        item.can_request = false
+        trendingMore.value = trendingMore.value.map((result) =>
+          resultKey(result) === key ? { ...result, status: 'requested', can_request: false } : result,
+        )
+      }
       loadSnapshot(true)
       return true
     }
-    notice.value = apiError(data, t('Request failed.'))
+    if (res.status === 409 && Array.isArray(data.detail?.seasons) && requestChoice.value?.item === item) {
+      const choice = requestChoice.value
+      choice.seasons = data.detail.seasons
+      choice.selected = choice.selected.filter(season => choice.seasons.includes(season))
+      notice.value = t('Some seasons can no longer be requested.')
+    } else {
+      notice.value = apiError(data, t('Request failed.'))
+    }
     return false
   } catch (err) {
     notice.value = err.message || t('Request failed.')
@@ -1492,7 +1521,7 @@ onUnmounted(() => {
                   :disabled="requestBusy === resultKey(item)"
                   @click="requestTitle(item)"
                 >
-                  {{ requestBusy === resultKey(item) ? (item.source === 'prowlarr' ? $t('Sending…') : $t('Requesting…')) : (item.source === 'prowlarr' ? $t('Download') : $t('Get it now')) }}
+                  {{ requestBusy === resultKey(item) ? (item.source === 'prowlarr' ? $t('Sending…') : $t('Requesting…')) : (item.source === 'prowlarr' ? $t('Download') : $t(item.mediaType === 'tv' ? 'Request seasons' : 'Request')) }}
                 </button>
               </li>
             </ul>
@@ -1550,9 +1579,15 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">{{ $t('Movies') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
+              <UiSelect v-if="snapshot.requests.length" v-model="requestAvailability" variant="inline"
+                        :aria-label="$t('Filter request availability')"
+                        :options="[
+                          { value: 'all', label: $t('All statuses') },
+                          { value: 'waiting', label: $t('Approved, awaiting availability') },
+                        ]" />
             </div>
           </div>
-          <p v-if="reviewNotice" class="home-muted" role="status">{{ reviewNotice }}</p>
+          <p v-if="reviewNotice && !shownLayout.some(item => item.id === 'approvals')" class="home-muted" role="status">{{ reviewNotice }}</p>
           <div v-if="requestItems.length" ref="requestsRail" class="home-rail home-requests-rail" tabindex="0" role="group" :aria-label="$t('Requests')" @scroll.passive="scrollRequests">
             <component
               :is="item.requestStatus === 1 && item.requestId ? 'button' : 'a'"
@@ -1589,25 +1624,30 @@ onUnmounted(() => {
             {{ requestsFilter === 'movie' ? $t('No movie requests in this filter.') : requestsFilter === 'tv' ? $t('No series requests in this filter.') : $t('No requests in this filter.') }}
           </p>
           <p v-else class="home-muted">{{ $t('No Seerr requests yet. Search above to request a title.') }}</p>
-          <dialog ref="reviewDialog" class="glass-card home-review-dialog" :aria-label="$t('Review request')"
-                  @close="pendingReview = null" @cancel="reviewBusy && $event.preventDefault()">
-            <template v-if="pendingReview">
-              <h2>{{ pendingReview.title }}</h2>
-              <p v-if="pendingReview.detail">{{ $t('Requested by {name}', { name: pendingReview.detail }) }}</p>
-              <p v-if="reviewError" role="alert" class="ui-alert ui-alert-error">{{ reviewError }}</p>
-              <div class="home-review-actions">
-                <button type="button" class="ui-btn ui-btn-ghost" :disabled="reviewBusy" @click="reviewDialog.close()">{{ $t('Cancel') }}</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :disabled="reviewBusy" @click="reviewRequest('decline')">{{ $t('Decline') }}</button>
-                <button type="button" class="ui-btn ui-btn-primary" :disabled="reviewBusy" @click="reviewRequest('approve')">{{ $t('Approve') }}</button>
-              </div>
-            </template>
-          </dialog>
           <ul v-if="widgetDebug && notesFor('requests').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('requests')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
               <span>{{ note.source }} — {{ note.detail }}</span>
             </li>
           </ul>
+        </article>
+      </template>
+      <template #approvals>
+        <article class="home-card glass-card" role="region" :aria-label="$t('Pending requests')">
+          <h3>{{ $t('Pending requests') }}</h3>
+          <p v-if="reviewNotice" class="home-muted" role="status">{{ reviewNotice }}</p>
+          <ul v-if="pendingRequests.length" class="home-approval-list">
+            <li v-for="item in pendingRequests" :key="item.requestId">
+              <div>
+                <strong>{{ item.title }}</strong>
+                <div v-if="item.detail" class="home-muted">{{ $t('Requested by {name}', { name: item.detail }) }}</div>
+              </div>
+              <button type="button" class="ui-btn ui-btn-ghost" :aria-label="$t('Review request') + ' · ' + item.title"
+                      @click="openRequestReview(item)">{{ $t('Review request') }}</button>
+            </li>
+          </ul>
+          <p v-else-if="isPending('requests')" class="home-muted" role="status">{{ $t('Loading requests…') }}</p>
+          <p v-else class="home-muted">{{ $t('No pending requests.') }}</p>
         </article>
       </template>
       <template #trending>
@@ -1645,7 +1685,6 @@ onUnmounted(() => {
                   <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
                 </span>
                 <span class="home-tile-title">{{ item.title }}</span>
-                <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
                 <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
               </button>
             </div>
@@ -1669,23 +1708,28 @@ onUnmounted(() => {
         </article>
       </template>
       <template #calendar>
-        <HomeCalendarWidget :snapshot="snapshot" :wide="calendarWide" :phone="calendarPhone" :pending="isPending('calendar')">
-          <p v-if="!snapshot.calendar.length && widgetDebug" class="home-muted">{{ $t('Nothing on the calendar.') }}</p>
-          <ul v-if="widgetDebug && notesFor('calendar').length" class="home-debug">
-            <li v-for="(note, idx) in notesFor('calendar')" :key="idx">
+        <CalendarFeed :wide="calendarWide" :phone="calendarPhone" v-slot="{ notes }">
+          <ul v-if="widgetDebug && notes.length" class="home-debug">
+            <li v-for="(note, idx) in notes" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
               <span>{{ note.source }} — {{ note.detail }}</span>
             </li>
           </ul>
-        </HomeCalendarWidget>
+        </CalendarFeed>
       </template>
       <template #downloads>
         <article class="home-card glass-card home-card-downloads">
           <div class="home-widget-head">
             <h3>{{ $t('Downloading') }}</h3>
-            <span v-if="movingDownloads.length && !downloadPause.paused" class="home-card-stat">{{ movingDownloads.length }}<template v-if="totalSpeed"> · {{ totalSpeed }}</template></span>
+            <span v-if="downloadFilter === 'all' && movingDownloads.length && !downloadPause.paused" class="home-card-stat">{{ movingDownloads.length }}<template v-if="totalSpeed"> · {{ totalSpeed }}</template></span>
+            <UiSelect v-if="snapshot.downloads.length" v-model="downloadFilter" variant="inline"
+                      :aria-label="$t('Filter downloads')"
+                      :options="[
+                        { value: 'all', label: $t('All downloads') },
+                        { value: 'problems', label: $t('Problems') },
+                      ]" />
             <UiSelect
-              v-if="movingDownloads.length > 1"
+              v-if="(downloadFilter === 'problems' ? problemDownloads : movingDownloads).length > 1"
               v-model="downloadSort"
               class="home-sort"
               variant="inline"
@@ -1717,28 +1761,13 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
-          <div v-if="movingDownloads.length && !downloadPause.paused" class="home-dl-compact">
+          <div v-if="downloadFilter === 'all' && movingDownloads.length && !downloadPause.paused" class="home-dl-compact">
             <span class="home-dl-count">{{ movingDownloads.length }}<small>{{ $t('active') }}</small></span>
             <span class="home-muted home-dl-meta">{{ totalSpeed || $t('Waiting for speed') }}</span>
             <span class="home-bar"><span :style="{ width: `${downloadsProgress}%` }" /></span>
           </div>
           <div class="home-card-body">
-          <ul v-if="movingDownloads.length">
-            <li v-for="(item, idx) in movingDownloads" :key="idx">
-              <span class="home-dl-row">
-                <strong>{{ item.title }}</strong>
-                <span class="home-dl-pct font-mono">{{ item.progress }}%</span>
-              </span>
-              <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
-              <span class="home-muted home-dl-meta">
-                {{ item.source }} · {{ item.status }}
-                <span v-if="formatSpeed(item.speed_bps)" class="home-speed"> · {{ formatSpeed(item.speed_bps) }}</span>
-                <span v-if="item.eta"> · {{ item.eta }}</span>
-              </span>
-            </li>
-          </ul>
-          <p v-else class="home-muted">{{ $t('No active downloads.') }}</p>
-          <details v-if="stuckItems.length" class="home-stuck">
+          <details v-if="stuckItems.length" class="home-stuck" :open="downloadFilter === 'problems' || problemDownloads.length > 0">
             <summary class="home-muted">{{ $t('Not moving:') }} {{ stuckSummary }}</summary>
             <div class="home-stuck-head">
               <span class="home-muted">{{ $t('Removing blocklists the release; Sonarr and Radarr search for another.') }}</span>
@@ -1765,6 +1794,22 @@ onUnmounted(() => {
               </li>
             </ul>
           </details>
+          <ul v-if="downloadFilter === 'all' && movingDownloads.length">
+            <li v-for="(item, idx) in movingDownloads" :key="idx">
+              <span class="home-dl-row">
+                <strong>{{ item.title }}</strong>
+                <span class="home-dl-pct font-mono">{{ item.progress }}%</span>
+              </span>
+              <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
+              <span class="home-muted home-dl-meta">
+                {{ item.source }} · {{ item.status }}
+                <span v-if="formatSpeed(item.speed_bps)" class="home-speed"> · {{ formatSpeed(item.speed_bps) }}</span>
+                <span v-if="item.eta"> · {{ item.eta }}</span>
+              </span>
+            </li>
+          </ul>
+          <p v-else-if="downloadFilter === 'all'" class="home-muted">{{ $t('No active downloads.') }}</p>
+          <p v-else-if="!stuckItems.length" class="home-muted">{{ $t('No download problems.') }}</p>
           <ul v-if="widgetDebug && notesFor('downloads').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('downloads')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1994,6 +2039,19 @@ onUnmounted(() => {
       </ul>
       <p v-else class="home-muted">{{ $t('No widget sources reported yet. Reload Home.') }}</p>
     </article>
+    <dialog ref="reviewDialog" class="glass-card home-review-dialog" :aria-label="$t('Review request')"
+            @close="pendingReview = null" @cancel="reviewBusy && $event.preventDefault()">
+      <template v-if="pendingReview">
+        <h2>{{ pendingReview.title }}</h2>
+        <p v-if="pendingReview.detail">{{ $t('Requested by {name}', { name: pendingReview.detail }) }}</p>
+        <p v-if="reviewError" role="alert" class="ui-alert ui-alert-error">{{ reviewError }}</p>
+        <div class="home-review-actions">
+          <button type="button" class="ui-btn ui-btn-ghost" :disabled="reviewBusy" @click="reviewDialog.close()">{{ $t('Cancel') }}</button>
+          <button type="button" class="ui-btn ui-btn-ghost" :disabled="reviewBusy" @click="reviewRequest('decline')">{{ $t('Decline') }}</button>
+          <button type="button" class="ui-btn ui-btn-primary" :disabled="reviewBusy" @click="reviewRequest('approve')">{{ $t('Approve') }}</button>
+        </div>
+      </template>
+    </dialog>
     <Teleport to="body">
       <div v-if="trendingDetail" class="modal-backdrop" @click.self="closeTrending">
         <div
@@ -2024,7 +2082,9 @@ onUnmounted(() => {
               <p v-else-if="!trendingDetail.pending" class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
             </div>
           </div>
-          <div class="home-request-actions">
+          <StreamingAvailability :streaming="trendingDetail.data?.streaming" :series="mediaKind(trendingDetail.item) === 'tv'" @setup="closeTrending" />
+          <div v-if="youtubeIdFromUrl(trendingDetail.data?.trailer) || trendingDetail.item.can_request"
+               class="home-request-actions">
             <button
               v-if="trendingDetail.data?.trailer && youtubeIdFromUrl(trendingDetail.data.trailer)"
               type="button"
@@ -2037,13 +2097,7 @@ onUnmounted(() => {
               class="ui-btn"
               :disabled="requestBusy === resultKey(trendingDetail.item)"
               @click="requestTitle(trendingDetail.item)"
-            >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t('Request') }}</button>
-            <button
-              v-if="trendingDetail.data?.url"
-              type="button"
-              class="ui-btn ui-btn-ghost"
-              @click="openApp($event, 'seerr', trendingDetail.data.url)"
-            >{{ $t('Open in Seerr') }}</button>
+            >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t(trendingDetail.item.mediaType === 'tv' ? 'Request seasons' : 'Request') }}</button>
           </div>
         </div>
       </div>
@@ -2069,10 +2123,22 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-      <div v-if="requestChoice && choiceServer" class="modal-backdrop" @click.self="requestChoice = null">
+      <div v-if="requestChoice" class="modal-backdrop" @click.self="!requestBusy && (requestChoice = null)">
         <form class="modal-content glass-popover home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
           <h3 id="home-request-title">{{ $t('Request') }} {{ requestChoice.item.title }}</h3>
-          <p class="home-muted">{{ $t('Choose where Seerr should add it.') }}</p>
+          <p v-if="requestChoice.loading" role="status" class="home-muted">{{ $t('Loading request options…') }}</p>
+          <p v-if="requestChoice.error" role="alert" class="home-notice home-notice-error">{{ requestChoice.error }}</p>
+          <fieldset v-if="requestChoice.seasons.length" class="home-request-seasons" :disabled="!!requestBusy">
+            <legend>{{ $t('Select seasons') }}</legend>
+            <label v-for="season in requestChoice.seasons" :key="season">
+              <input v-model="requestChoice.selected" type="checkbox" :value="season">
+              {{ season === 0 ? $t('Specials') : $t('Season {number}', { number: season }) }}
+            </label>
+          </fieldset>
+          <p v-else-if="requestChoice.item.mediaType === 'tv' && !requestChoice.loading && !requestChoice.error" class="home-muted">
+            {{ $t('No seasons left to request.') }}
+          </p>
+          <p v-if="choiceServer" class="home-muted">{{ $t('Choose where Seerr should add it.') }}</p>
           <label v-if="requestChoice.servers.length > 1" class="home-request-field">
             {{ $t('Server') }}
             <UiSelect
@@ -2081,21 +2147,21 @@ onUnmounted(() => {
               @update:model-value="onRequestServer"
             />
           </label>
-          <label v-if="choiceServer.profiles.length > 1" class="home-request-field">
+          <label v-if="choiceServer?.profiles.length > 1" class="home-request-field">
             {{ $t('Quality profile') }}
             <UiSelect
               v-model="requestChoice.profileId"
               :options="choiceServer.profiles.map((profile) => ({ value: profile.id, label: profile.name }))"
             />
           </label>
-          <label v-if="choiceServer.folders.length > 1" class="home-request-field">
+          <label v-if="choiceServer?.folders.length > 1" class="home-request-field">
             {{ $t('Folder') }}
             <UiSelect
               v-model="requestChoice.rootFolder"
               :options="choiceServer.folders.map((folder) => ({ value: folder.path, label: folder.path }))"
             />
           </label>
-          <label v-if="choiceServer.languages.length > 1" class="home-request-field">
+          <label v-if="choiceServer?.languages.length > 1" class="home-request-field">
             {{ $t('Language profile') }}
             <UiSelect
               v-model="requestChoice.languageProfileId"
@@ -2103,8 +2169,8 @@ onUnmounted(() => {
             />
           </label>
           <div class="home-request-actions">
-            <button type="button" class="ui-btn" @click="requestChoice = null">{{ $t('Cancel') }}</button>
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="requestBusy === resultKey(requestChoice.item)">
+            <button type="button" class="ui-btn" :disabled="!!requestBusy" @click="requestChoice = null">{{ $t('Cancel') }}</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="!requestChoice.ready || !!requestBusy || (requestChoice.item.mediaType === 'tv' && !requestChoice.selected.length)">
               {{ requestBusy === resultKey(requestChoice.item) ? $t('Requesting…') : $t('Request') }}
             </button>
           </div>

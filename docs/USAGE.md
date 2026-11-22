@@ -44,7 +44,7 @@ The settings page uses the same sidebar-and-content layout as the catalog. On a 
 
 | What do you want to change? | Choose this page |
 |---|---|
-| Name, profile photo or password | Personal → **Profile** |
+| Name, profile photo, password or streaming subscriptions | Personal → **Profile** |
 | Language, theme or wallpaper | Personal → **Language and appearance** |
 | App dock or sign-in message | Dashboard → **Start page** |
 | Update an app | Maintenance → **Updates** |
@@ -53,6 +53,8 @@ The settings page uses the same sidebar-and-content layout as the catalog. On a 
 | API keys, TV or Homey connections | Connections → **App connections** |
 
 The sidebar only selects a page. Change a setting on the right and use that section’s **Save** button when shown. Arrange widgets directly on **Home**, using the four-block layout button; Start page settings control the dock and sign-in text.
+
+In **Personal → Profile**, choose your streaming country and save the services you subscribe to. When a Trending title is included with one of those subscriptions in that country, its details show the matching services. Series availability can vary by season. The region and service lists come from Seerr.
 
 ![Settings: grouped sidebar and search](screenshots/light/settings.png?v=app-store-20261102)
 

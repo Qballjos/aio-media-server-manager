@@ -1,5 +1,6 @@
 """Persistent AIO access grants for accounts imported into Seerr."""
 
+import json
 import secrets
 import sqlite3
 from contextlib import closing, contextmanager
@@ -35,7 +36,34 @@ class MediaUsers:
                     PRIMARY KEY (provider, server_id, account_id)
                 )
             """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS streaming_preferences (
+                    provider TEXT NOT NULL, server_id TEXT NOT NULL, account_id TEXT NOT NULL,
+                    country TEXT NOT NULL, provider_ids TEXT NOT NULL,
+                    PRIMARY KEY (provider, server_id, account_id)
+                )
+            """)
             yield db
+
+    def streaming(self, account: tuple[str, str, str]) -> tuple[str, list[int]]:
+        if not self.path.is_file():
+            return "", []
+        with self._database() as db:
+            row = db.execute(
+                "SELECT country, provider_ids FROM streaming_preferences "
+                "WHERE provider = ? AND server_id = ? AND account_id = ?",
+                account,
+            ).fetchone()
+            return (row[0], json.loads(row[1])) if row else ("", [])
+
+    def set_streaming(self, account: tuple[str, str, str], country: str, provider_ids: list[int]) -> None:
+        with self._database() as db:
+            db.execute(
+                "INSERT INTO streaming_preferences VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(provider, server_id, account_id) DO UPDATE SET "
+                "country = excluded.country, provider_ids = excluded.provider_ids",
+                (*account, country, json.dumps(provider_ids)),
+            )
 
     def display_name(self, account: tuple[str, str, str]) -> str:
         with self._database() as db:

@@ -5,6 +5,7 @@ Never imported by main.py. Owns a TemporaryDirectory and starts no media process
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
@@ -39,7 +40,7 @@ def build_app(root: Path):
     from core.backup_jobs import backup_jobs
     from core.updater import ApplicationUpdater
     from core.wizard import WizardEngine
-    from api.routers import auth, wizard, catalog, applications, integrations, homepage, backups, notifications, settings as settings_router, updates
+    from api.routers import auth, wizard, catalog, applications, integrations, homepage, backups, notifications, settings as settings_router, streaming, updates
 
     state = {"wired": False, "source": False, "requested": False, "downloaded": False, "fail_update": False, "trending": False, "trending_detail_fail": False, "trending_statuses": False}
     process_states = {}
@@ -136,14 +137,35 @@ def build_app(root: Path):
         calendar = [{"title": "Calendar fixture", "when": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), "detail": "S01E01", "milestones": ["series-premiere"], "kind": "episode", "source": "sonarr", "has_file": False, "url": "http://127.0.0.1:8989/series/fixture"}]
         return {"apps": apps, "calendar": calendar, "downloads": queue, "recent": recent, "requests": requests_list, "trending": trending, "widgets": [], "waiting": [], "seerr": {"available": True, "url": "http://127.0.0.1:5055"}, "partial": False}
     homepage.homepage_snapshot = snapshot
-    homepage.homepage_title = lambda *a, **kw: {"ok": False, "detail": "Synthetic title detail failure"} if state["trending_detail_fail"] else {"ok": True, "title": "Trending Fixture", "overview": "Synthetic title overview", "year": "2026"}
+    homepage.homepage_calendar = lambda *_: {"items": snapshot()["calendar"]}
+    netflix = {"id": 8, "name": "Netflix"}
+    videoland = {"id": 20, "name": "Videoland"}
+    streaming._client = lambda: nullcontext(SimpleNamespace(
+        watch_provider_regions=lambda: [{"iso_3166_1": code} for code in ("NL", "US")],
+        watch_provider_catalog=lambda country: [netflix, videoland] if country == "NL" else [netflix],
+    ))
+
+    def trending_title(*args, **kwargs):
+        if state["trending_detail_fail"]:
+            return {"ok": False, "detail": "Synthetic title detail failure"}
+        return {
+            "ok": True, "title": "Trending Fixture", "overview": "Synthetic title overview", "year": "2026",
+            "watchProviders": [{
+                "iso_3166_1": "NL", "flatrate": [videoland],
+                "link": "https://www.themoviedb.org/movie/9002/watch?locale=NL",
+            }],
+        }
+
+    homepage.homepage_title = trending_title
     homepage.sync_seerr_external_links = lambda *a: None
     homepage.homepage_downloads = lambda: {"downloads": snapshot()["downloads"], "widgets": [], "pause": {"paused": False}}
     homepage.homepage_status = lambda *a, **kw: {"playing": [], "server": None, "storage": [], "attention": []}
     homepage.homepage_search = lambda host, q, provider: {"query": q, "seerr": True, "provider": "seerr", "results": [{"title": "Synthetic Journey", "mediaType": "tv", "mediaId": 9001, "source": "seerr", "status": "missing", "can_request": True, "poster": ""}]}
     homepage.homepage_request_options = lambda *a, **kw: {"needsChoice": False, "servers": []}
+    homepage._seerr_client = lambda: nullcontext(SimpleNamespace(admin_requestable_seasons=lambda _: [1, 2]))
     def request_title(payload):
         state["requested"] = True
+        state["requested_seasons"] = payload.get("seasons")
         return {"ok": True, "detail": "Synthetic request submitted"}
     homepage.homepage_request = request_title
 
@@ -157,7 +179,7 @@ def build_app(root: Path):
             if path.is_dir(): shutil.rmtree(path)
             else: path.unlink()
         settings.initialise()
-        state.update(wired=False, source=False, requested=False, downloaded=False, fail_update=False, trending=False, trending_detail_fail=False, trending_statuses=False)
+        state.update(wired=False, source=False, requested=False, downloaded=False, fail_update=False, trending=False, trending_detail_fail=False, trending_statuses=False, requested_seasons=None)
         process_states.clear(); clear_jobs()
         secret_store._fernet = None; secret_store._memory_data.clear()
         auth_manager._rate._hits.clear()
@@ -237,7 +259,7 @@ def build_app(root: Path):
         auth_manager.authenticate_request(request)
         return {**settings.as_serialisable_dict(), "updates": updates.scheduler.public_status(), "backups": backup_jobs.public_status(), "storage": {}, "homepage_keys": {}, "branding": {}}
 
-    for module in (auth, wizard, catalog, applications, integrations, homepage, backups, notifications, settings_router, updates):
+    for module in (auth, wizard, catalog, applications, integrations, homepage, backups, notifications, settings_router, streaming, updates):
         app.include_router(module.router)
     app.mount("/", StaticFiles(directory=Path(__file__).resolve().parents[1] / "frontend" / "dist", html=True))
     return app

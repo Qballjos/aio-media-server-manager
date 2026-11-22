@@ -13,10 +13,10 @@ const error = ref('')
 
 async function open(item) {
   title.value = item
-  seasons.value = item.requestableSeasons || []
+  seasons.value = []
   selected.value = []
   error.value = ''
-  loading.value = item.mediaType === 'tv' && !seasons.value.length
+  loading.value = item.mediaType === 'tv'
   await nextTick()
   dialog.value.showModal()
   if (!loading.value) return
@@ -39,11 +39,24 @@ async function submit() {
   const payload = { mediaType, mediaId }
   if (mediaType === 'tv') payload.seasons = selected.value
   try {
-    const { res } = await apiJson('/api/media-discovery/requests', {
+    const { res, data } = await apiJson('/api/media-discovery/requests', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
-    if (!res.ok) throw new Error()
+    if (!res.ok) {
+      if (res.status === 409 && Array.isArray(data.seasons)) {
+        seasons.value = data.seasons
+        selected.value = selected.value.filter(season => seasons.value.includes(season))
+        error.value = 'Some seasons can no longer be requested.'
+      } else if (res.status === 403) {
+        error.value = 'Request permission or limit reached.'
+      } else if (res.status === 409 && ['This film has already been requested.', 'This film is already available.'].includes(data.detail)) {
+        error.value = data.detail
+      } else {
+        error.value = 'This title could not be requested.'
+      }
+      return
+    }
     dialog.value.close()
     emit('submitted')
   } catch (_) {
@@ -73,7 +86,7 @@ defineExpose({ open })
           {{ season === 0 ? $t('Specials') : $t('Season {number}', { number: season }) }}
         </label>
       </fieldset>
-      <p v-else-if="title.mediaType === 'tv' && !error">{{ $t('No seasons found.') }}</p>
+      <p v-else-if="title.mediaType === 'tv' && !error">{{ $t('No seasons left to request.') }}</p>
       <p v-if="error" role="alert" class="ui-alert ui-alert-error">{{ $t(error) }}</p>
       <footer>
         <button type="submit" class="ui-btn ui-btn-primary"

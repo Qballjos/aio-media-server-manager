@@ -126,13 +126,6 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.cal-nav-btn {
-  width: var(--btn-h);
-  min-width: var(--btn-h);
-  padding: 0;
-  border-radius: 50%;
-  font-size: var(--text-strong);
-}
 .home-rail {
   flex: 1 1 auto;
   min-height: 0;
@@ -251,10 +244,6 @@
   margin: 0;
   font-size: var(--text-ui);
   min-width: 0;
-}
-.cal-nav-btn {
-  min-width: 2.1rem;
-  padding-inline: 0.45rem;
 }
 .home-card li.cal-row {
   --calendar-event-color: var(--color-info);
@@ -441,6 +430,9 @@
   gap: 1rem;
   align-items: start;
 }
+.home-title-body:not(:has(> .home-title-poster, > .home-tile-fallback)) {
+  grid-template-columns: minmax(0, 1fr);
+}
 .home-title-poster {
   width: 100%;
   aspect-ratio: 2 / 3;
@@ -479,6 +471,7 @@
   margin-right: 0.25rem;
 }
 .home-title-dialog .home-request-actions {
+  flex-wrap: wrap;
   margin-top: 0.9rem;
 }
 .home-trailer-frame {

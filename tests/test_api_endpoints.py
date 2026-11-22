@@ -145,7 +145,7 @@ def test_catalog_endpoints(client: TestClient):
     assert alloc_map.get("prowlarr") == 9696
 
 
-@pytest.mark.parametrize("path", ["/api/catalog", "/api/applications", "/api/homepage", "/api/logs"])
+@pytest.mark.parametrize("path", ["/api/catalog", "/api/applications", "/api/homepage", "/api/homepage/request-options", "/api/logs"])
 def test_member_session_cannot_read_admin_endpoints(client: TestClient, path: str):
     auth_manager.create_admin("admin", "StrongPassword123!")
     auth_manager.media_users.grant("plex", "server-a", "42")
@@ -638,6 +638,7 @@ def test_member_submission_uses_seerr_user_and_hides_upstream_errors(client, mon
     token = auth_manager.issue_member_token("plex", "server-a", "42")
     monkeypatch.setattr(media_discovery, "_seerr_client", lambda: SeerrClient(api_key="fixture-key"))
     monkeypatch.setattr(SeerrClient, "member_user_id", lambda self, *account: 8)
+    monkeypatch.setattr(media_discovery, "_fresh_requestable_seasons", lambda *_: [1, 2])
     status = 201
     actor_id = 8
 
@@ -883,7 +884,10 @@ def test_movie_availability_matches_only_accessible_tmdb_ids(client, monkeypatch
     import requests
 
     from api.routers import media_discovery
+    from core.integrations.seerr import SeerrClient
 
+    monkeypatch.setattr(media_discovery, "_seerr_client", SeerrClient)
+    monkeypatch.setattr(SeerrClient, "trending_request_coverage", lambda *_: {})
     auth_manager.create_admin("admin", "StrongPassword123!")
     auth_manager.media_users.grant(provider, "server-a", "42")
     token = auth_manager.issue_member_token(provider, "server-a", "42", library_token="viewer-token")
@@ -938,8 +942,10 @@ def test_series_availability_requires_every_requested_season(client, monkeypatch
     show = {"mediaType": "tv", "mediaId": 5, "title": "Series"}
     monkeypatch.setattr(media_discovery, "_seerr_search", lambda *_: ([show], None))
     monkeypatch.setattr(media_discovery, "_seerr_client", SeerrClient)
-    monkeypatch.setattr(media_discovery, "seerr_catalog_details", lambda *_: {"title": "Series"})
+    monkeypatch.setattr(media_discovery, "seerr_catalog_details", lambda *_: {"title": "Series", "seasonCounts": {1: 1, 2: 1}})
     monkeypatch.setattr(SeerrClient, "member_user_id", lambda *_: 8)
+    monkeypatch.setattr(SeerrClient, "trending_request_coverage", lambda *_: {})
+    monkeypatch.setattr(SeerrClient, "request_season_counts", lambda *_: {1: 1, 2: 1})
     rows = [{
         "id": number, "type": "tv", "requestedBy": {"id": 8}, "status": 2,
         "media": {"tmdbId": 5, "status": 5},
@@ -959,7 +965,7 @@ def test_series_availability_requires_every_requested_season(client, monkeypatch
             else:
                 assert params["ParentId"] == jellyfin_id and params["UserId"] == "42"
                 data = {"Items": [
-                    {"Type": "Episode", "ParentIndexNumber": 1},
+                    {"Type": "Episode", "ParentIndexNumber": 1, "IndexNumber": 1},
                     {"Type": "Episode", "ParentIndexNumber": 2, "LocationType": "Virtual"},
                 ]}
         else:
@@ -973,7 +979,7 @@ def test_series_availability_requires_every_requested_season(client, monkeypatch
             else:
                 assert url.endswith("/library/metadata/3/allLeaves")
                 payload = {"Metadata": [
-                    {"type": "episode", "parentIndex": 1, "grandparentRatingKey": "3"},
+                    {"type": "episode", "parentIndex": 1, "index": 1, "grandparentRatingKey": "3"},
                     {"type": "episode", "parentIndex": 2, "grandparentRatingKey": "9"},
                 ]}
             data = {"MediaContainer": payload}
@@ -981,7 +987,7 @@ def test_series_availability_requires_every_requested_season(client, monkeypatch
 
     monkeypatch.setattr(requests, "get", get)
     search = client.get("/api/media-discovery/search?q=series", headers=headers).json()["items"]
-    assert search == [{**show, "availableSeasons": [1]}]
+    assert search == [{**show, "availableSeasons": [1], "partiallyAvailable": True, "requestableSeasons": [2]}]
     own = client.get("/api/media-discovery/requests", headers=headers).json()["items"]
     assert own[0]["availableSeasons"] == [1] and "available" not in own[0]
     assert own[1]["availableSeasons"] == [1] and own[1]["available"] is True
@@ -1017,6 +1023,7 @@ def test_member_title_returns_catalog_metadata_only(client, monkeypatch):
 
     auth_manager.create_admin("admin", "StrongPassword123!")
     auth_manager.media_users.grant("plex", "server-a", "42")
+    auth_manager.media_users.set_streaming(("plex", "server-a", "42"), "NL", [8])
     token = auth_manager.issue_member_token("plex", "server-a", "42")
 
     def upstream(_host, _scheme, kind, media_id):
@@ -1024,6 +1031,10 @@ def test_member_title_returns_catalog_metadata_only(client, monkeypatch):
         return {
             "ok": True, "title": "Series", "overview": "Synopsis",
             "trailer": "https://www.youtube.com/watch?v=abcdefghijk",
+            "watchProviders": [
+                {"iso_3166_1": "NL", "flatrate": [{"id": 8, "name": "Netflix"}]},
+                {"iso_3166_1": "US", "flatrate": [{"id": 9, "name": "Prime Video"}]},
+            ],
             "status": "available", "can_request": False, "url": "private-seerr-url", "voteAverage": 8.5,
         }
 
@@ -1034,6 +1045,7 @@ def test_member_title_returns_catalog_metadata_only(client, monkeypatch):
     assert response.json() == {
         "title": "Series", "overview": "Synopsis",
         "trailer": "https://www.youtube.com/watch?v=abcdefghijk", "voteAverage": 8.5,
+        "streaming": {"configured": True, "providers": [{"id": 8, "name": "Netflix", "logo_url": ""}], "link": ""},
     }
 
 
@@ -1076,7 +1088,7 @@ def test_trending_omits_complete_movies_and_series_but_keeps_incomplete_seasons(
     headers = {"Authorization": f"Bearer {token}"}
     response = client.get("/api/media-discovery/trending", headers=headers)
     assert response.json() == {
-        "items": [{**titles[2], "availableSeasons": [1], "requestableSeasons": [1]}, titles[3]],
+        "items": [{**titles[2], "partiallyAvailable": True, "requestableSeasons": [1]}, titles[3]],
         "has_more": True,
     }
 
@@ -1134,3 +1146,92 @@ def test_member_avatar_is_private_and_can_be_replaced_or_removed(client, monkeyp
     assert client.get(replacement, headers=owner).content == png
     assert client.delete(path, headers=owner).json() == {"avatar_url": None}
     assert client.get(url, headers=owner).status_code == 404
+
+
+def test_streaming_settings_validate_country_and_keep_preferences_private(client, monkeypatch):
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from api.routers import streaming
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    auth_manager.media_users.grant("plex", "server-a", "42")
+    token = auth_manager.issue_member_token("plex", "server-a", "42")
+    headers = {"Authorization": f"Bearer {token}"}
+    seerr = SimpleNamespace(
+        watch_provider_regions=lambda: [{"iso_3166_1": "NL"}],
+        watch_provider_catalog=lambda country: [{"id": 8, "name": "Netflix"}],
+    )
+    monkeypatch.setattr(streaming, "_client", lambda: nullcontext(seerr))
+    path = "/api/streaming/member/preferences"
+    assert client.get(path).status_code == 401
+    assert client.get(path.replace("member", "admin"), headers=headers).status_code == 403
+    assert client.put(path, headers=headers, json={"country": "US", "provider_ids": [8]}).status_code == 422
+    assert client.put(path, headers=headers, json={"country": "NL", "provider_ids": [9]}).status_code == 422
+    response = client.put(path, headers=headers, json={"country": "NL", "provider_ids": [8, 8]})
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert client.get(path, headers=headers).json() == {"country": "NL", "provider_ids": [8]}
+
+
+def test_member_season_options_and_submission_share_fresh_eligibility(client, monkeypatch):
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from api.routers import media_discovery
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    account = ("plex", "server-a", "42")
+    auth_manager.media_users.grant(*account)
+    token = auth_manager.issue_member_token(*account, library_token="fixture-token")
+    headers = {"Authorization": f"Bearer {token}"}
+    requested = {2}
+    submissions = []
+    seerr = SimpleNamespace(
+        request_series=lambda _: ("Series", {0: 1, 1: 6, 2: 6, 3: 6}),
+        trending_request_coverage=lambda _: {("tv", 44): requested},
+        member_user_id=lambda *_: 8,
+        submit_member_request=lambda actor, payload: submissions.append((actor, payload)) or 11,
+    )
+    monkeypatch.setattr(media_discovery, "_seerr_client", lambda: nullcontext(seerr))
+    monkeypatch.setattr(media_discovery, "member_inventory", lambda *_: {
+        ("tv", 44): {1: set(range(1, 7)), 3: {1}},
+    })
+    root = "/api/media-discovery"
+    assert client.get(f"{root}/tv/44/seasons", headers=headers).json() == {"seasons": [3]}
+    requested.add(3)
+    response = client.post(f"{root}/requests", headers=headers, json={"mediaType": "tv", "mediaId": 44, "seasons": [3]})
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Some seasons can no longer be requested.", "seasons": []}
+    assert not submissions
+    requested.remove(3)
+    response = client.post(f"{root}/requests", headers=headers, json={"mediaType": "tv", "mediaId": 44, "seasons": [3]})
+    assert response.status_code == 201
+    assert submissions == [(8, {"mediaType": "tv", "mediaId": 44, "seasons": [3]})]
+
+
+def test_admin_request_options_and_submit_filter_selected_seasons(client, monkeypatch):
+    from api.routers import homepage
+    from core.integrations.seerr import SeerrClient
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    headers = {"Authorization": f"Bearer {auth_manager.issue_token('admin')}"}
+    monkeypatch.setattr(homepage, "_seerr_client", SeerrClient)
+    monkeypatch.setattr(homepage, "homepage_request_options", lambda _: {"needsChoice": False, "servers": []})
+    monkeypatch.setattr(SeerrClient, "_media_users_api", lambda *_: {
+        "seasons": [{"seasonNumber": n} for n in (0, 1, 2, 3)],
+        "mediaInfo": {"seasons": [{"seasonNumber": 1, "status": 5}]},
+    })
+    monkeypatch.setattr(SeerrClient, "trending_request_coverage", lambda *_: {("tv", 44): {2}})
+    sent = []
+    monkeypatch.setattr(homepage, "homepage_request", lambda payload: sent.append(payload) or {"ok": True})
+    options = client.get("/api/homepage/request-options?mediaType=tv&mediaId=44", headers=headers)
+    assert options.json()["seasons"] == [3]
+    assert options.headers["cache-control"] == "private, no-store"
+    payload = {"mediaType": "tv", "mediaId": 44}
+    response = client.post("/api/homepage/request", headers=headers, json={**payload, "seasons": [2, 3]})
+    assert response.status_code == 409
+    assert response.json()["detail"]["seasons"] == [3]
+    assert not sent
+    assert client.post("/api/homepage/request", headers=headers, json={**payload, "seasons": [3]}).status_code == 200
+    assert sent[0]["seasons"] == [3]

@@ -1,4 +1,5 @@
 <script setup>
+import StreamingSettings from './settings/StreamingSettings.vue'
 import { useI18n } from 'vue-i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -1782,6 +1783,7 @@ onBeforeUnmount(() => {
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="passwordSaving">{{ passwordSaving ? $t('Saving…') : $t('Change password') }}</button>
         </form>
       </div>
+      <StreamingSettings scope="admin" />
       <TwoFactorSettings @changed="passkeyRevision++" />
       <PasskeySettings :key="passkeyRevision" />
     </template>

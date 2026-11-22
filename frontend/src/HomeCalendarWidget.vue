@@ -1,5 +1,5 @@
 <script setup>
-import { computed, toRef, watch } from 'vue'
+import { computed, ref, toRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CalendarMilestones from './CalendarMilestones.vue'
 import UiSelect from './UiSelect.vue'
@@ -13,21 +13,63 @@ const props = defineProps({
   error: Boolean,
   member: Boolean,
 })
-const emit = defineEmits(['range'])
+const emit = defineEmits(['range', 'retry'])
 const { locale } = useI18n()
 const {
-  dayKey, startOfWeek, calCursor, formatEventTime, weekdayLabels, calView, calFilter,
+  dayKey, calendarRange, nextCalendarRange, formatEventTime, weekdayLabels, calView, calFilter,
   selectedDayKey, setCalView, selectCalDay, eventKind, calendarTarget, calendarLinkTitle,
   openCalendarItem, calendarRangeLabel, calendarDays, calendarWeeks, calendarList,
   calOnToday, shiftCalendar, goToday,
 } = useHomeCalendar({ snapshot: toRef(props, 'snapshot'), calendarWide: toRef(props, 'wide'), calendarPhone: toRef(props, 'phone') })
 
-const range = computed(() => ({
-  start: calView.value === 'list' ? dayKey(startOfWeek(calCursor.value)) : calendarDays.value[0].key,
-  days: calView.value === 'list' ? 7 : calendarDays.value.length,
-}))
-if (props.member) {
-  watch([() => range.value.start, () => range.value.days], ([start, days]) => emit('range', start, days), { immediate: true })
+const requestFilter = ref('all')
+const range = computed(() => calendarRange())
+watch([() => range.value.start, () => range.value.days, calView, requestFilter], () => {
+  emit('range', range.value, nextCalendarRange(), requestFilter.value === 'own')
+}, { immediate: true })
+
+let wheelTime = -Infinity
+let wheelDistance = 0
+let wheelTurned = false
+function scrollCalendar(event) {
+  if (event.ctrlKey || event.metaKey) return
+  const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+  if (!horizontal && !event.shiftKey) return
+  const distance = horizontal ? event.deltaX : event.deltaY
+  if (!distance) return
+  event.preventDefault()
+  if (event.timeStamp - wheelTime > 180) {
+    wheelDistance = 0
+    wheelTurned = false
+  }
+  wheelTime = event.timeStamp
+  wheelDistance += distance * (event.deltaMode ? 24 : 1)
+  if (wheelTurned || Math.abs(wheelDistance) < 45) return
+  wheelTurned = true
+  shiftCalendar(Math.sign(wheelDistance))
+}
+
+let touchStart = null
+let suppressClickUntil = 0
+function startSwipe(event) {
+  touchStart = event.touches.length === 1 ? event.touches[0] : null
+}
+function finishSwipe(event) {
+  const start = touchStart
+  touchStart = null
+  if (!start || event.touches.length) return
+  const end = event.changedTouches[0]
+  const x = start.clientX - end.clientX
+  const y = start.clientY - end.clientY
+  if (Math.abs(x) < 45 || Math.abs(x) < Math.abs(y) * 1.5) return
+  suppressClickUntil = event.timeStamp + 350
+  shiftCalendar(Math.sign(x))
+}
+function suppressSwipeClick(event) {
+  if (event.detail && event.timeStamp < suppressClickUntil) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
 }
 
 function chipDay(dt) {
@@ -53,6 +95,17 @@ function mediaLabel(item) {
       <div class="cal-tools">
         <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">{{ $t('Today') }}</button>
         <UiSelect
+          v-if="member"
+          v-model="requestFilter"
+          class="cal-select"
+          variant="inline"
+          :aria-label="$t('Calendar releases')"
+          :options="[
+            { value: 'all', label: $t('All releases') },
+            { value: 'own', label: $t('My requests') },
+          ]"
+        />
+        <UiSelect
           v-model="calFilter"
           class="cal-select"
           variant="inline"
@@ -77,20 +130,19 @@ function mediaLabel(item) {
           ]"
           @update:model-value="setCalView"
         />
-        <div class="cal-nav">
-          <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" :aria-label="$t('Previous')">‹</button>
-          <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" :aria-label="$t('Next')">›</button>
-        </div>
       </div>
     </div>
-    <div class="home-card-body">
-      <p v-if="error" class="home-muted" role="alert">{{ $t('Could not load your calendar.') }}</p>
-      <p v-else-if="member && pending" class="home-muted" role="status">{{ $t('Loading calendar…') }}</p>
+    <div class="home-card-body cal-surface" role="group" tabindex="0" :aria-label="$t('Swipe or use arrow keys to change dates')"
+         @wheel="scrollCalendar" @touchstart.passive="startSwipe" @touchend.passive="finishSwipe"
+         @touchcancel="touchStart = null" @click.capture="suppressSwipeClick"
+         @keydown.left.self.prevent="shiftCalendar(-1)" @keydown.right.self.prevent="shiftCalendar(1)">
+      <div v-if="error">
+        <p class="home-muted" role="alert">{{ $t('Could not load your calendar.') }}</p>
+        <button type="button" class="ui-btn ui-btn-ghost" @click="emit('retry')">{{ $t('Retry') }}</button>
+      </div>
+      <p v-else-if="pending" class="home-muted" role="status">{{ $t('Loading calendar…') }}</p>
       <div v-else-if="calView === 'list'" class="cal-list">
-        <div v-if="!calendarList.length && pending" aria-hidden="true">
-          <span v-for="n in 4" :key="n" class="home-skel home-skel-line"></span>
-        </div>
-        <p v-else-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
+        <p v-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
         <ul v-else>
           <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :data-source="row.item.source" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
             <component

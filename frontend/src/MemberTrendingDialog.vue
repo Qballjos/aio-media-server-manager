@@ -1,4 +1,5 @@
 <script setup>
+import StreamingAvailability from './StreamingAvailability.vue'
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiJson } from './api.js'
@@ -75,7 +76,7 @@ defineExpose({ open })
             <span class="media-badge">{{ $t(item.mediaType === 'tv' ? 'Series' : 'Movie') }}</span>
             <span>{{ detail?.year || item.detail }}</span>
             <span v-if="item.available">{{ $t('Available') }}</span>
-            <span v-else-if="item.availableSeasons?.length">{{ $t('Partially available') }}</span>
+            <span v-else-if="item.partiallyAvailable || item.availableSeasons?.length">{{ $t('Partially available') }}</span>
           </p>
           <p v-if="detail?.overview || item.overview" class="home-title-overview">{{ detail?.overview || item.overview }}</p>
           <p v-else-if="pending" class="home-muted" role="status">{{ $t('Loading title…') }}</p>
@@ -87,6 +88,7 @@ defineExpose({ open })
           <p v-else-if="!pending && !failed" class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
         </div>
       </div>
+      <StreamingAvailability :streaming="detail?.streaming" :series="item.mediaType === 'tv'" @setup="dialog.close()" />
       <div v-if="playing && trailerId" class="home-trailer-frame">
         <iframe :src="`https://www.youtube-nocookie.com/embed/${trailerId}?autoplay=1&rel=0`"
                 :title="`${$t('Trailer')} · ${title}`" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen />
@@ -94,7 +96,7 @@ defineExpose({ open })
       <div class="home-request-actions">
         <button v-if="trailerId" type="button" class="ui-btn ui-btn-primary" :aria-pressed="playing"
                 @click="playing = !playing">{{ $t('Trailer') }}</button>
-        <button v-if="!item.available" type="button" class="ui-btn" @click="request">{{ $t(item.requestableSeasons?.length ? 'Request remaining seasons' : 'Request') }}</button>
+        <button v-if="!item.available" type="button" class="ui-btn" @click="request">{{ $t(item.requestableSeasons?.length ? 'Request remaining seasons' : item.mediaType === 'tv' ? 'Request seasons' : 'Request') }}</button>
       </div>
     </template>
   </dialog>

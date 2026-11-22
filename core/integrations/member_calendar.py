@@ -119,7 +119,7 @@ def _calendar_rows(catalog, start, end):
         try:
             rows = _get(
                 f"http://127.0.0.1:{plugin.port}", "/api/v3/calendar", headers,
-                start=start.isoformat(), end=end.isoformat(), unmonitored="false",
+                start=start.isoformat(), end=f"{end.isoformat()}T23:59:59.999999Z", unmonitored="false",
                 **({"includeSeries": "true"} if app == "sonarr" else {}),
             ).json()
         except _FAILURES:
@@ -198,7 +198,12 @@ def _visible_item(base, headers, account_id, sections, event):
     return False
 
 
-def member_calendar(provider: str, server_id: str, account_id: str, token: str, start: date, end: date):
+def member_calendar(
+    provider: str, server_id: str, account_id: str, token: str, start: date, end: date,
+    *, coverage: dict[tuple[str, int], set[int]] | None = None,
+):
+    if coverage == {}:
+        return []
     catalog = ApplicationCatalog()
     plugin = catalog.get(provider)
     base = f"http://127.0.0.1:{plugin.port}"
@@ -214,6 +219,11 @@ def member_calendar(provider: str, server_id: str, account_id: str, token: str, 
 
     def visible(row):
         event, target, day = row
+        if coverage is not None:
+            movie = event["kind"] == "movie"
+            key = (event["kind"], event.get("_tmdb" if movie else "_tvdb"))
+            if key not in coverage or (not movie and event["_season"] not in coverage[key]):
+                return None
         if not event["has_file"] and day >= date.today() and _target_is_shared(target, folders):
             available = False
         else:

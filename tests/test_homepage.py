@@ -341,9 +341,10 @@ def test_homepage_calendar_from_sonarr(tmp_path, season, episode, finale_type, m
                 ],
                 None,
             ),
-        ),
+        ) as fetch,
     ):
         snap = homepage_snapshot("host.local", force=True)
+    assert fetch.call_args.kwargs["params"]["end"].endswith("T23:59:59.999999Z")
     assert snap["calendar"][0]["title"] == "Example Show"
     assert f"S{season:02d}E{episode:02d}" in snap["calendar"][0]["detail"]
     assert snap["calendar"][0].get("milestones", []) == milestones
@@ -1160,6 +1161,16 @@ def test_homepage_api_requires_session(tmp_path, monkeypatch):
         )
     assert ok.status_code == 200
     assert ok.json()["apps"] == []
+    assert client.get("/api/homepage/calendar?start=2026-12-01").status_code in (401, 403)
+    headers = {"Authorization": f"Bearer {token}"}
+    query = "/api/homepage/calendar?start=2026-12-01"
+    with patch("api.routers.homepage.homepage_calendar", return_value={"items": [{}] * 401}) as calendar:
+        assert client.get(f"{query}&days=43", headers=headers).status_code == 422
+        response = client.get(f"{query}&days=31", headers=headers)
+        assert response.status_code == 200
+        assert len(response.json()["items"]) == 401
+        calendar.assert_called_once_with("testserver", "http", date(2026, 12, 1), date(2026, 12, 31))
+
 
 
 def test_homepage_launcher_explains_why_apps_are_stopped(tmp_path, monkeypatch):

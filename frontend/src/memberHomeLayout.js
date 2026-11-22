@@ -5,6 +5,7 @@ export const MEMBER_WIDGETS = {
   greeting: WIDGETS.greeting,
   searchbar: { ...WIDGETS.searchbar, max: [12, 3] },
   requests: { ...WIDGETS.requests, label: 'My requests' },
+  resume: { ...WIDGETS.recent, label: 'Continue watching' },
   recent: { ...WIDGETS.recent, label: 'Newly available' },
   calendar: WIDGETS.calendar,
   trending: WIDGETS.trending,
@@ -19,7 +20,7 @@ export function addMemberWidget(layout, id, bp) {
 }
 
 export function defaultMemberLayout(bp) {
-  return Object.keys(MEMBER_WIDGETS).reduce((layout, id) => addMemberWidget(layout, id, bp), [])
+  return Object.keys(MEMBER_WIDGETS).filter(id => id !== 'resume').reduce((layout, id) => addMemberWidget(layout, id, bp), [])
 }
 
 function storageKey(account) {

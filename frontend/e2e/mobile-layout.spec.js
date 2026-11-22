@@ -21,7 +21,9 @@ test.beforeEach(async ({ page }, testInfo) => {
     else if (path === '/api/homepage') {
       json = { apps, recent: [], requests: [], downloads: [], widgets: [], waiting: [], seerr: { available: true },
         trending: ['missing', 'requested', 'available', 'partial', 'deleted', 'monitored'].map((status, index) => ({ title: `Trending ${status}`, mediaType: 'movie', mediaId: index + 1, poster: '/pwa-192.png', status })),
-        calendar: [{ title: 'Today fixture', source: 'sonarr', kind: 'episode', when: new Date().toISOString() }] }
+        calendar: [] }
+    } else if (path === '/api/homepage/calendar') {
+      json = { items: [{ title: 'Today fixture', source: 'sonarr', kind: 'episode', when: new Date().toISOString() }] }
     } else if (path === '/api/homepage/downloads') json = { downloads: [] }
     else if (path === '/api/homepage/recent' || path === '/api/homepage/trending') json = { items: [] }
     await route.fulfill({ json })
@@ -107,7 +109,9 @@ test('Catalog installation history stays inside its dialog', async ({ page }, te
     history: Array.from({ length: 200 }, (_, i) => ({ at: 1700000000 + i, message: `Downloading ${i}: ${'long-download-path/'.repeat(12)}` })),
   }] } }))
   await page.goto('/#/catalog')
-  await page.locator('button').filter({ hasText: TABLE['Installation activity'][0] }).click()
+  const language = testInfo.project.metadata.language || 'nl'
+  const activity = TABLE['Installation activity'][['nl', 'de', 'fr'].indexOf(language)]
+  await page.getByRole('button', { name: activity, exact: true }).click()
   const dialog = page.locator('.activity-dialog')
   const body = dialog.locator('.activity-body')
   await expect(dialog).toBeVisible()
@@ -121,4 +125,66 @@ test('Catalog installation history stays inside its dialog', async ({ page }, te
   await page.screenshot({ path: testInfo.outputPath('installation-history.png'), animations: 'disabled' })
   await dialog.locator('.share-row button').click()
   await expect(dialog).toBeHidden()
+})
+
+test('Streaming settings and Trending logos fit in light and dark themes', async ({ page }, testInfo) => {
+  const language = testInfo.project.metadata.language || 'nl'
+  const tr = key => TABLE[key][['nl', 'de', 'fr'].indexOf(language)]
+  const netflix = { id: 8, name: 'Netflix', logo_url: '/pwa-192.png' }
+  const unavailable = { id: 9, name: 'Provider without artwork', logo_url: '/missing-logo.png' }
+  const providers = [netflix, unavailable, { id: 10, name: 'Zee5', logo_url: '/pwa-192.png' },
+    ...Array.from({ length: 23 }, (_, i) => ({ id: 30 + i, name: `Regional service ${i + 1}`, logo_url: '/pwa-192.png' }))]
+  await page.route('**/missing-logo.png', route => route.abort())
+  await page.route('**/api/streaming/admin/**', route => {
+    const url = new URL(route.request().url())
+    return route.fulfill({ json: url.pathname.endsWith('/preferences')
+      ? { country: 'NL', provider_ids: [8] }
+      : url.searchParams.has('country') ? { providers } : { regions: ['NL'] } })
+  })
+  await page.route('**/api/homepage/title?**', route => route.fulfill({ json: {
+    title: 'Trending missing', poster: '/pwa-192.png', overview: 'A synthetic title overview.',
+    streaming: { configured: true, providers: [netflix, unavailable], link: 'https://www.themoviedb.org/movie/1/watch' },
+  } }))
+  const fits = locator => expect.poll(() => locator.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
+
+  let theme = 'dark'
+  await page.route('**/api/auth/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (!['/api/auth/status', '/api/auth/visuals', '/api/auth/me'].includes(path)) return route.fallback()
+    return route.fulfill({ json: {
+      authenticated: true, setup_required: false, username: 'fixture', locale: language, theme, wallpaper: 'aurora',
+    } })
+  })
+
+  for (theme of ['dark', 'light']) {
+    await page.goto(`/?fixture-theme=${theme}#/settings/account`)
+    const settings = page.getByRole('region', { name: tr('Streaming subscriptions') })
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    await expect(settings.getByRole('checkbox', { name: 'Netflix' })).toBeChecked()
+    expect((await settings.getByRole('checkbox', { name: 'Netflix' }).locator('..').boundingBox()).height).toBeGreaterThanOrEqual(44)
+    const options = settings.getByRole('group', { name: tr('Streaming subscriptions') })
+    await expect(options.getByRole('checkbox')).toHaveCount(26)
+    const columns = await options.evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length)
+    expect(columns).toBe(testInfo.project.name === 'desktop-webkit' ? 3 : testInfo.project.name === 'small-mobile-webkit' ? 1 : 2)
+    await expect(options.getByRole('checkbox', { name: 'Zee5' })).toBeVisible()
+    expect(await options.evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true)
+    await fits(settings)
+    await fits(page.locator('html'))
+    await settings.screenshot({ path: testInfo.outputPath(`streaming-settings-${theme}.png`) })
+
+    await page.goto('/#/home')
+    await page.locator('.home-tile-trending .home-tile-link').click()
+    const title = page.getByRole('dialog')
+    const availability = title.getByRole('region', { name: tr('Streaming availability') })
+    await expect(availability.getByRole('img', { name: 'Netflix' })).toBeVisible()
+    await expect(availability.getByText('Netflix', { exact: true })).toBeHidden()
+    await expect(availability.getByText('Provider without artwork')).toBeVisible()
+    const body = await title.locator('.home-title-body').boundingBox()
+    const streaming = await availability.boundingBox()
+    expect(streaming.width).toBeGreaterThanOrEqual(body.width)
+    expect(streaming.y).toBeGreaterThanOrEqual(body.y + body.height)
+    await fits(title)
+    await fits(page.locator('html'))
+    await title.screenshot({ path: testInfo.outputPath(`streaming-popup-${theme}.png`) })
+  }
 })

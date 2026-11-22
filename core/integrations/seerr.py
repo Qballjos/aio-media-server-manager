@@ -205,6 +205,8 @@ class SeerrClient:
                 "GET" if payload is None else "POST", f"{self.base_url}{path}",
                 headers=headers, json=payload, timeout=20, allow_redirects=False,
             )
+            if as_user is not None and payload is not None and path == "/request" and response.status_code == 403:
+                raise HTTPException(403, "Request permission or limit reached.")
             if as_user is not None and 400 <= response.status_code < 500:
                 raise HTTPException(409, "This title could not be requested.")
             if response.status_code not in (200, 201):
@@ -212,6 +214,16 @@ class SeerrClient:
             return response.json()
         except (requests.RequestException, ValueError) as exc:
             raise HTTPException(502, "Seerr could not complete the media user operation.") from exc
+
+    def watch_provider_regions(self):
+        return self._media_users_api("/watchproviders/regions")
+
+    def watch_provider_catalog(self, country: str):
+        movies = self._media_users_api(f"/watchproviders/movies?watchRegion={country}")
+        series = self._media_users_api(f"/watchproviders/tv?watchRegion={country}")
+        if not isinstance(movies, list) or not isinstance(series, list):
+            raise HTTPException(502, "Seerr could not load the streaming services.")
+        return [*movies, *series]
 
     def media_user_source(self) -> tuple[str, str]:
         kind = self._media_users_api("/settings/main").get("mediaServerType")
@@ -276,6 +288,43 @@ class SeerrClient:
     def user_requests(self, user_id: int, take: int, skip: int) -> dict:
         return self._media_users_api(f"/user/{user_id}/requests?take={take}&skip={skip}")
 
+    def calendar_request_coverage(self, user_id: int) -> dict[tuple[str, int], set[int]]:
+        coverage: dict[tuple[str, int], set[int]] = {}
+        unresolved: dict[int, set[int]] = {}
+        skip = 0
+        while True:
+            page = self.user_requests(user_id, 100, skip)
+            rows = page["results"]
+            for row in rows:
+                if (row.get("requestedBy") or {}).get("id") != user_id or row.get("status") not in (1, 2, 4, 5):
+                    continue
+                media = row.get("media") or {}
+                kind = row.get("type") or media.get("mediaType")
+                tmdb = media.get("tmdbId")
+                if kind == "movie" and type(tmdb) is int and tmdb > 0:
+                    coverage[("movie", tmdb)] = set()
+                if kind != "tv":
+                    continue
+                seasons = {
+                    season["seasonNumber"] for season in (row.get("seasons") or [])
+                    if isinstance(season, dict) and type(season.get("seasonNumber")) is int
+                    and season.get("status") != 3
+                }
+                tvdb = media.get("tvdbId")
+                if type(tvdb) is int and tvdb > 0:
+                    coverage.setdefault(("episode", tvdb), set()).update(seasons)
+                elif seasons and type(tmdb) is int and tmdb > 0:
+                    unresolved.setdefault(tmdb, set()).update(seasons)
+            skip += len(rows)
+            if not rows or skip >= page["pageInfo"]["results"]:
+                break
+        for tmdb, seasons in unresolved.items():
+            details = self._media_users_api(f"/tv/{tmdb}")
+            tvdb = (details.get("externalIds") or {}).get("tvdbId")
+            if type(tvdb) is int and tvdb > 0:
+                coverage.setdefault(("episode", tvdb), set()).update(seasons)
+        return coverage
+
     def review_request(self, request_id: int, action: str) -> None:
         result = self._media_users_api(f"/request/{request_id}/{action}", {})
         expected = 2 if action == "approve" else 3
@@ -305,16 +354,30 @@ class SeerrClient:
             if not rows or skip >= payload["pageInfo"]["results"]:
                 return covered
 
-    def request_seasons(self, media_id: int) -> list[int]:
-        return sorted(self.request_season_counts(media_id))
-
     def request_season_counts(self, media_id: int) -> dict[int, int | None]:
+        return self.request_series(media_id)[1]
+
+    def request_series(self, media_id: int) -> tuple[str, dict[int, int | None]]:
         details = self._media_users_api(f"/tv/{media_id}")
-        return {
+        return details.get("name") or "", {
             season["seasonNumber"]: season.get("episodeCount")
             for season in details.get("seasons", [])
             if isinstance(season, dict) and type(season.get("seasonNumber")) is int and season["seasonNumber"] >= 0
         }
+
+    def admin_requestable_seasons(self, media_id: int) -> list[int]:
+        details = self._media_users_api(f"/tv/{media_id}")
+        seasons = {
+            row["seasonNumber"] for row in details.get("seasons", [])
+            if isinstance(row, dict) and type(row.get("seasonNumber")) is int and row["seasonNumber"] >= 0
+        }
+        requested = self.trending_request_coverage({("tv", media_id)}).get(("tv", media_id), set())
+        media = details.get("mediaInfo") or {}
+        available = {
+            row.get("seasonNumber") for row in media.get("seasons", [])
+            if isinstance(row, dict) and row.get("status") == 5
+        }
+        return sorted((seasons - {0} or seasons) - requested - available)
 
     def submit_member_request(self, user_id: int, payload: dict) -> int:
         actor = self._media_users_api("/auth/me", as_user=user_id)

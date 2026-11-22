@@ -10,8 +10,9 @@ import { MEMBER_WIDGETS, addMemberWidget, defaultMemberLayout, memberLayoutFor, 
 import MemberUtilityWidgets from './MemberUtilityWidgets.vue'
 import MemberTrendingDialog from './MemberTrendingDialog.vue'
 import MemberRequestDialog from './MemberRequestDialog.vue'
-import MemberCalendar from './MemberCalendar.vue'
+import CalendarFeed from './CalendarFeed.vue'
 import MemberRecent from './MemberRecent.vue'
+import MemberResume from './MemberResume.vue'
 import MemberRequests from './MemberRequests.vue'
 import { t } from './i18n/index.js'
 import { apiJson } from './api.js'
@@ -189,9 +190,11 @@ onMounted(() => loadTrending())
                     <span v-else-if="item.availableSeasons?.length" class="home-status is-partial">
                       {{ $t('Available seasons: {seasons}', { seasons: seasonLabel(item.availableSeasons) }) }}
                     </span>
+                    <span v-else-if="item.partiallyAvailable" class="home-status is-partial">{{ $t('Partially available') }}</span>
                   </div>
-                  <button v-if="!item.available" type="button" class="ui-btn ui-btn-primary" @click="requestDialog.open(item)">
-                    {{ $t('Request') }}
+                  <span v-if="item.requestUnavailable" class="home-status">{{ $t('Nothing left to request.') }}</span>
+                  <button v-if="!item.available && !item.requestUnavailable" type="button" class="ui-btn ui-btn-primary" @click="requestDialog.open(item)">
+                    {{ $t(item.mediaType === 'tv' ? 'Request seasons' : 'Request') }}
                   </button>
                 </li>
               </ul>
@@ -200,8 +203,9 @@ onMounted(() => loadTrending())
         </section>
       </template>
       <template #requests><MemberRequests :key="requestRevision" @report-sent="reportRevision += 1" /></template>
+      <template #resume><MemberResume /></template>
       <template #recent><MemberRecent @report-sent="reportRevision += 1" /></template>
-      <template #calendar><MemberCalendar :wide="calendarWide" :phone="calendarPhone" /></template>
+      <template #calendar><CalendarFeed member :wide="calendarWide" :phone="calendarPhone" /></template>
       <template #limits><MemberUtilityWidgets :key="requestRevision" widget="limits" /></template>
       <template #support><MemberUtilityWidgets :key="reportRevision" widget="support" /></template>
       <template #trending>
@@ -209,8 +213,8 @@ onMounted(() => loadTrending())
                           :auto-load="hasMore && !trendingBusy && !trendingError" @load-more="loadTrending()">
           <MemberPosterTile v-for="item in trending" :key="`${item.mediaType}:${item.mediaId}`"
                             :title="item.title" :poster="item.poster" :media-type="item.mediaType"
-                            :meta="item.availableSeasons?.length ? $t('Partially available') : item.detail"
-                            :tone="item.availableSeasons?.length ? 'is-partial' : ''"
+                            :meta="(item.partiallyAvailable || item.availableSeasons?.length) ? $t('Partially available') : ''"
+                            :tone="(item.partiallyAvailable || item.availableSeasons?.length) ? 'is-partial' : ''"
                             :action-label="item.title"
                             @open="trendingDialog.open(item)" />
           <template #status>

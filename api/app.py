@@ -26,6 +26,7 @@ from api.routers import homepage as homepage_router
 from api.routers import integrations as integrations_router
 from api.routers import logs as logs_router
 from api.routers import media_discovery as media_discovery_router
+from api.routers import streaming as streaming_router
 from api.routers import media_login as media_login_router
 from api.routers import media_users as media_users_router
 from api.routers import notifications as notifications_router
@@ -243,6 +244,7 @@ def create_app() -> FastAPI:
     app.include_router(media_users_router.router)
     app.include_router(media_login_router.router)
     app.include_router(media_discovery_router.router)
+    app.include_router(streaming_router.router)
     app.include_router(branding_router.router)
     app.include_router(updates_router.router)
     app.include_router(usenet_router.router)

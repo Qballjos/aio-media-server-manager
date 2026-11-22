@@ -124,6 +124,39 @@ def recent_for_member(provider: str, server_id: str, account_id: str, token: str
     raise HTTPException(409, "This media server is not supported.")
 
 
+def resume_for_member(provider: str, server_id: str, account_id: str, token: str) -> list[dict]:
+    base = f"http://127.0.0.1:{ApplicationCatalog().get(provider).port}"
+    try:
+        if provider == "jellyfin":
+            headers = _jellyfin_headers(base, server_id, token)
+            rows = _get(
+                base, "/UserItems/Resume", headers, UserId=account_id, Limit=_RECENT_PAGE_SIZE,
+                IncludeItemTypes="Movie,Episode", MediaTypes="Video",
+            ).json()["Items"]
+            return [
+                _card(row["Id"], row.get("SeriesName") or row["Name"], "tv" if row["Type"] == "Episode" else "movie", None)
+                | {"posterId": str(row.get("SeriesId") or row["Id"]), "detail": row["Name"] if row["Type"] == "Episode" else ""}
+                for row in rows[:_RECENT_PAGE_SIZE]
+                if row.get("Type") in ("Movie", "Episode") and row.get("Id") and row.get("Name")
+            ]
+        if provider == "plex":
+            headers, sections = _plex_sections(base, server_id, token)
+            payload = _get(base, "/hubs/home/continueWatching", headers, count=_RECENT_PAGE_SIZE).json()["MediaContainer"]
+            rows = payload.get("Metadata")
+            if rows is None:
+                rows = [row for hub in payload.get("Hub", []) for row in hub.get("Metadata", [])]
+            return [
+                _card(row["ratingKey"], row.get("grandparentTitle") or row["title"], "tv" if row["type"] == "episode" else "movie", None)
+                | {"posterId": str(row.get("grandparentRatingKey") or row["ratingKey"]), "detail": row["title"] if row["type"] == "episode" else ""}
+                for row in rows[:_RECENT_PAGE_SIZE]
+                if row.get("type") in ("movie", "episode") and row.get("ratingKey") and row.get("title")
+                and str(row.get("librarySectionID")) in sections
+            ]
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError, ET.ParseError) as exc:
+        raise HTTPException(502, "Could not load Continue watching.") from exc
+    raise HTTPException(409, "This media server is not supported.")
+
+
 def poster_for_member(provider: str, server_id: str, account_id: str, token: str, item_id: str) -> tuple[bytes, str]:
     port = ApplicationCatalog().get(provider).port
     base = f"http://127.0.0.1:{port}"

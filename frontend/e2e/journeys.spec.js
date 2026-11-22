@@ -76,8 +76,15 @@ test('first installation → connection verification → request → download �
   await page.goto('/#/home')
   await page.getByRole('searchbox', { name: 'Search', exact: true }).fill('Synthetic Journey')
   await page.getByRole('button', { name: 'Search', exact: true }).click()
-  await page.getByRole('button', { name: 'Get it now', exact: true }).click()
-  await expect.poll(async () => (await flow.state()).requested).toBe(true)
+  await page.getByRole('button', { name: 'Request seasons', exact: true }).click()
+  const requestDialog = page.getByRole('dialog', { name: 'Request Synthetic Journey' })
+  const confirm = requestDialog.getByRole('button', { name: 'Request', exact: true })
+  await expect(requestDialog.getByRole('checkbox', { name: 'Season 1' })).not.toBeChecked()
+  await expect(confirm).toBeDisabled()
+  expect((await flow.state()).requested).toBe(false)
+  await requestDialog.getByRole('checkbox', { name: 'Season 2' }).check()
+  await confirm.click()
+  await expect.poll(async () => (await flow.state()).requested_seasons).toEqual([2])
   await page.reload()
   await expect(page.locator('.home-card').filter({ has: page.getByRole('heading', { name: 'Downloading', exact: true }) }).getByText('Synthetic Journey', { exact: true })).toBeVisible()
   const imported = await (await page.request.post('/_test/complete-download')).json()
@@ -146,7 +153,7 @@ test('notification form still saves after moving between settings sections', asy
 })
 
 
-test('calendar controls preserve a manually selected view across viewport changes', async ({ page }) => {
+test('calendar controls preserve a manually selected view across viewport changes', async ({ page }, testInfo) => {
   const flow = new SetupFlow(page)
   await flow.complete()
   const calendar = page.locator('.home-card-calendar')
@@ -160,6 +167,21 @@ test('calendar controls preserve a manually selected view across viewport change
   await event.scrollIntoViewIfNeeded()
   await expect(event.getByText('Calendar fixture', { exact: true })).toBeVisible()
   await expect(event.getByRole('img', { name: 'Series premiere' })).toBeVisible()
+  const surface = calendar.getByRole('group', { name: 'Swipe or use arrow keys to change dates' })
+  const month = await calendar.getByRole('heading').innerText()
+  if (testInfo.project.name === 'mobile') {
+    await surface.evaluate(target => {
+      const touch = clientX => new Touch({ identifier: 1, target, clientX, clientY: 80 })
+      target.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(150)], bubbles: true }))
+      target.dispatchEvent(new TouchEvent('touchend', { changedTouches: [touch(50)], bubbles: true }))
+    })
+  } else {
+    await surface.hover()
+    await page.mouse.wheel(115, 0)
+  }
+  await expect(calendar.getByRole('heading')).not.toHaveText(month)
+  await today.click()
+  await expect(calendar.getByRole('heading')).toHaveText(month)
   const viewport = page.viewportSize()
   await page.setViewportSize({ width: viewport.width < 600 ? 1100 : 390, height: viewport.height })
   await expect(calendar.locator('.cal-mode-month')).toBeVisible()
@@ -175,6 +197,7 @@ test('trending requests are only available in the poster dialog', async ({ page 
   await page.reload()
   const tile = page.locator('.home-tile-trending').filter({ hasText: 'Trending Fixture' })
   await expect(tile).toBeVisible()
+  await expect(tile.getByText('2026', { exact: true })).toHaveCount(0)
   const rail = tile.locator('..')
   await expect(rail).toHaveAttribute('tabindex', '0')
   await expect(page.getByRole('button', { name: /^(Previous|Next) trending$/ })).toHaveCount(0)
@@ -182,7 +205,9 @@ test('trending requests are only available in the poster dialog', async ({ page 
   await tile.locator('.home-tile-link').click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByRole('heading', { name: 'Trending Fixture', exact: true })).toBeVisible()
+  await expect(dialog.getByText('2026', { exact: true })).toBeVisible()
   await expect(dialog.getByRole('button', { name: 'Request', exact: true })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Open in Seerr', exact: true })).toHaveCount(0)
 })
 
 test('trending popup keeps request available when title details fail', async ({ page }) => {
@@ -197,6 +222,8 @@ test('trending popup keeps request available when title details fail', async ({ 
   const request = dialog.getByRole('button', { name: 'Request', exact: true })
   await expect(request).toBeVisible()
   await request.click()
+  await page.getByRole('dialog', { name: 'Request Trending Fixture' })
+    .getByRole('button', { name: 'Request', exact: true }).click()
   await expect.poll(async () => (await flow.state()).requested).toBe(true)
 })
 
@@ -501,7 +528,7 @@ test.describe('media-account login', () => {
           return route.fulfill({ status: 201, json: { id: 'report-1' } })
         }
         if (path === '/api/support') return route.fulfill({ json: { reports: [{ status: 'in_progress' }], new_count: 0 } })
-        if (path === '/api/media-discovery/tv/5/seasons') return route.fulfill({ json: { seasons: [1, 2] } })
+        if (path === '/api/media-discovery/tv/5/seasons') return route.fulfill({ json: { seasons: [2] } })
         if (path === '/api/media-discovery/requests' && route.request().method() === 'POST') {
           expect(route.request().postDataJSON()).toEqual({ mediaType: 'tv', mediaId: 5, seasons: [2] })
           requestSent = true
@@ -526,10 +553,19 @@ test.describe('media-account login', () => {
           }, { id: 'older-31', title: 'Older library title', mediaType: 'movie' },
           index => ({ id: `recent-filler-${index}`, title: `Recent filler ${index}`, mediaType: 'movie' })) })
         }
+        if (path === '/api/media-discovery/resume') {
+          return route.fulfill({ json: { items: [{
+            id: 'resume-1', posterId: 'shared-3', title: 'In progress series', mediaType: 'tv', detail: 'Episode 2',
+            playUrl: `https://${provider}.example.test/web/#/details?id=resume-1`,
+          }] } })
+        }
         if (path === '/api/media-discovery/calendar') {
           const params = new URL(route.request().url()).searchParams
           const start = params.get('start')
           expect(start).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+          if (params.has('own_requests')) return route.fulfill({ json: { items: [{
+            kind: 'movie', title: 'My future film', when: `${start}T12:00:00`, available: false,
+          }] } })
           return route.fulfill({ json: { items: [{
             kind: 'movie', title: 'Shared future film', detail: '2026', when: `${start}T12:00:00`, available: false,
           }, {
@@ -542,6 +578,7 @@ test.describe('media-account login', () => {
             title: 'Trending title', overview: 'The trending series synopsis.',
             poster: '/api/media-discovery/recent/art/shared-3',
             trailer: 'https://www.youtube.com/watch?v=abcdefghijk', voteAverage: 8.5,
+            streaming: { configured: true, providers: [{ id: 8, name: 'Netflix', logo_url: fixturePoster }], link: '' },
           } })
         }
         if (path === '/api/media-discovery/trending') {
@@ -555,7 +592,10 @@ test.describe('media-account login', () => {
         }
         if (path === '/api/media-discovery/search') {
           expect(new URL(route.request().url()).searchParams.get('q')).toBe('Test film')
-          return route.fulfill({ json: { items: [{ mediaType: 'movie', mediaId: 4, title: 'Test film', available: true, poster: fixturePoster }] } })
+          return route.fulfill({ json: { items: [
+            { mediaType: 'movie', mediaId: 4, title: 'Test film', available: true, poster: fixturePoster },
+            { mediaType: 'tv', mediaId: 5, title: 'Trending title', requestableSeasons: [2] },
+          ] } })
         }
         if (path === '/api/media-login/session') {
           return route.fulfill({ status: signedIn ? 200 : 401, json: signedIn ? { account_id: '42' } : {} })
@@ -634,8 +674,24 @@ test.describe('media-account login', () => {
       await expect(calendar.getByText('Shared future film')).toBeVisible()
       await expect(calendar.getByRole('img', { name: 'Season finale' })).toBeVisible()
       await expect(calendar.getByText('Upcoming', { exact: true }).first()).toBeVisible()
-      await calendar.getByRole('button', { name: 'Next' }).click()
+      const surface = calendar.getByRole('group', { name: 'Swipe or use arrow keys to change dates' })
+      const dateHeading = await calendar.getByRole('heading').innerText()
+      await surface.press('ArrowRight')
+      await expect(calendar.getByRole('heading')).not.toHaveText(dateHeading)
+      // The next day can already be in the range cache.
       await expect(calendar.getByText('Shared future film')).toBeVisible()
+      await calendar.getByRole('button', { name: 'Calendar releases' }).click()
+      await page.getByRole('option', { name: 'My requests', exact: true }).click()
+      await expect(calendar.getByText('My future film')).toBeVisible()
+      await expect(calendar.getByText('Shared future film')).toHaveCount(0)
+
+      const editHome = page.getByRole('button', { name: 'Edit the Home layout' })
+      await editHome.click()
+      await page.getByRole('button', { name: 'Continue watching', exact: true }).click()
+      const resume = page.getByRole('region', { name: 'Continue watching', exact: true })
+      await expect(resume.getByRole('link', { name: 'Open In progress series to continue watching' }))
+        .toHaveAttribute('href', `https://${provider}.example.test/web/#/details?id=resume-1`)
+      await page.getByRole('button', { name: 'Done arranging Home', exact: true }).click()
       await expect(page.getByRole('region', { name: 'Trending', exact: true }).getByText('Partially available')).toBeVisible()
       const recentTile = page.getByRole('region', { name: 'Newly available' }).getByRole('button', { name: /Shared library title/ })
       await recentTile.scrollIntoViewIfNeeded()
@@ -673,14 +729,24 @@ test.describe('media-account login', () => {
       const searchResults = page.getByRole('region', { name: 'Search', exact: true })
       await expect(searchResults.getByText('Available', { exact: true })).toBeVisible()
       await expect.poll(() => searchResults.locator('img').evaluate(img => img.naturalWidth)).toBeGreaterThan(0)
+      await searchResults.getByRole('button', { name: 'Request seasons' }).click()
+      const searchRequest = page.getByRole('dialog', { name: 'Request media' })
+      await expect(searchRequest.getByRole('checkbox', { name: 'Season 2' })).toBeVisible()
+      await expect(searchRequest.getByRole('checkbox', { name: 'Season 1' })).toHaveCount(0)
+      await expect(searchRequest.getByRole('button', { name: 'Send request' })).toBeDisabled()
+      await searchRequest.getByRole('button', { name: 'Cancel' }).click()
       await searchResults.getByRole('button', { name: 'Close' }).click()
       const trendingTile = page.getByRole('region', { name: 'Trending', exact: true })
       await expect(trendingTile.getByRole('button', { name: /Request Trending title/ })).toHaveCount(0)
       await trendingTile.getByRole('button', { name: 'Trending title', exact: true }).click()
       const trendingDetails = page.getByRole('dialog', { name: 'Title details' })
       await expect(trendingDetails.getByText('The trending series synopsis.')).toBeVisible()
-      await expect(trendingDetails.locator('img')).toBeVisible()
+      await expect(trendingDetails.locator('.home-title-poster')).toBeVisible()
       await expect(trendingDetails.getByText('8.5')).toBeVisible()
+      const streaming = trendingDetails.getByRole('region', { name: 'Streaming availability' })
+      await expect(streaming).toContainText('Netflix')
+      await expect.poll(() => streaming.locator('img').evaluate(image => image.naturalWidth)).toBeGreaterThan(0)
+      await expect(streaming).toContainText('Season availability may vary.')
       await trendingDetails.getByRole('button', { name: 'Trailer', exact: true }).click()
       await expect(trendingDetails.locator('iframe')).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/abcdefghijk/)
       await trendingDetails.getByRole('button', { name: 'Request remaining seasons', exact: true }).click()
@@ -847,17 +913,22 @@ test.describe('request review', () => {
 
   test('administrator approves and declines pending requests from Home', async ({ page }) => {
     const decisions = new Map()
+    const downloadItems = [
+      { title: 'Healthy transfer', source: 'qbittorrent', status: 'Downloading', progress: 40 },
+      { title: 'Problem transfer', source: 'qbittorrent', status: 'Stalled', progress: 25 },
+    ]
     await page.route('**/api/**', async route => {
       const request = route.request()
       const path = new URL(request.url()).pathname
       if (path === '/api/auth/status') return route.fulfill({ json: { authenticated: true, username: 'admin' } })
       if (path === '/api/wizard/status') return route.fulfill({ json: { completed: true } })
+      if (path === '/api/homepage/downloads') return route.fulfill({ json: { downloads: downloadItems } })
       if (path === '/api/homepage') {
-        const requests = [4, 5].map(id => ({
-          requestId: id, requestStatus: decisions.get(id) || 1, mediaType: 'movie', mediaId: id,
-          title: `Fixture Film ${id}`, detail: 'Viewer', status: 'requested',
+        const requests = [4, 5, 6].map(id => ({
+          requestId: id, requestStatus: id === 6 ? 2 : decisions.get(id) || 1, mediaType: 'movie', mediaId: id,
+          title: `Fixture Film ${id}`, detail: 'Viewer', status: id === 6 ? 'available' : 'requested',
         }))
-        return route.fulfill({ json: { apps: [{ name: 'seerr', display_name: 'Seerr' }], requests, seerr: { available: true } } })
+        return route.fulfill({ json: { apps: [{ name: 'seerr', display_name: 'Seerr' }], requests, downloads: downloadItems, seerr: { available: true } } })
       }
       const match = path.match(/^\/api\/homepage\/requests\/(\d+)\/(approve|decline)$/)
       if (match) {
@@ -870,14 +941,77 @@ test.describe('request review', () => {
 
     await page.goto('/#/home')
     const dialog = page.getByRole('dialog', { name: 'Review request' })
-    await page.getByRole('button', { name: /Fixture Film 4.*Review request/ }).click()
+    await page.getByRole('button', { name: 'Edit the Home layout' }).click()
+    await page.getByRole('button', { name: 'Add widget', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Add widget' }).getByRole('button', { name: /^Pending requests/ }).click()
+    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    const approvals = page.getByRole('region', { name: 'Pending requests' })
+    await approvals.getByRole('button', { name: 'Review request · Fixture Film 4' }).click()
     await expect(dialog.getByText('Requested by Viewer')).toBeVisible()
     await assertFitsViewport(page)
     await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
     await expect(page.getByText('Request approved.', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: /Fixture Film 5.*Review request/ }).click()
+    await expect(approvals.getByText('Fixture Film 4')).toHaveCount(0)
+    await approvals.getByRole('button', { name: 'Review request · Fixture Film 5' }).click()
     await dialog.getByRole('button', { name: 'Decline', exact: true }).click()
     await expect(page.getByText('Request declined.', { exact: true })).toBeVisible()
+    await expect(approvals.getByText('No pending requests.')).toBeVisible()
+    await page.getByRole('button', { name: 'Filter request availability' }).click()
+    await page.getByRole('option', { name: 'Approved, awaiting availability' }).click()
+    const requests = page.locator('[data-widget="requests"]')
+    await expect(requests.getByText('Fixture Film 4')).toBeVisible()
+    await expect(requests.getByText('Fixture Film 5')).toHaveCount(0)
+    await expect(requests.getByText('Fixture Film 6')).toHaveCount(0)
+    const downloads = page.locator('.home-card-downloads')
+    await expect(downloads.getByText('Problem transfer')).toBeVisible()
+    await downloads.getByRole('button', { name: 'Filter downloads' }).click()
+    await page.getByRole('option', { name: 'Problems', exact: true }).click()
+    await expect(downloads.getByText('Problem transfer')).toBeVisible()
+    await expect(downloads.getByText('Healthy transfer')).toHaveCount(0)
     expect([...decisions]).toEqual([[4, 2], [5, 3]])
   })
+})
+
+test('regional streaming subscriptions reach the Trending popup', async ({ page }, testInfo) => {
+  const flow = new SetupFlow(page)
+  await flow.complete()
+  await page.request.post('/_test/trending')
+  async function openTrending() {
+    await page.locator('.home-tile-trending').filter({ hasText: 'Trending Fixture' }).locator('.home-tile-link').click()
+    return page.getByRole('dialog')
+  }
+
+  await page.reload()
+  const initialDialog = await openTrending()
+  await initialDialog.getByRole('link', { name: 'Set up streaming subscriptions' }).click()
+  const settings = page.getByRole('region', { name: 'Streaming subscriptions' })
+  await settings.getByRole('button', { name: 'Streaming country' }).click()
+  await page.getByRole('option', { name: 'Netherlands', exact: true }).click()
+  await settings.getByRole('searchbox').fill('video')
+  await expect(settings.getByRole('checkbox', { name: 'Netflix' })).toHaveCount(0)
+  await settings.getByRole('checkbox', { name: 'Videoland' }).check()
+  await settings.getByRole('button', { name: 'Save subscriptions' }).click()
+  await expect(settings.getByRole('status')).toHaveText('Subscriptions saved.')
+  await page.reload()
+  await expect(settings.getByRole('checkbox', { name: 'Videoland' })).toBeChecked()
+  await assertFitsViewport(page)
+  await settings.screenshot({ path: testInfo.outputPath('streaming-settings.png') })
+
+  await page.goto('/#/home')
+  const dialog = await openTrending()
+  await expect(dialog.getByRole('region', { name: 'Streaming availability' })).toContainText('Videoland')
+  await expect(dialog.getByRole('link', { name: 'Where to watch' })).toHaveAttribute('href', /locale=NL$/)
+  await expect(dialog.getByRole('button', { name: 'Request', exact: true })).toBeVisible()
+  await assertFitsViewport(page)
+  await dialog.screenshot({ path: testInfo.outputPath('streaming-popup.png') })
+
+  await flow.settings('account')
+  await settings.getByRole('button', { name: 'Streaming country' }).click()
+  await page.getByRole('option', { name: 'United States', exact: true }).click()
+  await expect(settings.getByRole('status')).toContainText('Videoland')
+  await settings.getByRole('button', { name: 'Save subscriptions' }).click()
+  await expect(settings.getByRole('status')).toHaveText('Subscriptions saved.')
+  await page.reload()
+  await expect(settings.getByRole('button', { name: 'Streaming country' })).toHaveText('United States')
+  await expect(settings.getByRole('checkbox', { name: 'Videoland' })).toHaveCount(0)
 })
