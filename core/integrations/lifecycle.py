@@ -136,7 +136,7 @@ def _reclaim_tunneled_command(cmd: list[str]) -> list[str]:
 
 
 async def stop_tunneled_apps() -> list[str]:
-    """Stop qBittorrent, Prowlarr, and Flaresolverr so they cannot leak on the house WAN."""
+    """Stop tunneled apps so they cannot leak on the house WAN."""
     from applications.catalog import ApplicationCatalog
     from core.supervisor import reclaim_leftover_processes
 

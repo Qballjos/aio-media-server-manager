@@ -22,7 +22,7 @@ Vervang het IP (en de poort, als je die hebt gewijzigd).
 
 1. Maak het **beheerders**account wanneer daarom wordt gevraagd (gebruikersnaam, **e-mail**, wachtwoord).
 2. Rond de wizard van de eerste start af: de apps die je wilt, een Usenet-server als je die gebruikt, optioneel VPN en een optionele Cloudflare Tunnel. De wizard installeert die keuze. De tunnel en de VPN starten meteen als de wizard klaar is, als je ze hebt aangezet.
-3. Na het opnieuw aanmaken van de container antwoordt het dashboard terwijl apps nog starten. Met VPN aan wachten qBittorrent, Prowlarr en Flaresolverr tot de WireGuard-handshake klaar is (AIO probeert de VPN opnieuw als de eerste poging mislukt). Cloudflare Tunnel start als laatste, nadat de apps antwoorden, zodat cloudflared geen connection refused logt tegen origins die nog niet luisteren.
+3. Na het opnieuw aanmaken van de container antwoordt het dashboard terwijl apps nog starten. Met VPN aan wachten qBittorrent, Prowlarr, Flaresolverr en Shelfmark tot de WireGuard-handshake klaar is (AIO probeert de VPN opnieuw als de eerste poging mislukt). Cloudflare Tunnel start als laatste, nadat de apps antwoorden, zodat cloudflared geen connection refused logt tegen origins die nog niet luisteren.
 4. Wacht tot **Catalogus** die apps als **actief** toont. Gebruik **Open** voor alles wat nog een eigen account heeft (Plex, Jellyfin, NZBGet).
 5. Voeg later meer toe vanuit **Catalogus**. Je hebt niet elke app nodig.
 
@@ -313,7 +313,7 @@ De image werkt die apps niet vanzelf bij. Lees de release-opmerkingen op GitHub 
 | De servergrafiek telt alleen deze container | Mount host-`/sys` alleen-lezen op `/host/sys` en maak opnieuw aan ([Docker](deploy/DOCKER.md)) |
 | Recent toegevoegd van Jellyfin lijkt kort | Scroll de rij — er worden meer pagina’s geladen. Blijft de rij leeg, zet dan een Jellyfin-API-sleutel bij **Instellingen → App-koppelingen** |
 | Recent toegevoegd van Plex stopt bij 20 | Die lijst is de laatste 20 van Plex |
-| qBittorrent / Prowlarr / Flaresolverr blijven gestopt na boot | VPN staat aan zonder live handshake. Kijk bij **Instellingen → VPN**; AIO probeert de tunnel opnieuw en start die apps als hij omhoog is. Een handmatige VPN-**Stop** annuleert die poging |
+| qBittorrent / Prowlarr / Flaresolverr / Shelfmark blijven gestopt na boot | VPN staat aan zonder live handshake. Kijk bij **Instellingen → VPN**; AIO probeert de tunnel opnieuw en start die apps als hij omhoog is. Een handmatige VPN-**Stop** annuleert die poging |
 | Prowlarr-indexers niet beschikbaar / RSS-fouten | Vaak een DNS-timeout via de VPN. Maak na een AIO-update de container opnieuw aan, klik daarna **Test All** in Prowlarr (en test opnieuw in Sonarr/Radarr) zodat de oude fout-backoff weg is. Een debug-share toont hits van de VPN-DNS-cache en fouten per resolver |
 | cloudflared logt connection refused bij boot | Verwacht op oudere images toen de tunnel vóór de apps startte. Huidige images starten Cloudflare als laatste; maak opnieuw aan vanaf een actuele `nightly` / `latest` |
 

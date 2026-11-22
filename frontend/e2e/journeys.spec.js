@@ -168,18 +168,31 @@ test('calendar controls preserve a manually selected view across viewport change
   await expect(event.getByText('Calendar fixture', { exact: true })).toBeVisible()
   await expect(event.getByRole('img', { name: 'Series premiere' })).toBeVisible()
   const surface = calendar.getByRole('group', { name: 'Swipe or use arrow keys to change dates' })
-  const month = await calendar.getByRole('heading').innerText()
+  const heading = calendar.getByRole('heading')
+  const month = await heading.innerText()
+  const nextMonth = await page.evaluate(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      .toLocaleDateString('en', { month: 'long', year: 'numeric' })
+  })
   if (testInfo.project.name === 'mobile') {
     await surface.evaluate(target => {
       const touch = clientX => new Touch({ identifier: 1, target, clientX, clientY: 80 })
-      target.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(150)], bubbles: true }))
-      target.dispatchEvent(new TouchEvent('touchend', { changedTouches: [touch(50)], bubbles: true }))
+      for (let i = 0; i < 2; i++) {
+        target.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(150)], bubbles: true }))
+        target.dispatchEvent(new TouchEvent('touchend', { changedTouches: [touch(50)], bubbles: true }))
+      }
     })
   } else {
     await surface.hover()
     await page.mouse.wheel(115, 0)
+    await page.mouse.wheel(115, 0)
   }
-  await expect(calendar.getByRole('heading')).not.toHaveText(month)
+  await expect(heading).toHaveText(nextMonth)
+  const incoming = calendar.locator('.cal-mode-month.cal-slide-next')
+  await expect(incoming).toBeVisible()
+  await expect(incoming).toHaveCSS('animation-duration', '0.24s')
+  await expect(surface).toHaveCSS('scrollbar-width', 'none')
   await today.click()
   await expect(calendar.getByRole('heading')).toHaveText(month)
   const viewport = page.viewportSize()
@@ -913,6 +926,8 @@ test.describe('request review', () => {
 
   test('administrator approves and declines pending requests from Home', async ({ page }) => {
     const decisions = new Map()
+    let otherItems = []
+    await page.clock.install()
     const downloadItems = [
       { title: 'Healthy transfer', source: 'qbittorrent', status: 'Downloading', progress: 40 },
       { title: 'Problem transfer', source: 'qbittorrent', status: 'Stalled', progress: 25 },
@@ -922,6 +937,7 @@ test.describe('request review', () => {
       const path = new URL(request.url()).pathname
       if (path === '/api/auth/status') return route.fulfill({ json: { authenticated: true, username: 'admin' } })
       if (path === '/api/wizard/status') return route.fulfill({ json: { completed: true } })
+      if (path === '/api/homepage/other-downloads') return route.fulfill({ json: { items: otherItems } })
       if (path === '/api/homepage/downloads') return route.fulfill({ json: { downloads: downloadItems } })
       if (path === '/api/homepage') {
         const requests = [4, 5, 6].map(id => ({
@@ -944,7 +960,12 @@ test.describe('request review', () => {
     await page.getByRole('button', { name: 'Edit the Home layout' }).click()
     await page.getByRole('button', { name: 'Add widget', exact: true }).click()
     await page.getByRole('dialog', { name: 'Add widget' }).getByRole('button', { name: /^Pending requests/ }).click()
+    await page.getByRole('button', { name: 'Add widget', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Add widget' }).getByRole('button', { name: /^Other downloads/ }).click()
+    const other = page.locator('[data-widget="other"]')
+    await expect(other.getByText('Nothing besides films and series.')).toBeVisible()
     await page.getByRole('button', { name: 'Done', exact: true }).click()
+    await expect(other).toHaveCount(0)
     const approvals = page.getByRole('region', { name: 'Pending requests' })
     await approvals.getByRole('button', { name: 'Review request · Fixture Film 4' }).click()
     await expect(dialog.getByText('Requested by Viewer')).toBeVisible()
@@ -955,7 +976,7 @@ test.describe('request review', () => {
     await approvals.getByRole('button', { name: 'Review request · Fixture Film 5' }).click()
     await dialog.getByRole('button', { name: 'Decline', exact: true }).click()
     await expect(page.getByText('Request declined.', { exact: true })).toBeVisible()
-    await expect(approvals.getByText('No pending requests.')).toBeVisible()
+    await expect(approvals).toHaveCount(0)
     await page.getByRole('button', { name: 'Filter request availability' }).click()
     await page.getByRole('option', { name: 'Approved, awaiting availability' }).click()
     const requests = page.locator('[data-widget="requests"]')
@@ -969,6 +990,13 @@ test.describe('request review', () => {
     await expect(downloads.getByText('Problem transfer')).toBeVisible()
     await expect(downloads.getByText('Healthy transfer')).toHaveCount(0)
     expect([...decisions]).toEqual([[4, 2], [5, 3]])
+
+    otherItems = [{ id: 'book-1', title: 'Fixture audiobook', source: 'qbittorrent', kind: 'book', done: true }]
+    await page.clock.fastForward(60000)
+    await expect(other.getByText('Fixture audiobook')).toBeVisible()
+    otherItems = []
+    await page.clock.fastForward(60000)
+    await expect(other).toHaveCount(0)
   })
 })
 
@@ -985,8 +1013,7 @@ test('regional streaming subscriptions reach the Trending popup', async ({ page 
   const initialDialog = await openTrending()
   await initialDialog.getByRole('link', { name: 'Set up streaming subscriptions' }).click()
   const settings = page.getByRole('region', { name: 'Streaming subscriptions' })
-  await settings.getByRole('button', { name: 'Streaming country' }).click()
-  await page.getByRole('option', { name: 'Netherlands', exact: true }).click()
+  await expect(settings.getByRole('button', { name: 'Streaming country' })).toHaveText('Netherlands')
   await settings.getByRole('searchbox').fill('video')
   await expect(settings.getByRole('checkbox', { name: 'Netflix' })).toHaveCount(0)
   await settings.getByRole('checkbox', { name: 'Videoland' }).check()

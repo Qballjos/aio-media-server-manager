@@ -89,7 +89,7 @@ Install only what you will run. On ARM64, skip Chromium — Flaresolverr is x86_
 | Node.js 22 | Seerr |
 | JRE 25, `mariadb-server` | Grimmory |
 | `chromium`, `xvfb`, `fonts-liberation` | Flaresolverr (x86_64 only) |
-| `iproute2`, `openvpn`, `wireguard-tools` | Optional VPN (qBittorrent, Prowlarr, Flaresolverr) |
+| `iproute2`, `openvpn`, `wireguard-tools` | Optional VPN (qBittorrent, Prowlarr, Flaresolverr, Shelfmark) |
 
 ## Service file
 

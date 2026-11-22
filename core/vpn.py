@@ -1,9 +1,9 @@
 """
-core/vpn.py — Optional VPN isolation for BitTorrent, Prowlarr, and Flaresolverr.
+core/vpn.py — Optional VPN isolation for selected media applications.
 
 Usenet (SABnzbd/NZBGet) always stays on the host network. WireGuard runs in the
 container's main network namespace (the pattern that works on Synology). Only
-qBittorrent / Prowlarr / Flaresolverr are forced through wg0 via UID policy
+Tunneled apps are forced through wg0 via UID policy
 routing — no nested netns. The only NAT is a DNS redirect for that uid.
 """
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 PROVIDERS = ("privadovpn", "mullvad", "protonvpn", "airvpn", "ivpn", "custom")
 TORRENT_NETNS = "amm-torrent"
-VPN_TUNNELED_APPS = frozenset({"qbittorrent", "prowlarr", "flaresolverr"})
+VPN_TUNNELED_APPS = frozenset({"qbittorrent", "prowlarr", "flaresolverr", "shelfmark"})
 MAX_VPN_CONFIG_BYTES = 256 * 1024
 # WireGuard app isolation (main netns + policy routing). Matches Synology-safe VPN containers.
 VPN_APP_USER = "ammvpn"
@@ -44,7 +44,7 @@ _VETH_NS = "amm-veth-n"
 _NS_HOST_IP = "10.200.200.1"
 _NS_PEER_IP = "10.200.200.2"
 TORRENT_BRIDGE_HOST = _NS_HOST_IP
-_DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191}
+_DEFAULT_PORTS = {"qbittorrent": 8081, "prowlarr": 9696, "flaresolverr": 8191, "shelfmark": 8084}
 _FALLBACK_DNS = ("1.1.1.1", "9.9.9.9")
 _KS_CHAIN = "AMM-KS"
 _UID_KS_CHAIN = "AMM-UID-KS"
@@ -662,7 +662,7 @@ class VpnManager:
                 # Fail closed: never start torrent apps on the house WAN.
                 logger.error("setpriv not found; refusing to start tunneled apps without WireGuard UID isolation.")
                 raise VpnIsolationError(
-                    "setpriv (util-linux) is required to isolate qBittorrent/Prowlarr/Flaresolverr "
+                    "setpriv (util-linux) is required to isolate tunneled apps "
                     "onto WireGuard. Install util-linux or turn VPN off in Settings → Network."
                 )
             self._ensure_vpn_app_user()
@@ -2256,7 +2256,7 @@ class VpnManager:
                 self._ip(["netns", "exec", TORRENT_NETNS, "ip", "route", "del", dest])
 
     def _apply_netns_kill_switch(self) -> None:
-        """Drop any non-bridge WAN from Prowlarr/qBittorrent/Flaresolverr."""
+        """Drop any non-bridge WAN from tunneled apps."""
         if shutil.which("iptables") is None:
             logger.warning("iptables not found; cannot install the torrent VPN kill switch.")
             return

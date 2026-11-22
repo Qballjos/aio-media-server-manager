@@ -524,7 +524,7 @@ onUnmounted(() => {
           class="alert-banner alert-error"
           style="margin-bottom: 1.25rem;"
         >
-          {{ $t('A tunneled app (qBittorrent, Prowlarr, or Flaresolverr) is running without an active VPN tunnel while VPN enforcement is enabled. Usenet traffic is not routed through the VPN.') }}
+          {{ $t('A tunneled app (qBittorrent, Prowlarr, Flaresolverr, or Shelfmark) is running without an active VPN tunnel while VPN enforcement is enabled. Usenet traffic is not routed through the VPN.') }}
         </div>
 
         <div

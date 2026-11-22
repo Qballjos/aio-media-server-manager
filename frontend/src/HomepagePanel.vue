@@ -116,6 +116,7 @@ const searchPlaceholder = computed(() => {
   return snapshot.value.seerr?.available ? t('Search movies and TV to request') : t('Search Sonarr and Radarr')
 })
 const downloadsFresh = ref(false)
+const otherDownloads = ref([])
 const downloadPause = ref({ paused: false, resume_at: null })
 const pauseFor = ref('60')
 const pauseBusy = ref(false)
@@ -279,6 +280,7 @@ const hasWidgets = computed(
   () =>
     snapshot.value.calendar.length ||
     snapshot.value.downloads.length ||
+    otherDownloads.value.length ||
     snapshot.value.recent.length ||
     snapshot.value.requests.length ||
     snapshot.value.trending.length ||
@@ -320,13 +322,13 @@ const widgetHasContent = computed(() => {
     requests: !!(s.requests.length || (s.seerr.available && isPending('requests'))),
     trending: !!(s.trending.length || (s.seerr.available && isPending('trending'))),
     calendar: hasCalendarSource.value,
-    approvals: s.seerr.available || pendingRequests.value.length > 0,
+    approvals: pendingRequests.value.length > 0,
     downloads: !!(s.downloads.length || downloadPause.value.paused),
     playing: hasMediaServer.value,
     storage: true,
     server: true,
     attention: true,
-    other: true,
+    other: otherDownloads.value.length > 0,
   }
 })
 // Empty widgets leave Home outside edit mode, and the rows they had to themselves close up.
@@ -516,8 +518,7 @@ function onNetHover(event) {
   netHoverIdx.value = best
 }
 
-/** Other downloads: what the download clients got besides films and series, asked for only while the widget is on Home. */
-const otherDownloads = ref([])
+/** Poll other downloads only when the widget is in the saved layout. */
 const otherLoaded = ref(false)
 const otherWanted = computed(() => gridLayout.value.some((item) => item.id === 'other'))
 /** Per kind of download: its name and the outline icon it gets (24 × 24, stroked). */
@@ -1685,7 +1686,7 @@ onUnmounted(() => {
                   <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
                 </span>
                 <span class="home-tile-title">{{ item.title }}</span>
-                <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
+                <span v-if="item.status !== 'missing' && statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
               </button>
             </div>
           </div>

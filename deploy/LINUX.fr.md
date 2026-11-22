@@ -89,7 +89,7 @@ Nâ€™installez que ce que vous allez faire tourner. Sur ARM64, sautez Chromium â€
 | Node.js 22 | Seerr |
 | JRE 25, `mariadb-server` | Grimmory |
 | `chromium`, `xvfb`, `fonts-liberation` | Flaresolverr (x86_64 seulement) |
-| `iproute2`, `openvpn`, `wireguard-tools` | VPN facultatif (qBittorrent, Prowlarr, Flaresolverr) |
+| `iproute2`, `openvpn`, `wireguard-tools` | VPN facultatif (qBittorrent, Prowlarr, Flaresolverr, Shelfmark) |
 
 ## Fichier de service
 

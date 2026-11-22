@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { apiJson } from '../api.js'
 import UiSelect from '../UiSelect.vue'
+import { streamingCountryForTimeZone } from './streamingCountry.js'
 
 const props = defineProps({ scope: { type: String, required: true } })
 const { locale, t } = useI18n()
@@ -51,8 +52,9 @@ async function load() {
     const [preference, catalog] = await Promise.all([fetchData('preferences'), fetchData('catalog')])
     regions.value = catalog.regions
     selected.value = preference.provider_ids
-    const suggestedCountry = new Intl.Locale(navigator.language).region
-    const initialCountry = preference.country || suggestedCountry
+    const initialCountry = preference.country || streamingCountryForTimeZone(
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    )
     if (regions.value.includes(initialCountry)) {
       await loadCountry(initialCountry)
     }

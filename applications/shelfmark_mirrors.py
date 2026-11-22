@@ -311,7 +311,9 @@ def shelfmark_download_client_env() -> dict[str, str]:
     """Autofill Shelfmark torrent/usenet client fields from AIO-managed downloaders."""
     from core.library_layout import LibraryLayout
     from core.settings import settings as live_settings
+    from core.vpn import TORRENT_BRIDGE_HOST, vpn_manager
 
+    host = TORRENT_BRIDGE_HOST if vpn_manager.uses_netns_isolation() else "127.0.0.1"
     env: dict[str, str] = {
         "QBITTORRENT_CATEGORY": "books",
     }
@@ -355,7 +357,7 @@ def shelfmark_download_client_env() -> dict[str, str]:
             env.update(
                 {
                     "PROWLARR_USENET_CLIENT": "sabnzbd",
-                    "SABNZBD_URL": f"http://127.0.0.1:{sab_port}",
+                    "SABNZBD_URL": f"http://{host}:{sab_port}",
                     "SABNZBD_API_KEY": sab_key,
                     "SABNZBD_CATEGORY": "books",
                 }
@@ -371,7 +373,7 @@ def shelfmark_download_client_env() -> dict[str, str]:
         env.update(
             {
                 "PROWLARR_USENET_CLIENT": "nzbget",
-                "NZBGET_URL": f"http://127.0.0.1:{nzb_port}",
+                "NZBGET_URL": f"http://{host}:{nzb_port}",
                 "NZBGET_USERNAME": nzb_user or "nzbget",
                 "NZBGET_PASSWORD": nzb_pass or "",
                 "NZBGET_CATEGORY": "Books",
@@ -401,6 +403,8 @@ _DOWNLOAD_CLIENT_SETTING_KEYS = (
 
 def _managed_download_client_values(desired: dict[str, str]) -> dict[str, set[str]]:
     """Values AIO may safely overwrite per setting key."""
+    from core.vpn import TORRENT_BRIDGE_HOST
+
     managed: dict[str, set[str]] = {key: {""} for key in _DOWNLOAD_CLIENT_SETTING_KEYS}
     for key, value in desired.items():
         managed.setdefault(key, {""}).add(str(value).strip())
@@ -422,6 +426,7 @@ def _managed_download_client_values(desired: dict[str, str]) -> dict[str, set[st
         {
             f"http://127.0.0.1:{sab_port}",
             f"http://localhost:{sab_port}",
+            f"http://{TORRENT_BRIDGE_HOST}:{sab_port}",
         }
     )
     managed["SABNZBD_CATEGORY"].update({"books"})
@@ -429,6 +434,7 @@ def _managed_download_client_values(desired: dict[str, str]) -> dict[str, set[st
         {
             f"http://127.0.0.1:{nzb_port}",
             f"http://localhost:{nzb_port}",
+            f"http://{TORRENT_BRIDGE_HOST}:{nzb_port}",
         }
     )
     managed["NZBGET_USERNAME"].update({"nzbget", "admin"})

@@ -22,7 +22,7 @@ Ersetzen Sie die IP (und den Port, wenn Sie ihn geändert haben).
 
 1. Legen Sie das **Administrator**konto an, wenn Sie dazu aufgefordert werden (Benutzername, **E-Mail**, Passwort).
 2. Schließen Sie den Assistenten der Ersteinrichtung ab: die gewünschten Apps, einen Usenet-Server, falls Sie einen nutzen, optional VPN und einen optionalen Cloudflare Tunnel. Der Assistent installiert diese Auswahl. Tunnel und VPN starten, sobald der Assistent fertig ist, wenn Sie sie eingeschaltet haben.
-3. Nach dem Neuanlegen des Containers antwortet das Dashboard, während Apps noch starten. Mit VPN an warten qBittorrent, Prowlarr und Flaresolverr auf den WireGuard-Handshake (AIO versucht das VPN erneut, wenn der erste Versuch scheitert). Cloudflare Tunnel startet zuletzt, nachdem die Apps antworten, damit cloudflared kein connection refused gegen Origins loggt, die noch nicht lauschen.
+3. Nach dem Neuanlegen des Containers antwortet das Dashboard, während Apps noch starten. Mit VPN an warten qBittorrent, Prowlarr, Flaresolverr und Shelfmark auf den WireGuard-Handshake (AIO versucht das VPN erneut, wenn der erste Versuch scheitert). Cloudflare Tunnel startet zuletzt, nachdem die Apps antworten, damit cloudflared kein connection refused gegen Origins loggt, die noch nicht lauschen.
 4. Warten Sie, bis **Katalog** diese Apps als **aktiv** zeigt. Nutzen Sie **Öffnen** für alles, das noch ein eigenes Konto hat (Plex, Jellyfin, NZBGet).
 5. Später fügen Sie mehr über **Katalog** hinzu. Sie brauchen nicht jede App.
 
@@ -313,7 +313,7 @@ Das Image aktualisiert diese Apps nicht von allein. Lesen Sie die Release-Hinwei
 | Die Server-Grafik zählt nur diesen Container | Hängen Sie Host-`/sys` nur lesend unter `/host/sys` ein und erstellen Sie neu ([Docker](deploy/DOCKER.md)) |
 | Zuletzt hinzugefügt von Jellyfin wirkt kurz | Scrollen Sie die Zeile — weitere Seiten werden geladen. Bleibt die Zeile leer, setzen Sie einen Jellyfin-API-Schlüssel unter **Einstellungen → App-Verbindungen** |
 | Zuletzt hinzugefügt von Plex stoppt bei 20 | Diese Liste sind die letzten 20 von Plex |
-| qBittorrent / Prowlarr / Flaresolverr bleiben nach dem Boot gestoppt | VPN ist an ohne Live-Handshake. Prüfen Sie **Einstellungen → VPN**; AIO versucht den Tunnel erneut und startet diese Apps, sobald er wieder da ist. Ein manuelles VPN-**Stop** bricht den Retry ab |
+| qBittorrent / Prowlarr / Flaresolverr / Shelfmark bleiben nach dem Boot gestoppt | VPN ist an ohne Live-Handshake. Prüfen Sie **Einstellungen → VPN**; AIO versucht den Tunnel erneut und startet diese Apps, sobald er wieder da ist. Ein manuelles VPN-**Stop** bricht den Retry ab |
 | Prowlarr-Indexer nicht verfügbar / RSS-Fehler | Oft ein DNS-Timeout durch den VPN. Nach einem AIO-Update den Container neu anlegen, dann in Prowlarr **Test All** (und in Sonarr/Radarr erneut testen), damit der alte Fehler-Backoff weg ist. Ein Debug-Share zeigt Treffer des VPN-DNS-Caches und Fehler je Resolver |
 | cloudflared loggt connection refused beim Boot | Erwartet bei älteren Images, als der Tunnel vor den Apps startete. Aktuelle Images starten Cloudflare zuletzt; neu anlegen von aktuellem `nightly` / `latest` |
 

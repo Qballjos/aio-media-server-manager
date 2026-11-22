@@ -2030,7 +2030,7 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>{{ $t('VPN') }}</h3>
-          <p>{{ $t('qBittorrent, Prowlarr, and Flaresolverr. Usenet always bypasses the tunnel.') }}</p>
+          <p>{{ $t('qBittorrent, Prowlarr, Flaresolverr, and Shelfmark. Usenet always bypasses the tunnel.') }}</p>
         </div>
         <p class="share-meta">{{ vpnLive.enabled ? $t("VPN is on") : $t("VPN is off") }}{{ vpnLive.provider ? ` · ${vpnLive.provider}` : '' }}{{ vpnLive.protocol ? ` · ${vpnLive.protocol}` : '' }}</p>
         <div class="setting-status">
@@ -2063,7 +2063,7 @@ onBeforeUnmount(() => {
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
               <strong>{{ $t('Enable VPN') }}</strong>
-              <span>{{ $t('On: kill switch — qBittorrent, Prowlarr, and Flaresolverr only run when the tunnel is up. Off: those apps can start on the house network. Use Start / Stop / Restart for the tunnel.') }}</span>
+              <span>{{ $t('On: kill switch — qBittorrent, Prowlarr, Flaresolverr, and Shelfmark only run when the tunnel is up. Off: those apps can start on the house network. Use Start / Stop / Restart for the tunnel.') }}</span>
             </div>
             <button
               type="button"

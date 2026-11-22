@@ -305,7 +305,33 @@ def test_shelfmark_download_client_env_autofills_qbittorrent(tmp_path: Path, mon
     assert data["PROWLARR_TORRENT_CLIENT"] == "qbittorrent"
 
 
-def test_shelfmark_audiobook_library_uses_public_grimmory(tmp_path: Path, monkeypatch):
+def test_shelfmark_launcher_uses_vpn_wrapper(catalog, monkeypatch):
+    shelfmark = catalog.get("shelfmark")
+    runner = shelfmark.install_dir / "run-shelfmark"
+    monkeypatch.setattr("core.vpn.vpn_manager.wrap_isolated_command", lambda cmd: ["vpn-wrapper", *cmd])
+
+    assert shelfmark.build_start_command(runner) == ["vpn-wrapper", str(runner)]
+
+
+def test_shelfmark_updates_managed_usenet_url_when_openvpn_changes(tmp_path, monkeypatch):
+    import json
+
+    from applications.shelfmark_mirrors import sync_shelfmark_download_clients
+
+    monkeypatch.setattr("applications.shelfmark_mirrors._app_installed", lambda name: name == "sabnzbd")
+    monkeypatch.setattr("applications.shelfmark_mirrors._app_port", lambda name, default: default)
+    monkeypatch.setattr("core.integrations.credentials.get_application_api_key", lambda *args: "test-key")
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"SABNZBD_URL": "http://127.0.0.1:8085"}))
+
+    for netns, host in [(True, "10.200.200.1"), (False, "127.0.0.1")]:
+        monkeypatch.setattr("core.vpn.vpn_manager.uses_netns_isolation", lambda: netns)
+        assert sync_shelfmark_download_clients(tmp_path)
+        assert json.loads(path.read_text())["SABNZBD_URL"] == f"http://{host}:8085"
+
+
+@pytest.mark.parametrize("netns, host", [(False, "127.0.0.1"), (True, "10.200.200.1")])
+def test_shelfmark_grimmory_urls(tmp_path: Path, monkeypatch, netns, host):
     from applications.community import ShelfmarkApp
     from core import settings as settings_mod
     from core.public_hostnames import save_hostnames
@@ -326,8 +352,9 @@ def test_shelfmark_audiobook_library_uses_public_grimmory(tmp_path: Path, monkey
         {"grimmory": {"subdomain": "grimmory", "enabled": True}},
         app_settings=cfg,
     )
+    monkeypatch.setattr("core.vpn.vpn_manager.uses_netns_isolation", lambda: netns)
     shelfmark = ShelfmarkApp(base_config_dir=cfg.config_dir, base_install_dir=cfg.install_dir)
     env = shelfmark.extra_env()
-    assert env["BOOKLORE_HOST"] == "http://127.0.0.1:6060"
+    assert env["BOOKLORE_HOST"] == f"http://{host}:6060"
     assert env["AUDIOBOOK_LIBRARY_URL"] == "https://grimmory.example.com"
 

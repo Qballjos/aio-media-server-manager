@@ -22,7 +22,7 @@ Replace the IP (and port, if you changed it).
 
 1. Create the **admin** account when prompted (username, **email**, password).
 2. Finish the first-run wizard: the apps you want, a Usenet server if you use one, optional VPN, and an optional Cloudflare Tunnel. The wizard installs that selection. The tunnel and the VPN start as soon as it finishes, when you turned them on.
-3. After a container recreate, the dashboard answers while apps are still starting. With VPN on, qBittorrent, Prowlarr, and Flaresolverr wait until the WireGuard handshake is up (AIO retries the VPN if the first try fails). Cloudflare Tunnel starts last, after the apps answer, so cloudflared does not log connection refused against origins that are not listening yet.
+3. After a container recreate, the dashboard answers while apps are still starting. With VPN on, qBittorrent, Prowlarr, Flaresolverr, and Shelfmark wait until the WireGuard handshake is up (AIO retries the VPN if the first try fails). Cloudflare Tunnel starts last, after the apps answer, so cloudflared does not log connection refused against origins that are not listening yet.
 4. Wait until **Catalog** shows those apps as **running**. Use **Open** for anything that still has its own account (Plex, Jellyfin, NZBGet).
 5. Add more later from **Catalog**. You do not need every app.
 
@@ -317,7 +317,7 @@ The image does not bump those apps on its own. Read release notes on GitHub if s
 | Server graph counts only this container | Mount host `/sys` read-only at `/host/sys` and recreate ([Docker](deploy/DOCKER.md)) |
 | Jellyfin recently added looks short | Scroll the rail — it loads further pages. If the rail stays empty, set a Jellyfin API key under **Settings → App connections** |
 | Plex recently added stops at 20 | That list is Plex's latest 20 |
-| qBittorrent / Prowlarr / Flaresolverr stay stopped after boot | VPN is on without a live handshake. Check **Settings → VPN**; AIO retries the tunnel and starts those apps when it is up. A manual VPN **Stop** cancels the retry |
+| qBittorrent / Prowlarr / Flaresolverr / Shelfmark stay stopped after boot | VPN is on without a live handshake. Check **Settings → VPN**; AIO retries the tunnel and starts those apps when it is up. A manual VPN **Stop** cancels the retry |
 | Prowlarr indexers unavailable / RSS failures | Often a DNS timeout through the VPN. After updating AIO, recreate the container, then **Test All** in Prowlarr (and re-test in Sonarr/Radarr) so the old failure backoff clears. A debug share shows VPN DNS cache hits and per-resolver failures |
 | cloudflared logs connection refused at boot | Expected on older images when the tunnel started before apps. Current images start Cloudflare last; recreate from a current `nightly` / `latest` |
 

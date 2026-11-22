@@ -23,7 +23,33 @@ const {
 } = useHomeCalendar({ snapshot: toRef(props, 'snapshot'), calendarWide: toRef(props, 'wide'), calendarPhone: toRef(props, 'phone') })
 
 const requestFilter = ref('all')
+const surface = ref(null)
+const slideClass = ref('')
 const range = computed(() => calendarRange())
+const CALENDAR_TURN_MS = 240
+let lastTurn = -Infinity
+
+function turnCalendar(direction) {
+  const now = performance.now()
+  if (now - lastTurn < CALENDAR_TURN_MS) return
+  const start = range.value.start
+  shiftCalendar(direction)
+  if (range.value.start === start) return
+  lastTurn = now
+  slideClass.value = direction > 0 ? 'cal-slide-next' : 'cal-slide-previous'
+  if (surface.value) surface.value.scrollTop = 0
+}
+
+function changeView(view) {
+  slideClass.value = ''
+  setCalView(view)
+}
+
+function returnToToday() {
+  slideClass.value = ''
+  goToday()
+}
+
 watch([() => range.value.start, () => range.value.days, calView, requestFilter], () => {
   emit('range', range.value, nextCalendarRange(), requestFilter.value === 'own')
 }, { immediate: true })
@@ -46,7 +72,7 @@ function scrollCalendar(event) {
   wheelDistance += distance * (event.deltaMode ? 24 : 1)
   if (wheelTurned || Math.abs(wheelDistance) < 45) return
   wheelTurned = true
-  shiftCalendar(Math.sign(wheelDistance))
+  turnCalendar(Math.sign(wheelDistance))
 }
 
 let touchStart = null
@@ -63,7 +89,7 @@ function finishSwipe(event) {
   const y = start.clientY - end.clientY
   if (Math.abs(x) < 45 || Math.abs(x) < Math.abs(y) * 1.5) return
   suppressClickUntil = event.timeStamp + 350
-  shiftCalendar(Math.sign(x))
+  turnCalendar(Math.sign(x))
 }
 function suppressSwipeClick(event) {
   if (event.detail && event.timeStamp < suppressClickUntil) {
@@ -93,7 +119,7 @@ function mediaLabel(item) {
     <div class="cal-head">
       <h3>{{ calendarRangeLabel }}</h3>
       <div class="cal-tools">
-        <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">{{ $t('Today') }}</button>
+        <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="returnToToday">{{ $t('Today') }}</button>
         <UiSelect
           v-if="member"
           v-model="requestFilter"
@@ -128,20 +154,21 @@ function mediaLabel(item) {
             { value: 'week', label: $t('Week') },
             { value: 'month', label: $t('Month') },
           ]"
-          @update:model-value="setCalView"
+          @update:model-value="changeView"
         />
       </div>
     </div>
-    <div class="home-card-body cal-surface" role="group" tabindex="0" :aria-label="$t('Swipe or use arrow keys to change dates')"
+    <div ref="surface" class="home-card-body cal-surface" role="group" tabindex="0" :aria-label="$t('Swipe or use arrow keys to change dates')"
          @wheel="scrollCalendar" @touchstart.passive="startSwipe" @touchend.passive="finishSwipe"
          @touchcancel="touchStart = null" @click.capture="suppressSwipeClick"
-         @keydown.left.self.prevent="shiftCalendar(-1)" @keydown.right.self.prevent="shiftCalendar(1)">
+         @keydown.left.self.prevent="turnCalendar(-1)" @keydown.right.self.prevent="turnCalendar(1)">
       <div v-if="error">
         <p class="home-muted" role="alert">{{ $t('Could not load your calendar.') }}</p>
         <button type="button" class="ui-btn ui-btn-ghost" @click="emit('retry')">{{ $t('Retry') }}</button>
       </div>
       <p v-else-if="pending" class="home-muted" role="status">{{ $t('Loading calendar…') }}</p>
-      <div v-else-if="calView === 'list'" class="cal-list">
+      <div v-else-if="calView === 'list'" :key="range.start + ':list'" class="cal-list"
+           :class="slideClass">
         <p v-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
         <ul v-else>
           <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :data-source="row.item.source" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
@@ -167,7 +194,9 @@ function mediaLabel(item) {
           </li>
         </ul>
       </div>
-      <div v-else class="cal" :class="'cal-mode-' + calView" role="grid" :aria-label="$t('Upcoming releases calendar')">
+      <div v-else :key="range.start + ':' + calView" class="cal"
+           :class="['cal-mode-' + calView, slideClass]"
+           role="grid" :aria-label="$t('Upcoming releases calendar')">
         <div v-if="calView === 'week'" class="cal-weekdays">
           <span v-for="day in calendarDays" :key="day.key">{{ day.weekday }} {{ day.date }}-{{ day.month }}</span>
         </div>

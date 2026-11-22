@@ -145,7 +145,7 @@ Auf GitHub können Sie das Paket auch öffentlich machen unter **Packages → se
 
 ## Optionales VPN
 
-Für den Verkehr von qBittorrent / Prowlarr / Flaresolverr:
+Für den Verkehr von qBittorrent / Prowlarr / Flaresolverr / Shelfmark:
 
 ```bash
 sudo mkdir -p /opt/aio-media-manager/config/vpn
@@ -161,7 +161,7 @@ Der privilegierte Modus ist nötig für `/dev/net/tun` und das VPN-UID-Routing (
 
 ### Was AIO macht, solange das VPN an ist
 
-- Diese drei Apps starten erst nach einem Live-WireGuard-Handshake. Ist der Tunnel beim Boot down, warten sie; AIO versucht das VPN mit Backoff erneut und startet sie, wenn er wieder da ist. Ein manuelles VPN-**Stop** bricht den Retry ab.
+- Diese Apps starten erst nach einem Live-WireGuard-Handshake. Ist der Tunnel beim Boot down, warten sie; AIO versucht das VPN mit Backoff erneut und startet sie, wenn er wieder da ist. Ein manuelles VPN-**Stop** bricht den Retry ab.
 - DNS für diese Apps läuft über einen kleinen Caching-Forwarder in AIO (`127.0.0.153`), an die Tunnel-Schnittstelle gebunden, damit Lookups nicht aufs Haus-WAN leaken. Er fragt mehrere öffentliche Resolver parallel und kann eine frische Antwort liefern, wenn Upstream kurz still ist — damit Prowlarr-Indexer nicht an einem Timeout scheitern. Andere Apps (Sonarr, Radarr, SABnzbd, …) behalten den Container-Resolver.
 - Usenet-Verkehr nutzt den Tunnel nie.
 

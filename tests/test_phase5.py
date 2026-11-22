@@ -172,7 +172,7 @@ def test_vpn_status_without_tunnel(tmp_path: Path, monkeypatch):
     status = mgr.status()
     assert status["enabled"] is True
     assert status["usenet_bypasses_vpn"] is True
-    assert status["tunneled_apps"] == ["flaresolverr", "prowlarr", "qbittorrent"]
+    assert status["tunneled_apps"] == ["flaresolverr", "prowlarr", "qbittorrent", "shelfmark"]
     assert status["unprotected_apps"] == []
     assert status["tunnel_up"] is False
     assert status["kill_switch"] is True

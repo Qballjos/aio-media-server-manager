@@ -204,13 +204,15 @@ class ShelfmarkApp(SimpleApplication):
     def extra_env(self) -> dict[str, str]:
         from applications.shelfmark_mirrors import shelfmark_download_client_env
         from core.app_web_url import grimmory_browser_url
+        from core.vpn import TORRENT_BRIDGE_HOST, vpn_manager
 
         layout = LibraryLayout.from_settings(default_settings)
         # Ebooks and audiobooks share the same Grimmory bookdrop inbox.
         bookdrop = layout.bookdrop
         bookdrop.mkdir(parents=True, exist_ok=True)
         layout.books.mkdir(parents=True, exist_ok=True)
-        # BOOKLORE_HOST stays on loopback for Shelfmark→Grimmory API uploads.
+
+        # OpenVPN places Shelfmark in a separate namespace from Grimmory.
         # AUDIOBOOK_LIBRARY_URL is a browser nav link → prefer public Grimmory URL.
         grimmory_port = 6060
         try:
@@ -221,7 +223,8 @@ class ShelfmarkApp(SimpleApplication):
                 grimmory_port = int(cat.get("grimmory").port or 6060)
         except Exception:
             grimmory_port = 6060
-        grimmory_lan = f"http://127.0.0.1:{grimmory_port}"
+        host = TORRENT_BRIDGE_HOST if vpn_manager.uses_netns_isolation() else "127.0.0.1"
+        grimmory_lan = f"http://{host}:{grimmory_port}"
         env = {
             "FLASK_HOST": "0.0.0.0",
             "FLASK_PORT": str(self.port),
@@ -250,6 +253,11 @@ class ShelfmarkApp(SimpleApplication):
         except Exception:
             pass
         return env
+
+    def build_start_command(self, executable: Path) -> list[str]:
+        from core.vpn import vpn_manager
+
+        return vpn_manager.wrap_isolated_command(super().build_start_command(executable))
 
     def start_command(self) -> list[str]:
         ensure_shelfmark_venv(self.install_dir)

@@ -38,7 +38,7 @@ Kopieer [`.env.example`](../.env.example) voor native installs. Veel hiervan kun
 | `AMM_DOWNLOAD_DIR` / `AMM_MEDIA_DIR` | Paden in de container (host-mounts wijzig je in compose) |
 | `GITHUB_TOKEN` | Optioneel; hogere GitHub-API-limiet voor updates |
 | `AMM_CLOUDFLARE_TUNNEL_*` | Optionele tunnel voor toegang van buitenaf (`cloudflared` start na de apps bij boot) |
-| `AMM_VPN_*` | Optionele VPN voor qBittorrent, Prowlarr en Flaresolverr (ze wachten op de tunnel; lokale DNS-cache voor die apps) |
+| `AMM_VPN_*` | Optionele VPN voor qBittorrent, Prowlarr, Flaresolverr en Shelfmark (ze wachten op de tunnel; lokale DNS-cache voor die apps) |
 | `AMM_SECURE_COOKIES` | Zet op `true` als je de manager via HTTPS opent; standaard `false` voor HTTP op het LAN. |
 | `AMM_PREFLIGHT_MIN_FREE_MB` | Minimaal vereiste vrije MiB per opslaglocatie vóór installatie/update; standaard `512`. |
 | `AMM_BACKUP_RECOVERY_TOKEN` | Optionele herstelcode van minimaal 32 tekens voor de serverbeheerder, alleen zonder werkend beheerdersaccount. Verwijder na herstel; zie de beveiligingsgids. |
