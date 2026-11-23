@@ -462,7 +462,6 @@ const fullestFree = computed(() => (fullestVolume.value ? formatBytes(fullestVol
 const serverStatus = computed(() => (homeStatus.value.server ? serverMood(homeStatus.value.server) : null))
 const storageStatus = computed(() => (fullestVolume.value ? storageMood(fullestVolume.value.percent) : null))
 const attentionStatus = computed(() => attentionMood(homeStatus.value.attention))
-const nowItem = computed(() => homeStatus.value.playing[0] || null)
 // The last 30 polls (5 minutes) of network use, drawn in the Server widget; kept for the tab, like the snapshot.
 const netHistory = ref(homeSnapshotCache.netHistory || [])
 const netHoverIdx = ref(-1)
@@ -1414,7 +1413,8 @@ onUnmounted(() => {
 
     <template v-else-if="!loading">
       <Teleport to=".app-container" defer>
-      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating glass-pill" :aria-label="$t('Apps')">
+      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating" :aria-label="$t('Apps')">
+        <span class="home-dock-base glass-pill" aria-hidden="true"></span>
         <div class="home-dock-row">
           <component
             :is="launcherOpen(app) ? 'a' : 'span'"
@@ -1821,32 +1821,43 @@ onUnmounted(() => {
         </article>
       </template>
       <template #playing>
-        <article class="home-card glass-card home-card-playing" :class="{ 'has-art': nowItem?.poster }">
-          <template v-if="nowItem">
-            <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" loading="lazy" decoding="async" alt="" aria-hidden="true" />
-            <span v-if="nowItem.poster" class="np-shade" aria-hidden="true"></span>
-            <div class="np-top">
-              <span class="gh-pill">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
-                {{ nowItem.device || (nowItem.source === 'plex' ? 'Plex' : 'Jellyfin') }}
-              </span>
-              <span v-if="homeStatus.playing.length > 1" class="gh-pill">+{{ homeStatus.playing.length - 1 }} {{ $t('watching') }}</span>
+        <article class="home-card glass-card home-card-playing">
+          <div
+            v-if="homeStatus.playing.length"
+            class="np-scroll"
+            :tabindex="homeStatus.playing.length > 1 ? 0 : undefined"
+            role="region"
+            :aria-label="$t('Now playing')"
+          >
+            <div v-for="(nowItem, index) in homeStatus.playing" :key="index" class="np-slide" :class="{ 'has-art': nowItem.poster }">
+              <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" loading="lazy" decoding="async" alt="" aria-hidden="true" />
+              <span v-if="nowItem.poster" class="np-shade" aria-hidden="true"></span>
+              <div class="np-top">
+                <span class="gh-pill">
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+                  {{ nowItem.device || (nowItem.source === 'plex' ? 'Plex' : 'Jellyfin') }}
+                </span>
+                <span v-if="homeStatus.playing.length > 1" class="gh-pill np-position" :aria-label="$t('Stream {current} of {total}', { current: index + 1, total: homeStatus.playing.length })">
+                  {{ index + 1 }}/{{ homeStatus.playing.length }}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path :d="index === homeStatus.playing.length - 1 ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'" /></svg>
+                </span>
+              </div>
+              <component
+                :is="nowItem.url ? 'a' : 'div'"
+                class="np-bottom"
+                v-bind="nowItem.url ? { href: nowItem.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
+                @click="nowItem.url && openApp($event, nowItem.source, nowItem.url)"
+              >
+                <strong class="np-title">{{ nowItem.title }}</strong>
+                <span v-if="nowItem.detail" class="np-sub">{{ nowItem.detail }}</span>
+                <span class="np-progress"><span :style="{ width: `${nowItem.progress}%` }" /></span>
+                <span class="np-foot">
+                  <span>{{ nowItem.user }}<template v-if="nowItem.paused"> {{ $t('· Paused') }}</template></span>
+                  <span>{{ nowItem.transcoding ? $t('Transcoding') : $t('Direct play') }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} {{ $t('min left') }}</template></span>
+                </span>
+              </component>
             </div>
-            <component
-              :is="nowItem.url ? 'a' : 'div'"
-              class="np-bottom"
-              v-bind="nowItem.url ? { href: nowItem.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
-              @click="nowItem.url && openApp($event, nowItem.source, nowItem.url)"
-            >
-              <strong class="np-title">{{ nowItem.title }}</strong>
-              <span v-if="nowItem.detail" class="np-sub">{{ nowItem.detail }}</span>
-              <span class="np-progress"><span :style="{ width: `${nowItem.progress}%` }" /></span>
-              <span class="np-foot">
-                <span>{{ nowItem.user }}<template v-if="nowItem.paused"> {{ $t('· Paused') }}</template></span>
-                <span>{{ nowItem.transcoding ? $t('Transcoding') : $t('Direct play') }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} {{ $t('min left') }}</template></span>
-              </span>
-            </component>
-          </template>
+          </div>
           <template v-else>
             <div class="gh-head">
               <h3>{{ $t('Now playing') }}</h3>

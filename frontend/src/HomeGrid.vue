@@ -425,7 +425,7 @@ function onKey(event, id) {
   flex-direction: column;
   min-width: 0;
   border-radius: var(--radius-glass);
-  transition: box-shadow var(--hg-duration) var(--hg-easing);
+  transition: translate var(--hg-duration) var(--hg-easing), box-shadow var(--hg-duration) var(--hg-easing);
 }
 .hg-body > :deep(*) {
   flex: 1 1 auto;
@@ -434,10 +434,22 @@ function onKey(event, id) {
 .hg.is-editing .hg-item {
   cursor: grab;
 }
-.hg.is-editing .hg-item:focus-visible {
-  outline: 2px solid var(--border-active);
-  outline-offset: 4px;
-  border-radius: var(--radius-glass);
+.hg.is-editing .hg-item:focus-visible,
+.hg-body :deep(:is(.home-rail, .np-scroll):focus-visible) {
+  outline: none;
+}
+.hg-item:focus-visible,
+.hg-item:has(:focus-visible),
+.hg-item.is-new {
+  z-index: 20;
+}
+.hg-item:focus-visible .hg-body,
+.hg-item:has(:focus-visible) .hg-body,
+.hg-item.is-new .hg-body,
+.hg-item.is-lifted .hg-body,
+.hg-item.is-resizing .hg-body {
+  translate: 0 -3px;
+  box-shadow: 0 0 0 1px var(--glass-highlight), 0 8px 16px -8px rgb(0 0 0 / 0.45), var(--glass-shadow);
 }
 /* In edit mode a widget is something to arrange, not to use. */
 .hg.is-editing .hg-body {
@@ -455,30 +467,12 @@ function onKey(event, id) {
   z-index: 30;
   cursor: grabbing;
 }
-.hg-item.is-lifted .hg-body,
-.hg-item.is-resizing .hg-body {
-  border-radius: var(--radius-glass);
-  box-shadow: 0 0 0 1px rgba(var(--color-primary-rgb), 0.55), var(--glass-shadow);
-}
 .hg-item.is-lifted .hg-body::after,
 .hg-item.is-resizing .hg-body::after {
   background: transparent;
 }
 .hg-item.is-resizing {
   z-index: 30;
-}
-.hg-item.is-new .hg-body {
-  border-radius: var(--radius-glass);
-  animation: hg-new 1.8s ease-out;
-}
-@keyframes hg-new {
-  0%,
-  60% {
-    box-shadow: 0 0 0 2px var(--color-primary);
-  }
-  100% {
-    box-shadow: 0 0 0 2px transparent;
-  }
 }
 .hg-marker {
   position: absolute;
@@ -609,9 +603,6 @@ function onKey(event, id) {
   .hg-grip,
   .hg-rz {
     transition: none;
-  }
-  .hg-item.is-new .hg-body {
-    animation: none;
   }
 }
 </style>

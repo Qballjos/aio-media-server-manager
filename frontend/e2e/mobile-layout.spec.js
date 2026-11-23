@@ -188,3 +188,68 @@ test('Streaming settings and Trending logos fit in light and dark themes', async
     await title.screenshot({ path: testInfo.outputPath(`streaming-popup-${theme}.png`) })
   }
 })
+
+test('Now playing scrolls through concurrent streams inside the widget', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    const playing = [{ id: 'playing', x: 0, y: 0, w: 4, h: 3 }]
+    localStorage.setItem('amm-home-grid', JSON.stringify({ desktop: playing, tablet: playing, phone: playing }))
+  })
+  await page.route('**/api/homepage/status', route => route.fulfill({ json: {
+    playing: [
+      { title: 'Living room stream', device: 'TV', source: 'jellyfin', progress: 25, poster: '/pwa-192.png' },
+      { title: 'Bedroom stream', device: 'Tablet', source: 'plex', progress: 50 },
+    ],
+  } }))
+  await page.goto('/#/home')
+  const widget = page.locator('.home-card-playing')
+  const title = name => widget.getByText(name, { exact: true })
+  const first = title('Living room stream')
+  const second = title('Bedroom stream')
+  await expect(first).toBeInViewport()
+  await expect(second).not.toBeInViewport()
+  const scroller = widget.locator('.np-scroll')
+  expect(await scroller.evaluate(el => el.scrollWidth > el.clientWidth && el.scrollHeight === el.clientHeight)).toBe(true)
+  await scroller.focus()
+  await expect.poll(() => widget.evaluate(el => {
+    const body = el.closest('.hg-body')
+    return body.getBoundingClientRect().top < body.parentElement.getBoundingClientRect().top
+  })).toBe(true)
+  await page.keyboard.press('ArrowRight')
+  await expect(second).toBeInViewport()
+  await expect(first).not.toBeInViewport()
+  await expect.poll(() => scroller.evaluate(el => Math.abs(el.scrollWidth - el.clientWidth - el.scrollLeft))).toBeLessThan(2)
+  await widget.screenshot({ path: testInfo.outputPath('now-playing-second.png') })
+  if (testInfo.project.name === 'desktop-webkit') {
+    await scroller.hover()
+    await page.mouse.wheel(-await scroller.evaluate(el => el.clientWidth), 0)
+  } else {
+    await page.keyboard.press('ArrowLeft')
+  }
+  await expect(first).toBeInViewport()
+  await expect(second).not.toBeInViewport()
+  await expect.poll(() => scroller.evaluate(el => Math.abs(el.scrollLeft))).toBeLessThan(2)
+  await widget.screenshot({ path: testInfo.outputPath('now-playing-first.png') })
+})
+
+test('Dock tiles rise above the glass base without clipping', async ({ page }, testInfo) => {
+  await page.goto('/#/home')
+  const dock = page.locator('.home-dock.is-floating')
+  const tile = dock.locator('.home-app').first()
+  await expect(tile).toBeVisible()
+  const getBounds = () => tile.evaluate(el => {
+    const tile = el.getBoundingClientRect()
+    const row = el.parentElement.getBoundingClientRect()
+    const base = el.closest('.home-dock').querySelector('.home-dock-base').getBoundingClientRect()
+    return { top: tile.top, height: tile.height, rowTop: row.top, baseTop: base.top }
+  })
+  const resting = await getBounds()
+  expect(resting.top).toBeLessThan(resting.baseTop)
+  if (await page.evaluate(() => matchMedia('(hover: hover) and (pointer: fine)').matches)) {
+    await tile.hover()
+    await expect.poll(async () => (await getBounds()).height / resting.height).toBeGreaterThan(1.15)
+    const raised = await getBounds()
+    expect(raised.top).toBeLessThan(resting.top)
+    expect(raised.top).toBeGreaterThanOrEqual(raised.rowTop)
+  }
+  await dock.screenshot({ path: testInfo.outputPath('dock.png'), animations: 'disabled' })
+})

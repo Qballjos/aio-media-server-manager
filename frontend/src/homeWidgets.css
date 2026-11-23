@@ -140,10 +140,6 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-.home-rail:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -2px;
-}
 .home-rail::-webkit-scrollbar {
   display: none;
   width: 0;

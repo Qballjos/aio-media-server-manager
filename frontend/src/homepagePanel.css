@@ -125,6 +125,18 @@
   width: max-content;
   max-width: calc(100% - 2rem);
   margin: 0;
+  isolation: isolate;
+  background: transparent;
+  box-shadow: none;
+}
+.home-dock-base {
+  position: absolute;
+  inset: 1.3rem 0 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--control-bg);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  pointer-events: none;
 }
 .home-dock-row {
   display: flex;
@@ -134,6 +146,11 @@
   overflow-x: auto;
   padding: 0.15rem;
   scrollbar-width: none;
+}
+/* The scrollport includes the space the tiles need to grow above the glass base. */
+.home-dock.is-floating .home-dock-row {
+  margin-top: -1rem;
+  padding: 1.15rem 0.5rem 0.35rem;
 }
 .home-dock-row::-webkit-scrollbar {
   display: none;
@@ -149,14 +166,24 @@
   justify-content: center;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 4px 9px -4px rgb(0 0 0 / 0.45);
   color: inherit;
   text-decoration: none;
-  transition: transform 0.2s, background 0.2s;
+  transform-origin: center bottom;
 }
-.home-app:hover {
-  transform: translateY(-3px) scale(1.06);
-  background: var(--bg-surface-elevated);
+@media (hover: hover) and (pointer: fine) {
+  .home-app:not(.is-down):hover {
+    z-index: 1;
+    background: var(--bg-surface-elevated);
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .home-app {
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), background 200ms;
+  }
+  .home-app:not(.is-down):hover {
+    transform: translateY(-0.25rem) scale(1.2);
+  }
 }
 /* Status dot on the tile's corner: green running, grey stopped, amber busy, red unhealthy. */
 .home-app::after {
@@ -173,9 +200,6 @@
 .home-app.is-down {
   opacity: 0.55;
   cursor: default;
-}
-.home-app.is-down:hover {
-  transform: none;
 }
 .home-app.is-down::after {
   background: var(--text-dim);
@@ -695,23 +719,50 @@ button.home-tile-link {
   opacity: 1;
 }
 /* Now playing: the poster fills the card, the title sits on it. */
-.home-card-playing.has-art {
-  color: #fff;
+.home-card-playing {
+  position: relative;
 }
-.home-card-playing > .np-art,
-.home-card-playing > .np-shade {
+.np-scroll {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  display: flex;
+  overflow: auto hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+}
+.np-slide {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 0 0 100%;
+  min-width: 0;
+  padding: 1.35rem 1.35rem 1.3rem;
+  scroll-snap-align: start;
+}
+@media (max-width: 719px) {
+  .np-slide {
+    padding: 1rem 0.95rem 0.95rem;
+  }
+}
+.np-slide.has-art {
+  color: #fff;
+}
+.np-slide > .np-art,
+.np-slide > .np-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   pointer-events: none;
 }
-.home-card-playing > .np-art {
+.np-slide > .np-art {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center 22%;
 }
-.home-card-playing > .np-shade {
+.np-slide > .np-shade {
   background: linear-gradient(180deg, rgb(0 0 0 / 0.35) 0%, rgb(0 0 0 / 0) 30%, rgb(0 0 0 / 0.25) 50%, rgb(0 0 0 / 0.8) 100%);
 }
 .np-top {
@@ -720,7 +771,10 @@ button.home-tile-link {
   flex-wrap: wrap;
   gap: 0.4rem;
 }
-.has-art .gh-pill {
+.np-position {
+  margin-inline-start: auto;
+}
+.np-slide.has-art .gh-pill {
   color: #fff;
   background: rgb(0 0 0 / 0.35);
   border-color: rgb(255 255 255 / 0.18);
@@ -762,7 +816,7 @@ button.home-tile-link {
   background: rgb(255 255 255 / 0.25);
   overflow: hidden;
 }
-.home-card-playing:not(.has-art) .np-progress {
+.np-slide:not(.has-art) .np-progress {
   background: var(--switch-track);
 }
 .np-progress span {

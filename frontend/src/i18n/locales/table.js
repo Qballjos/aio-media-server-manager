@@ -497,6 +497,7 @@ export const TABLE = {
   'Until I resume': ['Tot ik hervat', 'Bis ich fortsetze', 'Jusqu’à reprise'],
   'No active downloads.': ['Geen actieve downloads.', 'Keine aktiven Downloads.', 'Aucun téléchargement en cours.'],
   'Remove all': ['Alles verwijderen', 'Alle entfernen', 'Tout retirer'],
+  'Stream {current} of {total}': ['Stream {current} van {total}', 'Stream {current} von {total}', 'Flux {current} sur {total}'],
   'Now playing': ['Wordt afgespeeld', 'Läuft gerade', 'En lecture'],
   'Nothing on': ['Niets aan', 'Nichts läuft', 'Rien en lecture'],
   'What plays on Jellyfin or Plex shows up here.': ['Wat op Jellyfin of Plex speelt, verschijnt hier.', 'Was auf Jellyfin oder Plex läuft, erscheint hier.', 'Ce qui est lu sur Jellyfin ou Plex apparaît ici.'],
