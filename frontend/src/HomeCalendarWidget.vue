@@ -289,7 +289,7 @@ function mediaLabel(item) {
                   <span class="cal-row-body">
                     <span class="cal-row-title">
                       <strong>{{ row.item.title }}</strong>
-                      <span v-if="mediaLabel(row.item)" class="media-badge">{{ $t(mediaLabel(row.item)) }}</span>
+                      <span v-if="mediaLabel(row.item)" class="cal-media-type">{{ $t(mediaLabel(row.item)) }}</span>
                       <CalendarMilestones :milestones="row.item.milestones" />
                     </span>
                     <span class="cal-row-meta">{{ [row.item.detail, member ? $t(row.item.has_file ? 'Available' : 'Upcoming') : formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
@@ -342,7 +342,7 @@ function mediaLabel(item) {
                       >
                         <span class="cal-event-top">
                           <span class="cal-event-time">{{ member ? $t(item.has_file ? 'Available' : 'Upcoming') : formatEventTime(item.when) }}</span>
-                          <span v-if="mediaLabel(item)" class="media-badge">{{ $t(mediaLabel(item)) }}</span>
+                          <span v-if="mediaLabel(item)" class="cal-media-type">{{ $t(mediaLabel(item)) }}</span>
                         </span>
                         <span v-if="item.milestones?.length" class="cal-event-title">
                           <strong>{{ item.title }}</strong>

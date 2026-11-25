@@ -67,7 +67,7 @@ Accueil est une grille. Téléphone, tablette et bureau gardent chacun leur disp
 | Ajouts récents | Nouvelles séries et films. Faire défiler charge d’autres pages Jellyfin. Plex reste aux 20 derniers |
 | Demandes | Demandes Seerr pas encore prêtes, plus ce qui a été marqué disponible ou refusé ces 30 derniers jours |
 | Tendances | La liste des tendances de Seerr. Faire défiler continue de charger |
-| En lecture | Qui regarde sur Jellyfin ou Plex, y compris la lecture directe |
+| En lecture | Lectures Jellyfin et Plex. Défilez horizontalement pour voir chaque flux |
 | Stockage | Utilisation disque de la config, des téléchargements et des médias |
 | Serveur | CPU, mémoire et réseau. Avec `/sys` de l’hôte monté sur `/host/sys`, ce sont les cartes réseau du serveur. Sans ce montage, seulement le trafic de ce conteneur |
 | À surveiller | Les mêmes contrôles que Réglages → Notifications, avec un lien pour régler chaque point |
@@ -217,13 +217,13 @@ Sur votre Mac, ouvrez le tableau de bord dans Safari à son adresse HTTPS. Dans 
 
 | Clair | Sombre |
 | --- | --- |
-| ![Compte dans Réglages, thème clair](screenshots/light/settings.png?v=app-store-20261102) | ![Compte dans Réglages, thème sombre](screenshots/dark/settings.png?v=app-store-20261102) |
+| ![Compte dans Réglages, thème clair](screenshots/light/settings.png?v=liquid-glass-20261125) | ![Compte dans Réglages, thème sombre](screenshots/dark/settings.png?v=liquid-glass-20261125) |
 
 ### Langue et apparence
 
 | Clair | Sombre |
 | --- | --- |
-| ![Apparence, thème clair](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Apparence, thème sombre](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
+| ![Apparence, thème clair](screenshots/light/settings-visuals.png?v=liquid-glass-20261125) | ![Apparence, thème sombre](screenshots/dark/settings-visuals.png?v=liquid-glass-20261125) |
 
 ### Serveur et stockage
 
@@ -277,7 +277,7 @@ Sur votre Mac, ouvrez le tableau de bord dans Safari à son adresse HTTPS. Dans 
 
 | Clair | Sombre |
 | --- | --- |
-| ![Réglages qBittorrent dans le catalogue, thème clair](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![Réglages qBittorrent dans le catalogue, thème sombre](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
+| ![Réglages qBittorrent dans le catalogue, thème clair](screenshots/light/catalog-settings.png?v=liquid-glass-20261125) | ![Réglages qBittorrent dans le catalogue, thème sombre](screenshots/dark/catalog-settings.png?v=liquid-glass-20261125) |
 
 ---
 

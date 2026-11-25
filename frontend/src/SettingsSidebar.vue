@@ -42,7 +42,7 @@ const paths = {
 </script>
 
 <template>
-  <aside class="settings-sidebar" :style="{ '--settings-header-height': `${headerHeight}px` }">
+  <aside class="settings-sidebar glass-chrome" :style="{ '--settings-header-height': `${headerHeight}px` }">
     <label class="settings-mobile-picker" for="settings-section-select">
         <span>{{ $t('Choose a settings section') }}</span>
         <UiSelect
@@ -62,7 +62,7 @@ const paths = {
       <nav :aria-label="$t('Settings sections')">
         <div v-for="group in groups" :key="group.label" class="settings-nav-group">
           <h3>{{ $t(group.label) }}</h3>
-          <RouterLink v-for="item in group.items" :key="item.id" :to="{ name: 'settings', params: { section: item.id } }" class="settings-sidebar-link" :class="{ 'is-active': section === item.id }" :aria-current="section === item.id ? 'page' : undefined">
+          <RouterLink v-for="item in group.items" :key="item.id" :to="{ name: 'settings', params: { section: item.id } }" class="settings-sidebar-link" :class="{ 'material-selected': section === item.id }" :aria-current="section === item.id ? 'page' : undefined">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="paths[item.icon]" /></svg>
             <span>{{ $t(item.label) }}</span>
           </RouterLink>
@@ -74,7 +74,7 @@ const paths = {
 </template>
 
 <style scoped>
-.settings-sidebar { position:relative; min-width:0; padding:1.5rem .875rem; border-right:1px solid var(--border-subtle); border-radius:var(--radius-glass) 0 0 var(--radius-glass); background:var(--panel-shine); }
+.settings-sidebar { position:relative; min-width:0; padding:1.5rem .875rem; }
 .settings-navigation { position:sticky; top:calc(var(--settings-header-height, 0px) + 1rem); max-height:calc(100dvh - var(--settings-header-height, 0px) - 2rem); overscroll-behavior-y:contain; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; }
 .settings-sidebar-title { margin:0 .5rem 1rem; font-size:var(--text-title); font-weight:600; letter-spacing:-.04em; }
 .settings-search { display:flex; align-items:center; gap:.55rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:var(--radius-inset); background:var(--bg-input); color:var(--text-dim); margin-bottom:1rem; }
@@ -86,13 +86,14 @@ const paths = {
 .settings-nav-group h3 { margin:0 0 .35rem; padding:0 .65rem; color:var(--text-dim); font-size:var(--text-kicker); font-weight:400; }
 .settings-sidebar-link { display:flex; align-items:center; gap:.6rem; padding:.65rem; margin:.2rem 0; text-decoration:none; color:var(--text-muted); font-size:var(--text-body); border-radius:10px; border:1px solid transparent; transition:background .15s; }
 .settings-sidebar-link span { min-width:0; overflow-wrap:anywhere; }
-.settings-sidebar-link svg { width:1.1rem; height:1.1rem; flex-shrink:0; color:var(--color-primary-text); }
+.settings-sidebar-link svg { width:1.1rem; height:1.1rem; flex-shrink:0; color:var(--text-muted); }
 .settings-sidebar-link:hover { background:var(--bg-surface); }
-.settings-sidebar-link.is-active { background:var(--pill-active); color:var(--color-primary-text); font-weight:500; }
+.settings-sidebar-link.material-selected { font-weight:600; color:var(--text-heading); }
+.settings-sidebar-link.material-selected:hover { background:var(--material-selected); }
 .settings-search-empty { color:var(--text-muted); font-size:var(--text-body); padding:.65rem; }
 .settings-mobile-picker { display:none; }
 @media (max-width: 760px) {
-  .settings-sidebar { padding:.875rem 1rem; border-right:0; border-bottom:1px solid var(--border-subtle); border-radius:var(--radius-glass) var(--radius-glass) 0 0; }
+  .settings-sidebar { padding:.875rem 1rem; }
   .settings-mobile-picker { display:grid; gap:.5rem; color:var(--text-muted); font-size:var(--text-kicker); }
   .settings-sidebar-title { display:none; }
   .settings-navigation { position:static; display:none; max-height:min(55dvh,28rem); margin-top:.75rem; padding: .75rem .15rem .15rem; border-top:1px solid var(--border-subtle); }

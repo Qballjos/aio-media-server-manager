@@ -61,7 +61,7 @@ defineExpose({ open })
 </script>
 
 <template>
-  <dialog ref="dialog" class="glass-popover home-title-dialog member-trending-dialog"
+  <dialog ref="dialog" class="glass-dialog home-title-dialog member-trending-dialog"
           :aria-label="$t('Title details')" @close="close">
     <template v-if="item">
       <div class="home-title-head">
@@ -105,5 +105,4 @@ defineExpose({ open })
 <style scoped>
 .member-trending-dialog { width: min(40rem, calc(100vw - 1.5rem)); max-height: calc(100dvh - 2rem); color: var(--text-main); }
 .member-trending-dialog[open] { display: grid; }
-.member-trending-dialog::backdrop { background: rgb(0 0 0 / 55%); }
 </style>

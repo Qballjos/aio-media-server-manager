@@ -27,7 +27,7 @@ onUnmounted(() => clearInterval(timer))
   <button v-if="needsAttention || error" type="button" class="ui-btn ui-btn-ghost" @click="show">{{ $t('Installation activity') }}</button>
   <Teleport to="body">
     <div v-if="open" class="activity-backdrop" @click.self="open = false" @keydown.esc="open = false">
-      <section role="dialog" aria-modal="true" aria-labelledby="activity-title" ref="dialog" @keydown.tab="trapDialogTab($event, dialog)" class="glass-card activity-dialog" tabindex="-1">
+      <section role="dialog" aria-modal="true" aria-labelledby="activity-title" ref="dialog" @keydown.tab="trapDialogTab($event, dialog)" class="glass-dialog activity-dialog" tabindex="-1">
         <div class="share-row"><h2 id="activity-title">{{ $t('Installation activity') }}</h2><button autofocus class="ui-btn ui-btn-ghost" @click="open = false">{{ $t('Close') }}</button></div>
         <div class="activity-body">
           <p>{{ $t('You can close this window and reopen it while installation continues. History is kept until the manager restarts.') }}</p>
@@ -45,7 +45,7 @@ onUnmounted(() => clearInterval(timer))
   </Teleport>
 </template>
 <style scoped>
-.activity-backdrop { position: fixed; inset: 0; z-index: 1000; background: #0008; display: grid; place-items: center; padding: 1rem; }
+.activity-backdrop { position: fixed; inset: 0; z-index: 1000; background: var(--modal-scrim); display: grid; place-items: center; padding: 1rem; }
 .activity-dialog { width: min(48rem, 100%); max-height: 85dvh; display: flex; flex-direction: column; overflow: hidden; padding: 1.5rem; }
 .activity-dialog .share-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-shrink: 0; }
 .activity-dialog h2 { min-width: 0; font-size: var(--text-strong); overflow-wrap: anywhere; }

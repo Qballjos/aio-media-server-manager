@@ -4,6 +4,7 @@ Never imported by main.py. Owns a TemporaryDirectory and starts no media process
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 from contextlib import nullcontext
 from dataclasses import replace
@@ -18,14 +19,16 @@ import time
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
+from fastapi import Request
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
-def build_app(root: Path):
+def build_app(root: Path, *, preview: bool = False):
     for name in ("config", "downloads", "media", "backups"):
         os.environ[f"AMM_{'DOWNLOAD' if name == 'downloads' else name.upper()}_DIR"] = str(root / name)
     os.environ["AMM_LOG_LEVEL"] = "ERROR"
-    from fastapi import FastAPI, Request
+    from fastapi import FastAPI
     from fastapi.staticfiles import StaticFiles
     import requests
     import applications.catalog as catalog_mod
@@ -40,7 +43,7 @@ def build_app(root: Path):
     from core.backup_jobs import backup_jobs
     from core.updater import ApplicationUpdater
     from core.wizard import WizardEngine
-    from api.routers import auth, wizard, catalog, applications, integrations, homepage, backups, notifications, settings as settings_router, streaming, updates
+    from api.routers import auth, wizard, catalog, applications, integrations, homepage, backups, branding, media_discovery, notifications, settings as settings_router, streaming, updates
 
     state = {"wired": False, "source": False, "requested": False, "downloaded": False, "fail_update": False, "trending": False, "trending_detail_fail": False, "trending_statuses": False}
     process_states = {}
@@ -120,6 +123,15 @@ def build_app(root: Path):
         return response({})
     requests.get = provider_get
 
+    demo_posters = Path(__file__).resolve().parents[1] / "docs" / "assets" / "demo-posters"
+    demo_media = [
+        {"title": title, "detail": detail, "mediaType": kind, "mediaId": index, "poster": f"/_preview/posters/{slug}.svg"}
+        for index, (title, detail, kind, slug) in enumerate(
+            [("Orbit", "2026", "movie", "orbit"), ("The Last Light", "Season 1", "tv", "last-light"),
+             ("Northbound", "2026", "movie", "northbound")], start=9201
+        )
+    ] if preview else []
+
     def snapshot(*args, **kwargs):
         apps = [{"name": p.name, "display_name": p.manifest.display_name, "category": p.manifest.category.value, "port": p.port, "state": "running", "state_label": "", "sick": False, "url": f"http://127.0.0.1:{p.port}"} for p in catalog.catalog.all_plugins() if p.is_installed()]
         item = {"title": "Synthetic Journey", "source": "jellyfin", "mediaType": "tv", "mediaId": 9001, "detail": "Test series", "url": "http://127.0.0.1:8096/web/", "poster": ""}
@@ -135,6 +147,25 @@ def build_app(root: Path):
             ]
         queue = [{"title": "Synthetic Journey", "source": "qbittorrent", "id": "fixture-download", "progress": 42, "size": 100, "downloaded": 42, "speed": 1000, "eta": 60, "state": "downloading", "moving": True}] if state["requested"] and not state["downloaded"] else []
         calendar = [{"title": "Calendar fixture", "when": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), "detail": "S01E01", "milestones": ["series-premiere"], "kind": "episode", "source": "sonarr", "has_file": False, "url": "http://127.0.0.1:8989/series/fixture"}]
+        if preview:
+            recent = [{**media, "source": "jellyfin"} for media in demo_media]
+            trending = [
+                {**media, "source": "seerr", "status": status, "can_request": status == "missing"}
+                for media, status in zip(demo_media, ("available", "requested", "missing"), strict=True)
+            ]
+            requests_list = [{**demo_media[1], "source": "seerr", "status": "requested"}]
+            queue = [
+                {"title": title, "source": source, "id": source, "progress": progress, "size": 2_000_000_000,
+                 "downloaded": progress * 20_000_000, "speed": 16_000_000, "eta": 92, "state": "downloading", "moving": True}
+                for title, source, progress in (("Orbit.2026.1080p", "sabnzbd", 68), ("The.Last.Light.S01E04", "qbittorrent", 34))
+            ]
+            calendar = [
+                {**event, "title": media["title"], "source": "sonarr" if media["mediaType"] == "tv" else "radarr",
+                 "kind": "episode" if media["mediaType"] == "tv" else "movie",
+                 "when": (datetime.now(timezone.utc) + timedelta(days=index)).isoformat()}
+                for index, media in enumerate(demo_media)
+                for event in calendar
+            ]
         return {"apps": apps, "calendar": calendar, "downloads": queue, "recent": recent, "requests": requests_list, "trending": trending, "widgets": [], "waiting": [], "seerr": {"available": True, "url": "http://127.0.0.1:5055"}, "partial": False}
     homepage.homepage_snapshot = snapshot
     homepage.homepage_calendar = lambda *_: {"items": snapshot()["calendar"]}
@@ -159,7 +190,16 @@ def build_app(root: Path):
     homepage.homepage_title = trending_title
     homepage.sync_seerr_external_links = lambda *a: None
     homepage.homepage_downloads = lambda: {"downloads": snapshot()["downloads"], "widgets": [], "pause": {"paused": False}}
-    homepage.homepage_status = lambda *a, **kw: {"playing": [], "server": None, "storage": [], "attention": []}
+    def homepage_status(*_args, **_kwargs):
+        playing = [
+            {**media, "source": source, "device": device, "user": user, "progress": progress, "minutes_left": 24}
+            for media, source, device, user, progress in zip(
+                demo_media[:2], ("jellyfin", "plex"), ("Living room TV", "Tablet"), ("Alex", "Sam"), (56, 31), strict=False
+            )
+        ]
+        return {"playing": playing, "server": None, "storage": [], "attention": []}
+
+    homepage.homepage_status = homepage_status
     homepage.homepage_search = lambda host, q, provider: {"query": q, "seerr": True, "provider": "seerr", "results": [{"title": "Synthetic Journey", "mediaType": "tv", "mediaId": 9001, "source": "seerr", "status": "missing", "can_request": True, "poster": ""}]}
     homepage.homepage_request_options = lambda *a, **kw: {"needsChoice": False, "servers": []}
     homepage._seerr_client = lambda: nullcontext(SimpleNamespace(admin_requestable_seasons=lambda _: [1, 2]))
@@ -257,15 +297,40 @@ def build_app(root: Path):
     @app.get("/api/settings")
     def public_settings(request: Request):
         auth_manager.authenticate_request(request)
-        return {**settings.as_serialisable_dict(), "updates": updates.scheduler.public_status(), "backups": backup_jobs.public_status(), "storage": {}, "homepage_keys": {}, "branding": {}}
+        return {**settings.as_serialisable_dict(), "updates": updates.scheduler.public_status(), "backups": backup_jobs.public_status(), "storage": {}, "homepage_keys": {}, "branding": branding.branding_mod.public_branding()}
 
-    for module in (auth, wizard, catalog, applications, integrations, homepage, backups, notifications, settings_router, streaming, updates):
+    for module in (auth, wizard, catalog, applications, integrations, homepage, backups, branding, media_discovery, notifications, settings_router, streaming, updates):
         app.include_router(module.router)
+    if preview:
+        from core.profile import save_visual_preferences
+
+        settings.initialise()
+        auth_manager.create_admin("demo", "LocalPreview123!", "demo@example.test")
+        wizard.wizard_engine.skip()
+        for name in ("jellyfin", "plex", "seerr", "sonarr", "radarr", "prowlarr", "sabnzbd", "qbittorrent"):
+            catalog.catalog.get(name).install()
+            process_states[name] = True
+        save_visual_preferences(homepage_grid={"desktop": [
+            {"id": "greeting", "x": 0, "y": 0, "w": 5, "h": 1},
+            {"id": "searchbar", "x": 5, "y": 0, "w": 7, "h": 1},
+            {"id": "recent", "x": 0, "y": 1, "w": 8, "h": 3},
+            {"id": "playing", "x": 8, "y": 1, "w": 4, "h": 3},
+            {"id": "calendar", "x": 0, "y": 4, "w": 8, "h": 4},
+            {"id": "downloads", "x": 8, "y": 4, "w": 4, "h": 4},
+            {"id": "trending", "x": 0, "y": 8, "w": 6, "h": 3},
+            {"id": "requests", "x": 6, "y": 8, "w": 6, "h": 3},
+        ]})
+        app.mount("/_preview/posters", StaticFiles(directory=demo_posters))
+
     app.mount("/", StaticFiles(directory=Path(__file__).resolve().parents[1] / "frontend" / "dist", html=True))
     return app
 
 
 if __name__ == "__main__":
     import uvicorn
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--preview", action="store_true", help="Start with a populated demo account")
+    args = parser.parse_args()
+    port = int(os.environ.get("AIO_E2E_PORT", "4173" if args.preview else "8765"))
     with tempfile.TemporaryDirectory(prefix="aio-browser-e2e-") as directory:
-        uvicorn.run(build_app(Path(directory)), host="127.0.0.1", port=int(os.environ.get("AIO_E2E_PORT", "8765")), log_level="warning")
+        uvicorn.run(build_app(Path(directory), preview=args.preview), host="127.0.0.1", port=port, log_level="info" if args.preview else "warning")

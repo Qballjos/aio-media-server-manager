@@ -52,6 +52,8 @@ test('Home, Catalog and Settings controls fit their screen size', async ({ page 
   await page.screenshot({ path: testInfo.outputPath('home.png'), animations: 'disabled' })
 
   await page.goto('/#/catalog')
+  await expect(page.locator('.catalog-store-heading h2')).toHaveText(tr('My apps'))
+  await expect(page.locator('.catalog-feature')).toHaveCount(0)
   const filterButton = page.locator('.catalog-filters-toggle')
   const categoryNav = page.locator('#catalog-category-navigation')
   if (mobile) {
@@ -93,7 +95,9 @@ test('Home, Catalog and Settings controls fit their screen size', async ({ page 
     await settingsPicker.press('Enter')
     await expect(page).toHaveURL(/settings\/visuals/)
     await expect(page.locator('#settings-navigation')).toBeHidden()
-    await page.getByRole('heading', { name: tr('Display size'), exact: true }).waitFor()
+    const glass = page.getByRole('group', { name: tr('Glass style'), exact: true })
+    await glass.getByRole('button', { name: tr('Tinted glass'), exact: true }).click()
+    await expect(glass.getByRole('button', { name: tr('Tinted glass'), exact: true })).toHaveAttribute('aria-pressed', 'true')
     await page.screenshot({ path: testInfo.outputPath('visuals.png'), animations: 'disabled' })
   } else {
     await expect(settingsPicker).toBeHidden()
@@ -231,25 +235,51 @@ test('Now playing scrolls through concurrent streams inside the widget', async (
   await widget.screenshot({ path: testInfo.outputPath('now-playing-first.png') })
 })
 
-test('Dock tiles rise above the glass base without clipping', async ({ page }, testInfo) => {
+test('Dock tiles sit inside the glass base and rise on hover', async ({ page }, testInfo) => {
   await page.goto('/#/home')
   const dock = page.locator('.home-dock.is-floating')
   const tile = dock.locator('.home-app').first()
   await expect(tile).toBeVisible()
   const getBounds = () => tile.evaluate(el => {
-    const tile = el.getBoundingClientRect()
+    const tile = el.querySelector('.home-app-tile').getBoundingClientRect()
     const row = el.parentElement.getBoundingClientRect()
     const base = el.closest('.home-dock').querySelector('.home-dock-base').getBoundingClientRect()
-    return { top: tile.top, height: tile.height, rowTop: row.top, baseTop: base.top }
+    return { top: tile.top, height: tile.height, rowTop: row.top, baseTop: base.top, baseHeight: base.height }
   })
   const resting = await getBounds()
-  expect(resting.top).toBeLessThan(resting.baseTop)
+  expect(resting.top).toBeGreaterThan(resting.baseTop)
+  expect(Math.abs(resting.top + resting.height / 2 - resting.baseTop - resting.baseHeight / 2)).toBeLessThan(1)
+  await dock.screenshot({ path: testInfo.outputPath('dock-dark.png'), animations: 'disabled' })
   if (await page.evaluate(() => matchMedia('(hover: hover) and (pointer: fine)').matches)) {
+    const neighbor = dock.locator('.home-app-tile').nth(1)
+    const neighborHeight = () => neighbor.evaluate(el => el.getBoundingClientRect().height)
+    const neighborResting = await neighborHeight()
+    const hitArea = await tile.boundingBox()
     await tile.hover()
-    await expect.poll(async () => (await getBounds()).height / resting.height).toBeGreaterThan(1.15)
+    await expect.poll(async () => (await getBounds()).height / resting.height).toBeGreaterThan(1.3)
+    await expect.poll(neighborHeight).toBeGreaterThan(neighborResting)
     const raised = await getBounds()
-    expect(raised.top).toBeLessThan(resting.top)
+    expect(await tile.boundingBox()).toEqual(hitArea)
+    expect(raised.top).toBeLessThan(raised.baseTop)
+    const adjacentTarget = await dock.locator('.home-app').nth(1).boundingBox()
+    const midpoint = (hitArea.x + hitArea.width + adjacentTarget.x) / 2
+    await page.mouse.move(midpoint, hitArea.y + hitArea.height / 2)
+    await expect.poll(async () => Math.abs((await getBounds()).height - await neighborHeight())).toBeLessThan(1)
+    expect((await getBounds()).height).toBeGreaterThan(resting.height)
+    await page.mouse.move(0, 0)
+    await expect.poll(async () => Math.abs((await getBounds()).height - resting.height)).toBeLessThan(0.5)
     expect(raised.top).toBeGreaterThanOrEqual(raised.rowTop)
   }
-  await dock.screenshot({ path: testInfo.outputPath('dock.png'), animations: 'disabled' })
+  const paint = () => dock.evaluate(el => {
+    const base = el.querySelector('.home-dock-base')
+    const tile = el.querySelector('.home-app')
+    return [getComputedStyle(base).backgroundColor, getComputedStyle(tile).getPropertyValue('--dock-icon-face')]
+  })
+  const dark = await paint()
+  expect(dark[1].trim()).toBe('#151517')
+  await page.locator('html').evaluate(el => { el.dataset.theme = 'light' })
+  const light = await paint()
+  expect(light[0]).not.toBe(dark[0])
+  expect(light[1]).not.toBe(dark[1])
+  await dock.screenshot({ path: testInfo.outputPath('dock-light.png'), animations: 'disabled' })
 })

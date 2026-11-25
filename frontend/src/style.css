@@ -13,6 +13,13 @@
   --glass-tint: 18 22 40;
   --skeleton-glint: rgb(255 255 255 / 0.16);
   --bg-card: rgb(var(--glass-tint) / min(0.96, calc(var(--glass-alpha) + 0.18)));
+  --material-content: color-mix(in srgb, var(--bg-base) 88%, transparent);
+  --material-chrome: rgb(var(--glass-tint) / clamp(0.4, calc(var(--glass-alpha) + 0.12), 0.94));
+  --material-dialog: rgb(var(--glass-tint) / clamp(0.68, calc(var(--glass-alpha) + 0.2), 0.9));
+  --material-menu: rgb(var(--glass-tint) / clamp(0.78, calc(var(--glass-alpha) + 0.3), 0.98));
+  --material-reflection: linear-gradient(155deg, color-mix(in srgb, var(--glass-highlight) 26%, transparent), transparent 62%);
+  --material-selected: color-mix(in srgb, var(--text-main) 12%, var(--material-chrome));
+  --material-lift: inset 0 1px 0 var(--glass-highlight), 0 4px 10px -5px rgb(0 0 0 / 0.42);
   --control-bg: rgb(var(--glass-tint) / min(0.94, calc(var(--glass-alpha) + 0.1)));
   --bg-surface: rgb(255 255 255 / 0.07);
   --bg-surface-elevated: rgb(255 255 255 / 0.12);
@@ -25,18 +32,15 @@
   --switch-track: rgb(255 255 255 / 0.12);
   --menu-bg: var(--floating-bg);
   --overlay-soft: rgb(9 13 31 / 0.55);
-  --modal-scrim: rgb(0 0 0 / 0.55);
-  --modal-backdrop-blur: calc(var(--glass-blur) * 0.25);
+  --modal-scrim: rgb(0 0 0 / 0.34);
   --radius-glass: 26px;
   --radius-tile: 18px;
   --radius-control: 999px;
   --radius-inset: 14px;
   --btn-h: 2.5rem;
   --button-glass-reflection: linear-gradient(155deg, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0.07) 38%, transparent 65%);
-  --button-glass-shadow: inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 rgb(0 0 0 / 0.16), 0 5px 12px -6px rgb(0 0 0 / calc(0.5 * var(--glass-depth)));
-  --button-accent-bg: color-mix(in srgb, var(--color-primary) 10%, var(--control-bg));
-  --button-accent-hover: color-mix(in srgb, var(--color-primary) 16%, var(--control-bg));
-  --button-accent-border: color-mix(in srgb, var(--color-primary) 40%, var(--border-subtle));
+  --button-primary-fill: color-mix(in srgb, var(--text-main) 16%, var(--material-chrome));
+  --button-primary-hover: color-mix(in srgb, var(--text-main) 23%, var(--material-chrome));
   /* One type scale for every screen. Sizes are rem so they follow the fluid root below. */
   --text-kicker: 0.75rem;
   --text-body: 0.9375rem;
@@ -55,8 +59,6 @@
   );
   --glass-highlight: rgb(255 255 255 / 0.28);
   --glass-shadow: 0 24px 60px -24px rgb(0 0 0 / calc(0.75 * var(--glass-depth))), 0 1px 2px rgb(0 0 0 / 0.3);
-  --panel-shine: linear-gradient(160deg, rgb(255 255 255 / 0.08), transparent 58%);
-  --panel-highlight: rgb(255 255 255 / 0.15);
   --panel-shadow: 0 16px 40px -24px rgb(0 0 0 / calc(0.5 * var(--glass-depth)));
   --wallpaper-text-shadow: 0 1px 6px rgb(0 0 0 / 0.6);
 
@@ -69,7 +71,6 @@
   --text-muted: #c5cedd;
   --text-dim: #b0bfd1;
   --text-heading: #ffffff;
-  --brand-title-gradient: linear-gradient(90deg, #ffffff, #9cc4ff);
 
   --color-primary: #5aa2ff;
   --color-primary-hover: #3b8cff;
@@ -120,7 +121,7 @@
   --switch-track: rgb(15 23 42 / 0.1);
   --menu-bg: var(--floating-bg);
   --overlay-soft: rgb(230 238 255 / 0.5);
-  --modal-scrim: rgb(15 23 42 / 0.3);
+  --modal-scrim: rgb(15 23 42 / 0.22);
   --glass-shine: linear-gradient(
     165deg,
     rgb(255 255 255 / 0.85) 0%,
@@ -137,8 +138,6 @@
   );
   --glass-highlight: rgb(255 255 255 / 0.95);
   --glass-shadow: 0 24px 60px -24px rgb(30 41 59 / calc(0.35 * var(--glass-depth))), 0 1px 2px rgb(30 41 59 / 0.06);
-  --panel-shine: linear-gradient(165deg, rgb(255 255 255 / 0.48), rgb(255 255 255 / 0.08) 58%, transparent);
-  --panel-highlight: rgb(255 255 255 / 0.7);
   --panel-shadow: 0 16px 40px -24px rgb(30 41 59 / calc(0.22 * var(--glass-depth)));
   --wallpaper-text-shadow: 0 1px 6px rgb(255 255 255 / 0.75);
 
@@ -151,7 +150,6 @@
   --text-muted: #344155;
   --text-dim: #475569;
   --text-heading: #0f172a;
-  --brand-title-gradient: linear-gradient(90deg, #0f172a, #0a6cff);
 
   --color-primary: #0a6cff;
   --color-primary-hover: #0659d6;
@@ -308,23 +306,21 @@ html {
   width: 42px;
   height: 42px;
   border-radius: var(--radius-md);
-  background: var(--gradient-primary);
+  background: var(--material-selected);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
   font-size: var(--text-title);
-  color: var(--color-primary-contrast);
-  box-shadow: var(--shadow-glow);
+  color: var(--text-heading);
+  box-shadow: var(--material-lift);
 }
 
 .brand-title {
   font-size: var(--text-title);
   font-weight: 700;
   letter-spacing: -0.02em;
-  background: var(--brand-title-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-heading);
 }
 
 .brand-subtitle {
@@ -571,7 +567,7 @@ html {
 }
 
 .app-card:hover {
-  border-color: var(--border-hover);
+  border-color: var(--border-strong);
   box-shadow: var(--shadow-card);
   transform: translateY(-2px);
 }
@@ -649,16 +645,16 @@ html {
 }
 
 .badge-port {
-  background: rgba(var(--color-primary-rgb), 0.1);
-  color: var(--color-primary-text);
+  background: var(--bg-surface);
+  color: var(--text-muted);
   font-family: var(--font-mono);
-  border: 1px solid rgba(var(--color-primary-rgb), 0.25);
+  border: 1px solid var(--border-subtle);
 }
 
 .badge-arm64 {
-  background: rgba(var(--color-primary-rgb), 0.12);
-  color: var(--color-primary-text);
-  border: 1px solid rgba(var(--color-primary-rgb), 0.25);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
 }
 
 .badge-running {
@@ -716,8 +712,6 @@ html {
   position: fixed;
   inset: 0;
   background: var(--modal-scrim);
-  backdrop-filter: blur(var(--modal-backdrop-blur));
-  -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
   z-index: 100;
   display: flex;
   align-items: center;
@@ -909,9 +903,7 @@ select.ui-input {
   font-weight: 600;
 }
 
-/* Buttons — one shape for the whole app: a glass pill, --btn-h high, 700 weight. Primary actions use a subtle accent tint and rim;
-   round icon buttons are the same pill squeezed to a circle. Text colour (not shape) hints at start/stop/open.
-   Labels wrap inside the pill when a translation is longer than the row, so the words stay inside the border. */
+/* Quiet controls share a height. Reserve stronger relief for primary and selected actions. */
 .ui-btn,
 .wizard-btn,
 .btn-primary,
@@ -928,17 +920,15 @@ select.ui-input {
   min-height: var(--btn-h);
   max-width: 100%;
   margin: 0;
-  padding: 0.35rem 1.1rem;
+  padding: 0.35rem 0.8rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  background: var(--button-glass-reflection), var(--pill-bg);
+  background: var(--bg-surface);
   color: var(--text-main);
-  box-shadow: var(--button-glass-shadow);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--pill-saturate));
+  box-shadow: none;
   font-family: inherit;
   font-size: var(--btn-font);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.01em;
   display: inline-flex;
@@ -963,29 +953,30 @@ select.ui-input {
 .theme-option:hover:not(:disabled),
 .settings-nav-btn:hover,
 .catalog-chip:hover {
-  background: var(--button-glass-reflection), var(--pill-active);
+  background: var(--bg-surface-elevated);
   color: var(--text-heading);
   border-color: var(--border-strong);
 }
 
-/* Active/selected: the lit pill plus an accent rim, the same everywhere. */
+/* Active controls use a neutral surface and visible relief. */
 .ui-btn.is-active,
 .theme-option.is-active,
 .settings-nav-btn.active,
 .catalog-chip.active,
 .btn-more.open {
-  background: var(--button-glass-reflection), var(--pill-active);
+  background: var(--material-selected);
   color: var(--text-heading);
-  border-color: rgba(var(--color-primary-rgb), 0.55);
-  box-shadow: var(--button-glass-shadow);
+  border-color: var(--border-strong);
+  box-shadow: var(--material-lift);
 }
 
 .ui-btn-primary,
 .wizard-btn-main,
 .btn-primary,
 .btn-install {
-  background: var(--button-glass-reflection), var(--button-accent-bg);
-  border-color: var(--button-accent-border);
+  background: var(--button-glass-reflection), var(--button-primary-fill);
+  border-color: var(--border-strong);
+  box-shadow: var(--material-lift);
   color: var(--text-main);
 }
 
@@ -993,8 +984,9 @@ select.ui-input {
 .wizard-btn-main:hover:not(:disabled),
 .btn-primary:hover:not(:disabled),
 .btn-install:hover:not(:disabled) {
-  background: var(--button-glass-reflection), var(--button-accent-hover);
-  border-color: var(--button-accent-border);
+  background: var(--button-glass-reflection), var(--button-primary-hover);
+  border-color: var(--border-strong);
+  box-shadow: var(--material-lift);
   color: var(--text-heading);
   transform: translateY(-1px);
 }
@@ -1027,9 +1019,7 @@ select.ui-input {
 }
 
 .btn-webui {
-  color: var(--color-primary-text);
-  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
-  box-shadow: 0 6px 14px -8px color-mix(in srgb, var(--color-primary) 70%, transparent);
+  color: var(--text-heading);
 }
 
 .ui-btn:disabled,
@@ -1119,7 +1109,8 @@ select.ui-input {
 }
 
 .ui-switch[aria-checked="true"] {
-  background: var(--gradient-primary);
+  background: color-mix(in srgb, var(--text-heading) 44%, var(--switch-track));
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 
 .ui-switch:disabled {
@@ -1144,8 +1135,8 @@ select.ui-input {
 }
 
 .theme-picker {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
@@ -1168,6 +1159,16 @@ select.ui-input {
 .theme-option {
   width: 100%;
   padding-inline: 0.6rem;
+}
+.theme-picker .theme-option {
+  flex: 1 0 auto;
+  width: auto;
+  max-width: 100%;
+}
+.theme-picker .theme-option.is-active {
+  background: var(--material-reflection), var(--material-selected);
+  border-color: var(--border-strong);
+  box-shadow: var(--material-lift);
 }
 
 .settings-nav-btn,
@@ -1217,8 +1218,9 @@ select.ui-input {
 }
 
 .theme-card.is-active .theme-card-art {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--border-strong);
   outline-offset: 2px;
+  box-shadow: var(--material-lift);
 }
 
 .theme-card-day {
@@ -1351,19 +1353,6 @@ select.ui-input {
   gap: 0.55rem;
   align-items: center;
   margin-top: 0.85rem;
-}
-
-.wallpaper-file-btn {
-  position: relative;
-  overflow: hidden;
-}
-
-.wallpaper-file-btn input[type='file'] {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-  font-size: 100px;
 }
 
 @media (max-width: 640px) {

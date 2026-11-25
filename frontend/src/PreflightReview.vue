@@ -29,7 +29,7 @@ defineExpose({ review })
 </script>
 <template>
   <Teleport to="body"><div v-if="open" class="preflight-overlay" @click.self="finish(false)" @keydown.esc="finish(false)">
-    <section role="dialog" aria-modal="true" aria-labelledby="preflight-title" ref="dialog" tabindex="-1" @keydown.tab="trapDialogTab($event, dialog)" class="glass-card preflight-card">
+    <section role="dialog" aria-modal="true" aria-labelledby="preflight-title" ref="dialog" tabindex="-1" @keydown.tab="trapDialogTab($event, dialog)" class="glass-dialog preflight-card">
       <h2 id="preflight-title">{{ $t('Ready to proceed?') }} — {{ app }}</h2>
       <p v-if="loading" aria-live="polite">{{ $t('Checking storage, maintenance and download access…') }}</p>
       <p v-if="error" role="alert">{{ error }}</p>
@@ -39,7 +39,7 @@ defineExpose({ review })
   </div></Teleport>
 </template>
 <style scoped>
-.preflight-overlay { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; background: #0008; padding: 1rem; }
+.preflight-overlay { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; background: var(--modal-scrim); padding: 1rem; }
 .preflight-card { width: min(42rem, 100%); padding: 1.5rem; max-height: 85dvh; overflow: auto; }
 li { margin-block: .75rem; overflow-wrap: anywhere; }
 </style>

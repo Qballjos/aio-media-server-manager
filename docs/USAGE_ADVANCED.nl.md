@@ -67,7 +67,7 @@ Start is een raster. Telefoon, tablet en desktop houden elk hun eigen indeling (
 | Recent toegevoegd | Nieuwe series en films. Scrollen laadt verdere Jellyfin-pagina’s. Plex blijft bij de laatste 20 |
 | Aanvragen | Seerr-aanvragen die nog niet klaar zijn, plus wat de laatste 30 dagen als beschikbaar of afgewezen is gemarkeerd |
 | Trending | De trendinglijst van Seerr. Scrollen blijft laden |
-| Wordt afgespeeld | Wie kijkt op Jellyfin of Plex, inclusief direct afspelen |
+| Wordt afgespeeld | Jellyfin- en Plex-sessies. Scroll of veeg zijwaarts om elke stream te bekijken |
 | Opslag | Schijfgebruik van config, downloads en media |
 | Server | CPU, geheugen en netwerk. Met host-`/sys` gemount op `/host/sys` zijn dit de netwerkkaarten van de server. Zonder die mount is het alleen het verkeer van deze container |
 | Aandacht nodig | Dezelfde controles als Instellingen → Meldingen, met een link om elk punt op te lossen |
@@ -232,13 +232,13 @@ Open het dashboard in Safari op je Mac via het HTTPS-adres en ga naar **Instelli
 
 | Licht | Donker |
 | --- | --- |
-| ![Account in Instellingen, licht thema](screenshots/light/settings.png?v=app-store-20261102) | ![Account in Instellingen, donker thema](screenshots/dark/settings.png?v=app-store-20261102) |
+| ![Account in Instellingen, licht thema](screenshots/light/settings.png?v=liquid-glass-20261125) | ![Account in Instellingen, donker thema](screenshots/dark/settings.png?v=liquid-glass-20261125) |
 
 ### Taal en uiterlijk
 
 | Licht | Donker |
 | --- | --- |
-| ![Weergave, licht thema](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Weergave, donker thema](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
+| ![Weergave, licht thema](screenshots/light/settings-visuals.png?v=liquid-glass-20261125) | ![Weergave, donker thema](screenshots/dark/settings-visuals.png?v=liquid-glass-20261125) |
 
 ### Server en opslag
 
@@ -292,7 +292,7 @@ Open het dashboard in Safari op je Mac via het HTTPS-adres en ga naar **Instelli
 
 | Licht | Donker |
 | --- | --- |
-| ![qBittorrent-instellingen in de catalogus, licht thema](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![qBittorrent-instellingen in de catalogus, donker thema](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
+| ![qBittorrent-instellingen in de catalogus, licht thema](screenshots/light/catalog-settings.png?v=liquid-glass-20261125) | ![qBittorrent-instellingen in de catalogus, donker thema](screenshots/dark/catalog-settings.png?v=liquid-glass-20261125) |
 
 ---
 

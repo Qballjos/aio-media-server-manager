@@ -444,7 +444,7 @@ function onKey(event, id) {
   z-index: 20;
 }
 .hg-item:focus-visible .hg-body,
-.hg-item:has(:focus-visible) .hg-body,
+.hg-item:not([data-widget='searchbar']):has(:focus-visible) .hg-body,
 .hg-item.is-new .hg-body,
 .hg-item.is-lifted .hg-body,
 .hg-item.is-resizing .hg-body {
@@ -481,8 +481,8 @@ function onKey(event, id) {
   display: grid;
   place-items: center;
   border-radius: var(--radius-glass);
-  background: rgba(var(--color-primary-rgb), 0.08);
-  border: 1.5px solid rgba(var(--color-primary-rgb), 0.55);
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-strong);
   opacity: 0;
   pointer-events: none;
   transition: transform var(--hg-duration) var(--hg-easing), width var(--hg-duration) var(--hg-easing), height var(--hg-duration) var(--hg-easing), opacity var(--hg-duration) var(--hg-easing);

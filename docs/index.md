@@ -251,10 +251,10 @@ title: AIO Media Server Manager
 </div>
 </div>
 <div class="preview-panel" id="preview-panel-catalog" role="tabpanel" aria-labelledby="preview-tab-catalog" data-panel="catalog" hidden>
-<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=app-store-20261102" data-preview-image="catalog" alt="Catalog — AIO application screenshot" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=liquid-glass-20261125" data-preview-image="catalog" alt="Catalog — AIO application screenshot" width="1280" height="720" loading="lazy">
 </div>
 <div class="preview-panel" id="preview-panel-settings" role="tabpanel" aria-labelledby="preview-tab-settings" data-panel="settings" hidden>
-<img src="__AIO_ASSET__/screenshots/light/settings.png?v=app-store-20261102" data-preview-image="settings" alt="Settings — AIO application screenshot" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png?v=liquid-glass-20261125" data-preview-image="settings" alt="Settings — AIO application screenshot" width="1280" height="720" loading="lazy">
 </div>
 </div>
 <p class="preview-caption">Interactive preview · sample data<span aria-hidden="true"> · </span>
@@ -339,7 +339,7 @@ title: AIO Media Server Manager
 <a class="landing-text-link" href="USAGE.md">Learn the dashboard →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=app-store-20261102" data-theme-image="catalog" alt="Catalog" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=liquid-glass-20261125" data-theme-image="catalog" alt="Catalog" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section feature-row reverse">
@@ -347,10 +347,11 @@ title: AIO Media Server Manager
 <p class="eyebrow">LESS FUSS. MORE CONTROL.</p>
 <h2>Set it up once.</h2>
 <p>Grouped settings with search. Find your profile and appearance under Personal, connections under Connections, and updates and backups under Maintenance.</p>
+<p>Floating glass navigation and dock, with quieter surfaces for your media and settings.</p>
 <a class="landing-text-link" href="USAGE.md#screens">Learn the dashboard →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/settings.png?v=app-store-20261102" data-theme-image="settings" alt="Settings" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png?v=liquid-glass-20261125" data-theme-image="settings" alt="Settings" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section" id="install">

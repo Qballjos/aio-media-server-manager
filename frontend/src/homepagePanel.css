@@ -117,6 +117,11 @@
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
 }
 .home-dock.is-floating {
+  --dock-icon-face: color-mix(in srgb, var(--bg-base) 22%, white);
+  --dock-icon-rim: rgb(30 41 59 / 0.12);
+  --dock-base-fill: rgb(191 202 219 / min(0.55, calc(var(--glass-alpha) * 0.7)));
+  --dock-base-rim: rgb(49 63 84 / 0.24);
+  --dock-base-highlight: rgb(255 255 255 / 0.64);
   position: fixed;
   bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   left: 50%;
@@ -129,13 +134,25 @@
   background: transparent;
   box-shadow: none;
 }
+:global([data-theme='dark'] .home-dock.is-floating) {
+  --dock-icon-face: #151517;
+  --dock-icon-rim: rgb(255 255 255 / 0.13);
+  --dock-base-fill: rgb(var(--glass-tint) / min(0.86, calc(var(--glass-alpha) + 0.08)));
+  --dock-base-rim: rgb(222 229 255 / 0.22);
+  --dock-base-highlight: rgb(255 255 255 / 0.19);
+}
 .home-dock-base {
   position: absolute;
-  inset: 1.3rem 0 0;
+  inset: 0.1rem 0 0;
   z-index: -1;
-  border-radius: inherit;
-  background: var(--control-bg);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  border: 1px solid var(--dock-base-rim);
+  border-radius: 1.15rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dock-base-highlight) 36%, transparent), transparent 58%),
+    var(--dock-base-fill);
+  box-shadow:
+    inset 0 1px 0 var(--dock-base-highlight),
+    0 6px 20px -12px rgb(0 0 0 / calc(0.65 * var(--glass-depth)));
   pointer-events: none;
 }
 .home-dock-row {
@@ -150,7 +167,7 @@
 /* The scrollport includes the space the tiles need to grow above the glass base. */
 .home-dock.is-floating .home-dock-row {
   margin-top: -1rem;
-  padding: 1.15rem 0.5rem 0.35rem;
+  padding: 1.3rem 0.65rem 0.2rem;
 }
 .home-dock-row::-webkit-scrollbar {
   display: none;
@@ -160,33 +177,36 @@
   flex: 0 0 auto;
   width: 3rem;
   height: 3rem;
-  border-radius: 15px;
+  border-radius: 28%;
+  color: inherit;
+  text-decoration: none;
+}
+.home-app-tile {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(170deg, color-mix(in srgb, var(--glass-highlight) 25%, transparent), transparent 65%),
+    var(--dock-icon-face);
+  border: 1px solid var(--dock-icon-rim);
+  box-shadow: 0 4px 9px -4px rgb(0 0 0 / 0.46);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 4px 9px -4px rgb(0 0 0 / 0.45);
-  color: inherit;
-  text-decoration: none;
   transform-origin: center bottom;
 }
-@media (hover: hover) and (pointer: fine) {
-  .home-app:not(.is-down):hover {
-    z-index: 1;
-    background: var(--bg-surface-elevated);
-  }
-}
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  .home-app {
-    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), background 200ms;
+  .home-app:hover {
+    z-index: 1;
   }
-  .home-app:not(.is-down):hover {
-    transform: translateY(-0.25rem) scale(1.2);
+  .home-app-tile {
+    transform: var(--dock-magnification, none);
+    will-change: transform;
   }
 }
 /* Status dot on the tile's corner: green running, grey stopped, amber busy, red unhealthy. */
-.home-app::after {
+.home-app-tile::after {
   content: '';
   position: absolute;
   right: 4px;
@@ -195,34 +215,33 @@
   height: 8px;
   border-radius: 50%;
   background: var(--color-success);
-  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.8);
+  box-shadow: 0 0 0 2px var(--bg-base);
 }
 .home-app.is-down {
   opacity: 0.55;
   cursor: default;
 }
-.home-app.is-down::after {
+.home-app.is-down .home-app-tile::after {
   background: var(--text-dim);
 }
-.home-app.is-busy::after {
+.home-app.is-busy .home-app-tile::after {
   background: var(--color-warning);
   animation: home-skel-pulse 1.4s ease-in-out infinite;
 }
-.home-app.is-sick {
-  background: var(--color-warning-bg);
-  border-color: var(--color-warning);
-}
-.home-app.is-sick::after {
+.home-app.is-sick .home-app-tile::after {
   background: var(--color-danger);
 }
 .home-app-icon,
 .home-app-fallback {
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 0.5rem;
+  width: 2.1rem;
+  height: 2.1rem;
   object-fit: contain;
+  filter: drop-shadow(0 3px 5px rgb(0 0 0 / 0.28));
 }
 .home-app-fallback {
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.7rem;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
   display: grid;
   place-items: center;
   font-weight: 700;
@@ -404,7 +423,7 @@ button.home-tile-link {
   pointer-events: none;
 }
 .home-status-dot.is-requested {
-  background: var(--color-primary);
+  background: var(--color-info);
 }
 .home-status-dot.is-available {
   background: var(--color-success);
@@ -519,7 +538,7 @@ button.home-tile-link {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: var(--color-primary);
+  background: var(--color-info);
 }
 .home-speed {
   color: var(--color-info);
@@ -965,8 +984,8 @@ button.home-tile-link {
   width: 2rem;
   height: 2rem;
   border-radius: 0.6rem;
-  background: rgba(var(--color-primary-rgb), 0.14);
-  color: var(--color-primary);
+  background: var(--bg-surface);
+  color: var(--text-muted);
 }
 .od-icon svg {
   width: 1.1rem;
@@ -1027,7 +1046,7 @@ button.home-tile-link {
   height: 0.62rem;
   margin-top: 0.3rem;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--color-info);
   box-shadow: 0 0 0 3px var(--bg-card);
 }
 .at-item.is-problem .at-dot {
@@ -1084,7 +1103,6 @@ button.home-request-tile {
   color: var(--text-main);
   padding: 1.25rem;
 }
-.home-review-dialog::backdrop { background: rgb(0 0 0 / 55%); }
 .home-review-dialog h2 { margin-block-start: 0; overflow-wrap: anywhere; }
 .home-review-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 
@@ -1107,12 +1125,27 @@ button.home-request-tile {
 .home-request-seasons {
   min-inline-size: 0;
   margin: 0;
+  padding: 0.2rem 0.85rem 0.45rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-inset);
+}
+.home-request-seasons legend {
+  margin-inline-start: -0.2rem;
+  padding-inline: 0.2rem;
+  color: var(--text-muted);
+  font-size: var(--text-body);
+  font-weight: 600;
 }
 .home-request-seasons label {
   display: flex;
   align-items: center;
-  gap: .6rem;
+  gap: 0.65rem;
   min-block-size: max(44px, 2.75rem);
+  font-size: var(--text-body);
+}
+.home-request-seasons input {
+  flex: 0 0 auto;
+  margin: 0;
+  inline-size: 1rem;
+  block-size: 1rem;
 }

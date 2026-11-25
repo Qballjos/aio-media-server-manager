@@ -292,12 +292,104 @@ const editing = homeEditing
 const dockElement = ref(null)
 const dockHeight = ref(72)
 let dockObserver = null
+let dockMotion
+let dockFrame = 0
+let dockLastFrame = 0
+let dockTiles = []
+let dockPointerX = null
+let dockVisualX = 0
+let dockStrength = 0
+
+function measureDock(row) {
+  dockTiles = Array.from(row.children, (app) => {
+    const { left, width } = app.getBoundingClientRect()
+    return { tile: app.firstElementChild, center: left + width / 2, width }
+  })
+}
+
+function magnifyDock(event) {
+  if (event.pointerType === 'touch') return
+  dockMotion ??= window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)')
+  if (!dockMotion.matches) return
+
+  const row = event.currentTarget
+  if (dockPointerX === null || dockTiles.length !== row.children.length) measureDock(row)
+  if (!dockStrength) dockVisualX = event.clientX
+  dockPointerX = event.clientX
+  queueDockFrame()
+}
+
+function queueDockFrame() {
+  if (!dockFrame) dockFrame = requestAnimationFrame(animateDock)
+}
+
+function animateDock(now) {
+  dockFrame = 0
+  if (!dockMotion?.matches) {
+    clearDockMagnification()
+    return
+  }
+  const blend = 1 - Math.exp(-(dockLastFrame ? Math.min(50, now - dockLastFrame) : 16) / 42)
+  dockLastFrame = now
+  const targetStrength = dockPointerX === null ? 0 : 1
+  const targetX = dockPointerX ?? dockVisualX
+  dockStrength += (targetStrength - dockStrength) * blend
+  dockVisualX += (targetX - dockVisualX) * blend
+  const settled = Math.abs(targetStrength - dockStrength) < 0.003 && Math.abs(targetX - dockVisualX) < 0.25
+  if (settled) {
+    dockStrength = targetStrength
+    dockVisualX = targetX
+    dockLastFrame = 0
+  }
+  if (!dockStrength) {
+    clearDockMagnification()
+    return
+  }
+
+  for (const { tile, center, width } of dockTiles) {
+    const distance = center - dockVisualX
+    const proximity = Math.max(0, 1 - Math.abs(distance) / (2.1 * width))
+    const lift = proximity * proximity * (3 - 2 * proximity) * dockStrength
+    const shift = Math.sign(distance) * proximity * (1 - proximity) * width * 0.58 * dockStrength
+    tile.style.setProperty('--dock-magnification', `translate3d(${shift}px, 0, 0) scale(${1 + 0.36 * lift})`)
+  }
+  if (!settled) queueDockFrame()
+}
+
+function releaseDock() {
+  dockPointerX = null
+  if (dockStrength) queueDockFrame()
+  else clearDockMagnification()
+}
+
+function onDockScroll(event) {
+  if (dockPointerX === null) return
+  measureDock(event.currentTarget)
+  queueDockFrame()
+}
+
+function clearDockMagnification() {
+  cancelAnimationFrame(dockFrame)
+  dockFrame = 0
+  dockLastFrame = 0
+  dockStrength = 0
+  dockPointerX = null
+  for (const { tile } of dockTiles) tile.style.removeProperty('--dock-magnification')
+  dockTiles = []
+}
+
 // Reserve the real dock height, including any installation or health notices.
 watch(dockElement, (element) => {
   dockObserver?.disconnect()
+  clearDockMagnification()
   if (!element) return
   dockObserver = new ResizeObserver(() => {
     dockHeight.value = element.getBoundingClientRect().height
+    const row = element.querySelector('.home-dock-row')
+    if (row && dockPointerX !== null) {
+      measureDock(row)
+      queueDockFrame()
+    }
   })
   dockObserver.observe(element)
 })
@@ -1369,6 +1461,7 @@ watch(
 )
 onUnmounted(() => {
   homeEditing.value = false
+  clearDockMagnification()
   dockObserver?.disconnect()
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.removeEventListener('keydown', onArrangeKey)
@@ -1415,7 +1508,7 @@ onUnmounted(() => {
       <Teleport to=".app-container" defer>
       <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating" :aria-label="$t('Apps')">
         <span class="home-dock-base glass-pill" aria-hidden="true"></span>
-        <div class="home-dock-row">
+        <div class="home-dock-row" @pointermove.passive="magnifyDock" @pointerleave="releaseDock" @pointercancel="releaseDock" @scroll.passive="onDockScroll">
           <component
             :is="launcherOpen(app) ? 'a' : 'span'"
             v-for="app in dockApps"
@@ -1427,8 +1520,10 @@ onUnmounted(() => {
             :aria-label="launcherTitle(app)"
             @click="launcherOpen(app) && openApp($event, app.name, app.url)"
           >
-            <img v-if="appIconSrc(app.name)" :src="appIconSrc(app.name)" alt="" class="home-app-icon" />
-            <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
+            <span class="home-app-tile" aria-hidden="true">
+              <img v-if="appIconSrc(app.name)" :src="appIconSrc(app.name)" alt="" class="home-app-icon" />
+              <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
+            </span>
           </component>
         </div>
         <p v-if="dockNotes.length" class="home-dock-notes" aria-live="polite">{{ dockNotes.join(' · ') }}</p>
@@ -1495,7 +1590,7 @@ onUnmounted(() => {
             <span>{{ $t('Search') }}</span>
           </button>
         </form>
-        <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
+        <div v-if="searchOpen" class="home-hero-results glass-popover" :class="searchAnchor">
           <div class="home-results-scroll">
             <p v-if="notice" class="home-notice">{{ notice }}</p>
             <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
@@ -2051,7 +2146,7 @@ onUnmounted(() => {
       </ul>
       <p v-else class="home-muted">{{ $t('No widget sources reported yet. Reload Home.') }}</p>
     </article>
-    <dialog ref="reviewDialog" class="glass-card home-review-dialog" :aria-label="$t('Review request')"
+    <dialog ref="reviewDialog" class="glass-dialog home-review-dialog" :aria-label="$t('Review request')"
             @close="pendingReview = null" @cancel="reviewBusy && $event.preventDefault()">
       <template v-if="pendingReview">
         <h2>{{ pendingReview.title }}</h2>
@@ -2067,7 +2162,7 @@ onUnmounted(() => {
     <Teleport to="body">
       <div v-if="trendingDetail" class="modal-backdrop" @click.self="closeTrending">
         <div
-          class="modal-content glass-popover home-title-dialog"
+          class="modal-content glass-dialog home-title-dialog"
           role="dialog"
           aria-modal="true"
           aria-labelledby="home-title-heading"
@@ -2115,7 +2210,7 @@ onUnmounted(() => {
       </div>
       <div v-if="trailerPlayer" class="modal-backdrop home-trailer-backdrop" @click.self="closeTrailer">
         <div
-          class="modal-content glass-popover home-trailer-dialog"
+          class="modal-content glass-dialog home-trailer-dialog"
           role="dialog"
           aria-modal="true"
           aria-labelledby="home-trailer-heading"
@@ -2136,7 +2231,7 @@ onUnmounted(() => {
         </div>
       </div>
       <div v-if="requestChoice" class="modal-backdrop" @click.self="!requestBusy && (requestChoice = null)">
-        <form class="modal-content glass-popover home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
+        <form class="modal-content glass-dialog home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
           <h3 id="home-request-title">{{ $t('Request') }} {{ requestChoice.item.title }}</h3>
           <p v-if="requestChoice.loading" role="status" class="home-muted">{{ $t('Loading request options…') }}</p>
           <p v-if="requestChoice.error" role="alert" class="home-notice home-notice-error">{{ requestChoice.error }}</p>

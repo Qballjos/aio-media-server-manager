@@ -76,7 +76,11 @@ const catalogState = computed(() =>
   route.name === 'catalog' ? catalogStateFromQuery(route.query) : catalogStateFromQuery({})
 )
 const catalogCategoriesSelected = computed(() => catalogState.value.cat)
-const catalogStatusFilters = computed(() => catalogState.value.status)
+const catalogStatusFilters = computed(() => {
+  const { status, cat, view } = catalogState.value
+  if (status.length || cat.length || view || catalogSearchInput.value.trim()) return status
+  return combinedServices.value.some(service => service.installed) ? ['installed'] : []
+})
 const catalogSort = computed({
   get: () => catalogState.value.sort,
   set: (value) => patchCatalogQuery({ sort: value === 'az' ? 'az' : 'popularity' }),
@@ -235,7 +239,7 @@ function selectCatalogSection(status = '', category = '') {
   const restoreFocus = categoryFiltersExpanded.value && categoryNavigation.value?.contains(document.activeElement)
   categoryFiltersExpanded.value = false
   if (restoreFocus) nextTick(() => categoryFiltersToggle.value?.focus())
-  patchCatalogQuery({ status: status ? [status] : [], cat: category ? [category] : [] })
+  patchCatalogQuery({ status: status ? [status] : [], cat: category ? [category] : [], view: !status && !category ? 'discover' : undefined })
 }
 function onAppRowClick(event, service) {
   if (event.target.closest('button, a, input, select, [role="listbox"]')) return
@@ -544,12 +548,9 @@ onUnmounted(() => {
         </div>
 
 
-  <section class="catalog-store glass-card" :aria-label="$t('Catalog')">
-    <aside class="catalog-store-sidebar">
+  <section class="catalog-store" :aria-label="$t('Catalog')">
+    <aside class="catalog-store-sidebar glass-chrome">
       <h2 class="catalog-sidebar-title">{{ $t('Catalog') }}</h2>
-      <label class="catalog-search-label" for="catalog-search">{{ $t('Search') }}</label>
-      <input id="catalog-search" v-model="catalogSearchInput" type="search" class="ui-input catalog-store-search"
-        :placeholder="$t('Search apps…')" autocomplete="off" spellcheck="false" />
       <nav class="catalog-store-nav catalog-status-nav" :aria-label="$t('Catalog')">
         <button type="button" :aria-pressed="discoverSelected" @click="selectCatalogSection()">
           <span aria-hidden="true">✧</span>{{ $t('Discover') }}
@@ -586,11 +587,18 @@ onUnmounted(() => {
         <small>CPU {{ cpuPercent != null ? Math.round(cpuPercent) + '%' : '—' }}</small>
       </button>
     </aside>
-    <div class="catalog-store-main">
+    <div class="catalog-store-main material-content">
       <header class="catalog-store-heading">
         <h2>{{ catalogHeading }}</h2>
       <InstallationActivity ref="activity" @retry="retryJob" @logs="openLogs" />
       </header>
+      <div id="catalog-toolbar" class="catalog-search-tools">
+        <label class="catalog-search-label" for="catalog-search">{{ $t('Search') }}</label>
+        <input id="catalog-search" v-model="catalogSearchInput" type="search" class="ui-input catalog-store-search"
+          :placeholder="$t('Search apps…')" autocomplete="off" spellcheck="false" />
+        <UiSelect id="catalog-sort" v-model="catalogSort" variant="inline" :aria-label="$t('Sort')"
+          :options="[{ value: 'popularity', label: $t('Popularity') }, { value: 'az', label: $t('A to Z') }]" />
+      </div>
       <section v-if="showDiscovery && featuredService" class="catalog-feature-carousel" :aria-label="$t('Featured apps')"
         aria-roledescription="carousel" @mouseenter="featuredHovered = true" @mouseleave="featuredHovered = false"
         @focusin="featuredFocused = true" @focusout="featuredFocused = !!($event.relatedTarget && $event.currentTarget.contains($event.relatedTarget))">
@@ -629,10 +637,8 @@ onUnmounted(() => {
         </div>
       </div>
       </section>
-      <div id="catalog-toolbar" class="catalog-store-list-heading">
+      <div class="catalog-store-list-heading">
         <h3>{{ showDiscovery ? $t('For your media server') : $t('Applications') }} <span>{{ visibleServices.length }}</span></h3>
-        <UiSelect id="catalog-sort" v-model="catalogSort" variant="inline" :aria-label="$t('Sort')"
-          :options="[{ value: 'popularity', label: $t('Popularity') }, { value: 'az', label: $t('A to Z') }]" />
       </div>
       <div class="catalog-store-apps">
         <article v-for="service in visibleServices" :key="service.name" class="catalog-store-app"
@@ -700,17 +706,18 @@ onUnmounted(() => {
 
 <style scoped>
 .catalog-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.catalog-store { display: grid; grid-template-columns: 13.5rem minmax(0, 1fr); padding: 0; isolation: isolate; overflow: visible; }
-.catalog-store-sidebar { display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem 0.875rem; border-right: 1px solid var(--border-subtle); background: var(--panel-shine); border-radius: var(--radius-glass) 0 0 var(--radius-glass); }
+.catalog-store { display: grid; grid-template-columns: 13.5rem minmax(0, 1fr); gap: 1rem; padding: 0; isolation: isolate; overflow: visible; }
+.catalog-store-sidebar { display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem 0.875rem; }
 .catalog-sidebar-title { margin: 0 0.5rem; font-size: var(--text-title); letter-spacing: -0.04em; }
-.catalog-store-search { width: 100%; min-width: 0; border-radius: var(--radius-inset); }
+.catalog-search-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .6rem; margin-bottom: 1rem; position: relative; z-index: 2; }
+.catalog-store-search { width: 100%; min-width: 0; min-height: var(--btn-h); border-radius: var(--radius-inset); }
 .catalog-store-nav { display: grid; gap: 0.25rem; }
 .catalog-filters-toggle, .catalog-store-nav .catalog-all-categories { display: none; }
 .catalog-store-nav button { display: flex; align-items: center; gap: 0.6rem; width: 100%; border: 1px solid transparent; border-radius: 10px; padding: 0.65rem; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--text-body); text-align: left; cursor: pointer; }
-.catalog-store-nav button > span { width: 1.1rem; color: var(--color-primary-text); text-align: center; flex-shrink: 0; }
+.catalog-store-nav button > span { width: 1.1rem; color: var(--text-muted); text-align: center; flex-shrink: 0; }
 .catalog-store-nav button > small { margin-left: auto; font-size: var(--text-kicker); }
 .catalog-store-nav button:hover { background: var(--bg-surface); }
-.catalog-store-nav button[aria-pressed='true'] { background: var(--pill-active); color: var(--color-primary-text); }
+.catalog-store-nav button[aria-pressed='true'] { background: var(--material-selected); color: var(--text-heading); box-shadow: var(--material-lift); }
 .catalog-sidebar-label { padding: 1rem 0.65rem 0.35rem; font-size: var(--text-kicker); color: var(--text-dim); }
 .catalog-store-health { display: grid; gap: 0.25rem; margin-top: auto; padding: 1.25rem 0.65rem 0; background: transparent; border: 0; border-top: 1px solid var(--border-subtle); font: inherit; font-size: var(--text-body); color: var(--color-success-fg); cursor: pointer; text-align: left; }
 .catalog-store-health small { color: var(--text-dim); font-size: var(--text-kicker); }
@@ -718,7 +725,7 @@ onUnmounted(() => {
 .catalog-store-main { min-width: 0; padding: 1.75rem; }
 .catalog-store-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
 .catalog-store-heading h2 { font-size: var(--text-display); letter-spacing: -0.04em; }
-.catalog-feature { display: grid; grid-template-columns: minmax(0, 1fr) 8rem; align-items: center; gap: 1.5rem; width: 100%; padding: 1.75rem; border: 1px solid var(--border-strong); border-radius: var(--radius-tile); background: linear-gradient(125deg, rgb(var(--color-primary-rgb) / 0.19), transparent), var(--bg-surface); color: var(--text-main); text-align: left; cursor: pointer; font: inherit; }
+.catalog-feature { display: grid; grid-template-columns: minmax(0, 1fr) 8rem; align-items: center; gap: 1.5rem; width: 100%; padding: 1.75rem; border: 1px solid var(--border-strong); border-radius: var(--radius-tile); background: var(--bg-surface); color: var(--text-main); text-align: left; cursor: pointer; font: inherit; }
 .catalog-feature-carousel { position: relative; }
 .catalog-feature-controls { position: absolute; bottom: 0.8rem; left: 1rem; right: 1rem; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 0.2rem; }
 .catalog-feature-dots { display: flex; flex-wrap: wrap; align-items: center; }
@@ -726,7 +733,7 @@ onUnmounted(() => {
 .catalog-feature-dots-right { justify-content: flex-start; }
 .catalog-feature-dot, .catalog-feature-pause, .catalog-feature-arrow { display: inline-flex; justify-content: center; align-items: center; width: 1.5rem; height: 1.5rem; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted); cursor: pointer; }
 .catalog-feature-dot span { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; opacity: 0.45; }
-.catalog-feature-dot.is-current { color: var(--color-primary-text); }
+.catalog-feature-dot.is-current { color: var(--text-heading); }
 .catalog-feature-dot.is-current span, .catalog-feature-dot:hover span { opacity: 1; }
 .catalog-feature-pause svg { width: 0.5rem; height: 0.5rem; fill: currentColor; }
 .catalog-feature-arrow svg { width: 0.65rem; height: 0.65rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -736,7 +743,7 @@ onUnmounted(() => {
 @keyframes catalog-feature-reveal { from { opacity: 0; transform: translateY(0.3rem); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: no-preference) { .catalog-feature-copy { animation: catalog-feature-reveal 300ms ease-out; } }
 .catalog-feature-copy { display: grid; gap: 0.75rem; max-width: 28rem; }
-.catalog-feature-kicker { color: var(--color-primary-text); text-transform: uppercase; letter-spacing: 0.1em; font-size: var(--text-kicker); }
+.catalog-feature-kicker { color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; font-size: var(--text-kicker); }
 .catalog-feature-copy strong { font-size: clamp(1.4rem, 2.5vw, 2rem); line-height: 1.15; letter-spacing: -0.035em; font-weight: 600; }
 .catalog-feature-copy > span:not(.catalog-feature-kicker):not(.catalog-feature-link) { color: var(--text-muted); font-size: var(--text-body); }
 .catalog-feature-link { color: var(--color-primary-text); font-size: var(--text-body); }
@@ -758,7 +765,7 @@ onUnmounted(() => {
 .catalog-app-state.is-failed, .catalog-app-update { color: var(--color-warning-fg); }
 .card-menu a { display: block; padding: 0.55rem 0.75rem; color: var(--text-main); font-size: var(--text-body); text-decoration: none; }
 .catalog-app-actions { display: flex; align-items: center; gap: 0.2rem; }
-.catalog-get { display: inline-flex; align-items: center; justify-content: center; min-width: 4.3rem; min-height: 2rem; padding: 0.35rem 0.8rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--pill-active); color: var(--color-primary-text); font: inherit; font-size: var(--text-kicker); font-weight: 600; text-decoration: none; cursor: pointer; }
+.catalog-get { display: inline-flex; align-items: center; justify-content: center; min-width: 4.3rem; min-height: 2rem; padding: 0.35rem 0.8rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--bg-surface); color: var(--text-main); font: inherit; font-size: var(--text-kicker); font-weight: 600; text-decoration: none; cursor: pointer; }
 .catalog-get:hover { background: var(--bg-surface-elevated); }
 .catalog-get:disabled { opacity: 0.6; cursor: wait; }
 .catalog-app-more { display: grid; place-items: center; width: 1.8rem; min-height: 2rem; padding: 0; border: 0; background: transparent; color: var(--text-dim); font-size: var(--text-strong); cursor: pointer; border-radius: var(--radius-sm); }
@@ -771,7 +778,7 @@ onUnmounted(() => {
 @media (max-width: 1100px) { .catalog-store-apps { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) {
   .catalog-store { grid-template-columns: minmax(0, 1fr); }
-  .catalog-store-sidebar { border-right: 0; border-bottom: 1px solid var(--border-subtle); padding: 1rem; border-radius: var(--radius-glass) var(--radius-glass) 0 0; }
+  .catalog-store-sidebar { padding: 1rem; }
   .catalog-sidebar-title, .catalog-sidebar-label, .catalog-store-health { display: none; }
   .catalog-status-nav { display: flex; flex-wrap: nowrap; gap: 0.35rem; overflow-x: auto; }
   .catalog-status-nav button { flex: 0 0 auto; white-space: nowrap; }
@@ -797,6 +804,7 @@ onUnmounted(() => {
   .catalog-collections { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 400px) {
+  .catalog-search-tools { grid-template-columns: minmax(0, 1fr); }
   .catalog-feature { grid-template-columns: minmax(0, 1fr); }
   .catalog-feature img { display: none; }
   .catalog-store-main { padding: 1rem; }
@@ -805,5 +813,5 @@ onUnmounted(() => {
   .catalog-store-icon .app-icon { width: 1.85rem; height: 1.85rem; }
   .catalog-get { min-width: 3.4rem; padding-inline: 0.5rem; }
 }
-@media (pointer: coarse) { .catalog-get, .catalog-app-more, .catalog-store-nav button { min-height: 44px; } .catalog-app-more { width: 36px; } }
+@media (pointer: coarse) { .catalog-get, .catalog-app-more, .catalog-store-nav button { min-height: 44px; } .catalog-app-more { width: 44px; } }
 </style>

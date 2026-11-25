@@ -12,7 +12,9 @@ theme:
   language: en
   logo: assets/logo-aio-media-manager.png
   favicon: assets/logo-aio-media-manager.png
-  font: false
+  font:
+    text: Figtree
+    code: false
   palette:
     - media: "(prefers-color-scheme)"
       toggle:
@@ -42,10 +44,10 @@ theme:
     - toc.follow
 
 extra_javascript:
-  - javascripts/showcase.js?v=app-store-20261102
+  - javascripts/showcase.js?v=liquid-glass-20261125
 
 extra_css:
-  - stylesheets/extra.css?v=20261102-layout2
+  - stylesheets/extra.css?v=liquid-glass-20261125
 
 plugins:
   - search

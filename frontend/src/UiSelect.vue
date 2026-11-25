@@ -309,9 +309,8 @@ watch(query, () => {
   border-radius: var(--radius-control);
   background: var(--bg-input);
   color: var(--text-main);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
   font-family: inherit;
-  font-size: var(--text-ui);
+  font-size: var(--btn-font);
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.01em;
@@ -331,8 +330,8 @@ watch(query, () => {
 }
 
 .ui-select.is-open .ui-select-btn {
-  border-color: rgba(var(--color-primary-rgb), 0.55);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 0 0 3px rgba(var(--color-primary-rgb), 0.2);
+  border-color: var(--border-strong);
+  box-shadow: var(--material-lift);
 }
 
 .ui-select-btn:focus {
@@ -479,10 +478,10 @@ watch(query, () => {
 }
 
 .ui-select-option.is-selected {
-  background: var(--pill-active);
+  background: var(--material-selected);
   color: var(--text-heading);
-  border-color: rgba(var(--color-primary-rgb), 0.55);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  border-color: var(--border-strong);
+  box-shadow: var(--material-lift);
 }
 
 .ui-select-option:disabled {

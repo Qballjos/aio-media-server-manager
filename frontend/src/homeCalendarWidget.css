@@ -38,9 +38,9 @@
   }
 }
 .cal-views .ui-btn.is-active {
-  border-color: rgba(var(--color-primary-rgb), 0.45);
-  background: rgba(var(--color-primary-rgb), 0.14);
-  color: var(--color-primary-text);
+  border-color: var(--border-strong);
+  background: var(--material-selected);
+  color: var(--text-heading);
 }
 .cal {
   display: grid;
@@ -209,4 +209,15 @@ a.cal-row-link:hover {
 }
 .home-card .cal-select {
   min-width: 0;
+}
+
+
+/* Keep the media type available when the colour cue can't be seen. */
+.cal-media-type {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

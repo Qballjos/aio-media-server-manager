@@ -20,6 +20,8 @@ Maak het beheerdersaccount en doorloop de wizard. Begin bijvoorbeeld met Jellyfi
 
 Open bovenaan **Catalogus**. Links kies je wat je wilt zien; rechts verschijnen de apps.
 
+Als er apps geïnstalleerd zijn, opent de Catalogus op **Mijn apps**. Zoeken en sorteren staan boven de lijst. Kies **Ontdekken** voor uitgelichte apps en de volledige catalogus.
+
 | Keuze links | Wat zie je? |
 |---|---|
 | **Ontdekken** | Uitgelichte apps en de volledige catalogus. |
@@ -36,7 +38,7 @@ Klik op de naam, het pictogram of de rij van een app om het **venster met app-in
 
 **App-instellingen in Catalogus** gelden voor één app. De pagina **Instellingen** bovenaan is voor AIO zelf: je profiel, uiterlijk, koppelingen, back-ups en updates.
 
-![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=app-store-20261102)
+![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=liquid-glass-20261125)
 
 ## Je weg vinden in Instellingen {#settings-menu}
 
@@ -54,7 +56,9 @@ Instellingen gebruikt dezelfde indeling als de catalogus: een zijmenu links en d
 
 Het zijmenu opent alleen een pagina. Verander rechts de gewenste instelling en gebruik de knop **Opslaan** van dat onderdeel als die verschijnt. Widgets verplaats je op **Start** met de knop met vier blokjes; Startpagina-instellingen regelen de app-balk en aanmeldtekst.
 
-![Settings: grouped sidebar and search](screenshots/light/settings.png?v=app-store-20261102)
+Open **Persoonlijk → Taal en uiterlijk** voor een live voorbeeld van je achtergrond, thema en glas. Kies **Helder**, **Gebalanceerd** of **Getint**. Onder **Geavanceerd** staan de handmatige glasinstellingen en de accentkleur voor links en toetsenbordfocus. Wil je een logo zonder titel, upload dan **Logo** bij **Merknaam en pictogrammen**, zet **Toon alleen het headerlogo** aan en sla op. Het afzonderlijke **Headericoon** staat naast een zichtbare titel.
+
+![Settings: grouped sidebar and search](screenshots/light/settings.png?v=liquid-glass-20261125)
 
 ## 3. Open je eerste app
 
@@ -96,6 +100,8 @@ Een serie zet je in media/tv. Open na het kopiëren Jellyfin → Dashboard → B
 [De widgets op Home aanpassen](index.md#app-preview){ .md-button .md-button--primary }
 
 Deze plaatjes leggen de echte bediening uit. Het websitevoorbeeld gebruikt fictieve gegevens en verandert niets aan jouw dashboard.
+
+Bij meerdere Jellyfin- of Plex-sessies scroll of veeg je zijwaarts in **Wordt afgespeeld**. De agenda gebruikt gekleurde markeringen voor gebeurtenissen. Kies in de zoekresultaten **Seizoenen aanvragen** om losse seizoenen te selecteren. De beheerder stelt het gedeelde **Trending**-filter voor media-accounts in.
 
 ### Waarom is een widget leeg?
 

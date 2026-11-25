@@ -74,7 +74,7 @@ defineExpose({ open })
 </script>
 
 <template>
-  <dialog ref="dialog" class="glass-card request-dialog" :aria-label="$t('Request media')" @close="close"
+  <dialog ref="dialog" class="glass-dialog request-dialog" :aria-label="$t('Request media')" @close="close"
           @cancel="submitting && $event.preventDefault()">
     <form v-if="title" @submit.prevent="submit">
       <h2>{{ title.title }}</h2>
@@ -101,7 +101,6 @@ defineExpose({ open })
 
 <style scoped>
 .request-dialog { inline-size: min(28rem, calc(100% - 2rem)); max-block-size: calc(100dvh - 2rem); padding: 1.25rem; color: var(--text-main); }
-.request-dialog::backdrop { background: rgb(0 0 0 / 55%); }
 .request-dialog h2 { margin-block-start: 0; overflow-wrap: anywhere; }
 .request-dialog fieldset { border: 1px solid var(--border-subtle); min-inline-size: 0; }
 .request-dialog label { display: flex; align-items: center; gap: .5rem; min-block-size: 2.75rem; }

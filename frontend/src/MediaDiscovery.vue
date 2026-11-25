@@ -171,7 +171,7 @@ onMounted(() => loadTrending())
               <span>{{ $t('Search') }}</span>
             </button>
           </form>
-          <div v-if="!homeEditing && (searched || searchBusy || searchError)" class="home-hero-results glass-card">
+          <div v-if="!homeEditing && (searched || searchBusy || searchError)" class="home-hero-results glass-popover">
             <div class="home-results-scroll">
               <div class="home-widget-head">
                 <h3>{{ $t('Search') }}</h3>

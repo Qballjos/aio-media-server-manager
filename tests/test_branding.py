@@ -61,6 +61,7 @@ def test_public_branding_defaults(tmp_path: Path, monkeypatch):
     assert res.status_code == 200
     data = res.json()
     assert data["title"] == "AIO Media Server Manager"
+    assert data["header_logo_only"] is False
     assert data["login_message"] == ""
     assert data["accent_color"] == "#0a6cff"
     assert data["header_url"].endswith("logo-aio-media-manager.png")
@@ -118,6 +119,14 @@ def test_brand_title_and_image_upload(tmp_path: Path, monkeypatch):
     settings_res = client.get("/api/settings", headers=headers)
     assert settings_res.status_code == 200
     assert settings_res.json()["branding"]["title"] == "Homelab Media"
+
+    logo_only = client.patch("/api/branding", json={"header_logo_only": True}, headers=headers)
+    assert logo_only.status_code == 200
+    assert logo_only.json()["title"] == "Homelab Media"
+    assert client.get("/api/branding").json()["header_logo_only"] is True
+    restored = client.patch("/api/branding", json={"header_logo_only": False}, headers=headers)
+    assert restored.status_code == 200
+    assert restored.json()["header_logo_only"] is False
 
     assert (cfg.config_dir / "branding" / "header.png").is_file()
 

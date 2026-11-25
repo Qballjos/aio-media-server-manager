@@ -21,7 +21,7 @@ import {
 } from './api.js'
 import { useToasts } from './useToasts.js'
 import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInstall.js'
-import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
+import { brandTitle, brandHeaderUrl, brandHeaderLogoOnly, brandLogoUrl, loadBranding } from './branding.js'
 import { migrateLocalVisualsIfNeeded, saveLocaleToProfile } from './visualsProfile.js'
 import { lockThemeToSystem, unlockTheme } from './theme.js'
 import { combinedServiceStatus, tunnelChip, vpnChip } from './statusChips.js'
@@ -430,17 +430,18 @@ onUnmounted(() => {
   <div class="app-container">
     <WallpaperLayer />
     <header class="top-nav">
-      <div class="nav-brand glass-pill">
-        <div class="logo-orb">
-          <img
-            :src="brandHeaderUrl"
-            :alt="brandTitle"
-            class="brand-logo"
-          />
-        </div>
-        <div class="brand-titles">
-          <h1 class="brand-name" :title="brandTitle">{{ brandTitle }}</h1>
-        </div>
+      <div class="nav-brand glass-pill" :class="{ 'is-logo-only': brandHeaderLogoOnly }">
+        <h1 v-if="brandHeaderLogoOnly" class="brand-image-title">
+          <img :src="brandLogoUrl" :alt="brandTitle" />
+        </h1>
+        <template v-else>
+          <div class="logo-orb">
+            <img :src="brandHeaderUrl" alt="" class="brand-logo" />
+          </div>
+          <div class="brand-titles">
+            <h1 class="brand-name" :title="brandTitle">{{ brandTitle }}</h1>
+          </div>
+        </template>
       </div>
 
       <nav v-if="authStatus.authenticated && (isMember || wizardCompleted)" class="nav-tabs glass-pill" :aria-label="$t('Pages')">

@@ -98,9 +98,9 @@ async function arrangeHome() {
 </script>
 
 <template>
-  <section v-if="settings" class="settings-page glass-card animate-fade" :aria-label="$t('Settings')">
+  <section v-if="settings" class="settings-page animate-fade" :aria-label="$t('Settings')">
     <SettingsSidebar :section="page.id" :navigation="MEMBER_SETTINGS_GROUPS" />
-    <div class="settings-content">
+    <div class="settings-content material-content">
       <header class="settings-header">
         <h2 class="section-title">{{ $t(page.label) }}</h2>
         <p class="section-subtitle">{{ $t(page.description) }}</p>

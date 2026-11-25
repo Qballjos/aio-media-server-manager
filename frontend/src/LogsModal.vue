@@ -156,7 +156,7 @@ onUnmounted(() => {
 
 <template>
         <div v-if="app" class="modal-backdrop" @click.self="closeLogs">
-      <div class="log-modal glass-card animate-scale">
+      <div class="log-modal glass-dialog animate-scale">
         <div class="modal-header">
           <div class="modal-title-group">
             <span class="modal-dot"></span>

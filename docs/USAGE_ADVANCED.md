@@ -67,7 +67,7 @@ Home is a grid. Phone, tablet, and desktop each keep their own layout (4, 8, and
 | Recently added | New shows and movies. Scrolling loads further Jellyfin pages. Plex stays on its latest 20 |
 | Requests | Seerr requests that are not finished, plus ones marked available or declined in the last 30 days. Open a pending request to approve or decline it |
 | Trending | Seerr's trending list. The administrator's All, Movies or Series selection is shared with media accounts. Scrolling keeps loading |
-| Now playing | Who is watching on Jellyfin or Plex, including direct play |
+| Now playing | Jellyfin and Plex sessions. Scroll or swipe sideways to see each stream |
 | Storage | Disk use for config, downloads, and media |
 | Server | CPU, memory, and network. With host `/sys` mounted at `/host/sys`, this is the server's network cards. Without that mount it is only this container's traffic |
 | Needs attention | The same checks as Settings → Notifications, with a link to fix each one |
@@ -236,13 +236,13 @@ To use Touch ID on a Mac, open the dashboard in Safari at its HTTPS address and 
 
 | Light | Dark |
 | --- | --- |
-| ![Settings account, light theme](screenshots/light/settings.png?v=app-store-20261102) | ![Settings account, dark theme](screenshots/dark/settings.png?v=app-store-20261102) |
+| ![Settings account, light theme](screenshots/light/settings.png?v=liquid-glass-20261125) | ![Settings account, dark theme](screenshots/dark/settings.png?v=liquid-glass-20261125) |
 
 ### Language and appearance
 
 | Light | Dark |
 | --- | --- |
-| ![Visuals, light theme](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Visuals, dark theme](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
+| ![Visuals, light theme](screenshots/light/settings-visuals.png?v=liquid-glass-20261125) | ![Visuals, dark theme](screenshots/dark/settings-visuals.png?v=liquid-glass-20261125) |
 
 ### Server and storage
 
@@ -296,7 +296,7 @@ To use Touch ID on a Mac, open the dashboard in Safari at its HTTPS address and 
 
 | Light | Dark |
 | --- | --- |
-| ![qBittorrent catalog settings, light theme](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![qBittorrent catalog settings, dark theme](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
+| ![qBittorrent catalog settings, light theme](screenshots/light/catalog-settings.png?v=liquid-glass-20261125) | ![qBittorrent catalog settings, dark theme](screenshots/dark/catalog-settings.png?v=liquid-glass-20261125) |
 
 ---
 

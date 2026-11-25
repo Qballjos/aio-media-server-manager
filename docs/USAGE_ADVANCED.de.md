@@ -67,7 +67,7 @@ Start ist ein Raster. Telefon, Tablet und Desktop behalten jeweils ihr eigenes L
 | Zuletzt hinzugefügt | Neue Serien und Filme. Scrollen lädt weitere Jellyfin-Seiten. Plex bleibt bei den letzten 20 |
 | Anfragen | Seerr-Anfragen, die noch nicht fertig sind, plus was in den letzten 30 Tagen als verfügbar oder abgelehnt markiert wurde |
 | Trending | Die Trending-Liste von Seerr. Scrollen lädt weiter |
-| Wird abgespielt | Wer auf Jellyfin oder Plex schaut, inklusive Direktwiedergabe |
+| Wird abgespielt | Jellyfin- und Plex-Sitzungen. Seitlich scrollen oder wischen, um die Streams anzusehen |
 | Speicher | Plattennutzung von Config, Downloads und Medien |
 | Server | CPU, Arbeitsspeicher und Netzwerk. Mit Host-`/sys` unter `/host/sys` sind das die Netzwerkkarten des Servers. Ohne diesen Mount nur der Verkehr dieses Containers |
 | Braucht Aufmerksamkeit | Dieselben Prüfungen wie Einstellungen → Benachrichtigungen, mit einem Link, jeden Punkt zu beheben |
@@ -217,13 +217,13 @@ Benutzer können über die Titeldetails oder **Einstellungen → Support** ein P
 
 | Hell | Dunkel |
 | --- | --- |
-| ![Konto in den Einstellungen, helles Thema](screenshots/light/settings.png?v=app-store-20261102) | ![Konto in den Einstellungen, dunkles Thema](screenshots/dark/settings.png?v=app-store-20261102) |
+| ![Konto in den Einstellungen, helles Thema](screenshots/light/settings.png?v=liquid-glass-20261125) | ![Konto in den Einstellungen, dunkles Thema](screenshots/dark/settings.png?v=liquid-glass-20261125) |
 
 ### Sprache und Darstellung
 
 | Hell | Dunkel |
 | --- | --- |
-| ![Darstellung, helles Thema](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Darstellung, dunkles Thema](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
+| ![Darstellung, helles Thema](screenshots/light/settings-visuals.png?v=liquid-glass-20261125) | ![Darstellung, dunkles Thema](screenshots/dark/settings-visuals.png?v=liquid-glass-20261125) |
 
 ### Server und Speicher
 
@@ -277,7 +277,7 @@ Benutzer können über die Titeldetails oder **Einstellungen → Support** ein P
 
 | Hell | Dunkel |
 | --- | --- |
-| ![qBittorrent-Einstellungen im Katalog, helles Thema](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![qBittorrent-Einstellungen im Katalog, dunkles Thema](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
+| ![qBittorrent-Einstellungen im Katalog, helles Thema](screenshots/light/catalog-settings.png?v=liquid-glass-20261125) | ![qBittorrent-Einstellungen im Katalog, dunkles Thema](screenshots/dark/catalog-settings.png?v=liquid-glass-20261125) |
 
 ---
 

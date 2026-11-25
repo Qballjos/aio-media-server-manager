@@ -20,6 +20,8 @@ Administratorkonto erstellen und den Assistenten abschließen. Beginne etwa mit 
 
 Öffne oben **Katalog**. Links wählst du die Ansicht, rechts erscheinen die Apps.
 
+Wenn Apps installiert sind, öffnet der Katalog **Meine Apps**. Suche und Sortierung stehen über der Liste. Unter **Entdecken** findest du Empfehlungen und den vollständigen Katalog.
+
 | Auswahl links | Was wird angezeigt? |
 |---|---|
 | **Entdecken** | Empfohlene Apps und der vollständige Katalog. |
@@ -36,7 +38,7 @@ Name, Symbol oder Zeile einer App öffnen das **App-Einstellungsfenster**, nicht
 
 **App-Einstellungen im Katalog** gelten für eine App. Die Seite **Einstellungen** oben ändert AIO selbst: Profil, Aussehen, Verbindungen, Sicherungen und Updates.
 
-![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=app-store-20261102)
+![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=liquid-glass-20261125)
 
 ## In den Einstellungen zurechtfinden {#settings-menu}
 
@@ -54,7 +56,9 @@ Einstellungen nutzt dieselbe Seitenleiste wie der Katalog: links Gruppe und Seit
 
 Die Seitenleiste öffnet nur eine Seite. Ändere rechts die gewünschte Option und nutze die jeweilige Schaltfläche **Speichern**, sofern angezeigt. Widgets ordnest du direkt auf **Start** über das Symbol mit vier Blöcken an; Startseite regelt die App-Leiste und den Anmeldetext.
 
-![Settings: grouped sidebar and search](screenshots/light/settings.png?v=app-store-20261102)
+Unter **Persönlich → Sprache und Darstellung** siehst du eine Live-Vorschau von Hintergrund, Thema und Glas. Wähle **Klar**, **Ausgewogen** oder **Getönt**. Unter **Erweitert** findest du die manuellen Glaseinstellungen und die Akzentfarbe für Links und Tastaturfokus. Für ein Logo ohne Titel lade unter **Markenname und Symbole** ein **Logo** hoch, aktiviere **Nur das Kopfzeilenlogo anzeigen** und speichere. Neben einem sichtbaren Titel steht das separate **Kopfzeilensymbol**.
+
+![Settings: grouped sidebar and search](screenshots/light/settings.png?v=liquid-glass-20261125)
 
 ## 3. Erste App öffnen
 
@@ -96,6 +100,8 @@ Serien kommen nach media/tv. Nach dem Kopieren unter Jellyfin → Dashboard → 
 [Home-Widgets anordnen](index.md#app-preview){ .md-button .md-button--primary }
 
 Die Bilder erklären die echten Bedienelemente. Die Website-Demo verwendet Beispieldaten und ändert dein Dashboard nicht.
+
+Bei mehreren Jellyfin- oder Plex-Sitzungen kannst du in **Läuft gerade** seitlich scrollen oder wischen. Der Kalender nutzt farbige Markierungen. Wähle in der Suche **Staffeln anfragen**, um einzelne Staffeln auszuwählen. Medienkonten verwenden den gemeinsamen Trendfilter des Administrators.
 
 ### Warum ist ein Widget leer?
 

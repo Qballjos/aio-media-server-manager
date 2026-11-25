@@ -65,7 +65,7 @@ defineExpose({ open })
 </script>
 
 <template>
-  <dialog ref="dialog" class="glass-card request-details" :aria-label="$t(libraryTitle ? 'Title details' : 'Request details')"
+  <dialog ref="dialog" class="glass-dialog request-details" :aria-label="$t(libraryTitle ? 'Title details' : 'Request details')"
           @close="request = null" @cancel="busy && $event.preventDefault()">
     <template v-if="request">
       <header>
@@ -112,7 +112,6 @@ defineExpose({ open })
 
 <style scoped>
 .request-details { inline-size: min(34rem, calc(100% - 2rem)); max-block-size: calc(100dvh - 2rem); padding: 1.25rem; color: var(--text-main); overflow-wrap: anywhere; }
-.request-details::backdrop { background: rgb(0 0 0 / 55%); }
 .request-details header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: .875rem; }
 .request-details header > div:only-child { grid-column: 1 / -1; }
 .request-details img { width: clamp(3.5rem, 18vw, 6rem); aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--radius-tile); }

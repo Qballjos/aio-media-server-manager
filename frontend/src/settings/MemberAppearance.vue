@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import AppearancePreview from './AppearancePreview.vue'
 import LanguageSelect from '../LanguageSelect.vue'
 import { ACCENT_PRESETS, applyAccentColor, brandAccent, DEFAULT_ACCENT } from '../branding.js'
 import { applyWallpaper, cacheWallpaperImageUrl, clearWallpaperImage, encodeWallpaperFile, setWallpaperPreference, wallpaperCss, wallpaperState } from '../background.js'
@@ -52,6 +53,7 @@ async function loadWallpaper(event) {
 </script>
 
 <template>
+  <AppearancePreview @select-glass="applyGlass" />
   <div class="glass-card settings-card">
     <div class="settings-card-head"><h3>{{ $t('Language') }}</h3></div>
     <LanguageSelect />
@@ -82,21 +84,6 @@ async function loadWallpaper(event) {
     </div>
   </div>
   <div class="glass-card settings-card">
-    <div class="settings-card-head"><h3>{{ $t('Accent colour') }}</h3></div>
-    <div class="accent-presets" role="group" :aria-label="$t('Accent colour')">
-      <button v-for="[color, label] in ACCENT_PRESETS" :key="color" type="button" class="accent-preset"
-              :class="{ 'is-active': brandAccent === color }" :aria-pressed="brandAccent === color"
-              :aria-label="$t(label)" :title="$t(label)" :style="{ '--accent-swatch': color, backgroundColor: color }"
-              @click="applyAccentColor(color)" />
-    </div>
-    <div class="wallpaper-personal-actions">
-      <label class="ui-field">{{ $t('Accent colour') }}
-        <input type="color" :value="brandAccent" @input="applyAccentColor($event.target.value)" />
-      </label>
-      <button type="button" class="ui-btn ui-btn-ghost" @click="applyAccentColor(DEFAULT_ACCENT)">{{ $t('Reset') }}</button>
-    </div>
-  </div>
-  <div class="glass-card settings-card">
     <div class="settings-card-head"><h3>{{ $t('Display size') }}</h3></div>
     <div class="theme-picker" role="group" :aria-label="$t('Display size')">
       <button v-for="item in DISPLAY_SIZES" :key="item.value" type="button" class="theme-option"
@@ -113,14 +100,35 @@ async function loadWallpaper(event) {
       <button v-if="wallpaperState.image" type="button" class="ui-btn ui-btn-ghost" @click="clearWallpaperImage">{{ $t('Remove') }}</button>
     </div>
     <p v-if="error" class="ui-alert ui-alert-error" role="alert">{{ $t('Could not save background image.') }}</p>
-    <div class="glass-sliders">
-      <label v-for="(label, key) in sliders" :key="key" class="glass-slider">
-        <span class="glass-slider-head"><span>{{ $t(label) }}</span><output>{{ key === 'alpha' ? Math.round((1 - glass.alpha) * 100) + '%' : glass[key] }}</output></span>
-        <input type="range" :min="key === 'alpha' ? 1 - GLASS_RANGES.alpha[1] : GLASS_RANGES[key][0]" :max="key === 'alpha' ? 1 - GLASS_RANGES.alpha[0] : GLASS_RANGES[key][1]" :step="GLASS_RANGES[key][2]"
-               :value="key === 'alpha' ? 1 - glass.alpha : glass[key]" @input="applyGlass({ [key]: key === 'alpha' ? 1 - Number($event.target.value) : Number($event.target.value) })" />
-      </label>
-    </div>
-    <button type="button" class="ui-btn ui-btn-ghost" @click="applyGlass(GLASS_DEFAULTS)">{{ $t('Reset to defaults') }}</button>
+    <details>
+      <summary>{{ $t('Advanced') }}</summary>
+      <div class="glass-sliders">
+        <label v-for="(label, key) in sliders" :key="key" class="glass-slider">
+          <span class="glass-slider-head"><span>{{ $t(label) }}</span><output>{{ key === 'alpha' ? Math.round((1 - glass.alpha) * 100) + '%' : glass[key] }}</output></span>
+          <input type="range" :min="key === 'alpha' ? 1 - GLASS_RANGES.alpha[1] : GLASS_RANGES[key][0]" :max="key === 'alpha' ? 1 - GLASS_RANGES.alpha[0] : GLASS_RANGES[key][1]" :step="GLASS_RANGES[key][2]"
+                 :value="key === 'alpha' ? 1 - glass.alpha : glass[key]" @input="applyGlass({ [key]: key === 'alpha' ? 1 - Number($event.target.value) : Number($event.target.value) })" />
+        </label>
+      </div>
+      <button type="button" class="ui-btn ui-btn-ghost" @click="applyGlass(GLASS_DEFAULTS)">{{ $t('Reset to defaults') }}</button>
+      <div class="theme-accent">
+        <div class="theme-accent-copy">
+          <strong>{{ $t('Accent colour') }}</strong>
+          <span>{{ $t('Used for links and keyboard focus.') }}</span>
+        </div>
+        <div class="accent-presets" role="group" :aria-label="$t('Accent colour')">
+          <button v-for="[color, label] in ACCENT_PRESETS" :key="color" type="button" class="accent-preset"
+                  :class="{ 'is-active': brandAccent === color }" :aria-pressed="brandAccent === color"
+                  :aria-label="$t(label)" :title="$t(label)" :style="{ '--accent-swatch': color, backgroundColor: color }"
+                  @click="applyAccentColor(color)" />
+        </div>
+        <div class="wallpaper-personal-actions">
+          <label class="ui-field">{{ $t('Accent colour') }}
+            <input type="color" :value="brandAccent" @input="applyAccentColor($event.target.value)" />
+          </label>
+          <button type="button" class="ui-btn ui-btn-ghost" @click="applyAccentColor(DEFAULT_ACCENT)">{{ $t('Reset') }}</button>
+        </div>
+      </div>
+    </details>
   </div>
 </template>
 

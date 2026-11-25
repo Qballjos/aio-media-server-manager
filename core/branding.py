@@ -117,6 +117,7 @@ def _load_meta() -> dict[str, Any]:
         accent = DEFAULT_ACCENT
     return {
         "title": title[:MAX_TITLE_LEN],
+        "header_logo_only": data.get("header_logo_only") is True,
         "accent_color": accent,
         "login_message": normalize_login_message(data.get("login_message")),
         "files": files,
@@ -136,9 +137,12 @@ def normalize_title(value: str | None) -> str:
     return text[:MAX_TITLE_LEN]
 
 
-def set_title(value: str | None) -> str:
+def set_title(value: str | None, *, header_logo_only: bool | None = None) -> str:
     meta = _load_meta()
-    meta["title"] = normalize_title(value)
+    if value is not None:
+        meta["title"] = normalize_title(value)
+    if header_logo_only is not None:
+        meta["header_logo_only"] = header_logo_only
     _save_meta(meta)
     return meta["title"]
 
@@ -225,6 +229,7 @@ def public_branding() -> dict[str, Any]:
     return {
         "title": title,
         "default_title": DEFAULT_TITLE,
+        "header_logo_only": meta.get("header_logo_only", False),
         "accent_color": accent,
         "default_accent": DEFAULT_ACCENT,
         "accent_custom": accent != DEFAULT_ACCENT,

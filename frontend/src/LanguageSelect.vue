@@ -119,7 +119,7 @@ async function choose(code) {
 .locale-code.is-active,
 .locale-dock-btn[aria-expanded='true'] {
   color: var(--text-heading);
-  border-color: rgba(var(--color-primary-rgb), 0.55);
+  border-color: var(--border-strong);
   background: var(--pill-active);
 }
 </style>
