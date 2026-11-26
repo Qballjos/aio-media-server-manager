@@ -16,7 +16,7 @@
     "@simplewebauthn/browser": "^13.3.0",
     "qrcode": "^1.5.4",
     "vue": "^3.5.45",
-    "vue-i18n": "^11.4.20",
+    "vue-i18n": "^11.4.23",
     "vue-router": "^4.6.3"
   },
   "devDependencies": {
