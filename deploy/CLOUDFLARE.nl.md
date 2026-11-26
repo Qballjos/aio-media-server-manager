@@ -84,10 +84,10 @@ Nadat de connectortoken is opgeslagen (stap 3):
 1. **Instellingen → Externe toegang → Publieke subdomeinen**
 2. Zet **Publiek app-domein** op je zone (bijvoorbeeld `example.com` of `example.co.uk`).
 3. Maak een API-token zoals Cloudflare het beschrijft ([Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)):
-   - **My Profile → API Tokens** (gebruiker) of **Manage Account → Account API Tokens**
-   - **Create Token** → begin bij het sjabloon **Edit zone DNS**
-   - Houd **Zone → DNS → Edit**, beperkt tot je zone
-   - Voeg **Account → Cloudflare Tunnel → Edit** toe (en bij voorkeur **Zone → Zone → Read**)
+   - **My Profile → API Tokens** (gebruiker) of **Manage Account → API Tokens**
+   - **Create Token** → begin zonder sjabloon
+   - Voeg **Cloudflare One Connector: cloudflared → Edit** toe voor het account dat de tunnel beheert.
+   - Voeg voor je domein **DNS → Edit** en **Zone → Read** toe in het **Zone**-beleid.
    - Ga door naar de samenvatting → Create Token (kopieer het geheim één keer)
 4. Plak die API-token onder **Publieke subdomeinen**  
    (dit is **niet** de `eyJ…`-connectortoken uit stap 3, en **niet** de Global API Key).

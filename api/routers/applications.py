@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from applications.catalog import ApplicationCatalog, refresh_live_catalogs
 from core.app_prefs import AppPrefsError, autostart_for, set_app_option, update_app_prefs
-from core.app_web_url import app_web_ui_url_for_request
+from core.app_web_url import app_launch_url, app_web_ui_url_for_request
 from core.auth import auth_manager
 from core.integrations.sessions import app_session_cookies
 from core.integrations.jellyfin import JellyfinClient
@@ -106,8 +106,8 @@ async def list_applications(request: Request) -> dict[str, Any]:
                 "is_crash_loop": is_crash_loop,
                 "recent_crashes": recent_crashes,
                 "health_url": plugin.health_check_url(),
-                "web_ui_url": app_web_ui_url_for_request(
-                    request, app_name=plugin.name, port=plugin.port
+                "web_ui_url": app_launch_url(
+                    plugin.name, app_web_ui_url_for_request(request, app_name=plugin.name, port=plugin.port)
                 ),
                 "daemon": plugin.manifest.daemon,
             }
@@ -174,7 +174,7 @@ async def app_session(name: str, request: Request) -> JSONResponse:
         jar = await asyncio.to_thread(
             app_session_cookies, plugin.name, plugin.port, plex_config_dir=plex_dir
         )
-    response = JSONResponse({"url": target, "signed_in": bool(jar)})
+    response = JSONResponse({"url": app_launch_url(plugin.name, target), "signed_in": bool(jar)})
     for cookie in jar or []:
         max_age = None
         if cookie.expires:

@@ -6,7 +6,7 @@ import json
 import os
 import sqlite3
 import tarfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -245,6 +245,9 @@ def test_backup_schedule_due(tmp_path: Path):
     jobs = BackupJobs(cfg)
     assert jobs.due(now=datetime(2026, 9, 24, 3, 0)) is False
     assert jobs.due(now=datetime(2026, 9, 24, 3, 31)) is True
+    setup_completed = datetime(2026, 9, 24, 15, 0, tzinfo=timezone.utc).timestamp()
+    assert jobs.due(now=datetime(2026, 9, 24, 15, 1), setup_completed_at=setup_completed) is False
+    assert jobs.due(now=datetime(2026, 9, 25, 3, 30), setup_completed_at=setup_completed) is True
     cfg.backup_schedule = "off"
     assert jobs.due(now=datetime(2026, 9, 24, 3, 31)) is False
 

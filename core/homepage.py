@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, quote, urlparse
 import requests
 
 from applications.catalog import ApplicationCatalog
-from core.app_web_url import app_web_ui_url
+from core.app_web_url import app_launch_url, app_web_ui_url
 from core.integrations.credentials import get_application_api_key
 from core.integrations.jellyfin import jellyfin_auth_headers
 from core.crypto import secret_store
@@ -753,7 +753,7 @@ def _launcher_apps(
                 "state_label": label,
                 "progress_message": job.get("message", ""),
                 "progress_updated_at": job.get("updated_at"),
-                "url": _web_url(plugin.name, plugin.port, host, scheme),
+                "url": app_launch_url(plugin.name, _web_url(plugin.name, plugin.port, host, scheme)),
             }
         )
     order = {name: index for index, name in enumerate(_LAUNCHER_CATEGORY_ORDER)}

@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import platform
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -106,10 +107,19 @@ class WizardEngine:
     def is_completed(self) -> bool:
         return bool(self._state.get("completed", False))
 
-    def skip(self) -> dict[str, Any]:
+    def completed_at(self) -> float | None:
+        value = self._state.get("completed_at")
+        return float(value) if isinstance(value, (int, float)) else None
+
+    def _complete(self) -> None:
+        if not self.is_completed():
+            self._state["completed_at"] = time.time()
         self._state["completed"] = True
         self._state["current_step"] = 12
         self._save_state()
+
+    def skip(self) -> dict[str, Any]:
+        self._complete()
         return self.get_status()
 
     def _catalog(self) -> ApplicationCatalog:
@@ -333,6 +343,7 @@ class WizardEngine:
                         {"id": "bazarr", "name": "Bazarr (Subtitles)"},
                         {"id": "recyclarr", "name": "Recyclarr (TRaSH Guides Sync)"},
                         {"id": "neutarr", "name": "NeutArr (Automation Optimizer)"},
+                        {"id": "cleanuparr", "name": "Cleanuparr"},
                         {"id": "flaresolverr", "name": "Flaresolverr (Cloudflare bypass for indexers)"},
                         {"id": "grimmory", "name": "Grimmory (ebooks, comics, audiobooks)"},
                         {"id": "shelfmark", "name": "Shelfmark (book search and requests)"},
@@ -579,9 +590,7 @@ class WizardEngine:
             else:
                 install_results.append({"app": app_name, "installed": False, "status": "pending_catalog_install"})
 
-        self._state["completed"] = True
-        self._state["current_step"] = 12
-        self._save_state()
+        self._complete()
 
         return {
             "completed": True,

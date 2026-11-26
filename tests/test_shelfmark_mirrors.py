@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from applications.community import ShelfmarkApp
 from applications.shelfmark_mirrors import (
     coerce_url_list,
     ensure_shelfmark_venv,
@@ -18,6 +19,21 @@ from applications.shelfmark_mirrors import (
     write_shelfmark_preload,
     write_shelfmark_runner,
 )
+
+
+def test_shelfmark_source_metadata_alone_does_not_complete_install(tmp_path):
+    app = ShelfmarkApp(base_config_dir=tmp_path / "config", base_install_dir=tmp_path / "apps")
+    app.install_dir.mkdir(parents=True)
+    app.metadata_path().write_text('{"version": "v1"}')
+    assert not app.is_installed()
+
+    (app.install_dir / app.executable_name).touch()
+    assert not app.is_installed()
+
+    venv_bin = app.install_dir / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "gunicorn").touch()
+    assert app.is_installed()
 
 
 def test_mirror_url_is_safe_accepts_normal_https():

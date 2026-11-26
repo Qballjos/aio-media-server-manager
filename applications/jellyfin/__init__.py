@@ -190,16 +190,10 @@ class JellyfinApp(BaseApplication):
             path.write_text(updated, encoding="utf-8")
 
     def _ensure_known_proxies(self) -> None:
-        """Trust localhost so X-Forwarded-For from the CF origin shim is honored.
-
-        Kestrel often reports the shim as ``:ffff:127.0.0.1``. Exact ``127.0.0.1`` in
-        KnownProxies does not match that, so ForwardedHeaders never rewrites RemoteIP
-        and every tunnel client stays ``IsInLocalNetwork: True``.
-        """
+        """Trust localhost so X-Forwarded-For from the CF origin shim is honored."""
         path = self.config_dir / "network.xml"
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        # Order: exact loopbacks, IPv4-mapped loopback, then the whole loopback net.
-        proxies = ("127.0.0.1", "::1", "::ffff:127.0.0.1", "127.0.0.0/8")
+        proxies = ("127.0.0.1", "::1", "127.0.0.0/8")
         if not path.is_file():
             body = "\n".join(f"    <string>{ip}</string>" for ip in proxies)
             path.write_text(
@@ -226,7 +220,15 @@ class JellyfinApp(BaseApplication):
             if updated != text:
                 path.write_text(updated, encoding="utf-8")
             return
-        updated = text
+        # Jellyfin maps the legacy alias to IPv4 but keeps its IPv6 /128 prefix.
+        # Remove this entry from existing configurations before Jellyfin starts.
+        updated = re.sub(
+            r"<KnownProxies>.*?</KnownProxies>",
+            lambda match: re.sub(r"[ \t]*<string>\s*::ffff:127\.0\.0\.1\s*</string>\r?\n?", "", match[0], flags=re.IGNORECASE),
+            text,
+            count=1,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
         for ip in proxies:
             if re.search(rf"<string>\s*{re.escape(ip)}\s*</string>", updated, flags=re.IGNORECASE):
                 continue

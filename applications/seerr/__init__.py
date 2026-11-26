@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import signal
 import subprocess
 from collections import deque
 from pathlib import Path
@@ -101,6 +102,9 @@ delete nextConfig.experimental.turbopackMemoryLimit;
 """
     else:
         raise RuntimeError("Cannot apply Seerr build memory target: unsupported Next.js schema")
+    if supports("cpus"):
+        # Limit Next.js's build worker processes as well as Turbopack's threads.
+        memory_patch += "nextConfig.experimental.cpus = 1;\n"
     lint_patch = (
         "nextConfig.eslint = { ...nextConfig.eslint, ignoreDuringBuilds: true };\n"
         if supports("eslint") else "delete nextConfig.eslint;\n"
@@ -167,7 +171,15 @@ class SeerrApp(BaseApplication):
         self._verify_sqlite(node, pnpm, env)
         set_job(self.name, "installing", "Building Seerr from source…")
         _limit_build_memory(self.install_dir)
-        self._run_install_step([pnpm, "build"], {**env, "RAYON_NUM_THREADS": "1"})
+        try:
+            self._run_install_step([pnpm, "build"], {**env, "RAYON_NUM_THREADS": "1"})
+        except subprocess.CalledProcessError as exc:
+            if exc.returncode not in (-signal.SIGKILL, 128 + signal.SIGKILL):
+                raise
+            raise RuntimeError(
+                "Seerr build was killed. Check Docker's available memory and retry "
+                "when other application installs have finished."
+            ) from exc
         set_job(self.name, "installing", "Finishing Seerr installation…")
         runner = self.install_dir / "seerr"
         write_runner(

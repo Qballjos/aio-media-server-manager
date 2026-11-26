@@ -84,10 +84,10 @@ Nachdem das Connector-Token gespeichert ist (Schritt 3):
 1. **Einstellungen → Externer Zugriff → Öffentliche Subdomains**
 2. Setzen Sie **Öffentliche App-Domain** auf Ihre Zone (z. B. `example.com` oder `example.co.uk`).
 3. Legen Sie ein API-Token so an, wie Cloudflare es beschreibt ([Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)):
-   - **My Profile → API Tokens** (Benutzer) oder **Manage Account → Account API Tokens**
-   - **Create Token** → starten Sie von der Vorlage **Edit zone DNS**
-   - Behalten Sie **Zone → DNS → Edit**, beschränkt auf Ihre Zone
-   - Fügen Sie **Account → Cloudflare Tunnel → Edit** hinzu (und möglichst **Zone → Zone → Read**)
+   - **My Profile → API Tokens** (Benutzer) oder **Manage Account → API Tokens**
+   - **Create Token** → ohne Vorlage beginnen
+   - Fügen Sie **Cloudflare One Connector: cloudflared → Edit** für das Konto hinzu, dem der Tunnel gehört.
+   - Fügen Sie für Ihre Domain **DNS → Edit** und **Zone → Read** zur **Zone**-Richtlinie hinzu.
    - Weiter zur Zusammenfassung → Create Token (das Geheimnis einmal kopieren)
 4. Fügen Sie dieses API-Token unter **Öffentliche Subdomains** ein  
    (das ist **nicht** das `eyJ…`-Connector-Token aus Schritt 3 und **nicht** der Global API Key).

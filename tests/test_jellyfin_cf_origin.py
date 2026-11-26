@@ -74,8 +74,22 @@ def test_jellyfin_ensures_known_proxies(tmp_path: Path, monkeypatch):
     text = (app.config_dir / "network.xml").read_text(encoding="utf-8")
     assert "<string>127.0.0.1</string>" in text
     assert "<string>::1</string>" in text
-    assert "<string>::ffff:127.0.0.1</string>" in text
+    assert "<string>::ffff:127.0.0.1</string>" not in text
     assert "<string>127.0.0.0/8</string>" in text
+
+    path = app.config_dir / "network.xml"
+    path.write_text(text.replace(
+        "<KnownProxies>",
+        "<KnownProxies>\n"
+        "    <string> ::ffff:127.0.0.1 </string>\n"
+        "    <string>192.0.2.1</string>",
+    ), encoding="utf-8")
+    app._ensure_known_proxies()
+    migrated = path.read_text(encoding="utf-8")
+    assert "::ffff:127.0.0.1" not in migrated
+    assert "<string>192.0.2.1</string>" in migrated
+    app._ensure_known_proxies()
+    assert path.read_text(encoding="utf-8") == migrated
 
 
 def test_dockerfile_ships_nginx_cf_origin_template():

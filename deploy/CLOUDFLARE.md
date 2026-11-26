@@ -84,10 +84,10 @@ After the tunnel connector token is saved (Step 3):
 1. **Settings → External access → Public subdomains**
 2. Set **Public app domain** to your zone (e.g. `example.com` or `example.co.uk`).
 3. Create an API token the way Cloudflare documents ([Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)):
-   - **My Profile → API Tokens** (user) or **Manage Account → Account API Tokens**
-   - **Create Token** → start from the **Edit zone DNS** template
-   - Keep **Zone → DNS → Edit**, limited to your zone
-   - Add **Account → Cloudflare Tunnel → Edit** (and preferably **Zone → Zone → Read**)
+   - **My Profile → API Tokens** (user) or **Manage Account → API Tokens**
+   - **Create Token** → start from scratch
+   - For the account that owns the tunnel, add **Cloudflare One Connector: cloudflared → Edit**.
+   - For your specific domain, add **DNS → Edit** and **Zone → Read** to the **Zone** policy.
    - Continue to summary → Create Token (copy the secret once)
 4. Paste that API token under **Public subdomains**  
    (this is **not** the `eyJ…` tunnel connector token from Step 3, and **not** the Global API Key).

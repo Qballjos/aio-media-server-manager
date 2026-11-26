@@ -2221,14 +2221,20 @@ onBeforeUnmount(() => {
           <label class="ui-field">
             {{ $t('Cloudflare API token') }}
             <span class="ui-field-hint">
-              {{ $t('Used by Publish to Cloudflare. Different from the tunnel') }} <code>eyJ…</code> {{ $t('token and from the Global API Key. Create under') }}
+              {{ $t('Publish to Cloudflare uses a separate API token. Keep the tunnel connector token in the tunnel settings.') }}
               <a
                 href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/"
                 target="_blank"
                 rel="noopener noreferrer"
-              >{{ $t('My Profile → API Tokens') }}</a>
-              {{ $t('(or Manage Account → Account API Tokens): Create Token →') }}
-              <strong>{{ $t('Edit zone DNS') }}</strong> {{ $t('template → keep Zone → DNS → Edit on your zone → add Account → Cloudflare Tunnel → Edit → Create Token. If you see') }} <strong>{{ $t('Invalid access token') }}</strong>{{ $t(', clear the saved token and paste a new API Token. Leave blank to keep a saved token.') }}
+              >{{ $t('Cloudflare token setup') }}</a>
+              <br />
+              {{ $t('Open My Profile → API Tokens or Manage Account → API Tokens. Select Create Token and start from scratch.') }}
+              <br />
+              {{ $t('For your Cloudflare account, add Cloudflare One Connector: cloudflared → Edit.') }}
+              <br />
+              {{ $t('For the domain you publish, add DNS → Edit and Zone → Read under the Zone policy.') }}
+              <br />
+              {{ $t('Select Continue to summary, then Create Token. Paste the new token here to replace a saved token, or leave this field blank to keep it.') }}
             </span>
             <input
               v-model="form.cloudflare_api_token"

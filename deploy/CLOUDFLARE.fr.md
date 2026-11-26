@@ -84,10 +84,10 @@ Une fois le jeton connecteur enregistré (étape 3) :
 1. **Réglages → Accès externe → Sous-domaines publics**
 2. Mettez **Domaine public des apps** sur votre zone (par exemple `example.com` ou `example.co.uk`).
 3. Créez un jeton d’API comme Cloudflare le documente ([Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)) :
-   - **My Profile → API Tokens** (utilisateur) ou **Manage Account → Account API Tokens**
-   - **Create Token** → partez du modèle **Edit zone DNS**
-   - Gardez **Zone → DNS → Edit**, limité à votre zone
-   - Ajoutez **Account → Cloudflare Tunnel → Edit** (et de préférence **Zone → Zone → Read**)
+   - **My Profile → API Tokens** (utilisateur) ou **Manage Account → API Tokens**
+   - **Create Token** → commencez sans modèle
+   - Ajoutez **Cloudflare One Connector: cloudflared → Edit** pour le compte qui possède le tunnel.
+   - Dans la stratégie **Zone**, ajoutez **DNS → Edit** et **Zone → Read** pour votre domaine.
    - Continuez jusqu’au résumé → Create Token (copiez le secret une fois)
 4. Collez ce jeton d’API sous **Sous-domaines publics**  
    (ce n’est **pas** le jeton connecteur `eyJ…` de l’étape 3, et **pas** la Global API Key).

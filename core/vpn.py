@@ -530,6 +530,12 @@ def vpn_start_failure_detail(returncode: int, stderr: str, stdout: str) -> str:
             "from a current image."
         )
         return f"{hint} {detail}".strip()[:2000]
+    if "rtnetlink answers: operation not permitted" in lower:
+        hint = (
+            "WireGuard could not configure the network interface. Check that the "
+            "container has NET_ADMIN and access to /dev/net/tun."
+        )
+        return f"{hint} {detail}".strip()[:2000]
     if "unknown device type" in lower or (
         "cannot find device" in lower and "wg0" in lower
     ):

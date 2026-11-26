@@ -289,13 +289,16 @@ class BackupJobs:
             "last_warnings": state.get("last_warnings") or 0,
         }
 
-    def due(self, now=None) -> bool:
+    def due(self, now=None, *, setup_completed_at: float | None = None) -> bool:
         from core.update_schedule import local_now, parse_hhmm, schedule_due
 
         hour, minute = parse_hhmm(self.settings.backup_time)
+        last_at = self.load_state().get("last_scheduled_at")
+        if setup_completed_at is not None and (last_at is None or last_at < setup_completed_at):
+            last_at = setup_completed_at
         return schedule_due(
             schedule=self.settings.backup_schedule,
-            last_at=self.load_state().get("last_scheduled_at"),
+            last_at=last_at,
             now=local_now(self.settings.timezone, now=now),
             hour=hour,
             minute=minute,
@@ -304,9 +307,11 @@ class BackupJobs:
         )
 
     async def tick(self) -> str:
+        from core.wizard import wizard_engine
+
         if self.busy or pause_reason():
             return "paused"
-        if not self.due():
+        if not self.due(setup_completed_at=wizard_engine.completed_at()):
             return "idle"
         try:
             self.start_backup("scheduled", kind="scheduled")

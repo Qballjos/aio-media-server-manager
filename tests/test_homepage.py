@@ -231,6 +231,7 @@ def test_homepage_launcher_groups_by_category(tmp_path):
         [
             _plugin("sonarr", 8989, tmp_path, category="automation"),
             _plugin("jellyfin", 8096, tmp_path, category="media"),
+            _plugin("plex", 32400, tmp_path, category="media"),
             _plugin("seerr", 5055, tmp_path, category="requests"),
             _plugin("flaresolverr", 8191, tmp_path, category="indexers"),
         ]
@@ -242,8 +243,9 @@ def test_homepage_launcher_groups_by_category(tmp_path):
         patch("core.homepage._fetch_json", return_value=(None, "skipped")),
     ):
         snap = homepage_snapshot("nas.local")
-    assert [item["name"] for item in snap["apps"]] == ["jellyfin", "seerr", "sonarr"]
-    assert [item["category"] for item in snap["apps"]] == ["media", "requests", "automation"]
+    assert [item["name"] for item in snap["apps"]] == ["jellyfin", "plex", "seerr", "sonarr"]
+    assert [item["category"] for item in snap["apps"]] == ["media", "media", "requests", "automation"]
+    assert snap["apps"][1]["url"] == "http://nas.local:32400/web/index.html"
 
 
 def test_homepage_launcher_marks_crash_loop_sick(tmp_path):

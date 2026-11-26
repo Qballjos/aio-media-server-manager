@@ -48,6 +48,10 @@ def test_wizard_engine_lifecycle(tmp_path: Path):
 
     step10 = engine.get_step_data(10)
     assert "bazarr" in step10["selected"]
+    assert "cleanuparr" in {opt["id"] for opt in step10["options"]}
+    assert "cleanuparr" not in step10["selected"]
+    engine.update_step_selections(10, {"recommended_preview": [*step10["selected"], "cleanuparr"]})
+    assert "cleanuparr" in engine._target_apps()
     from applications.community import FlaresolverrApp
     from core.installer.arch import detect_system_arch
 
@@ -107,6 +111,8 @@ def test_wizard_engine_lifecycle(tmp_path: Path):
 
     # Reload from disk to test persistence
     reloaded_engine = WizardEngine(state_file=state_file)
+    assert reloaded_engine.completed_at() == engine.completed_at()
+    assert reloaded_engine.completed_at() is not None
     assert reloaded_engine.get_status()["selections"]["vpn_provider"] == "privadovpn"
 
 

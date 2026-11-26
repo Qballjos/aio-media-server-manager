@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 from applications.base import SimpleApplication
-from applications.install_helpers import write_runner
+from applications.install_helpers import venv_bin, write_runner
 from applications.manifest import AppCategory, AppManifest, AppTier, InstallMethod
 from applications.shelfmark_mirrors import (
     ensure_shelfmark_venv,
@@ -200,6 +200,14 @@ class ShelfmarkApp(SimpleApplication):
         optional_dependencies=("prowlarr", "flaresolverr", "grimmory", "qbittorrent"),
         health_path="/api/health",
     )
+
+    def is_installed(self) -> bool:
+        # Source extraction writes metadata before the virtualenv and runner exist.
+        return (
+            self.metadata_path().is_file()
+            and (self.install_dir / self.executable_name).is_file()
+            and venv_bin(self.install_dir / "venv", "gunicorn").is_file()
+        )
 
     def extra_env(self) -> dict[str, str]:
         from applications.shelfmark_mirrors import _app_installed, _app_port, shelfmark_download_client_env

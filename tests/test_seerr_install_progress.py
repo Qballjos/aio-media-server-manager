@@ -205,7 +205,7 @@ def test_current_next_config_removes_unsupported_options(tmp_path):
         pytest.skip('Node.js required')
     schema = tmp_path / 'node_modules/next/dist/server/config-schema.js'
     schema.parent.mkdir(parents=True)
-    schema.write_text('turbopackGc: value, turbopackFileSystemCacheForBuild: value')
+    schema.write_text('turbopackGc: value, turbopackFileSystemCacheForBuild: value, cpus: value')
     config = tmp_path / 'next.config.mjs'
     config.write_text('const nextConfig = {experimental:{scrollRestoration:true,turbopackMemoryLimit:512},eslint:{ignoreDuringBuilds:true}};\nexport default nextConfig;\n')
     _limit_build_memory(tmp_path)
@@ -219,3 +219,4 @@ def test_current_next_config_removes_unsupported_options(tmp_path):
     assert actual['experimental']['scrollRestoration'] is True
     assert actual['experimental']['turbopackGc'] is True
     assert actual['experimental']['turbopackFileSystemCacheForBuild'] is True
+    assert actual['experimental']['cpus'] == 1

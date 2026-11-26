@@ -115,6 +115,13 @@ def app_web_ui_url_for_request(request: Request, *, app_name: str, port: int) ->
     return app_web_ui_url(app_name=app_name, port=port, hostname=host, scheme=scheme)
 
 
+def app_launch_url(app_name: str, base_url: str) -> str:
+    """Return the app's browser entry point from its origin URL."""
+    if app_name == "plex":
+        return f"{base_url}/web/index.html"
+    return base_url
+
+
 def catalog_app_browser_url(
     app_name: str,
     *,
