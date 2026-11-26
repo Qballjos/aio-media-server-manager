@@ -11,24 +11,28 @@ COPY frontend/ ./
 COPY logo-aio-media-manager.png ./public/logo-aio-media-manager.png
 RUN npm run build
 
-FROM node:22-bookworm-slim AS nodebin
+FROM node:22-trixie-slim AS nodebin
+# Catalog installers need npm; replace Node's bundled npm with a patched release.
+RUN npm install --global --no-audit --no-fund npm@11.21.3
 
 FROM eclipse-temurin:25-jre-noble AS jre
 
-FROM python:3.13-slim-bookworm AS py313
+FROM python:3.13-slim-trixie AS py313
+RUN python -m pip install --no-cache-dir --upgrade pip==26.3
 
 # Userspace WireGuard for NAS kernels that have no wireguard module (typical on Synology).
 # wg-quick falls back to this binary when `ip link add type wireguard` fails (exit 127 otherwise).
-FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS wggo
+FROM --platform=$BUILDPLATFORM golang:1.26.11-bookworm AS wggo
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
-# 0.0.20230223 fails on Go 1.23: golang.org/x/net still calls syscall.recvmsg.
+# Override the tagged release's vulnerable x/net and transitive x/crypto.
 RUN git -c advice.detachedHead=false clone --depth 1 --branch 0.0.20250522 https://github.com/WireGuard/wireguard-go.git . \
+    && go get golang.org/x/net@v0.62.0 \
     && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
         go build -trimpath -ldflags="-s -w" -o /wireguard-go .
 
-FROM python:3.14-slim-bookworm
+FROM python:3.14-slim-trixie
 ARG TARGETARCH
 ARG AMM_VERSION=0.4.1
 ARG AMM_GIT_SHA=
@@ -63,7 +67,7 @@ RUN printf '%s\n' \
 
 # Host packages vs catalog (both linux/amd64 and linux/arm64 unless noted):
 #   *Arr/.NET (Sonarr, Radarr, Lidarr, Prowlarr, NeutArr, Recyclarr):
-#     libicu*, libssl3, libgssapi-krb5-2, zlib1g, libsqlite3-0, sqlite3
+#     libicu*, libssl3t64, libgssapi-krb5-2, zlib1g, libsqlite3-0, sqlite3
 #   SABnzbd / NZBGet: unrar (non-free RAR 5), par2cmdline-turbo, p7zip-full, python3.13, build-essential
 #   Bazarr / NeutArr (venv wheels): libxml2, libxslt1.1, libjpeg62-turbo,
 #     libncurses6, python3.13, python3-dev, build-essential
@@ -81,7 +85,7 @@ RUN printf '%s\n' \
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources; \
     else \
-        echo "deb http://deb.debian.org/debian bookworm non-free non-free-firmware" > /etc/apt/sources.list.d/non-free.list; \
+        echo "deb http://deb.debian.org/debian trixie non-free non-free-firmware" > /etc/apt/sources.list.d/non-free.list; \
     fi \
     && apt-get update \
     && ICU_PKG=$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -1) \
@@ -100,7 +104,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         openvpn \
         wireguard-tools \
         iptables \
-        libssl3 \
+        libssl3t64 \
         libgssapi-krb5-2 \
         zlib1g \
         libsqlite3-0 \
@@ -141,7 +145,7 @@ RUN set -eux; \
     printf '%s\n' \
       'Types: deb' \
       'URIs: https://repo.jellyfin.org/debian' \
-      'Suites: bookworm' \
+      'Suites: trixie' \
       'Components: main' \
       "Architectures: ${TARGETARCH:-amd64}" \
       'Signed-By: /etc/apt/keyrings/jellyfin.gpg' \
@@ -193,7 +197,8 @@ RUN set -eux; \
 
 WORKDIR /app
 COPY pyproject.toml poetry.lock ./
-RUN pip install --no-cache-dir poetry \
+RUN python -m pip install --no-cache-dir --upgrade pip==26.3 \
+    && python -m pip install --no-cache-dir poetry \
     && poetry install --only main --no-interaction --no-ansi --no-root
 
 COPY core ./core

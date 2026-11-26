@@ -1,0 +1,39 @@
+name: Scan container image
+description: Scan a published image digest for Critical and High vulnerabilities
+inputs:
+  image:
+    description: Registry image reference pinned to a digest
+    required: true
+  platform:
+    description: Target image platform
+    required: true
+  artifact:
+    description: Unique report artifact name
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Scan image with Trivy
+      shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image }}
+        PLATFORM: ${{ inputs.platform }}
+        REPORT: ${{ runner.temp }}/trivy-image.json
+      run: |
+        docker run --rm ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+          image --image-src remote --platform "$PLATFORM" --scanners vuln \
+          --severity CRITICAL,HIGH --format json --no-progress --exit-code 0 --timeout 10m \
+          "$IMAGE_REF" > "$REPORT"
+        jq -er '
+          (if .SchemaVersion == 2 and (.Results | type) == "array"
+          then [.Results[] | .Vulnerabilities[]?]
+          else error("Invalid Trivy image report")
+          end) as $findings
+          | "### Trivy image scan\n\nCritical: \([$findings[] | select(.Severity == "CRITICAL")] | length) · High: \([$findings[] | select(.Severity == "HIGH")] | length)"
+        ' "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ inputs.artifact }}
+        path: ${{ runner.temp }}/trivy-image.json
+        if-no-files-found: error
+        retention-days: 30

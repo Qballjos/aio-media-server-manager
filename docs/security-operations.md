@@ -69,3 +69,25 @@ updates report binary, configuration and process recovery separately. A retained
 before another update can replace it; its path and the configuration snapshot
 are included in the failed update result. Archive activation failures also keep
 `.APP.previous-*` copies when recovery fails.
+
+## Container image vulnerability scans
+
+Stable and nightly workflows run Trivy on the exact registry digest built for
+each architecture (`linux/amd64` and `linux/arm64`) before publishing the image
+tags. Check the GitHub Actions run summary for Critical and High counts and
+download the `trivy-linux-amd64` and `trivy-linux-arm64` JSON artifacts for
+affected packages, file paths and available fixes. Counts are findings per
+package and scan target. A CVE can appear in more than one target.
+
+The initial scans report findings without blocking publication. A failed scan
+or missing report stops publication. Triage Critical and High findings by
+affected component, deployed exposure and available fixes. Compare the same
+architecture and image digest when investigating an existing report. CodeQL
+and Dependabot continue to track source and declared dependency findings.
+
+Check upstream package contents before classifying bundled-component findings.
+For example, pip lists setuptools in its vendored metadata but ships only
+`pkg_resources`. The `package_index.py` code affected by CVE-2025-47273
+is absent from the pip wheel. Keep the finding visible in raw reports and
+recheck the shipped files when pip changes.
+[pip maintainer discussion](https://github.com/pypa/pip/issues/14031)

@@ -19,6 +19,7 @@ on:
       - "scripts/e2e_server.py"
       - "scripts/release_version.py"
       - "tests/test_release_version.py"
+      - ".github/actions/scan-image/**"
       - ".github/workflows/docker.yml"
   workflow_dispatch:
 
@@ -121,6 +122,12 @@ jobs:
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Scan image
+        uses: ./.github/actions/scan-image
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          platform: ${{ matrix.platform }}
+          artifact: trivy-${{ env.PLATFORM_PAIR }}
       - name: Export digest
         run: |
           mkdir -p /tmp/digests

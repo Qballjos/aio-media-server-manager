@@ -78,7 +78,7 @@ are retained.
 
 | Runtime | Pin | Reason |
 |---|---|---|
-| Node (frontend build + Seerr) | **22** LTS | Seerr declares `engines.node: ^22.19.0`. The image copies Node from `node:22-bookworm-slim`. Do **not** merge Dependabot bumps to Node 24/25/26 until Seerr’s engines allow it (Node 26 also broke `corepack` in our Dockerfile). |
+| Node (frontend build + Seerr) | **22** LTS | Seerr declares `engines.node: ^22.19.0`. The image copies Node from the Node 22 slim image for its Debian base. Do **not** merge Dependabot bumps to Node 24/25/26 until Seerr’s engines allow it (Node 26 also broke `corepack` in our Dockerfile). |
 | Manager Python | **3.14** | Appliance API process |
 | Child Python | **3.13** | Bazarr / SABnzbd (`AMM_CHILD_PYTHON` / `/opt/python3.13`) |
 | Shelfmark Python | **3.14** | Upstream `requires-python >= 3.14`. Uses the manager interpreter so `gunicorn` is installed. |
@@ -94,6 +94,7 @@ Report vulnerabilities through [GitHub private advisories](https://github.com/Qb
 ## Pull requests
 
 - For a nightly build, target `beta`, never `main`. Pushes to `beta` run Nightly and publish `:nightly`; Every push to `main` (including documentation-only changes) runs CI, builds both stable image architectures, and then publishes a GitHub release and its versioned image alongside `:latest`. Releases queue instead of canceling earlier pushes. Failed tests or builds prevent publication. Patch versions increment automatically from existing stable tags; a higher version in `pyproject.toml` selects a new minor/major series. No version-bump commit is pushed back to `main`. Reruns reuse the release for the same commit. Promote to `main` only when a stable release is explicitly requested.
+- The experimental `codex/debian13` branch publishes only `ghcr.io/qballjos/aio-media-server-manager:debian13` after the amd64 and arm64 builds and Trivy scans. Validate catalog installs and NAS compatibility before promoting the base change.
 - Keep the change focused and explain *why* in the PR body.
 - Add or update tests when behaviour changes.
 - Squash merge is preferred.
