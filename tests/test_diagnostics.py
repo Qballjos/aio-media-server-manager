@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from api.app import create_app
 from applications.catalog import ApplicationCatalog
 from applications.sonarr import SonarrApp
+from core.auth import auth_manager
 from core.diagnostics import diagnostics
 from core.settings import Settings, settings
 
@@ -49,7 +50,10 @@ def test_debug_share_url_is_token_gated(tmp_path: Path, monkeypatch):
     missing = client.get("/debug/not-a-real-token")
     assert missing.status_code == 404
 
-    created = client.post("/api/diagnostics/share")
+    assert client.post("/api/diagnostics/share").status_code == 401
+    auth_manager.create_admin("admin", "FixturePassword123!")
+    headers = {"Authorization": f"Bearer {auth_manager.issue_token('admin')}"}
+    created = client.post("/api/diagnostics/share", headers=headers)
     assert created.status_code == 200
     payload = created.json()
     url = payload["url"]
@@ -79,7 +83,16 @@ def test_debug_share_url_is_token_gated(tmp_path: Path, monkeypatch):
     assert "tunneled_apps" in body["vpn"]
     assert b"<h2>VPN</h2>" in html.content
 
-    revoked = client.delete("/api/diagnostics/share")
+    def unavailable_vpn():
+        raise RuntimeError("internal VPN diagnostic detail")
+
+    monkeypatch.setattr("core.vpn.vpn_manager.status", unavailable_vpn)
+    fallback = client.get(f"/debug/{token}", params={"format": "json"})
+    assert fallback.json()["vpn"] == {"error": "VPN diagnostics unavailable."}
+    assert "internal VPN diagnostic detail" not in fallback.text
+
+    assert client.delete("/api/diagnostics/share").status_code == 401
+    revoked = client.delete("/api/diagnostics/share", headers=headers)
     assert revoked.status_code == 200
     gone = client.get(f"/debug/{token}")
     assert gone.status_code == 404

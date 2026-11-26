@@ -636,7 +636,7 @@ def test_homepage_seerr_requests_row(tmp_path):
     assert snap["requests"][0]["detail"] == "Qballjos"
     assert snap["requests"][0]["mediaType"] == "movie"
     assert snap["requests"][0]["status"] == "requested"
-    assert "image.tmdb.org" in snap["requests"][0]["poster"]
+    assert snap["requests"][0]["poster"] == "https://image.tmdb.org/t/p/w185/x.jpg"
 
 
 def test_homepage_seerr_requests_keep_unfinished(tmp_path):
@@ -735,7 +735,7 @@ def test_homepage_seerr_trending_row(tmp_path):
     assert snap["trending"][0]["mediaId"] == 99
     assert snap["trending"][0]["overview"] == "A court herbalist solves mysteries."
     assert snap["trending"][0]["voteAverage"] == 8.2
-    assert "image.tmdb.org" in snap["trending"][0]["poster"]
+    assert snap["trending"][0]["poster"] == "https://image.tmdb.org/t/p/w185/t.jpg"
     assert snap["trending"][0]["backdrop"] == "https://image.tmdb.org/t/p/w1280/wide.jpg"
     assert snap["trending"][1]["title"] == "Hot Show"
     assert snap["trending"][1]["backdrop"] == ""
@@ -956,7 +956,7 @@ def test_homepage_search_uses_seerr_when_running(tmp_path):
     assert data["results"][0]["can_request"] is True
     assert data["results"][0]["status"] == "missing"
     assert data["results"][0]["mediaId"] == 42
-    assert "image.tmdb.org" in data["results"][0]["poster"]
+    assert data["results"][0]["poster"] == "https://image.tmdb.org/t/p/w154/x.jpg"
     assert data["results"][1]["status"] == "available"
     assert data["results"][1]["can_request"] is False
 

@@ -34,7 +34,7 @@ the manager next configures them; this does not encrypt credentials inside those
 child-application files. Keep the configuration volume and its backups private.
 
 Backup failures and application-settings failures return safe guidance rather
-than uncontrolled exception text. Token-protected debug reports include redacted error summaries. Stack traces
+than uncontrolled exception text. Only an authenticated administrator can create or revoke a shared debug link. Token-protected reports include redacted error summaries. Stack traces
 stay out of the shared report, and browsers are told to avoid caching the report
 or sending its URL as a referrer.
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -359,5 +360,6 @@ def test_shelfmark_grimmory_urls(tmp_path: Path, monkeypatch, netns, host):
     env = shelfmark.extra_env()
     assert env["BOOKLORE_HOST"] == f"http://{host}:6060"
     assert sync_shelfmark_audiobook_library_url(shelfmark.config_dir)
-    assert "https://grimmory.example.com" in (shelfmark.config_dir / "settings.json").read_text()
+    saved = json.loads((shelfmark.config_dir / "settings.json").read_text())
+    assert saved["AUDIOBOOK_LIBRARY_URL"] == "https://grimmory.example.com"
 

@@ -1051,7 +1051,7 @@ def test_vpn_webui_proxy_forwards_bytes():
     for _ in range(20):
         probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        probe.bind(("0.0.0.0", 0))
+        probe.bind(("127.0.0.1", 0))
         candidate = probe.getsockname()[1]
         probe.close()
         time.sleep(0.02)

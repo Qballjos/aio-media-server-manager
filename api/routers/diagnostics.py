@@ -41,7 +41,7 @@ async def diagnostics_status(request: Request) -> dict[str, Any]:
 
 @router.post("/api/diagnostics/share", summary="Create a time-limited debug URL")
 async def create_debug_share(request: Request) -> dict[str, Any]:
-    _ensure_authenticated(request)
+    auth_manager.authenticate_request(request)
     payload = diagnostics.create_share()
     return {
         "status": "ok",
@@ -54,7 +54,7 @@ async def create_debug_share(request: Request) -> dict[str, Any]:
 
 @router.delete("/api/diagnostics/share", summary="Revoke the debug URL")
 async def revoke_debug_share(request: Request) -> dict[str, Any]:
-    _ensure_authenticated(request)
+    auth_manager.authenticate_request(request)
     diagnostics.revoke_share()
     return {"status": "revoked"}
 

@@ -12,6 +12,7 @@ from typing import Any, Callable, Optional
 
 import requests
 
+from core.file_io import write_private_text
 from core.install_jobs import set_wiring_progress
 from core.shared_credentials import shared_admin_credentials
 
@@ -190,10 +191,6 @@ def read_neutarr_setup_token(config_dir: Path) -> str | None:
     return token or None
 
 
-def sha256_hex(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
-
 def bazarr_password_hash(password: str) -> str:
     """Bazarr compares login against MD5 hex of the password, not SHA-256."""
     return hashlib.md5(password.encode("utf-8")).hexdigest()
@@ -210,7 +207,7 @@ def patch_bazarr_auth_yaml(config_path: Path, username: str, password: str) -> b
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
     updated = _rewrite_bazarr_auth_block(text, username, hashed)
     if updated != text:
-        path.write_text(updated, encoding="utf-8")
+        write_private_text(path, updated)
         return True
     return False
 
