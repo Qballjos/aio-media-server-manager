@@ -81,6 +81,7 @@ RUN printf '%s\n' \
 #   Recyclarr: git (clones TRaSH Guides on sync)
 #   VPN: iproute2, openvpn, wireguard-tools, iptables, wireguard-go (userspace fallback)
 # Catalog app installs use GitHub zipballs/releases; Recyclarr still shells out to git.
+# Install libzstd1 explicitly so the base image copy picks up DSA-6657-1.
 # Official `unrar` lives in Debian non-free; unrar-free reports version 0.00 to SABnzbd.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources; \
@@ -107,6 +108,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         libssl3t64 \
         libgssapi-krb5-2 \
         zlib1g \
+        libzstd1 \
         libsqlite3-0 \
         sqlite3 \
         libxml2 \
@@ -122,6 +124,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         python3-dev \
         ${ICU_PKG} \
         ${EXTRA} \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libzstd1)" ge '1.5.7+dfsg-1+deb13u1' \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
