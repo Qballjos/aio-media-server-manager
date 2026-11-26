@@ -26,6 +26,12 @@ updates:
     schedule:
       interval: weekly
 
+    # Keep CodeQL init and analyze on the same version.
+    groups:
+      codeql:
+        patterns:
+          - "github/codeql-action*"
+
   - package-ecosystem: docker
     target-branch: beta
     directory: /
@@ -37,3 +43,6 @@ updates:
     ignore:
       - dependency-name: "node"
         versions: [">=23"]
+      # Keep manager Python 3.14 and child Python 3.13 on their own minor lines.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

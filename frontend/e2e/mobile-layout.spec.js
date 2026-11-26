@@ -37,13 +37,14 @@ test('Home, Catalog and Settings controls fit their screen size', async ({ page 
   await page.goto('/#/home')
   const trending = page.locator('.home-card-trending')
   await expect(trending.locator('.home-tile')).toHaveCount(1)
-  const title = await trending.locator('h3').boundingBox()
-  const filters = await trending.locator('.home-type-filter').boundingBox()
   await expect(trending.locator('.home-trending-toggle')).toHaveCount(0)
   await expect(trending.locator('.home-tile')).toContainText('Trending missing')
   if (mobile) {
-    expect(filters.x).toBeGreaterThanOrEqual(title.x + title.width)
-    expect(Math.abs(filters.y + filters.height / 2 - title.y - title.height / 2)).toBeLessThan(2)
+    await expect.poll(() => trending.evaluate(card => {
+      const title = card.querySelector('h3').getBoundingClientRect()
+      const filters = card.querySelector('.home-type-filter').getBoundingClientRect()
+      return filters.left >= title.right && Math.abs(filters.y + filters.height / 2 - title.y - title.height / 2) < 2
+    })).toBe(true)
     await expect(page.locator('.cal-mode-day')).toBeVisible()
   } else await expect(page.locator('.cal-list, .cal-mode-week')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)

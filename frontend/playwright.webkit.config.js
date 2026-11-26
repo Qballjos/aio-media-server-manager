@@ -13,7 +13,7 @@ export default defineConfig({
     { name: 'desktop-webkit', use: { ...devices['Desktop Safari'] } },
   ],
   webServer: {
-    command: 'npx --no-install vite preview --host 127.0.0.1 --port 8766 --strictPort',
+    command: 'node ./node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 8766 --strictPort',
     url: 'http://127.0.0.1:8766',
     reuseExistingServer: false,
   },
