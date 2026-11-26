@@ -2,7 +2,17 @@
 
 Thank you for contributing to AIO Media Server Manager.
 
-## Run the appliance (default)
+## Local UI preview (default for design and frontend work)
+
+Install the host dependencies below, then run `npm --prefix frontend run preview`.
+It builds the frontend and serves a populated, disposable demo at
+`http://127.0.0.1:4173`. Sign in as `demo` with `LocalPreview123!`.
+The demo uses synthetic apps, streams, downloads and media. It resets on restart.
+
+Use Docker when testing real catalog installs and managed services. See
+[Verification](docs/testing.md) for the populated preview and the clean-start browser journeys.
+
+## Run the appliance
 
 Docker is the default way to test the wizard, catalog installs, Open UI, and Auto-Wire. The image is Linux (`linux/amd64` or `linux/arm64`). macOS and Windows hosts only provide Docker Desktop; they are not a native install target.
 
@@ -57,6 +67,12 @@ Do not use `poetry run python main.py` on macOS or Windows to exercise catalog i
 Agents and Dependabot often treat “not on the newest version” as a bug. In this project it is often intentional:
 
 **Catalog apps** (Sonarr, Radarr, Seerr, …) are updated by the operator (dashboard **Update**) or by Settings update schedules. Those schedules default to **Off**. AIO does not silently bump child apps in CI or on image rebuild. Seeing an older installed app version is expected until someone applies an update.
+
+Installation packages under `cache/downloads` are temporary: each install or update
+removes its package on completion or failure. Before starting install jobs, manager
+startup removes legacy package files and interrupted installer workspaces from that
+directory. Other runtime caches, media downloads, libraries and rollback snapshots
+are retained.
 
 **Pinned runtimes in the appliance image / CI:**
 

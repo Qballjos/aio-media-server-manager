@@ -55,6 +55,6 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
-    # Required for WireGuard/OpenVPN + netns isolation of qBittorrent.
+    # Required for WireGuard/OpenVPN isolation of VPN-managed apps.
     privileged: true
     # Intel/AMD transcoding: add compose.gpu.yml (do not map /dev/dri unless it exists).

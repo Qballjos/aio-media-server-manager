@@ -383,7 +383,7 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         result = await bring_up_vpn(vpn_manager)
         if result.get("status") == "error":
             notes.append(f"VPN start failed: {result.get('detail') or 'unknown error'}.")
-            notes.append("qBittorrent, Prowlarr, and Flaresolverr are stopped so they cannot leak.")
+            notes.append("qBittorrent, Prowlarr, Flaresolverr, and Shelfmark are stopped so they cannot leak.")
         elif result.get("tunnel_up"):
             started = result.get("started_apps") or []
             notes.append("VPN started.")
@@ -392,7 +392,7 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         else:
             notes.append(
                 "VPN start ran but the tunnel is still down. "
-                "qBittorrent, Prowlarr, and Flaresolverr stay stopped."
+                "qBittorrent, Prowlarr, Flaresolverr, and Shelfmark stay stopped."
             )
     elif body.vpn_enabled is True and vpn_was_enabled:
         notes.append("VPN settings saved. Tunnel left running; use Restart if you changed the profile.")
@@ -404,7 +404,7 @@ async def patch_settings(body: SettingsPatch, request: Request) -> dict[str, Any
         # Isolation may already have stopped tunneled apps while the tunnel was down.
         # With VPN off they may run on the house network again.
         started = await start_tunneled_apps(stopped or None)
-        notes.append("VPN stopped. Kill switch is off — qBittorrent, Prowlarr, and Flaresolverr can use the house network.")
+        notes.append("VPN stopped. Kill switch is off — qBittorrent, Prowlarr, Flaresolverr, and Shelfmark can use the house network.")
         if started:
             notes.append("Started " + ", ".join(started) + " on the house network.")
     elif body.vpn_enabled is False and not vpn_was_enabled:

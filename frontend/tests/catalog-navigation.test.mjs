@@ -30,8 +30,8 @@ function catalog() {
 
 test('store sections retain URL filters and separate installed, available and active apps', () => {
   const { panel, route } = catalog()
-  assert.equal(panel.showDiscovery.value, true)
-  assert.equal(panel.featuredService.value.name, 'jellyfin')
+  assert.equal(panel.showDiscovery.value, false)
+  assert.equal(panel.visibleServices.value.map(s => s.name).join(','), 'jellyfin,sonarr')
   panel.selectCatalogSection('installed')
   assert.equal(route.query.status, 'installed')
   assert.equal(panel.visibleServices.value.map(s => s.name).join(','), 'jellyfin,sonarr')
@@ -45,7 +45,9 @@ test('store sections retain URL filters and separate installed, available and ac
   assert.equal(route.query.cat, 'media')
   assert.equal(panel.visibleServices.value.map(s => s.name).join(','), 'jellyfin,plex')
   panel.selectCatalogSection()
+  assert.equal(route.query.view, 'discover')
   assert.equal(panel.showDiscovery.value, true)
+  assert.equal(panel.featuredService.value.name, 'jellyfin')
 })
 
 test('search narrows the selected section and hides featured content', () => {

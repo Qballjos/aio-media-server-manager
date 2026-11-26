@@ -3,6 +3,11 @@
 import { ref } from 'vue'
 
 export const GLASS_DEFAULTS = { alpha: 0.5, blur: 28, depth: 1, wallpaperBlur: 12 }
+export const GLASS_PRESETS = [
+  { label: 'Clear glass', alpha: 0.28, blur: 18, depth: 0.8 },
+  { label: 'Balanced glass', alpha: GLASS_DEFAULTS.alpha, blur: GLASS_DEFAULTS.blur, depth: GLASS_DEFAULTS.depth },
+  { label: 'Tinted glass', alpha: 0.76, blur: 34, depth: 1 },
+]
 /** [min, max, step] per control. */
 export const GLASS_RANGES = { alpha: [0.15, 0.9, 0.01], blur: [0, 60, 1], depth: [0, 2, 0.05], wallpaperBlur: [0, 40, 1] }
 const KEY = 'amm-glass'

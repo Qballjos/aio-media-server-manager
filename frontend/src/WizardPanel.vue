@@ -803,7 +803,7 @@ onUnmounted(() => {
   right: -40px;
   width: 120px;
   height: 120px;
-  background: radial-gradient(circle, rgba(var(--color-primary-rgb), 0.25) 0%, transparent 70%);
+  background: radial-gradient(circle, var(--bg-surface) 0%, transparent 70%);
   pointer-events: none;
 }
 .wizard-header {
@@ -830,7 +830,7 @@ onUnmounted(() => {
   letter-spacing: 0.08em;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
-  background: rgba(var(--color-primary-rgb), 0.18);
+  background: var(--bg-surface-elevated);
   color: var(--color-primary-soft);
   margin-bottom: 0.5rem;
 }
@@ -868,10 +868,10 @@ onUnmounted(() => {
   background: var(--pill-bg);
 }
 .wizard-steps li.active {
-  color: var(--color-primary-contrast);
-  background: var(--gradient-primary);
-  border-color: transparent;
-  box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.35);
+  color: var(--text-heading);
+  background: var(--material-selected);
+  border-color: var(--border-strong);
+  box-shadow: var(--material-lift);
 }
 .wizard-steps li.done {
   color: var(--color-success-fg);
@@ -913,9 +913,9 @@ onUnmounted(() => {
   border-color: var(--border-strong);
 }
 .wizard-option.selected {
-  border-color: rgba(var(--color-primary-rgb), 0.45);
-  box-shadow: 0 0 0 1px rgba(var(--color-primary-rgb), 0.22);
-  background: rgba(var(--color-primary-rgb), 0.08);
+  border-color: var(--border-strong);
+  box-shadow: var(--material-lift);
+  background: var(--material-selected);
 }
 .wizard-app-badge {
   width: 36px;
@@ -1042,8 +1042,7 @@ onUnmounted(() => {
 .wizard-bar-fill {
   height: 100%;
   border-radius: inherit;
-  background: var(--gradient-primary);
-  box-shadow: 0 0 12px rgba(var(--color-primary-rgb), 0.45);
+  background: var(--color-info);
   transition: width 0.35s ease;
 }
 .wizard-bar-fill.indeterminate {

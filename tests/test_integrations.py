@@ -2,6 +2,7 @@
 tests/test_integrations.py — Tests for the automatic integration engine and client adapters.
 """
 
+from configparser import ConfigParser
 from pathlib import Path
 import json
 from unittest.mock import MagicMock, patch
@@ -267,10 +268,11 @@ def test_ensure_sabnzbd_public_access_sets_exposure_and_whitelist(tmp_path: Path
         app_settings=cfg,
     )
     assert ensure_sabnzbd_public_access(sab_dir, port=8085) is True
-    text = ini.read_text(encoding="utf-8")
-    assert "inet_exposure = 5" in text
-    assert "usenet.example.com" in text
-    assert "localhost" in text
+    config = ConfigParser(interpolation=None)
+    config.read(ini, encoding="utf-8")
+    assert config["misc"].getint("inet_exposure") == 5
+    whitelist = {host.strip() for host in config["misc"]["host_whitelist"].split(",")}
+    assert {"usenet.example.com", "localhost"} <= whitelist
     # Second pass should be a no-op once values match.
     assert ensure_sabnzbd_public_access(sab_dir, port=8085) is False
 
@@ -295,7 +297,9 @@ def test_sabnzbd_post_install_seeds_ini_and_api_key(tmp_path: Path, monkeypatch)
     app.post_install()
     ini = app.config_dir / "sabnzbd.ini"
     text = ini.read_text(encoding="utf-8")
-    assert "news.example.com" in text
+    from core.integrations.sabnzbd import read_sabnzbd_ini_server
+
+    assert read_sabnzbd_ini_server(app.config_dir)["host"] == "news.example.com"
     assert "connections = 12" in text
     assert "username = admin" in text
     key = get_application_api_key("sabnzbd", app_config_dir=app.config_dir)
@@ -814,7 +818,7 @@ def test_patch_bazarr_arr_yaml_enables_existing_blocks(tmp_path: Path):
 
 @patch("requests.post")
 def test_bazarr_set_ui_auth_sends_plaintext_and_hashes_yaml(mock_post, tmp_path: Path):
-    from core.integrations.local_auth import bazarr_password_hash, sha256_hex
+    from core.integrations.local_auth import bazarr_password_hash
 
     mock_post.return_value = MagicMock(status_code=201)
     client = BazarrClient(api_key="baz")
@@ -825,7 +829,6 @@ def test_bazarr_set_ui_auth_sends_plaintext_and_hashes_yaml(mock_post, tmp_path:
     yaml_text = (tmp_path / "config" / "config.yaml").read_text(encoding="utf-8")
     assert "type: form" in yaml_text
     assert bazarr_password_hash("SharedPass123!") in yaml_text
-    assert sha256_hex("SharedPass123!") not in yaml_text
 
 
 @patch("core.integrations.local_auth.restart_bazarr_if_running")

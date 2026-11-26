@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -168,19 +169,64 @@ def test_version_compare():
     assert _is_newer("v2.0.0", "1.9.9")
 
 
-def test_grimmory_runner_starts_mariadb_as_root(catalog: ApplicationCatalog):
+def test_grimmory_runner_uses_supervised_identity(catalog: ApplicationCatalog):
     app = catalog.get("grimmory")
     app.install_dir.mkdir(parents=True, exist_ok=True)
     app.data_dir.mkdir(parents=True, exist_ok=True)
     (app.install_dir / "grimmory.jar").write_bytes(b"jar")
     app.post_install()
     script = (app.install_dir / "run-grimmory").read_text(encoding="utf-8")
-    assert "--user=root" in script
     assert "command -v java" in script
     assert "--enable-preview" in script
     assert "--enable-native-access=ALL-UNNAMED" in script
     assert "--expire-logs-days=0 --binlog-expire-logs-seconds=0" in script
     assert "if ! _mariadb_up" in script
+
+
+def test_grimmory_bootstrap_uses_sql_root_without_running_daemon_as_root(catalog, tmp_path, monkeypatch):
+    import os
+    import subprocess
+
+    app = catalog.get("grimmory")
+    app.install_dir.mkdir(parents=True)
+    (app.data_dir / "mysql" / "mysql").mkdir(parents=True)
+    (app.install_dir / "grimmory.jar").write_bytes(b"jar")
+    app.post_install()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    started = tmp_path / "db-started"
+    bootstrapped = tmp_path / "db-bootstrapped"
+    commands = {
+        "mariadbd": f'case " $* " in *" --user=root "*) exit 1;; esac\ntouch "{started}"',
+        "mariadb-admin": f'[ "$1" = "--user=root" ] && test -f "{started}"',
+        "mysqladmin": "exit 1",
+        "mariadb": f'[ "$1" = "--user=root" ] && touch "{bootstrapped}"',
+        "java": f'test -f "{started}" && test -f "{bootstrapped}"',
+    }
+    for name, content in commands.items():
+        target = bin_dir / name
+        target.write_text("#!/bin/sh\n" + content + "\n")
+        target.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    result = subprocess.run([str(app.install_dir / "run-grimmory")], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
+    assert bootstrapped.is_file()
+
+
+def test_neutarr_retains_legacy_state_in_its_owned_directory(catalog):
+    app = catalog.get("neutarr")
+    legacy = app.config_dir.parent / "stateful" / "sonarr"
+    legacy.mkdir(parents=True)
+    (legacy / "processed.json").write_text('{"id": 42}')
+    env = app.extra_env()
+    stateful = Path(env["STATEFUL_DIR"])
+    assert stateful == app.config_dir / "stateful"
+    copied = stateful / "sonarr" / "processed.json"
+    assert copied.read_text() == '{"id": 42}'
+    copied.write_text('{"id": 43}')
+    app.extra_env()
+    assert copied.read_text() == '{"id": 43}'
+    assert (legacy / "processed.json").read_text() == '{"id": 42}'
 
 
 def test_grimmory_bookdrop_matches_shelfmark_ingest(tmp_path: Path, monkeypatch):
@@ -207,8 +253,8 @@ def test_grimmory_bookdrop_matches_shelfmark_ingest(tmp_path: Path, monkeypatch)
     assert g_env["APP_BOOKDROP_FOLDER"] == bookdrop
     assert s_env["INGEST_DIR"] == bookdrop
     assert s_env["DESTINATION"] == bookdrop
-    assert s_env["BOOKLORE_HOST"] == "http://127.0.0.1:6060"
-    assert s_env["AUDIOBOOK_LIBRARY_URL"] == "http://127.0.0.1:6060"
+    assert "BOOKLORE_HOST" not in s_env
+    assert "AUDIOBOOK_LIBRARY_URL" not in s_env
     assert s_env["QBITTORRENT_CATEGORY"] == "books"
     assert "DESTINATION_AUDIOBOOK" not in s_env
     assert "QBITTORRENT_CATEGORY_AUDIOBOOK" not in s_env
@@ -260,8 +306,35 @@ def test_shelfmark_download_client_env_autofills_qbittorrent(tmp_path: Path, mon
     assert data["PROWLARR_TORRENT_CLIENT"] == "qbittorrent"
 
 
-def test_shelfmark_audiobook_library_uses_public_grimmory(tmp_path: Path, monkeypatch):
+def test_shelfmark_launcher_uses_vpn_wrapper(catalog, monkeypatch):
+    shelfmark = catalog.get("shelfmark")
+    runner = shelfmark.install_dir / "run-shelfmark"
+    monkeypatch.setattr("core.vpn.vpn_manager.wrap_isolated_command", lambda cmd: ["vpn-wrapper", *cmd])
+
+    assert shelfmark.build_start_command(runner) == ["vpn-wrapper", str(runner)]
+
+
+def test_shelfmark_updates_managed_usenet_url_when_openvpn_changes(tmp_path, monkeypatch):
+    import json
+
+    from applications.shelfmark_mirrors import sync_shelfmark_download_clients
+
+    monkeypatch.setattr("applications.shelfmark_mirrors._app_installed", lambda name: name == "sabnzbd")
+    monkeypatch.setattr("applications.shelfmark_mirrors._app_port", lambda name, default: default)
+    monkeypatch.setattr("core.integrations.credentials.get_application_api_key", lambda *args: "test-key")
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"SABNZBD_URL": "http://127.0.0.1:8085"}))
+
+    for netns, host in [(True, "10.200.200.1"), (False, "127.0.0.1")]:
+        monkeypatch.setattr("core.vpn.vpn_manager.uses_netns_isolation", lambda: netns)
+        assert sync_shelfmark_download_clients(tmp_path)
+        assert json.loads(path.read_text())["SABNZBD_URL"] == f"http://{host}:8085"
+
+
+@pytest.mark.parametrize("netns, host", [(False, "127.0.0.1"), (True, "10.200.200.1")])
+def test_shelfmark_grimmory_urls(tmp_path: Path, monkeypatch, netns, host):
     from applications.community import ShelfmarkApp
+    from applications.shelfmark_mirrors import sync_shelfmark_audiobook_library_url
     from core import settings as settings_mod
     from core.public_hostnames import save_hostnames
 
@@ -281,8 +354,12 @@ def test_shelfmark_audiobook_library_uses_public_grimmory(tmp_path: Path, monkey
         {"grimmory": {"subdomain": "grimmory", "enabled": True}},
         app_settings=cfg,
     )
+    monkeypatch.setattr("core.vpn.vpn_manager.uses_netns_isolation", lambda: netns)
     shelfmark = ShelfmarkApp(base_config_dir=cfg.config_dir, base_install_dir=cfg.install_dir)
+    monkeypatch.setattr("applications.shelfmark_mirrors._app_installed", lambda name: name == "grimmory")
     env = shelfmark.extra_env()
-    assert env["BOOKLORE_HOST"] == "http://127.0.0.1:6060"
-    assert env["AUDIOBOOK_LIBRARY_URL"] == "https://grimmory.example.com"
+    assert env["BOOKLORE_HOST"] == f"http://{host}:6060"
+    assert sync_shelfmark_audiobook_library_url(shelfmark.config_dir)
+    saved = json.loads((shelfmark.config_dir / "settings.json").read_text())
+    assert saved["AUDIOBOOK_LIBRARY_URL"] == "https://grimmory.example.com"
 

@@ -235,3 +235,63 @@ def test_ensure_refuses_python_older_than_314(tmp_path: Path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="Python >= 3.14"):
         ensure_shelfmark_venv(install)
+
+
+@pytest.mark.parametrize(
+    "existing",
+    [{}, {"DIRECT_DOWNLOAD_ENABLED": False, "AA_MIRROR_URLS": [], "AA_BASE_URL": "https://mirror.example"}],
+)
+def test_prepare_shelfmark_fills_missing_direct_download_settings(tmp_path, monkeypatch, existing):
+    monkeypatch.setattr("applications.shelfmark_mirrors._app_installed", lambda name: False)
+    config = tmp_path / "config"
+    config.mkdir()
+    path = config / "settings.json"
+    path.write_text(json.dumps(existing))
+
+    prepare_shelfmark_runtime(config, tmp_path / "install", port=8084)
+    first = path.read_text()
+    data = json.loads(first)
+    plugins = config / "plugins"
+    sources = json.loads((plugins / "download_sources.json").read_text())
+    mirrors = json.loads((plugins / "mirrors.json").read_text())
+    downloads = json.loads((plugins / "downloads.json").read_text())
+    assert sources["DIRECT_DOWNLOAD_ENABLED"] is existing.get("DIRECT_DOWNLOAD_ENABLED", True)
+    assert mirrors["AA_MIRROR_URLS"] == existing.get("AA_MIRROR_URLS", ["https://annas-archive.gl"])
+    assert mirrors["AA_BASE_URL"] == existing.get("AA_BASE_URL", "auto")
+    assert downloads["HARDLINK_TORRENTS_AUDIOBOOK"] is False
+    assert data["METADATA_PROVIDER"] == "openlibrary"
+    assert "AUDIOBOOK_LIBRARY_URL" not in data
+
+    prepare_shelfmark_runtime(config, tmp_path / "install", port=8084)
+    assert path.read_text() == first
+
+
+def test_prepare_shelfmark_respects_plugin_overrides_and_uses_available_integrations(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "applications.shelfmark_mirrors._app_installed", lambda name: name in {"flaresolverr", "prowlarr"}
+    )
+    monkeypatch.setattr("applications.shelfmark_mirrors._app_port", lambda name, default: default + 1)
+    monkeypatch.setattr("core.integrations.credentials.get_application_api_key", lambda *args: "test-key")
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    sources = plugins / "download_sources.json"
+    sources.write_text('{"DIRECT_DOWNLOAD_ENABLED": false}')
+    mirrors = plugins / "mirrors.json"
+    mirrors.write_text('{"AA_MIRROR_URLS": [], "AA_BASE_URL": "auto"}')
+    prowlarr = plugins / "prowlarr_config.json"
+
+    prepare_shelfmark_runtime(tmp_path, tmp_path / "install", port=8084)
+
+    assert json.loads(sources.read_text()) == {"DIRECT_DOWNLOAD_ENABLED": False}
+    assert json.loads(mirrors.read_text()) == {"AA_MIRROR_URLS": [], "AA_BASE_URL": "auto"}
+    assert json.loads(prowlarr.read_text()) == {
+        "PROWLARR_ENABLED": True,
+        "PROWLARR_URL": "http://127.0.0.1:9697",
+        "PROWLARR_API_KEY": "test-key",
+    }
+    assert prowlarr.stat().st_mode & 0o777 == 0o600
+    assert json.loads((plugins / "cloudflare_bypass.json").read_text())["EXT_BYPASSER_URL"] == "http://127.0.0.1:8192"
+
+    prowlarr.write_text('{"PROWLARR_URL": "https://prowlarr.example"}')
+    prepare_shelfmark_runtime(tmp_path, tmp_path / "install", port=8084)
+    assert json.loads(prowlarr.read_text()) == {"PROWLARR_URL": "https://prowlarr.example"}

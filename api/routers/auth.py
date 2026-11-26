@@ -6,20 +6,56 @@ Handles initial setup, login, logout, session status, and profile info.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Optional
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
+from webauthn import (
+    base64url_to_bytes,
+    generate_authentication_options,
+    generate_registration_options,
+    options_to_json,
+    verify_authentication_response,
+    verify_registration_response,
+)
+from webauthn.helpers import bytes_to_base64url, parse_client_data_json
+from webauthn.helpers.exceptions import WebAuthnException
+from webauthn.helpers.structs import (
+    AuthenticatorSelectionCriteria,
+    PublicKeyCredentialDescriptor,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
+)
 
 from core.auth import COOKIE_CSRF, auth_manager, normalize_email
 from core import profile as profile_mod
+from core.passkeys import Purpose, relying_party
 from core.shared_credentials import save_shared_admin_credentials, shared_admin_credentials
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/auth", tags=["Auth"])
+class AuthRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def handle(request: Request) -> Response:
+            try:
+                return await handler(request)
+            except RequestValidationError as exc:
+                # Validation must not echo submitted passwords or authenticator material.
+                errors = [{key: item[key] for key in ("loc", "msg", "type")} for item in exc.errors()]
+                raise HTTPException(status_code=422, detail=errors) from None
+
+        return handle
+
+
+router = APIRouter(prefix="/api/auth", tags=["Auth"], route_class=AuthRoute)
 
 
 class SetupRequest(BaseModel):
@@ -31,6 +67,20 @@ class SetupRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
+    code: str = Field(default="", max_length=128)
+
+
+class TwoFactorSetup(BaseModel):
+    password: str = Field(min_length=1, max_length=72)
+
+
+class TwoFactorEnable(BaseModel):
+    enrollment: str = Field(min_length=1, max_length=512)
+    code: str = Field(min_length=1, max_length=128)
+
+
+class TwoFactorDisable(TwoFactorSetup):
+    code: str = Field(min_length=1, max_length=128)
 
 
 def _person_fields() -> dict[str, Optional[str]]:
@@ -170,20 +220,226 @@ async def login(req: LoginRequest, request: Request, response: Response) -> dict
             detail="Invalid username or password.",
         )
 
-    save_shared_admin_credentials(req.username, req.password)
+    if auth_manager.two_factor_enabled():
+        if not req.code.strip():
+            response.headers["Cache-Control"] = "no-store"
+            return {"status": "two_factor_required"}
+        if not auth_manager.verify_two_factor(req.code):
+            raise HTTPException(status_code=401, detail="Invalid or already used verification code.")
 
-    token = auth_manager.issue_token(req.username)
+    save_shared_admin_credentials(req.username, req.password)
+    return _login_session(response, req.username)
+
+
+def _login_session(response: Response, username: str) -> dict:
+    response.headers["Cache-Control"] = "no-store"
+    token = auth_manager.issue_token(username)
     csrf = auth_manager.set_session_cookies(response, token)
     visuals = _visuals_payload()
     return {
         "status": "ok",
-        "username": req.username,
+        "username": username,
         **_person_fields(),
         "csrf_token": csrf,
         "access_token": token,
         "avatar_url": _avatar_url(),
         **visuals,
     }
+
+
+def _check_two_factor_password(request: Request, password: str) -> str:
+    username = auth_manager.authenticate_request(request)
+    auth_manager.check_login_rate(request)
+    if not auth_manager.verify_password(username, password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    return username
+
+
+def _refresh_two_factor_session(response: Response, username: str) -> dict:
+    response.headers["Cache-Control"] = "no-store"
+    token = auth_manager.issue_token(username)
+    return {
+        "access_token": token,
+        "csrf_token": auth_manager.set_session_cookies(response, token),
+    }
+
+
+@router.get("/two-factor")
+async def two_factor_status(request: Request) -> dict:
+    auth_manager.authenticate_request(request)
+    return {"enabled": auth_manager.two_factor_enabled()}
+
+
+@router.post("/two-factor/setup")
+async def two_factor_setup(req: TwoFactorSetup, request: Request, response: Response) -> dict:
+    username = _check_two_factor_password(request, req.password)
+    secret, enrollment = auth_manager.begin_two_factor()
+    issuer = "AIO Media Server Manager"
+    label = f"{quote(issuer, safe='')}:{quote(username, safe='')}"
+    query = urlencode({"secret": secret, "issuer": issuer})
+    response.headers["Cache-Control"] = "no-store"
+    return {"secret": secret, "uri": f"otpauth://totp/{label}?{query}", "enrollment": enrollment}
+
+
+@router.post("/two-factor/enable")
+async def two_factor_enable(req: TwoFactorEnable, request: Request, response: Response) -> dict:
+    username = auth_manager.authenticate_request(request)
+    auth_manager.check_login_rate(request)
+    codes = auth_manager.enable_two_factor(req.enrollment, req.code)
+    return {"recovery_codes": codes, **_refresh_two_factor_session(response, username)}
+
+
+@router.post("/two-factor/disable")
+async def two_factor_disable(req: TwoFactorDisable, request: Request, response: Response) -> dict:
+    username = _check_two_factor_password(request, req.password)
+    if not auth_manager.verify_two_factor(req.code, disable=True):
+        raise HTTPException(status_code=400, detail="Invalid or already used verification code.")
+    return _refresh_two_factor_session(response, username)
+
+
+class PasskeyManagement(TwoFactorSetup):
+    code: str = Field(default="", max_length=128)
+
+
+class PasskeyResponse(BaseModel):
+    challenge: str = Field(min_length=1, max_length=128)
+    credential: str = Field(min_length=1, max_length=32768)
+
+
+def _passkey_origin(request: Request) -> tuple[str, str]:
+    origin = request.headers.get("Origin", "")
+    rp_id = relying_party(origin, request.headers.get("Host", ""))
+    if rp_id is None:
+        raise HTTPException(status_code=400, detail="Passkeys require the dashboard's HTTPS address.")
+    return origin, rp_id
+
+
+def _check_passkey_factor(code: str) -> None:
+    if auth_manager.two_factor_enabled() and not auth_manager.verify_two_factor(code):
+        raise HTTPException(status_code=400, detail="Invalid or already used verification code.")
+
+
+def _take_passkey_challenge(req: PasskeyResponse, purpose: Purpose, origin: str, binding: str) -> bytes:
+    challenge = auth_manager.passkey_challenges.take(req.challenge, purpose, origin, binding)
+    if challenge is None:
+        raise HTTPException(status_code=400, detail="Passkey request expired. Try again.")
+    return challenge
+
+
+def _parse_passkey_response(value: str) -> dict:
+    data = json.loads(value)
+    client_data = parse_client_data_json(base64url_to_bytes(data["response"]["clientDataJSON"]))
+    if client_data.cross_origin:
+        raise ValueError("Cross-origin WebAuthn requests are unsupported")
+    return data
+
+
+@router.get("/passkeys")
+async def passkey_status(request: Request) -> dict:
+    auth_manager.authenticate_request(request)
+    passkey = auth_manager.passkey()
+    return {"origin": passkey["origin"] if passkey else None, "two_factor_enabled": auth_manager.two_factor_enabled()}
+
+
+@router.post("/passkeys/register/options")
+async def passkey_register_options(req: PasskeyManagement, request: Request, response: Response) -> dict:
+    origin, rp_id = _passkey_origin(request)
+    username = _check_two_factor_password(request, req.password)
+    if auth_manager.passkey():
+        raise HTTPException(status_code=409, detail="Remove the current passkey before adding another.")
+    _check_passkey_factor(req.code)
+    options = generate_registration_options(
+        rp_id=rp_id,
+        rp_name="AIO Media Server Manager",
+        user_name=username,
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            require_resident_key=True,
+            user_verification=UserVerificationRequirement.REQUIRED,
+        ),
+    )
+    auth_manager.passkey_challenges.add(options.challenge, "register", origin, request.state.manager_session_id)
+    response.headers["Cache-Control"] = "no-store"
+    return json.loads(options_to_json(options))
+
+
+@router.post("/passkeys/register")
+async def passkey_register(req: PasskeyResponse, request: Request) -> dict:
+    auth_manager.authenticate_request(request)
+    origin, rp_id = _passkey_origin(request)
+    challenge = _take_passkey_challenge(req, "register", origin, request.state.manager_session_id)
+    if auth_manager.passkey():
+        raise HTTPException(status_code=409, detail="Remove the current passkey before adding another.")
+    try:
+        credential = verify_registration_response(
+            credential=_parse_passkey_response(req.credential),
+            expected_challenge=challenge,
+            expected_origin=origin,
+            expected_rp_id=rp_id,
+            require_user_verification=True,
+        )
+    except (WebAuthnException, KeyError, TypeError, ValueError, RecursionError):
+        raise HTTPException(status_code=400, detail="Could not verify the passkey.") from None
+    auth_manager.save_passkey({
+        "origin": origin,
+        "id": bytes_to_base64url(credential.credential_id),
+        "public_key": bytes_to_base64url(credential.credential_public_key),
+        "sign_count": credential.sign_count,
+    })
+    return {"origin": origin}
+
+
+@router.post("/passkeys/remove")
+async def passkey_remove(req: PasskeyManagement, request: Request) -> dict:
+    _check_two_factor_password(request, req.password)
+    if auth_manager.passkey():
+        _check_passkey_factor(req.code)
+        auth_manager.save_passkey(None)
+    return {"origin": None}
+
+
+@router.post("/passkeys/login/options")
+async def passkey_login_options(request: Request, response: Response) -> dict:
+    origin, rp_id = _passkey_origin(request)
+    auth_manager.check_login_rate(request)
+    passkey = auth_manager.passkey()
+    if auth_manager.setup_required() or not passkey or passkey["origin"] != origin:
+        raise HTTPException(status_code=400, detail="No passkey is available at this dashboard address.")
+    options = generate_authentication_options(
+        rp_id=rp_id,
+        allow_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(passkey["id"]))],
+        user_verification=UserVerificationRequirement.REQUIRED,
+    )
+    auth_manager.passkey_challenges.add(options.challenge, "login", origin, auth_manager.passkey_session_version())
+    response.headers["Cache-Control"] = "no-store"
+    return json.loads(options_to_json(options))
+
+
+@router.post("/passkeys/login")
+async def passkey_login(req: PasskeyResponse, request: Request, response: Response) -> dict:
+    origin, rp_id = _passkey_origin(request)
+    auth_manager.check_login_rate(request)
+    challenge = _take_passkey_challenge(req, "login", origin, auth_manager.passkey_session_version())
+    passkey = auth_manager.passkey()
+    if auth_manager.setup_required() or not passkey or passkey["origin"] != origin:
+        raise HTTPException(status_code=400, detail="No passkey is available at this dashboard address.")
+    try:
+        data = _parse_passkey_response(req.credential)
+        if data.get("id") != passkey["id"]:
+            raise ValueError("Credential ID does not match")
+        result = verify_authentication_response(
+            credential=data,
+            expected_challenge=challenge,
+            expected_origin=origin,
+            expected_rp_id=rp_id,
+            credential_public_key=base64url_to_bytes(passkey["public_key"]),
+            credential_current_sign_count=passkey["sign_count"],
+            require_user_verification=True,
+        )
+    except (WebAuthnException, KeyError, TypeError, ValueError, RecursionError):
+        raise HTTPException(status_code=400, detail="Could not verify the passkey.") from None
+    auth_manager.save_passkey({**passkey, "sign_count": result.new_sign_count})
+    return _login_session(response, auth_manager.username())
 
 
 @router.post("/logout", summary="End session")

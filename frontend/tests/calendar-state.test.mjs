@@ -63,10 +63,12 @@ test('a group of episodes only links to the library when every episode is availa
     const rows = [1, 2].map((episode) => ({ dt: new Date(2026, 10, 2, 12 + episode), item: {
       title: 'Test series', detail: `S01E0${episode}`, has_file: episode === 1,
       play_url: 'episode', series_play_url: 'series',
+      milestones: [episode === 1 ? 'series-premiere' : 'season-finale'],
     } }))
     let grouped = state.groupSameDay(rows)
     assert.equal(grouped.length, 1)
     assert.equal(grouped[0].item.has_file, false)
+    assert.deepEqual(grouped[0].item.milestones, ['series-premiere', 'season-finale'])
     rows[1].item.has_file = true
     grouped = state.groupSameDay(rows)
     assert.equal(grouped[0].item.has_file, true)
@@ -95,5 +97,24 @@ test('downloaded calendar items prefer the media server and missing items use th
     assert.deepEqual(state.calendarTarget({ has_file: true, play_app: 'jellyfin', play_url: 'watch', source: 'sonarr', url: 'manage' }), { app: 'jellyfin', url: 'watch' })
     assert.deepEqual(state.calendarTarget({ has_file: false, source: 'sonarr', url: 'manage' }), { app: 'sonarr', url: 'manage' })
     assert.equal(state.calendarTarget({}), null)
+  } finally { state.dispose() }
+})
+
+test('calendar stops requesting pages after the rolling three-month horizon', async () => {
+  const state = calendar([], false, true)
+  try {
+    const today = new Date()
+    const end = new Date(today.getFullYear(), today.getMonth() + 4, 0)
+    end.setDate(Math.min(end.getDate(), today.getDate()))
+    for (let n = 0; n < 100; n++) state.shiftCalendar(1)
+    assert.deepEqual(state.calendarRange(), { start: state.dayKey(end), days: 1 })
+    assert.equal(state.nextCalendarRange(), null)
+    state.setCalView('month')
+    await nextTick()
+    assert.equal(state.nextCalendarRange(), null)
+    const { start, days } = state.calendarRange()
+    const last = new Date(`${start}T00:00:00`)
+    last.setDate(last.getDate() + days - 1)
+    assert.equal(state.dayKey(last), state.dayKey(end))
   } finally { state.dispose() }
 })

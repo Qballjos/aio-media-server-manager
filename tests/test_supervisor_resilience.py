@@ -144,24 +144,25 @@ def test_reclaim_leftover_processes(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_supervisor_refuses_qbittorrent_when_vpn_blocks(tmp_path: Path, monkeypatch):
+@pytest.mark.parametrize("app", ["qbittorrent", "shelfmark"])
+async def test_supervisor_refuses_tunneled_app_when_vpn_blocks(tmp_path: Path, monkeypatch, app):
     from core.vpn import VpnIsolationError
 
     def refuse(name: str) -> None:
-        if name in {"qbittorrent", "prowlarr", "flaresolverr"}:
+        if name == app:
             raise VpnIsolationError(f"Refusing {name}")
 
     monkeypatch.setattr("core.vpn.vpn_manager.assert_can_start_tunneled_app", refuse)
     supervisor = ProcessSupervisor.get()
     with pytest.raises(VpnIsolationError):
         await supervisor.start(
-            name="qbittorrent",
+            name=app,
             cmd=["python3", "-c", "import time; time.sleep(30)"],
             restart_policy=RestartPolicy.NEVER,
             log_dir=tmp_path / "logs",
         )
-    assert supervisor.status("qbittorrent") == ProcessState.STOPPED
-    supervisor.forget("qbittorrent")
+    assert supervisor.status(app) == ProcessState.STOPPED
+    supervisor.forget(app)
 
 
 @pytest.mark.asyncio
@@ -169,6 +170,9 @@ async def test_restart_watcher_does_not_bring_qbittorrent_back_off_vpn(
     tmp_path: Path, monkeypatch
 ):
     from core.vpn import VpnIsolationError
+
+    # Keep the dummy process on the test runner's UID; identity has separate coverage.
+    monkeypatch.setattr("core.process_identity.prepare_process_identity", lambda _name, _env: {})
 
     supervisor = ProcessSupervisor.get()
     await supervisor.start(

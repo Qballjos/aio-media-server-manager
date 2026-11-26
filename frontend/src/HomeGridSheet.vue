@@ -56,7 +56,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
   <Teleport to=".app-container">
     <div class="home-sheet-layer" @click.self="emit('close')">
       <div
-        class="home-sheet glass-card"
+        class="home-sheet glass-dialog"
         role="dialog"
         aria-modal="true"
         :aria-label="mode === 'add' ? $t('Add widget') : $t('{name} settings', { name: $t(WIDGETS[item.id].label) })"
@@ -130,8 +130,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
   place-items: center;
   padding: 1.5rem;
   background: var(--modal-scrim);
-  backdrop-filter: blur(var(--modal-backdrop-blur));
-  -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
 }
 .home-sheet {
   width: min(28rem, 100%);
@@ -199,8 +197,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
   color: var(--text-muted);
 }
 .home-sheet-option.is-on {
-  border-color: rgba(var(--color-primary-rgb), 0.7);
-  background: rgba(var(--color-primary-rgb), 0.14);
+  border-color: var(--border-strong);
+  background: var(--material-selected);
+  box-shadow: var(--material-lift);
 }
 .home-sheet-pick {
   display: flex;
@@ -222,7 +221,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
 }
 .home-sheet-row:hover,
 .home-sheet-option:hover {
-  border-color: var(--border-hover);
+  border-color: var(--border-strong);
 }
 .home-sheet-row-text {
   flex: 1;

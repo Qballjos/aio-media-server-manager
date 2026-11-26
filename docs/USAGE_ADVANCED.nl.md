@@ -22,7 +22,7 @@ Vervang het IP (en de poort, als je die hebt gewijzigd).
 
 1. Maak het **beheerders**account wanneer daarom wordt gevraagd (gebruikersnaam, **e-mail**, wachtwoord).
 2. Rond de wizard van de eerste start af: de apps die je wilt, een Usenet-server als je die gebruikt, optioneel VPN en een optionele Cloudflare Tunnel. De wizard installeert die keuze. De tunnel en de VPN starten meteen als de wizard klaar is, als je ze hebt aangezet.
-3. Na het opnieuw aanmaken van de container antwoordt het dashboard terwijl apps nog starten. Met VPN aan wachten qBittorrent, Prowlarr en Flaresolverr tot de WireGuard-handshake klaar is (AIO probeert de VPN opnieuw als de eerste poging mislukt). Cloudflare Tunnel start als laatste, nadat de apps antwoorden, zodat cloudflared geen connection refused logt tegen origins die nog niet luisteren.
+3. Na het opnieuw aanmaken van de container antwoordt het dashboard terwijl apps nog starten. Met VPN aan wachten qBittorrent, Prowlarr, Flaresolverr en Shelfmark tot de WireGuard-handshake klaar is (AIO probeert de VPN opnieuw als de eerste poging mislukt). Cloudflare Tunnel start als laatste, nadat de apps antwoorden, zodat cloudflared geen connection refused logt tegen origins die nog niet luisteren.
 4. Wacht tot **Catalogus** die apps als **actief** toont. Gebruik **Open** voor alles wat nog een eigen account heeft (Plex, Jellyfin, NZBGet).
 5. Voeg later meer toe vanuit **Catalogus**. Je hebt niet elke app nodig.
 
@@ -67,7 +67,7 @@ Start is een raster. Telefoon, tablet en desktop houden elk hun eigen indeling (
 | Recent toegevoegd | Nieuwe series en films. Scrollen laadt verdere Jellyfin-pagina’s. Plex blijft bij de laatste 20 |
 | Aanvragen | Seerr-aanvragen die nog niet klaar zijn, plus wat de laatste 30 dagen als beschikbaar of afgewezen is gemarkeerd |
 | Trending | De trendinglijst van Seerr. Scrollen blijft laden |
-| Wordt afgespeeld | Wie kijkt op Jellyfin of Plex, inclusief direct afspelen |
+| Wordt afgespeeld | Jellyfin- en Plex-sessies. Scroll of veeg zijwaarts om elke stream te bekijken |
 | Opslag | Schijfgebruik van config, downloads en media |
 | Server | CPU, geheugen en netwerk. Met host-`/sys` gemount op `/host/sys` zijn dit de netwerkkaarten van de server. Zonder die mount is het alleen het verkeer van deze container |
 | Aandacht nodig | Dezelfde controles als Instellingen → Meldingen, met een link om elk punt op te lossen |
@@ -133,6 +133,21 @@ Als **Open** faalt:
 
 ---
 
+## Shelfmark instellen na installatie {#shelfmark-setup}
+
+1. Klik bij Shelfmark in de **Catalogus** op **Open**. Controleer in de **Settings** van Shelfmark of de bestemming voor e-books verwijst naar `complete/books` onder de AIO-downloadmap. Gebruik je Grimmory, dan is dit de inbox voor automatische import. Houd deze map gescheiden van de permanente boekenbibliotheek.
+2. AIO vult Universal Search met Open Library als zoekprovider in. Controleer of de gewenste downloadbron beschikbaar is. Gebruik je Prowlarr, test dan de verbinding en controleer welke indexers beschikbaar zijn. Controleer ook de gekozen torrent- of Usenet-client en de boekencategorie. AIO kan de clientinstellingen voor qBittorrent, SABnzbd of NZBGet invullen als die beschikbaar zijn.
+3. Schakel authenticatie in voordat je Shelfmark deelt of publiceert. Wil je aanvragen van andere gebruikers eerst goedkeuren, maak dan hun accounts aan en stel per bron het aanvraagbeleid in. [Authenticatie en gebruikersrollen in Shelfmark](https://github.com/calibrain/shelfmark#-authentication)
+4. Test met een boek dat je mag downloaden. Controleer of Shelfmark de download voltooit en, als je Grimmory gebruikt, of het boek na import in de bibliotheek verschijnt. Herhaal dit met een audioboek als je die workflow gebruikt.
+
+### Direct Downloads en mirrors
+
+AIO schakelt Direct Download in en vult een Anna’s Archive-mirror in als die instellingen ontbreken. Een opgeslagen keuze om de bron uit te zetten of de mirrorlijst leeg te laten blijft behouden. Loop in dat geval deze stappen door als je Direct Download wilt gebruiken.
+
+1. Open in Shelfmark **Settings → Direct Download → Download Sources** en zet **Enable Direct Download Source** aan.
+2. Open **Mirrors**, voeg bij **Anna’s Archive** de basis-URL van je mirror toe, bijvoorbeeld `https://annas-archive.gl`, en druk op Enter. Laat **Primary Mirror** op **Auto** staan. Met meerdere mirrors probeert Shelfmark ze in de volgorde van je lijst. Mirroradressen kunnen veranderen. [Shelfmark-instellingen voor mirrors](https://github.com/calibrain/shelfmark/blob/main/docs/environment-variables.md#direct-download-mirrors)
+3. Sla op en controleer of **Direct Download** als bron verschijnt bij het zoeken naar een boek. Laat de bronvolgorde onder **Download Sources** eerst op de standaardwaarden staan.
+
 ## De nieuwe catalogus gebruiken {#catalog-menu}
 
 Open bovenaan **Catalogus**. Links kies je wat je wilt zien; rechts verschijnen de apps.
@@ -183,6 +198,20 @@ De huidige app met fictieve voorbeeldgegevens. Licht staat links, donker rechts.
 |---|---|
 | ![Externe toegang](screenshots/light/settings-remote.png?v=app-store-20261102) | ![Externe toegang](screenshots/dark/settings-remote.png?v=app-store-20261102) |
 
+### Gebruikers en support
+
+Open **Instellingen → Gebruikers** om Jellyfin- of Plex-accounts via Seerr te importeren en toegang tot AIO te geven. Intrekken beëindigt hun AIO-sessies. Seerr bewaart hun aanvraaggeschiedenis.
+
+Media-accounts kunnen vanuit **Zoeken** en **Trending** films en seizoenen aanvragen. De beheerder stelt het gedeelde Trending-filter in en kan openstaande aanvragen beoordelen op Start. Seerr past de rechten, limieten en automatische goedkeuring van het account toe.
+
+**Nieuw beschikbaar** en de beschikbaarheidslabels volgen de bibliotheekrechten van het ingelogde account. Een goedgekeurde serieaanvraag krijgt de status Beschikbaar zodra elk aangevraagd seizoen ten minste één toegankelijke aflevering heeft. Gebruikers met een oudere AIO-sessie moeten opnieuw inloggen.
+
+**Trending** verbergt films en series die het account al volledig kan bekijken. Openstaande en goedgekeurde aanvragen van alle accounts tellen mee. Via de poster kun je ontbrekende of onvolledige seizoenen aanvragen waarvoor nog geen aanvraag loopt.
+
+**Agenda** toont releases die het ingelogde account in Jellyfin of Plex mag zien. Aankomende releases uit Sonarr en Radarr verschijnen als AIO de doelmap aan een gedeelde bibliotheek kan koppelen en kan verifiëren dat er geen extra inhoudsfilters gelden.
+
+Gebruikers kunnen via de titelpopup of **Instellingen → Support** een probleem melden. Beheerders zien de meldingen in hun Support-inbox en kunnen antwoorden en de status aanpassen.
+
 ### App-koppelingen
 
 | Light | Dark |
@@ -197,15 +226,19 @@ De huidige app met fictieve voorbeeldgegevens. Licht staat links, donker rechts.
 
 ### Profiel
 
+Ga naar **Instellingen → Profiel → Tweestapsverificatie**. Voer je huidige wachtwoord in, scan de QR-code met een TOTP-authenticator (of voer de instelsleutel in) en bevestig met een zescijferige code. Bewaar de eenmalige herstelcodes op een veilige plek. Bij volgende aanmeldingen bij de manager heb je je wachtwoord en een authenticator- of herstelcode nodig. In- en uitschakelen meldt andere managersessies af. Voor uitschakelen zijn je wachtwoord en een geldige tweede factor vereist. Bij het terugzetten van een managerback-up wordt ook de status van tweestapsverificatie en herstelcodes teruggezet naar het moment van de back-up.
+
+Open het dashboard in Safari op je Mac via het HTTPS-adres en ga naar **Instellingen → Profiel → Passkey**. Bevestig je huidige wachtwoord en, als die aanstaat, je tweede factor. Kies **Passkey toevoegen** en volg de browsermelding voor Touch ID. Kies daarna **Aanmelden met een passkey** op het aanmeldscherm. De manager bewaart één passkey voor dat exacte dashboardadres. Bewaar je wachtwoord en eventuele 2FA-herstelcodes als terugvaloptie. Een reverse proxy die HTTPS afhandelt moet de openbare Host-header doorgeven.
+
 | Licht | Donker |
 | --- | --- |
-| ![Account in Instellingen, licht thema](screenshots/light/settings.png?v=app-store-20261102) | ![Account in Instellingen, donker thema](screenshots/dark/settings.png?v=app-store-20261102) |
+| ![Account in Instellingen, licht thema](screenshots/light/settings.png?v=liquid-glass-20261125) | ![Account in Instellingen, donker thema](screenshots/dark/settings.png?v=liquid-glass-20261125) |
 
 ### Taal en uiterlijk
 
 | Licht | Donker |
 | --- | --- |
-| ![Weergave, licht thema](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Weergave, donker thema](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
+| ![Weergave, licht thema](screenshots/light/settings-visuals.png?v=liquid-glass-20261125) | ![Weergave, donker thema](screenshots/dark/settings-visuals.png?v=liquid-glass-20261125) |
 
 ### Server en opslag
 
@@ -259,7 +292,7 @@ De huidige app met fictieve voorbeeldgegevens. Licht staat links, donker rechts.
 
 | Licht | Donker |
 | --- | --- |
-| ![qBittorrent-instellingen in de catalogus, licht thema](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![qBittorrent-instellingen in de catalogus, donker thema](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
+| ![qBittorrent-instellingen in de catalogus, licht thema](screenshots/light/catalog-settings.png?v=liquid-glass-20261125) | ![qBittorrent-instellingen in de catalogus, donker thema](screenshots/dark/catalog-settings.png?v=liquid-glass-20261125) |
 
 ---
 
@@ -295,7 +328,7 @@ De image werkt die apps niet vanzelf bij. Lees de release-opmerkingen op GitHub 
 | De servergrafiek telt alleen deze container | Mount host-`/sys` alleen-lezen op `/host/sys` en maak opnieuw aan ([Docker](deploy/DOCKER.md)) |
 | Recent toegevoegd van Jellyfin lijkt kort | Scroll de rij — er worden meer pagina’s geladen. Blijft de rij leeg, zet dan een Jellyfin-API-sleutel bij **Instellingen → App-koppelingen** |
 | Recent toegevoegd van Plex stopt bij 20 | Die lijst is de laatste 20 van Plex |
-| qBittorrent / Prowlarr / Flaresolverr blijven gestopt na boot | VPN staat aan zonder live handshake. Kijk bij **Instellingen → VPN**; AIO probeert de tunnel opnieuw en start die apps als hij omhoog is. Een handmatige VPN-**Stop** annuleert die poging |
+| qBittorrent / Prowlarr / Flaresolverr / Shelfmark blijven gestopt na boot | VPN staat aan zonder live handshake. Kijk bij **Instellingen → VPN**; AIO probeert de tunnel opnieuw en start die apps als hij omhoog is. Een handmatige VPN-**Stop** annuleert die poging |
 | Prowlarr-indexers niet beschikbaar / RSS-fouten | Vaak een DNS-timeout via de VPN. Maak na een AIO-update de container opnieuw aan, klik daarna **Test All** in Prowlarr (en test opnieuw in Sonarr/Radarr) zodat de oude fout-backoff weg is. Een debug-share toont hits van de VPN-DNS-cache en fouten per resolver |
 | cloudflared logt connection refused bij boot | Verwacht op oudere images toen de tunnel vóór de apps startte. Huidige images starten Cloudflare als laatste; maak opnieuw aan vanaf een actuele `nightly` / `latest` |
 
@@ -311,7 +344,7 @@ De image werkt die apps niet vanzelf bij. Lees de release-opmerkingen op GitHub 
 
 Installeer **Cleanuparr** via Catalogus of selecteer de app bij de optionele wizard-apps. AIO beheert de app als proces op Linux amd64/arm64, op poort **11011**, met configuratie in `/config/cleanuparr`. Voeg bij bestaande Compose-installaties `11011:11011` toe en maak de AIO-container opnieuw aan. De test- en GPU-overlays nemen deze poort over.
 
-Auto-Wire maakt bij een nieuwe installatie de AIO-beheerder aan en koppelt geïnstalleerde Sonarr, Radarr, Lidarr, qBittorrent en SABnzbd met hun ingestelde poorten en aanmeldgegevens. Cleanuparr ondersteunt NZBGet niet. Nieuwe installaties starten in **dry-run** voordat koppelingen worden toegevoegd. AIO schakelt conservatieve wachtrij- en malwarecontroles in dry-run in, maar laat het opruimen van afgeronde downloads en proactief zoeken uit. Controleer de regels voordat je verwijderen toestaat en voorkom overlappende zoektaken met NeutArr. Bestaande externe koppelingen, uitgeschakelde keuzes en opruimregels blijven behouden.
+Auto-Wire maakt bij een nieuwe installatie de AIO-beheerder aan en koppelt geïnstalleerde Sonarr, Radarr, Lidarr, qBittorrent en SABnzbd met hun ingestelde poorten en aanmeldgegevens. Cleanuparr ondersteunt NZBGet niet. Nieuwe installaties gebruiken **dry-run tijdens de configuratie** en schakelen dit uit zodra alle standaardregels zijn opgeslagen en gecontroleerd. AIO schakelt conservatieve wachtrij- en malwarecontroles in, maar laat het opruimen van afgeronde downloads en proactief zoeken uit. Controleer de actieve verwijderregels en voorkom overlappende zoektaken met NeutArr. Bestaande externe koppelingen, uitgeschakelde keuzes en opruimregels blijven behouden.
 
 **Open UI** meldt de gedeelde beheerder aan op dezelfde LAN-host; openbare subdomeinen en accounts met 2FA behouden hun eigen aanmelding. Wachtwoorden en API-sleutels blijven op de server en sessietokens komen niet in URL’s. Heeft Cleanuparr al een ander account, voltooi dan de setup en bewaar de API-sleutel via **Catalogus → Cleanuparr → Instellingen**. Voer daarna Auto-Wire uit. AIO neemt geen onbekend onvoltooid account over.
 
@@ -323,7 +356,7 @@ Dit zijn conservatieve **AIO-keuzes**, gebaseerd op de officiële documentatie. 
 
 | Instelling | AIO-standaard |
 | --- | --- |
-| Dry-run | Aan; controleer eerst de gesimuleerde resultaten |
+| Dry-run | Uit na een geslaagde configuratie |
 | Internetcontrole | Aan, via HTTPS naar GitHub en Cloudflare; certificaatcontrole aan |
 | Queue Cleaner | Elke 5 minuten |
 | Vastgelopen publieke torrents | 12 meldingen, ongeveer 1 uur; teller reset bij voortgang; private torrents overslaan |
@@ -332,9 +365,10 @@ Dit zijn conservatieve **AIO-keuzes**, gebaseerd op de officiële documentatie. 
 | Metadata-, clientfout- en traagheidsregels | Uit; geen aannames over snelheid of schijfproblemen |
 | Malware Blocker | Elke minuut; officiële permissieve blacklist voor Sonarr/Radarr, niet voor muziek |
 | Malwareverwijdering | Private torrents overslaan; niet de hele torrent verwijderen vanwege één geblokkeerd bestand |
+| Blacklist Sync | Aan, elk uur; officiële permissieve lijst. Globaal voor qBittorrent; schakel daar bestandsuitsluitingen in |
 | Download Cleaner | Uit; geen automatisch verwijderen op seedratio of weesbestanden |
 | Seeker | Alleen vervangende zoekopdrachten, elke 10 minuten; proactief zoeken uit |
 
-De importpatronen zijn `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing` en `Unable to parse`. Uitpakken, onvoldoende schijfruimte en onjuiste padkoppelingen vallen daar niet onder. De globale metadataregel blijft uit om private torrents te beschermen. AIO verandert geen qBittorrent-uitsluitingen buiten Cleanuparrs dry-run om.
+De importpatronen zijn `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing` en `Unable to parse`. Uitpakken, onvoldoende schijfruimte en onjuiste padkoppelingen vallen daar niet onder. De globale metadataregel blijft uit om private torrents te beschermen. Na de configuratie kan Cleanuparr qBittorrent-uitsluitingen toepassen. Prowlarr beheert de openbare seedstandaarden: ratio 1, seedtijd 2880 minuten en pack-seedtijd 10080 minuten.
 
 Bronnen: [Queue Cleaner](https://cleanuparr.github.io/docs/configuration/queue-cleaner/), [Malware Blocker](https://cleanuparr.github.io/docs/configuration/malware-blocker/), [General](https://cleanuparr.github.io/docs/configuration/general/), [Seeker](https://cleanuparr.github.io/docs/configuration/seeker/). API-velden gecontroleerd voor Cleanuparr v2.11.0; de online documentatie kan nieuwere velden beschrijven.

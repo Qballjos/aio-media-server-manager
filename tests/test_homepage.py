@@ -312,7 +312,14 @@ def test_homepage_downloads_include_speed(tmp_path):
     assert snap["downloads"][0]["speed_bps"] == 1_500_000
 
 
-def test_homepage_calendar_from_sonarr(tmp_path):
+@pytest.mark.parametrize(("season", "episode", "finale_type", "milestones"), [
+    (1, 1, "series", ["series-premiere", "series-finale"]),
+    (2, 1, None, ["season-premiere"]),
+    (2, 8, "season", ["season-finale"]),
+    (0, 1, None, []),
+    (1, 2, None, []),
+])
+def test_homepage_calendar_from_sonarr(tmp_path, season, episode, finale_type, milestones):
     catalog = FakeCatalog([_plugin("sonarr", 8989, tmp_path)])
     with (
         patch("core.homepage.ApplicationCatalog", return_value=catalog),
@@ -324,8 +331,9 @@ def test_homepage_calendar_from_sonarr(tmp_path):
                 [
                     {
                         "title": "Pilot",
-                        "seasonNumber": 1,
-                        "episodeNumber": 2,
+                        "seasonNumber": season,
+                        "episodeNumber": episode,
+                        "finaleType": finale_type,
                         "airDateUtc": "2026-09-24T20:00:00Z",
                         "hasFile": False,
                         "series": {"title": "Example Show", "titleSlug": "example-show", "tvdbId": 10},
@@ -333,11 +341,13 @@ def test_homepage_calendar_from_sonarr(tmp_path):
                 ],
                 None,
             ),
-        ),
+        ) as fetch,
     ):
         snap = homepage_snapshot("host.local", force=True)
+    assert fetch.call_args.kwargs["params"]["end"].endswith("T23:59:59.999999Z")
     assert snap["calendar"][0]["title"] == "Example Show"
-    assert "S01E02" in snap["calendar"][0]["detail"]
+    assert f"S{season:02d}E{episode:02d}" in snap["calendar"][0]["detail"]
+    assert snap["calendar"][0].get("milestones", []) == milestones
     assert "Pilot" in snap["calendar"][0]["detail"]
     assert snap["calendar"][0]["has_file"] is False
     assert snap["calendar"][0]["when"].startswith("2026-09-24T20:00:00")
@@ -626,7 +636,7 @@ def test_homepage_seerr_requests_row(tmp_path):
     assert snap["requests"][0]["detail"] == "Qballjos"
     assert snap["requests"][0]["mediaType"] == "movie"
     assert snap["requests"][0]["status"] == "requested"
-    assert "image.tmdb.org" in snap["requests"][0]["poster"]
+    assert snap["requests"][0]["poster"] == "https://image.tmdb.org/t/p/w185/x.jpg"
 
 
 def test_homepage_seerr_requests_keep_unfinished(tmp_path):
@@ -725,7 +735,7 @@ def test_homepage_seerr_trending_row(tmp_path):
     assert snap["trending"][0]["mediaId"] == 99
     assert snap["trending"][0]["overview"] == "A court herbalist solves mysteries."
     assert snap["trending"][0]["voteAverage"] == 8.2
-    assert "image.tmdb.org" in snap["trending"][0]["poster"]
+    assert snap["trending"][0]["poster"] == "https://image.tmdb.org/t/p/w185/t.jpg"
     assert snap["trending"][0]["backdrop"] == "https://image.tmdb.org/t/p/w1280/wide.jpg"
     assert snap["trending"][1]["title"] == "Hot Show"
     assert snap["trending"][1]["backdrop"] == ""
@@ -946,7 +956,7 @@ def test_homepage_search_uses_seerr_when_running(tmp_path):
     assert data["results"][0]["can_request"] is True
     assert data["results"][0]["status"] == "missing"
     assert data["results"][0]["mediaId"] == 42
-    assert "image.tmdb.org" in data["results"][0]["poster"]
+    assert data["results"][0]["poster"] == "https://image.tmdb.org/t/p/w154/x.jpg"
     assert data["results"][1]["status"] == "available"
     assert data["results"][1]["can_request"] is False
 
@@ -1151,6 +1161,16 @@ def test_homepage_api_requires_session(tmp_path, monkeypatch):
         )
     assert ok.status_code == 200
     assert ok.json()["apps"] == []
+    assert client.get("/api/homepage/calendar?start=2026-12-01").status_code in (401, 403)
+    headers = {"Authorization": f"Bearer {token}"}
+    query = "/api/homepage/calendar?start=2026-12-01"
+    with patch("api.routers.homepage.homepage_calendar", return_value={"items": [{}] * 401}) as calendar:
+        assert client.get(f"{query}&days=43", headers=headers).status_code == 422
+        response = client.get(f"{query}&days=31", headers=headers)
+        assert response.status_code == 200
+        assert len(response.json()["items"]) == 401
+        calendar.assert_called_once_with("testserver", "http", date(2026, 12, 1), date(2026, 12, 31))
+
 
 
 def test_homepage_launcher_explains_why_apps_are_stopped(tmp_path, monkeypatch):

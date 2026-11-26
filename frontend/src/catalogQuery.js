@@ -17,6 +17,7 @@ export function catalogStateFromQuery(query) {
     sort: source.sort === 'az' ? 'az' : 'popularity',
     status: parseList(source.status).filter((key) => STATUS_KEYS.includes(key)),
     cat: parseList(source.cat),
+    ...(source.view === 'discover' ? { view: 'discover' } : {}),
   }
 }
 
@@ -27,6 +28,7 @@ export function catalogQueryFromState(state) {
   if (state.sort === 'az') query.sort = 'az'
   if (state.status?.length) query.status = state.status.join(',')
   if (state.cat?.length) query.cat = state.cat.join(',')
+  if (state.view === 'discover') query.view = 'discover'
   return query
 }
 

@@ -96,25 +96,25 @@ def clear_homepage_snapshot_cache() -> None:
         _snapshots.clear()
 
 
-def _cache_ident(host: str, scheme: str = "http") -> str:
+def _cache_ident(host: str, scheme: str = "http", include_calendar: bool = True) -> str:
     h = (host or "127.0.0.1").strip() or "127.0.0.1"
     s = (scheme or "http").split(":")[0].lower() or "http"
-    return f"{s}://{h}"
+    return f"{s}://{h}" if include_calendar else f"{s}://{h}#without-calendar"
 
 
-def homepage_snapshot(host: str, *, force: bool = False, scheme: str = "http") -> dict[str, Any]:
+def homepage_snapshot(host: str, *, force: bool = False, scheme: str = "http", include_calendar: bool = True) -> dict[str, Any]:
     host = (host or "127.0.0.1").strip() or "127.0.0.1"
     scheme = (scheme or "http").split(":")[0].lower() or "http"
-    ident = _cache_ident(host, scheme)
+    ident = _cache_ident(host, scheme, include_calendar)
     if force:
         with _lock_for(ident):
-            return _build_and_store(host, scheme)
+            return _build_and_store(host, scheme, include_calendar)
 
     cached = _cached_copy(ident)
     if cached is not None:
         snap, age = cached
         if age >= _CACHE_TTL:
-            _schedule_refresh(host, scheme)
+            _schedule_refresh(host, scheme, include_calendar)
         return _with_live_launcher(snap, host, scheme)
 
     with _lock_for(ident):
@@ -122,12 +122,12 @@ def homepage_snapshot(host: str, *, force: bool = False, scheme: str = "http") -
         if cached is not None:
             snap, age = cached
             if age >= _CACHE_TTL:
-                _schedule_refresh(host, scheme)
+                _schedule_refresh(host, scheme, include_calendar)
             return _with_live_launcher(snap, host, scheme)
         # Cold miss: return launcher immediately; fill widgets in the background.
         shell = _launcher_shell(host, scheme)
         _snapshots[ident] = _SnapshotEntry(shell, time.monotonic() - _CACHE_TTL)
-        _schedule_refresh(host, scheme)
+        _schedule_refresh(host, scheme, include_calendar)
         return copy.deepcopy(shell)
 
 
@@ -220,8 +220,8 @@ def _cached_copy(host: str) -> tuple[dict[str, Any], float] | None:
         return copy.deepcopy(entry.snapshot), age
 
 
-def _schedule_refresh(host: str, scheme: str = "http") -> None:
-    ident = _cache_ident(host, scheme)
+def _schedule_refresh(host: str, scheme: str = "http", include_calendar: bool = True) -> None:
+    ident = _cache_ident(host, scheme, include_calendar)
     with _cache_guard:
         entry = _snapshots.get(ident)
         if entry is None or entry.refreshing:
@@ -229,17 +229,17 @@ def _schedule_refresh(host: str, scheme: str = "http") -> None:
         entry.refreshing = True
     threading.Thread(
         target=_refresh_snapshot,
-        args=(host, scheme),
+        args=(host, scheme, include_calendar),
         name=f"homepage-refresh-{ident}",
         daemon=True,
     ).start()
 
 
-def _refresh_snapshot(host: str, scheme: str = "http") -> None:
-    ident = _cache_ident(host, scheme)
+def _refresh_snapshot(host: str, scheme: str = "http", include_calendar: bool = True) -> None:
+    ident = _cache_ident(host, scheme, include_calendar)
     try:
         with _lock_for(ident):
-            _build_and_store(host, scheme)
+            _build_and_store(host, scheme, include_calendar)
     except Exception as exc:
         logger.debug("Homepage background refresh failed: %s", exc)
         with _cache_guard:
@@ -266,9 +266,9 @@ def _keep_last_good(snapshot: dict[str, Any], previous: dict[str, Any] | None) -
     return waiting
 
 
-def _build_and_store(host: str, scheme: str = "http") -> dict[str, Any]:
-    ident = _cache_ident(host, scheme)
-    snapshot = _build_homepage_snapshot(host, scheme)
+def _build_and_store(host: str, scheme: str = "http", include_calendar: bool = True) -> dict[str, Any]:
+    ident = _cache_ident(host, scheme, include_calendar)
+    snapshot = _build_homepage_snapshot(host, scheme, include_calendar=include_calendar)
     with _cache_guard:
         entry = _snapshots.get(ident)
         previous = entry.snapshot if entry is not None else None
@@ -280,7 +280,20 @@ def _build_and_store(host: str, scheme: str = "http") -> dict[str, Any]:
     return copy.deepcopy(snapshot)
 
 
-def _build_homepage_snapshot(host: str, scheme: str = "http") -> dict[str, Any]:
+def homepage_calendar(host: str, scheme: str, start: date, end: date) -> dict[str, Any]:
+    catalog = ApplicationCatalog()
+    running = _running_names()
+    sonarr_notes: list[dict[str, Any]] = []
+    radarr_notes: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        sonarr = pool.submit(_collect_sonarr_calendar, catalog, running, start, end, sonarr_notes)
+        radarr = pool.submit(_collect_radarr_calendar, catalog, running, start, end, radarr_notes)
+        play = pool.submit(_collect_play_index, catalog, running, host, scheme, start, end)
+        items = _link_calendar(sonarr.result() + radarr.result(), catalog, host, scheme, play.result())
+    return {"items": items, "widgets": sonarr_notes + radarr_notes}
+
+
+def _build_homepage_snapshot(host: str, scheme: str = "http", *, include_calendar: bool = True) -> dict[str, Any]:
     catalog = ApplicationCatalog()
     running = _running_names()
     start, end = calendar_fetch_span()
@@ -302,17 +315,19 @@ def _build_homepage_snapshot(host: str, scheme: str = "http") -> dict[str, Any]:
     trending_notes: list[dict[str, Any]] = []
 
     with ThreadPoolExecutor(max_workers=10) as pool:
-        fut_sonarr = pool.submit(_collect_sonarr_calendar, catalog, running, start, end, sonarr_notes)
-        fut_radarr = pool.submit(_collect_radarr_calendar, catalog, running, start, end, radarr_notes)
+        if include_calendar:
+            fut_sonarr = pool.submit(_collect_sonarr_calendar, catalog, running, start, end, sonarr_notes)
+            fut_radarr = pool.submit(_collect_radarr_calendar, catalog, running, start, end, radarr_notes)
+            fut_play = pool.submit(_collect_play_index, catalog, running, host, scheme, start, end)
         fut_downloads = pool.submit(_collect_download_queues, catalog, running)
         fut_jelly = pool.submit(_collect_jellyfin_recent, catalog, running, jelly_notes, host, scheme)
         fut_plex = pool.submit(_collect_plex_recent, catalog, running, plex_notes, host, scheme)
         fut_seerr = pool.submit(_collect_seerr_requests, catalog, running, seerr_notes, host, scheme)
         fut_trending = pool.submit(_collect_seerr_trending, catalog, running, trending_notes, host, scheme)
-        fut_play = pool.submit(_collect_play_index, catalog, running, host, scheme, start, end)
-        calendar.extend(fut_sonarr.result())
-        calendar.extend(fut_radarr.result())
-        calendar = _link_calendar(calendar, catalog, host, scheme, fut_play.result())
+        if include_calendar:
+            calendar.extend(fut_sonarr.result())
+            calendar.extend(fut_radarr.result())
+            calendar = _link_calendar(calendar, catalog, host, scheme, fut_play.result())
         dl_items, dl_notes = fut_downloads.result()
         downloads.extend(dl_items)
         recent.extend(fut_jelly.result())
@@ -439,6 +454,7 @@ def homepage_title(host: str, scheme: str, media_type: str, media_id: int) -> di
     imdb = ratings.get("imdb") if isinstance(ratings, dict) and isinstance(ratings.get("imdb"), dict) else {}
     return {
         "ok": True,
+        "watchProviders": data.get("watchProviders"),
         "title": data.get("title") or data.get("name") or "",
         "overview": " ".join(str(data.get("overview") or "").split())[:4000],
         "year": year,
@@ -997,7 +1013,7 @@ def _collect_sonarr_calendar(
         headers=_arr_headers("sonarr", plugin.config_dir),
         params={
             "start": start.isoformat(),
-            "end": end.isoformat(),
+            "end": f"{end.isoformat()}T23:59:59.999999Z",
             "unmonitored": "false",
             "includeSeries": "true",
         },
@@ -1021,9 +1037,15 @@ def _parse_sonarr_calendar(data: Any) -> list[dict[str, Any]]:
             continue
         series = row.get("series") if isinstance(row.get("series"), dict) else {}
         title = series.get("title") or row.get("title") or "Episode"
-        season = row.get("seasonNumber")
-        episode = row.get("episodeNumber")
-        ep = f"S{int(season):02d}E{int(episode):02d}" if season is not None and episode is not None else ""
+        season = _as_int(row.get("seasonNumber"))
+        episode = _as_int(row.get("episodeNumber"))
+        ep = f"S{season:02d}E{episode:02d}" if season is not None and episode is not None else ""
+        milestones = []
+        if episode == 1 and season is not None and season > 0:
+            milestones.append("series-premiere" if season == 1 else "season-premiere")
+        finale_type = row.get("finaleType")
+        if finale_type in ("season", "series"):
+            milestones.append(f"{finale_type}-finale")
         items.append(
             {
                 "source": "sonarr",
@@ -1032,11 +1054,12 @@ def _parse_sonarr_calendar(data: Any) -> list[dict[str, Any]]:
                 "detail": " ".join(part for part in (ep, row.get("title") or "") if part),
                 "when": _iso_when(row.get("airDateUtc") or row.get("airDate")),
                 "has_file": bool(row.get("hasFile")),
+                "milestones": milestones,
                 "_slug": str(series.get("titleSlug") or "").strip(),
                 "_tvdb": _as_int(series.get("tvdbId")),
                 "_episode_tvdb": _as_int(row.get("tvdbId")),
-                "_season": _as_int(row.get("seasonNumber")),
-                "_episode": _as_int(row.get("episodeNumber")),
+                "_season": season,
+                "_episode": episode,
                 "_title_key": str(title).strip().lower(),
             }
         )
@@ -1056,7 +1079,7 @@ def _collect_radarr_calendar(
     data, error = _fetch_json(
         f"http://127.0.0.1:{plugin.port}/api/v3/calendar",
         headers=_arr_headers("radarr", plugin.config_dir),
-        params={"start": start.isoformat(), "end": end.isoformat(), "unmonitored": "false"},
+        params={"start": start.isoformat(), "end": f"{end.isoformat()}T23:59:59.999999Z", "unmonitored": "false"},
     )
     return _finish_source(
         notes,
@@ -1389,6 +1412,8 @@ def _link_calendar(
             "has_file": bool(item.get("has_file")),
             "url": _arr_item_url(source, str(item.get("_slug") or ""), webs.get(source, "")),
         }
+        if item.get("milestones"):
+            row["milestones"] = item["milestones"]
         if row["has_file"] and play_app and home:
             play_url, series_url = _match_play(item, index)
             row["play_app"] = play_app
@@ -2080,6 +2105,8 @@ _REQUEST_DONE_DAYS = 30
 
 def _seerr_request_visible(row: dict[str, Any], cutoff: datetime) -> bool:
     """Unfinished requests stay; available or declined ones drop off after 30 days."""
+    if row.get("status") == 1:  # Pending decisions remain visible even if another request made the title available.
+        return True
     media = row.get("media") if isinstance(row.get("media"), dict) else {}
     if seerr_media_status(media) != "available" and row.get("status") != 3:  # 3 = declined
         return True
@@ -2133,9 +2160,12 @@ def _seerr_request_cards(
     seen: set[tuple[str, int]] = set()
     for row, media_type, tmdb_id in jobs:
         ident = (media_type, tmdb_id)
-        if ident in seen:
-            continue
-        seen.add(ident)
+        request_id = row.get("id")
+        pending = type(request_id) is int and request_id > 0 and row.get("status") == 1
+        if not pending:
+            if ident in seen:
+                continue
+            seen.add(ident)
         info = details.get(ident) or {}
         who = row.get("requestedBy") if isinstance(row.get("requestedBy"), dict) else {}
         requester = who.get("displayName") or who.get("username") or ""
@@ -2151,6 +2181,8 @@ def _seerr_request_cards(
                 "url": f"{_web_url(plugin.name, plugin.port, host, scheme)}/{path}",
                 "mediaType": media_type,
                 "mediaId": tmdb_id,
+                "requestId": request_id,
+                "requestStatus": row.get("status"),
                 "status": seerr_media_status(media),
             }
         )
@@ -2163,9 +2195,12 @@ def _seerr_media_details(
     media_type: str,
     tmdb_id: int,
 ) -> dict[str, Any]:
-    kind = "tv" if media_type == "tv" else "movie"
+    return seerr_catalog_details(f"http://127.0.0.1:{plugin.port}/api/v1", headers, media_type, tmdb_id)
+
+
+def seerr_catalog_details(base_url: str, headers: dict[str, str], media_type: str, tmdb_id: int) -> dict:
     data, _error = _fetch_json(
-        f"http://127.0.0.1:{plugin.port}/api/v1/{kind}/{tmdb_id}",
+        f"{base_url}/{media_type}/{tmdb_id}",
         headers=headers,
         timeout=2.0,
     )
@@ -2173,6 +2208,11 @@ def _seerr_media_details(
         return {}
     poster = data.get("posterPath") or ""
     return {
+        "seasonCounts": {
+            row["seasonNumber"]: row.get("episodeCount")
+            for row in (data.get("seasons") or [])
+            if isinstance(row, dict) and type(row.get("seasonNumber")) is int and row["seasonNumber"] >= 0
+        },
         "title": data.get("title") or data.get("name") or "",
         "poster": f"https://image.tmdb.org/t/p/w185{poster}" if poster else "",
     }

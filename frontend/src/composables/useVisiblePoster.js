@@ -10,8 +10,9 @@ export function useVisiblePoster(element) {
   let target = null
 
   onMounted(() => {
-    target = element.value
-    if (typeof IntersectionObserver === 'undefined') {
+    // The artwork frame has a layout box before the image gets a source.
+    target = element.value?.parentElement
+    if (!target || typeof IntersectionObserver === 'undefined') {
       visible.value = true
       return
     }

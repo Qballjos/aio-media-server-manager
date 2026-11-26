@@ -20,6 +20,8 @@ Créez le compte administrateur et terminez l’assistant. Commencez par exemple
 
 Ouvrez **Catalogue** en haut. Choisissez la vue à gauche ; les apps apparaissent à droite.
 
+Lorsque des apps sont installées, le catalogue s’ouvre sur **Mes apps**. La recherche et le tri se trouvent au-dessus de la liste. **Découvrir** affiche les apps mises en avant et le catalogue complet.
+
 | Choix à gauche | Contenu affiché |
 |---|---|
 | **Découvrir** | Apps mises en avant et catalogue complet. |
@@ -36,7 +38,7 @@ Cliquez sur le nom, l’icône ou la ligne d’une app pour ouvrir sa **fenêtre
 
 Les **réglages d’app dans Catalogue** concernent une app. La page **Réglages** en haut concerne AIO : profil, apparence, connexions, sauvegardes et mises à jour.
 
-![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=app-store-20261102)
+![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=liquid-glass-20261125)
 
 ## Se repérer dans les réglages {#settings-menu}
 
@@ -54,7 +56,9 @@ Réglages utilise la même disposition que le catalogue : groupe et page à gauc
 
 Le menu ouvre une page. Modifiez l’option à droite et utilisez le bouton **Enregistrer** du bloc lorsqu’il est affiché. Déplacez les widgets directement sur **Accueil** avec l’icône à quatre blocs ; Page d’accueil règle la barre d’apps et le texte de connexion.
 
-![Settings: grouped sidebar and search](screenshots/light/settings.png?v=app-store-20261102)
+Ouvrez **Personnel → Langue et apparence** pour voir le fond d’écran, le thème et le verre en direct. Choisissez **Transparent**, **Équilibré** ou **Teinté**. Sous **Avancé**, réglez le verre et la couleur d’accent des liens et du focus clavier. Pour afficher un logo seul, téléversez le **Logo** sous **Nom et icônes**, activez **Afficher uniquement le logo d’en-tête** et enregistrez. L’**icône d’en-tête** accompagne un titre visible.
+
+![Settings: grouped sidebar and search](screenshots/light/settings.png?v=liquid-glass-20261125)
 
 ## 3. Ouvrir votre première app
 
@@ -96,6 +100,8 @@ Pour une série utilisez media/tv. Après la copie, ouvrez Jellyfin → Dashboar
 [Organiser les widgets Home](index.md#app-preview){ .md-button .md-button--primary }
 
 Ces images expliquent les vraies commandes. La démo du site utilise des données fictives sans modifier votre tableau de bord.
+
+Pour plusieurs lectures Jellyfin ou Plex, faites défiler **En lecture** horizontalement. Le calendrier utilise des repères de couleur. Dans les résultats, sélectionnez **Demander des saisons** pour choisir des saisons précises. Les comptes média utilisent le filtre **Tendances** défini par l’administrateur.
 
 ### Pourquoi un widget est-il vide ?
 

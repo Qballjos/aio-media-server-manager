@@ -9,6 +9,7 @@ export const DEFAULT_ACCENT = '#0a6cff'
 const ACCENT_CACHE_KEY = 'amm-accent'
 
 export const brandTitle = ref(DEFAULT_TITLE)
+export const brandHeaderLogoOnly = ref(false)
 export const brandHeaderUrl = ref(DEFAULT_LOGO)
 export const brandLogoUrl = ref(DEFAULT_LOGO)
 export const brandFaviconUrl = ref(DEFAULT_LOGO)
@@ -152,10 +153,6 @@ export function applyAccentColor(hex) {
   root.style.setProperty('--border-hover', `rgba(${accent.rgb}, 0.35)`)
   root.style.setProperty('--shadow-glow', `0 0 20px rgba(${accent.rgb}, 0.28)`)
   root.style.setProperty('--glow-orb', `rgba(${accent.rgb}, 0.18)`)
-  root.style.setProperty(
-    '--brand-title-gradient',
-    `linear-gradient(90deg, var(--text-heading), ${accent.soft})`,
-  )
   return accent.primary
 }
 
@@ -177,6 +174,7 @@ export function applyBranding(data) {
 
   brandTitle.value = title
   brandHeaderUrl.value = header
+  brandHeaderLogoOnly.value = data?.header_logo_only === true
   brandLogoUrl.value = logo
   brandFaviconUrl.value = favicon
   brandSlots.value = data?.slots || {}

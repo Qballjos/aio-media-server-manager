@@ -98,6 +98,6 @@ test('home uses real timestamps, preserves stale progress, and refreshes once on
   await panel.loadInstallJobs()
   await setImmediate()
   await panel.loadInstallJobs()
-  assert.equal(calls.filter((path) => path === '/api/homepage?refresh=1').length, 1)
+  assert.equal(calls.filter((path) => path === '/api/homepage?include_calendar=false&refresh=1').length, 1)
   assert.equal(panel.snapshot.value.apps[0].state, 'running')
 })

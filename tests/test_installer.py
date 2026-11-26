@@ -577,6 +577,7 @@ def test_install_workflows_report_progress_and_preserve_callback(
         source = "https://example.org/app.zip" if workflow == "url" else "owner/repo"
         result = method(source, "app", "app", progress_callback=callback)
         assert result.executable_path.read_text() == "executable content"
+        assert list((cfg.cache_dir / "downloads").iterdir()) == []
         assert get_job("app")["status"] == "installing"
         assert "Extracting archive…" in messages
         if workflow != "url":
@@ -690,3 +691,62 @@ def test_child_python_prefers_env_override(tmp_path: Path, monkeypatch):
     fake.chmod(0o755)
     monkeypatch.setenv("AMM_CHILD_PYTHON", str(fake))
     assert child_python() == str(fake)
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_package_download_is_temporary(tmp_path, failure):
+    from core.installer.download_cache import temporary_package
+
+    cache = tmp_path / "cache"
+    other = cache / "jellyfin" / "keep"
+    other.parent.mkdir(parents=True)
+    other.write_text("keep")
+    try:
+        with temporary_package(cache, "app.tar.gz") as archive:
+            archive.write_bytes(b"package")
+            assert archive.name == "app.tar.gz"
+            if failure:
+                raise RuntimeError("installation failed")
+    except RuntimeError:
+        pass
+    assert not archive.exists()
+    assert list((cache / "downloads").iterdir()) == []
+    assert other.read_text() == "keep"
+
+
+def test_package_cache_cleanup_preserves_external_symlink_target(tmp_path):
+    from core.installer.download_cache import cleanup_download_cache
+
+    cache = tmp_path / "cache"
+    downloads = cache / "downloads"
+    downloads.mkdir(parents=True)
+    (downloads / "old.zip").write_bytes(b"old")
+    media = tmp_path / "media"
+    media.mkdir()
+    (media / "keep").write_text("media")
+    (downloads / "link").symlink_to(media, target_is_directory=True)
+    cleanup_download_cache(cache)
+    assert not (downloads / "old.zip").exists()
+    assert (media / "keep").read_text() == "media"
+
+
+def test_package_cache_cleanup_removes_only_owned_directories(tmp_path):
+    from core.installer.download_cache import cleanup_download_cache
+
+    downloads = tmp_path / "downloads"
+    interrupted = downloads / "amm-package-interrupted"
+    interrupted.mkdir(parents=True)
+    (interrupted / "partial").write_bytes(b"partial")
+    unrelated = downloads / "other"
+    unrelated.mkdir()
+    cleanup_download_cache(tmp_path)
+    assert not interrupted.exists()
+    assert unrelated.is_dir()
+
+
+@pytest.mark.parametrize("filename", ["../escape.zip", "/escape.zip", "..", ""])
+def test_package_download_rejects_paths(tmp_path, filename):
+    from core.installer.download_cache import temporary_package
+
+    with pytest.raises(ValueError):
+        with temporary_package(tmp_path, filename):
+            pytest.fail("Unsafe filename accepted")

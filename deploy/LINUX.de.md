@@ -89,7 +89,7 @@ Installieren Sie nur, was Sie ausführen. Auf ARM64 überspringen Sie Chromium �
 | Node.js 22 | Seerr |
 | JRE 25, `mariadb-server` | Grimmory |
 | `chromium`, `xvfb`, `fonts-liberation` | Flaresolverr (nur x86_64) |
-| `iproute2`, `openvpn`, `wireguard-tools` | Optionales VPN (qBittorrent, Prowlarr, Flaresolverr) |
+| `iproute2`, `openvpn`, `wireguard-tools` | Optionales VPN (qBittorrent, Prowlarr, Flaresolverr, Shelfmark) |
 
 ## Dienstdatei
 

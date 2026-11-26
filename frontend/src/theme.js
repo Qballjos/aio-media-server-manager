@@ -1,5 +1,9 @@
 /** Theme preference — localStorage cache + profile sync. */
 
+import { ref } from 'vue'
+
+export const resolvedTheme = ref('dark')
+
 const STORAGE_KEY = 'amm-theme'
 const PREFS = new Set(['dark', 'light', 'system'])
 const THEME_COLORS = {
@@ -40,6 +44,7 @@ function syncMetaThemeColor(theme) {
 export function applyResolvedTheme(theme) {
   const resolved = theme === 'light' ? 'light' : 'dark'
   const root = document.documentElement
+  resolvedTheme.value = resolved
   root.setAttribute('data-theme', resolved)
   root.style.colorScheme = resolved
   syncMetaThemeColor(resolved)

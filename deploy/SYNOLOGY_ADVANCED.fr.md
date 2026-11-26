@@ -102,14 +102,14 @@ Si `/dev/dri` existe, ajoutez ce bloc sous `aio-media-manager` dans le fichier C
 ls -l /dev/dri
 ```
 
-## VPN (qBittorrent, Prowlarr, Flaresolverr)
+## VPN (qBittorrent, Prowlarr, Flaresolverr, Shelfmark)
 
 ```bash
 sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
 # scp wg0.conf into that directory
 ```
 
-Mettez `AMM_VPN_ENABLED=true` dans le Compose du projet, puis redémarrez le projet. Tant que le VPN est actif, Prowlarr, qBittorrent et Flaresolverr ne peuvent pas utiliser le WAN de la maison : ils ne sortent que par le tunnel. Si le tunnel est coupé au boot, ils attendent ; AIO réessaie le VPN et les démarre quand la poignée de main est de retour. Un cache DNS local pour ces apps (lié au tunnel) réduit les échecs d’indexeurs dus à de courts délais DNS. Le noyau Synology n’a souvent pas de module WireGuard ; l’image de l’appliance inclut **wireguard-go** en repli et crée `/dev/net/tun` s’il manque. Cela ne marche que si le projet reste `privileged: true` (le script d’installation le définit). Recréez le conteneur après avoir tiré une image à jour, puis enregistrez le VPN dans **Réglages → VPN**. OpenVPN utilise le même nœud de périphérique et a aussi besoin du mode privilégié. Sur DSM, l’ACL Synology peut bloquer l’uid des apps VPN (910) après `chown` ; si ces apps ne peuvent pas écrire leurs dossiers de config, effacez l’ACL sur le chemin hôte comme le décrivent les journaux.
+Mettez `AMM_VPN_ENABLED=true` dans le Compose du projet, puis redémarrez le projet. Tant que le VPN est actif, Prowlarr, qBittorrent, Flaresolverr et Shelfmark ne peuvent pas utiliser le WAN de la maison : ils ne sortent que par le tunnel. Si le tunnel est coupé au boot, ils attendent ; AIO réessaie le VPN et les démarre quand la poignée de main est de retour. Un cache DNS local pour ces apps (lié au tunnel) réduit les échecs d’indexeurs dus à de courts délais DNS. Le noyau Synology n’a souvent pas de module WireGuard ; l’image de l’appliance inclut **wireguard-go** en repli et crée `/dev/net/tun` s’il manque. Cela ne marche que si le projet reste `privileged: true` (le script d’installation le définit). Recréez le conteneur après avoir tiré une image à jour, puis enregistrez le VPN dans **Réglages → VPN**. OpenVPN utilise le même nœud de périphérique et a aussi besoin du mode privilégié. Sur DSM, l’ACL Synology peut bloquer l’uid des apps VPN (910) après `chown` ; si ces apps ne peuvent pas écrire leurs dossiers de config, effacez l’ACL sur le chemin hôte comme le décrivent les journaux.
 
 ## Cloudflare Tunnel
 

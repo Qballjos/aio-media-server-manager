@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from core.file_io import write_private_text
 from core.log_redactor import redact_log_line
 from core.settings import settings
 from core.version import app_version
@@ -137,13 +138,7 @@ class DiagnosticsStore:
             "created_at": now.isoformat(),
             "expires_at": (now + timedelta(hours=SHARE_TTL_HOURS)).isoformat(),
         }
-        path = self._share_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload), encoding="utf-8")
-        try:
-            path.chmod(0o600)
-        except OSError:
-            pass
+        write_private_text(self._share_path(), json.dumps(payload))
         logger.warning("Created debug share link (expires %s).", payload["expires_at"])
         return payload
 
@@ -193,7 +188,7 @@ class DiagnosticsStore:
             "process_logs": logs,
             "storage": settings.as_serialisable_dict(),
             "library": LibraryLayout.from_settings(settings).as_dict(),
-            "errors": self.recent_errors(100),
+            "errors": [{key: value for key, value in item.items() if key != "traceback"} for item in self.recent_errors(100)],
             "recyclarr": self._recyclarr_debug(),
             "vpn": self._vpn_debug(),
         }
@@ -211,8 +206,8 @@ class DiagnosticsStore:
             payload["iproute"] = shutil.which("ip")
             payload["iptables"] = shutil.which("iptables")
             return payload
-        except Exception as exc:
-            return {"error": str(exc)}
+        except Exception:
+            return {"error": "VPN diagnostics unavailable."}
 
     def _recyclarr_debug(self) -> dict[str, Any]:
         try:
@@ -225,6 +220,14 @@ class DiagnosticsStore:
             env = plugin.extra_env() if plugin else {}
             args = plugin.start_args() if plugin else []
             last = last_sync_payload(config_dir)
+            if last is not None:
+                last = {
+                    "at": last.get("at"),
+                    "ok": bool(last.get("ok")),
+                    "returncode": last.get("returncode"),
+                    "detail": redact_log_line(str(last.get("detail") or "")),
+                    "log": "\n".join(redact_log_line(line) for line in str(last.get("log") or "").splitlines()),
+                }
             git_exe = git_executable()
             return {
                 "installed": bool(plugin and plugin.is_installed()),
@@ -237,8 +240,8 @@ class DiagnosticsStore:
                 "config_env": env.get("RECYCLARR_CONFIG_DIR"),
                 "last_sync": last,
             }
-        except Exception as exc:
-            return {"error": str(exc)}
+        except Exception:
+            return {"error": "Recyclarr diagnostics unavailable."}
 
     def render_html(self, report: dict[str, Any]) -> str:
         counts = report.get("catalog", {}).get("counts", {})
@@ -252,8 +255,6 @@ class DiagnosticsStore:
         error_blocks = []
         for item in errors[-40:]:
             body = f"{item.get('timestamp')}  {item.get('level')}  {item.get('source')}\n{item.get('message')}"
-            if item.get("traceback"):
-                body += "\n" + item["traceback"]
             error_blocks.append(_pre(body))
 
         app_rows = "".join(
@@ -280,7 +281,7 @@ class DiagnosticsStore:
         if last:
             rec_block += (
                 f"last_sync ok={last.get('ok')} at={last.get('at')} {last.get('detail')}\n"
-                f"{redact_log_line(str(last.get('log') or ''))}"
+                f"{last.get('log') or ''}"
             )
         else:
             rec_block += "No last-sync.json (sync has not been run yet).\n"

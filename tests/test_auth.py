@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
+from core import two_factor
 from core.auth import (
     COOKIE_ACCESS,
     COOKIE_CSRF,
@@ -162,3 +163,60 @@ def test_bearer_skips_csrf_when_session_cookie_also_present(auth_mgr: AuthManage
     request.headers = {"Authorization": f"Bearer {token}"}
     request.method = "POST"
     assert auth_mgr.authenticate_request(request) == "admin"
+
+
+@pytest.mark.parametrize(("timestamp", "code"), [(59, "287082"), (1111111109, "081804")])
+def test_totp_rfc6238_sha1_vectors(timestamp: int, code: str):
+    # Appendix B sample key, with the published result reduced to six digits.
+    secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+    assert two_factor.totp_code(secret, timestamp // 30) == code
+
+
+def test_member_session_is_rejected_by_admin_authentication(auth_mgr: AuthManager):
+    auth_mgr.media_users.grant("plex", "server-a", "42")
+    token = auth_mgr.issue_member_token("plex", "server-a", "42")
+    request = MagicMock()
+    request.headers = {"Authorization": f"Bearer {token}"}
+    request.cookies = {}
+    request.method = "GET"
+
+    assert auth_mgr.authenticate_member_request(request) == "42"
+    with pytest.raises(HTTPException) as admin_error:
+        auth_mgr.authenticate_request(request)
+    assert admin_error.value.status_code == 403
+    with pytest.raises(HTTPException):
+        auth_mgr.decode_token(token)
+
+    auth_mgr.revoke_request_session(request, member=True)
+    with pytest.raises(HTTPException) as revoked_error:
+        auth_mgr.authenticate_member_request(request)
+    assert revoked_error.value.status_code == 401
+
+
+def test_admin_session_is_rejected_by_member_authentication(auth_mgr: AuthManager):
+    request = MagicMock()
+    request.headers = {"Authorization": f"Bearer {auth_mgr.issue_token('admin')}"}
+    request.cookies = {}
+    request.method = "GET"
+
+    with pytest.raises(HTTPException) as error:
+        auth_mgr.authenticate_member_request(request)
+    assert error.value.status_code == 403
+
+
+def test_member_library_credential_stays_in_the_server_session(auth_mgr):
+    auth_mgr.media_users.grant("jellyfin", "server-a", "42")
+    credential = "provider-library-credential"
+    token = auth_mgr.issue_member_token("jellyfin", "server-a", "42", library_token=credential)
+    payload = auth_mgr.decode_token(token, member=True)
+    assert credential not in str(payload)
+    directory = auth_mgr.media_users.path.parent / ".sessions"
+    assert credential.encode() not in (directory / payload["jti"]).read_bytes()
+    request = MagicMock()
+    request.headers = {"Authorization": f"Bearer {token}"}
+    request.method = "GET"
+    assert auth_mgr.member_library_token(request) == credential
+    auth_mgr.media_users.revoke("jellyfin", "server-a", "42")
+    with pytest.raises(HTTPException) as error:
+        auth_mgr.member_library_token(request)
+    assert error.value.status_code == 401

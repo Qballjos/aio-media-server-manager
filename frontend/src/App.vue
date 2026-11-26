@@ -7,7 +7,9 @@ import HealthModal from './HealthModal.vue'
 import AppSettingsModal from './AppSettingsModal.vue'
 import WallpaperLayer from './WallpaperLayer.vue'
 import AppLoader from './AppLoader.vue'
+import MediaAccountView from './MediaAccountView.vue'
 import { isLocale, readStoredLocale, t } from './i18n/index.js'
+import { MEMBER_SETTINGS_PAGES } from './settingsNavigation.js'
 import { homeEditing } from './homeLayout.js'
 import { startGuardedInterval } from './pageVisible.js'
 import {
@@ -19,7 +21,7 @@ import {
 } from './api.js'
 import { useToasts } from './useToasts.js'
 import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInstall.js'
-import { brandTitle, brandHeaderUrl, loadBranding } from './branding.js'
+import { brandTitle, brandHeaderUrl, brandHeaderLogoOnly, brandLogoUrl, loadBranding } from './branding.js'
 import { migrateLocalVisualsIfNeeded, saveLocaleToProfile } from './visualsProfile.js'
 import { lockThemeToSystem, unlockTheme } from './theme.js'
 import { combinedServiceStatus, tunnelChip, vpnChip } from './statusChips.js'
@@ -40,6 +42,7 @@ const authStatus = ref({
   last_name: null,
   avatar_url: null,
 })
+const isMember = computed(() => authStatus.value.authenticated && authStatus.value.role === 'member')
 const catalogApps = ref([])
 const UPDATE_TOAST_KEY = 'amm-update-notice'
 const updateStatus = ref({
@@ -89,6 +92,7 @@ const availableUpdates = computed(() => updateStatus.value.available || [])
 const showUpdatesPill = computed(
   () =>
     authStatus.value.authenticated &&
+    !isMember.value &&
     wizardCompleted.value &&
     !!updateStatus.value.notify_enabled &&
     availableUpdates.value.length > 0,
@@ -159,11 +163,14 @@ async function onAuthSession(data) {
     setup_required: false,
     authenticated: true,
     username: data.username,
+    role: data.role || 'admin',
+    account_id: data.account_id || null,
     first_name: data.first_name || null,
     last_name: data.last_name || null,
     avatar_url: data.avatar_url || null,
   }
   applySession(data)
+  if (isMember.value) return
   await migrateLocalVisualsIfNeeded(data).catch(() => {})
   rememberLocale(data)
   await Promise.all([refreshDashboard(), fetchWizardStatus()])
@@ -171,7 +178,7 @@ async function onAuthSession(data) {
 
 async function handleLogout() {
   try {
-    await apiRequest('/api/auth/logout', { method: 'POST' })
+    await apiRequest(isMember.value ? '/api/media-login/logout' : '/api/auth/logout', { method: 'POST' })
   } catch (_) {}
   clearSession()
   authStatus.value.authenticated = false
@@ -258,7 +265,7 @@ function syncSetupTheme() {
   }
   const setup = !!authStatus.value.setup_required
   const auth = !!authStatus.value.authenticated
-  const wizardPending = auth && (!wizardStatusLoaded.value || !wizardCompleted.value)
+  const wizardPending = auth && !isMember.value && (!wizardStatusLoaded.value || !wizardCompleted.value)
   if (setup || wizardPending) {
     lockThemeToSystem()
     return
@@ -271,6 +278,7 @@ watch(
     authStatusKnown.value,
     authStatus.value.setup_required,
     authStatus.value.authenticated,
+    isMember.value,
     wizardCompleted.value,
     wizardStatusLoaded.value,
   ],
@@ -324,7 +332,7 @@ async function refreshDashboard() {
 }
 
 function pollLiveStatus() {
-  if (!authStatus.value.authenticated || !wizardCompleted.value) return
+  if (!authStatus.value.authenticated || isMember.value || !wizardCompleted.value) return
   if (currentView.value === 'catalog') {
     fetchApplications()
     fetchCatalog()
@@ -333,7 +341,7 @@ function pollLiveStatus() {
 }
 
 function pollSlowStatus() {
-  if (!authStatus.value.authenticated || !wizardCompleted.value) return
+  if (!authStatus.value.authenticated || isMember.value || !wizardCompleted.value) return
   if (!showHealthModal.value) fetchSystemInfo()
   fetchUpdateStatus()
 }
@@ -366,8 +374,16 @@ async function runAutomatedWiring() {
   }
 }
 
+watch([isMember, () => route.fullPath], ([member]) => {
+  if (!member) return
+  if (route.name === 'catalog') router.replace({ name: 'home' })
+  if (route.name === 'settings' && !MEMBER_SETTINGS_PAGES.some(page => page.id === route.params.section)) {
+    router.replace({ name: 'settings', params: { section: 'account' } })
+  }
+})
+
 watch(currentView, (view) => {
-  if (!authStatus.value.authenticated || !wizardCompleted.value) return
+  if (!authStatus.value.authenticated || isMember.value || !wizardCompleted.value) return
   if (view === 'catalog') {
     fetchApplications()
     fetchCatalog()
@@ -414,20 +430,21 @@ onUnmounted(() => {
   <div class="app-container">
     <WallpaperLayer />
     <header class="top-nav">
-      <div class="nav-brand glass-pill">
-        <div class="logo-orb">
-          <img
-            :src="brandHeaderUrl"
-            :alt="brandTitle"
-            class="brand-logo"
-          />
-        </div>
-        <div class="brand-titles">
-          <h1 class="brand-name" :title="brandTitle">{{ brandTitle }}</h1>
-        </div>
+      <div class="nav-brand glass-pill" :class="{ 'is-logo-only': brandHeaderLogoOnly }">
+        <h1 v-if="brandHeaderLogoOnly" class="brand-image-title">
+          <img :src="brandLogoUrl" :alt="brandTitle" />
+        </h1>
+        <template v-else>
+          <div class="logo-orb">
+            <img :src="brandHeaderUrl" alt="" class="brand-logo" />
+          </div>
+          <div class="brand-titles">
+            <h1 class="brand-name" :title="brandTitle">{{ brandTitle }}</h1>
+          </div>
+        </template>
       </div>
 
-      <nav v-if="authStatus.authenticated && wizardCompleted" class="nav-tabs glass-pill" :aria-label="$t('Pages')">
+      <nav v-if="authStatus.authenticated && (isMember || wizardCompleted)" class="nav-tabs glass-pill" :aria-label="$t('Pages')">
         <RouterLink
           :to="{ name: 'home', query: route.name === 'home' ? route.query : {} }"
           class="metric-pill metric-pill-action"
@@ -437,6 +454,7 @@ onUnmounted(() => {
           {{ $t('Home') }}
         </RouterLink>
         <RouterLink
+          v-if="!isMember"
           :to="{ name: 'catalog', query: route.name === 'catalog' ? route.query : {} }"
           class="metric-pill metric-pill-action"
           :class="{ 'is-active': currentView === 'catalog' }"
@@ -483,7 +501,7 @@ onUnmounted(() => {
             <span class="metric-val font-mono">{{ updatesPillLabel }}</span>
           </RouterLink>
           <button
-            v-if="authStatus.authenticated && currentView === 'catalog'"
+            v-if="authStatus.authenticated && !isMember && currentView === 'catalog'"
             @click="runAutomatedWiring"
             class="metric-pill metric-pill-action"
             :disabled="wiringRunning"
@@ -495,8 +513,8 @@ onUnmounted(() => {
         </div>
 
         <details v-if="authStatus.authenticated" class="nav-account" @keydown.esc="$event.currentTarget.removeAttribute('open')">
-          <summary class="glass-pill" :aria-label="`${authStatus.username} account. ${wizardCompleted ? statusChips.map(chip => chip.title).join('. ') : ''}`">
-            <span v-if="wizardCompleted && accountStatus" class="nav-account-status">
+          <summary class="glass-pill" :aria-label="`${authStatus.username} account. ${!isMember && wizardCompleted ? statusChips.map(chip => chip.title).join('. ') : ''}`">
+            <span v-if="!isMember && wizardCompleted && accountStatus" class="nav-account-status">
               <span class="status-chip" :data-tone="accountStatus.tone" :title="accountStatus.title">
                 <span class="status-dot" aria-hidden="true"></span>
               </span>
@@ -511,12 +529,12 @@ onUnmounted(() => {
           </summary>
           <div class="nav-account-menu glass-popover">
             <RouterLink
-              v-if="wizardCompleted"
+              v-if="isMember || wizardCompleted"
               :to="{ name: 'settings', params: { section: 'account' } }"
               class="metric-pill metric-pill-action"
               @click="$event.currentTarget.closest('details').removeAttribute('open')"
             >{{ authStatus.username }} · {{ $t('Account') }}</RouterLink>
-            <template v-if="wizardCompleted">
+            <template v-if="!isMember && wizardCompleted">
               <RouterLink
                 v-for="chip in statusChips"
                 :key="chip.key"
@@ -531,7 +549,7 @@ onUnmounted(() => {
                 <span>{{ chip.label }}</span>
               </RouterLink>
             </template>
-            <div v-if="transcodingAvailable" class="metric-pill nav-account-info" :title="$t('Hardware transcoding available')">
+            <div v-if="!isMember && transcodingAvailable" class="metric-pill nav-account-info" :title="$t('Hardware transcoding available')">
               <span class="status-dot" aria-hidden="true"></span>
               <span>{{ $t('GPU · hardware transcoding') }}</span>
             </div>
@@ -542,7 +560,7 @@ onUnmounted(() => {
               @click="$event.currentTarget.closest('details').removeAttribute('open')"
             >{{ updatesPillLabel }}</RouterLink>
             <button
-              v-if="currentView === 'catalog'"
+              v-if="!isMember && currentView === 'catalog'"
               @click="runAutomatedWiring"
               class="metric-pill metric-pill-action nav-account-phone-only"
               :disabled="wiringRunning"
@@ -565,6 +583,8 @@ onUnmounted(() => {
         @status="onAuthStatus"
         @session="onAuthSession"
       />
+      <MediaAccountView v-else-if="isMember" :settings="currentView === 'settings'" :account-id="authStatus.account_id"
+                        :section="String(route.params.section || 'account')" @session="onSettingsSession" />
       <section v-else-if="!wizardStatusLoaded" class="auth-card-wrapper animate-fade">
         <AppLoader :label="$t('Loading setup')" />
       </section>

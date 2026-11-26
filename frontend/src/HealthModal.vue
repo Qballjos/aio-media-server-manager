@@ -112,7 +112,7 @@ onUnmounted(() => {
 
 <template>
     <div class="modal-backdrop" @click.self="closeHealthModal">
-      <div class="health-modal glass-card animate-scale" @click.stop>
+      <div class="health-modal glass-dialog animate-scale" @click.stop>
         <div class="modal-header">
           <div class="modal-title-group">
             <h3>{{ $t('Host health') }}</h3>

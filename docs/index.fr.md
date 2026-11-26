@@ -251,10 +251,10 @@ title: AIO Media Server Manager
 </div>
 </div>
 <div class="preview-panel" id="preview-panel-catalog" role="tabpanel" aria-labelledby="preview-tab-catalog" data-panel="catalog" hidden>
-<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=app-store-20261102" data-preview-image="catalog" alt="Catalogue — Capture de l’application AIO" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=liquid-glass-20261125" data-preview-image="catalog" alt="Catalogue — Capture de l’application AIO" width="1280" height="720" loading="lazy">
 </div>
 <div class="preview-panel" id="preview-panel-settings" role="tabpanel" aria-labelledby="preview-tab-settings" data-panel="settings" hidden>
-<img src="__AIO_ASSET__/screenshots/light/settings.png?v=app-store-20261102" data-preview-image="settings" alt="Réglages — Capture de l’application AIO" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png?v=liquid-glass-20261125" data-preview-image="settings" alt="Réglages — Capture de l’application AIO" width="1280" height="720" loading="lazy">
 </div>
 </div>
 <p class="preview-caption">Aperçu interactif · données fictives<span aria-hidden="true"> · </span>
@@ -339,7 +339,7 @@ title: AIO Media Server Manager
 <a class="landing-text-link" href="USAGE.md">Découvrir le tableau de bord →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=app-store-20261102" data-theme-image="catalog" alt="Catalogue" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/catalog.png?v=liquid-glass-20261125" data-theme-image="catalog" alt="Catalogue" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section feature-row reverse">
@@ -347,10 +347,11 @@ title: AIO Media Server Manager
 <p class="eyebrow">MOINS D’EFFORT. PLUS DE CONTRÔLE.</p>
 <h2>Bien régler, une fois.</h2>
 <p>Les réglages sont groupés avec un champ de recherche. Profil et apparence sont dans Personnel, les connexions dans Connexions, les mises à jour et sauvegardes dans Maintenance.</p>
+<p>Une navigation et un dock en verre flottant, avec des surfaces sobres pour les médias et les réglages.</p>
 <a class="landing-text-link" href="USAGE.md#screens">Découvrir le tableau de bord →</a>
 </div>
 <figure class="feature-shot">
-<img src="__AIO_ASSET__/screenshots/light/settings.png?v=app-store-20261102" data-theme-image="settings" alt="Réglages" width="1280" height="720" loading="lazy">
+<img src="__AIO_ASSET__/screenshots/light/settings.png?v=liquid-glass-20261125" data-theme-image="settings" alt="Réglages" width="1280" height="720" loading="lazy">
 </figure>
 </section>
 <section class="landing-section" id="install">

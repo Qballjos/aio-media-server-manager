@@ -41,7 +41,7 @@ async def diagnostics_status(request: Request) -> dict[str, Any]:
 
 @router.post("/api/diagnostics/share", summary="Create a time-limited debug URL")
 async def create_debug_share(request: Request) -> dict[str, Any]:
-    _ensure_authenticated(request)
+    auth_manager.authenticate_request(request)
     payload = diagnostics.create_share()
     return {
         "status": "ok",
@@ -54,7 +54,7 @@ async def create_debug_share(request: Request) -> dict[str, Any]:
 
 @router.delete("/api/diagnostics/share", summary="Revoke the debug URL")
 async def revoke_debug_share(request: Request) -> dict[str, Any]:
-    _ensure_authenticated(request)
+    auth_manager.authenticate_request(request)
     diagnostics.revoke_share()
     return {"status": "revoked"}
 
@@ -67,6 +67,7 @@ async def public_debug_report(
     if not diagnostics.validate_token(token):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown or expired debug link.")
     report = diagnostics.build_report()
+    headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
     if (format or "").lower() == "json":
-        return JSONResponse(report)
-    return HTMLResponse(diagnostics.render_html(report))
+        return JSONResponse(report, headers=headers)
+    return HTMLResponse(diagnostics.render_html(report), headers=headers)

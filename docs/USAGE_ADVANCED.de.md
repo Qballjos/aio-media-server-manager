@@ -22,7 +22,7 @@ Ersetzen Sie die IP (und den Port, wenn Sie ihn geändert haben).
 
 1. Legen Sie das **Administrator**konto an, wenn Sie dazu aufgefordert werden (Benutzername, **E-Mail**, Passwort).
 2. Schließen Sie den Assistenten der Ersteinrichtung ab: die gewünschten Apps, einen Usenet-Server, falls Sie einen nutzen, optional VPN und einen optionalen Cloudflare Tunnel. Der Assistent installiert diese Auswahl. Tunnel und VPN starten, sobald der Assistent fertig ist, wenn Sie sie eingeschaltet haben.
-3. Nach dem Neuanlegen des Containers antwortet das Dashboard, während Apps noch starten. Mit VPN an warten qBittorrent, Prowlarr und Flaresolverr auf den WireGuard-Handshake (AIO versucht das VPN erneut, wenn der erste Versuch scheitert). Cloudflare Tunnel startet zuletzt, nachdem die Apps antworten, damit cloudflared kein connection refused gegen Origins loggt, die noch nicht lauschen.
+3. Nach dem Neuanlegen des Containers antwortet das Dashboard, während Apps noch starten. Mit VPN an warten qBittorrent, Prowlarr, Flaresolverr und Shelfmark auf den WireGuard-Handshake (AIO versucht das VPN erneut, wenn der erste Versuch scheitert). Cloudflare Tunnel startet zuletzt, nachdem die Apps antworten, damit cloudflared kein connection refused gegen Origins loggt, die noch nicht lauschen.
 4. Warten Sie, bis **Katalog** diese Apps als **aktiv** zeigt. Nutzen Sie **Öffnen** für alles, das noch ein eigenes Konto hat (Plex, Jellyfin, NZBGet).
 5. Später fügen Sie mehr über **Katalog** hinzu. Sie brauchen nicht jede App.
 
@@ -67,7 +67,7 @@ Start ist ein Raster. Telefon, Tablet und Desktop behalten jeweils ihr eigenes L
 | Zuletzt hinzugefügt | Neue Serien und Filme. Scrollen lädt weitere Jellyfin-Seiten. Plex bleibt bei den letzten 20 |
 | Anfragen | Seerr-Anfragen, die noch nicht fertig sind, plus was in den letzten 30 Tagen als verfügbar oder abgelehnt markiert wurde |
 | Trending | Die Trending-Liste von Seerr. Scrollen lädt weiter |
-| Wird abgespielt | Wer auf Jellyfin oder Plex schaut, inklusive Direktwiedergabe |
+| Wird abgespielt | Jellyfin- und Plex-Sitzungen. Seitlich scrollen oder wischen, um die Streams anzusehen |
 | Speicher | Plattennutzung von Config, Downloads und Medien |
 | Server | CPU, Arbeitsspeicher und Netzwerk. Mit Host-`/sys` unter `/host/sys` sind das die Netzwerkkarten des Servers. Ohne diesen Mount nur der Verkehr dieses Containers |
 | Braucht Aufmerksamkeit | Dieselben Prüfungen wie Einstellungen → Benachrichtigungen, mit einem Link, jeden Punkt zu beheben |
@@ -183,6 +183,20 @@ Aktuelle App mit fiktiven Beispieldaten. Links hell, rechts dunkel. Die gefüllt
 |---|---|
 | ![Externer Zugriff](screenshots/light/settings-remote.png?v=app-store-20261102) | ![Externer Zugriff](screenshots/dark/settings-remote.png?v=app-store-20261102) |
 
+### Benutzer und Support
+
+Öffne **Einstellungen → Benutzer**, um Jellyfin- oder Plex-Konten über Seerr zu importieren und ihnen AIO-Zugang zu gewähren. Beim Entzug enden ihre AIO-Sitzungen. Seerr behält den Anfrageverlauf.
+
+Medienkonten können über **Suche** und **Trending** Filme und Staffeln anfragen. Der Administrator legt den gemeinsamen Trendfilter fest und kann offene Anfragen auf der Startseite prüfen. Seerr wendet die Rechte, Limits und automatische Genehmigung des Kontos an.
+
+**Neu verfügbar** und die Verfügbarkeitsanzeigen berücksichtigen die Bibliotheksrechte des angemeldeten Kontos. Eine genehmigte Serienanfrage wird als verfügbar angezeigt, sobald jede angefragte Staffel mindestens eine zugängliche Folge enthält. Benutzer mit einer älteren AIO-Sitzung müssen sich erneut anmelden.
+
+**Trending** blendet Filme und Serien aus, die das Konto bereits vollständig ansehen kann. Offene und genehmigte Anfragen aller Konten werden berücksichtigt. Über das Poster kannst du fehlende oder unvollständige Staffeln anfragen, für die noch keine Anfrage vorliegt.
+
+**Kalender** zeigt Veröffentlichungen, die das angemeldete Konto in Jellyfin oder Plex sehen darf. Kommende Veröffentlichungen aus Sonarr und Radarr erscheinen, wenn AIO den Zielordner einer freigegebenen Bibliothek zuordnen kann und keine zusätzlichen Inhaltsfilter gelten.
+
+Benutzer können über die Titeldetails oder **Einstellungen → Support** ein Problem melden. Administratoren sehen die Meldungen im Support-Posteingang und können antworten und den Status ändern.
+
 ### App-Verbindungen
 
 | Light | Dark |
@@ -197,15 +211,19 @@ Aktuelle App mit fiktiven Beispieldaten. Links hell, rechts dunkel. Die gefüllt
 
 ### Profil
 
+Öffne **Einstellungen → Profil → Zwei-Faktor-Authentifizierung**. Gib dein aktuelles Passwort ein, scanne den QR-Code mit einer TOTP-App (oder gib den Einrichtungsschlüssel ein) und bestätige mit einem sechsstelligen Code. Bewahre die einmaligen Wiederherstellungscodes sicher auf. Weitere Manager-Anmeldungen benötigen dein Passwort und einen Authenticator- oder Wiederherstellungscode. Beim Aktivieren oder Deaktivieren werden andere Manager-Sitzungen abgemeldet. Zum Deaktivieren brauchst du dein Passwort und einen gültigen zweiten Faktor. Beim Wiederherstellen eines Manager-Backups werden auch die Zwei-Faktor-Einstellungen und der Stand der Wiederherstellungscodes aus dem Backup übernommen.
+
+Öffne das Dashboard auf deinem Mac in Safari unter seiner HTTPS-Adresse. Unter **Einstellungen → Profil → Passkey** bestätigst du dein Passwort und bei aktivierter Zwei-Faktor-Authentifizierung den zweiten Faktor. Wähle **Passkey hinzufügen** und folge der Touch-ID-Abfrage. Wähle später **Mit einem Passkey anmelden**. Der Manager speichert einen Passkey für diese genaue Adresse. Bewahre dein Passwort und gegebenenfalls die Wiederherstellungscodes auf. Ein Reverse Proxy, der HTTPS terminiert, muss den öffentlichen Host-Header weiterleiten.
+
 | Hell | Dunkel |
 | --- | --- |
-| ![Konto in den Einstellungen, helles Thema](screenshots/light/settings.png?v=app-store-20261102) | ![Konto in den Einstellungen, dunkles Thema](screenshots/dark/settings.png?v=app-store-20261102) |
+| ![Konto in den Einstellungen, helles Thema](screenshots/light/settings.png?v=liquid-glass-20261125) | ![Konto in den Einstellungen, dunkles Thema](screenshots/dark/settings.png?v=liquid-glass-20261125) |
 
 ### Sprache und Darstellung
 
 | Hell | Dunkel |
 | --- | --- |
-| ![Darstellung, helles Thema](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Darstellung, dunkles Thema](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
+| ![Darstellung, helles Thema](screenshots/light/settings-visuals.png?v=liquid-glass-20261125) | ![Darstellung, dunkles Thema](screenshots/dark/settings-visuals.png?v=liquid-glass-20261125) |
 
 ### Server und Speicher
 
@@ -259,7 +277,7 @@ Aktuelle App mit fiktiven Beispieldaten. Links hell, rechts dunkel. Die gefüllt
 
 | Hell | Dunkel |
 | --- | --- |
-| ![qBittorrent-Einstellungen im Katalog, helles Thema](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![qBittorrent-Einstellungen im Katalog, dunkles Thema](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
+| ![qBittorrent-Einstellungen im Katalog, helles Thema](screenshots/light/catalog-settings.png?v=liquid-glass-20261125) | ![qBittorrent-Einstellungen im Katalog, dunkles Thema](screenshots/dark/catalog-settings.png?v=liquid-glass-20261125) |
 
 ---
 
@@ -295,7 +313,7 @@ Das Image aktualisiert diese Apps nicht von allein. Lesen Sie die Release-Hinwei
 | Die Server-Grafik zählt nur diesen Container | Hängen Sie Host-`/sys` nur lesend unter `/host/sys` ein und erstellen Sie neu ([Docker](deploy/DOCKER.md)) |
 | Zuletzt hinzugefügt von Jellyfin wirkt kurz | Scrollen Sie die Zeile — weitere Seiten werden geladen. Bleibt die Zeile leer, setzen Sie einen Jellyfin-API-Schlüssel unter **Einstellungen → App-Verbindungen** |
 | Zuletzt hinzugefügt von Plex stoppt bei 20 | Diese Liste sind die letzten 20 von Plex |
-| qBittorrent / Prowlarr / Flaresolverr bleiben nach dem Boot gestoppt | VPN ist an ohne Live-Handshake. Prüfen Sie **Einstellungen → VPN**; AIO versucht den Tunnel erneut und startet diese Apps, sobald er wieder da ist. Ein manuelles VPN-**Stop** bricht den Retry ab |
+| qBittorrent / Prowlarr / Flaresolverr / Shelfmark bleiben nach dem Boot gestoppt | VPN ist an ohne Live-Handshake. Prüfen Sie **Einstellungen → VPN**; AIO versucht den Tunnel erneut und startet diese Apps, sobald er wieder da ist. Ein manuelles VPN-**Stop** bricht den Retry ab |
 | Prowlarr-Indexer nicht verfügbar / RSS-Fehler | Oft ein DNS-Timeout durch den VPN. Nach einem AIO-Update den Container neu anlegen, dann in Prowlarr **Test All** (und in Sonarr/Radarr erneut testen), damit der alte Fehler-Backoff weg ist. Ein Debug-Share zeigt Treffer des VPN-DNS-Caches und Fehler je Resolver |
 | cloudflared loggt connection refused beim Boot | Erwartet bei älteren Images, als der Tunnel vor den Apps startete. Aktuelle Images starten Cloudflare zuletzt; neu anlegen von aktuellem `nightly` / `latest` |
 
@@ -311,7 +329,7 @@ Das Image aktualisiert diese Apps nicht von allein. Lesen Sie die Release-Hinwei
 
 **Cleanuparr** ist eine optionale Katalog-/Assistenten-App für Linux amd64/arm64, Port **11011**, Konfiguration `/config/cleanuparr`. Bestehende Compose-Installationen benötigen `11011:11011` und einen neu erstellten AIO-Container. Test- und GPU-Overlays übernehmen die Portzuordnung.
 
-Auto-Wire erstellt bei einer neuen Installation den AIO-Administrator und verbindet installierte Sonarr-, Radarr-, Lidarr-, qBittorrent- und SABnzbd-Apps mit ihren eingestellten Ports und Zugangsdaten. NZBGet wird von Cleanuparr nicht unterstützt. Neue Installationen starten vor dem Verbinden im **Testmodus (dry-run)**. AIO aktiviert vorsichtige Warteschlangen- und Malware-Prüfungen im Testmodus; die Bereinigung abgeschlossener Downloads und proaktive Suchen bleiben aus. Prüfen Sie die Regeln vor dem Löschen und vermeiden Sie doppelte Suchpläne mit NeutArr. Andere Verbindungen, deaktivierte Einträge und Bereinigungsregeln bleiben erhalten.
+Auto-Wire erstellt bei einer neuen Installation den AIO-Administrator und verbindet installierte Sonarr-, Radarr-, Lidarr-, qBittorrent- und SABnzbd-Apps mit ihren eingestellten Ports und Zugangsdaten. NZBGet wird von Cleanuparr nicht unterstützt. Neue Installationen verwenden den **Testmodus während der Einrichtung** und deaktivieren ihn, sobald alle Standardregeln gespeichert und geprüft sind. AIO aktiviert vorsichtige Warteschlangen- und Malware-Prüfungen; die Bereinigung abgeschlossener Downloads und proaktive Suchen bleiben aus. Prüfen Sie die aktiven Löschregeln und vermeiden Sie doppelte Suchpläne mit NeutArr. Andere Verbindungen, deaktivierte Einträge und Bereinigungsregeln bleiben erhalten.
 
 **Open UI** meldet den gemeinsamen Administrator auf demselben LAN-Host an; öffentliche Subdomains und Konten mit 2FA behalten ihre Anmeldung. Passwörter und API-Schlüssel bleiben serverseitig; Sitzungstoken stehen nie in URLs. Bei einem vorhandenen anderen Konto Einrichtung abschließen, den API-Schlüssel unter **Katalog → Cleanuparr → Einstellungen** speichern und Auto-Wire ausführen. AIO übernimmt keine fremden unvollständigen Konten.
 
@@ -323,7 +341,7 @@ Diese vorsichtigen **AIO-Vorgaben** basieren auf der offiziellen Dokumentation; 
 
 | Einstellung | AIO-Standard |
 | --- | --- |
-| Testmodus (dry-run) | Ein; simulierte Ergebnisse zuerst prüfen |
+| Testmodus (dry-run) | Nach erfolgreicher Einrichtung aus |
 | Internetprüfung / TLS | HTTPS zu GitHub und Cloudflare; Zertifikatsprüfung ein |
 | Queue Cleaner | Alle 5 Minuten |
 | Blockierte öffentliche Torrents | 12 Strikes, etwa 1 Stunde; Zurücksetzen bei Fortschritt; private Torrents überspringen |
@@ -332,9 +350,10 @@ Diese vorsichtigen **AIO-Vorgaben** basieren auf der offiziellen Dokumentation; 
 | Metadaten-, Clientfehler- und Geschwindigkeitsregeln | Aus |
 | Malware Blocker | Jede Minute; offizielle permissive Blacklist für Sonarr/Radarr, nicht für Musik |
 | Malware-Löschung | Private Torrents überspringen; nicht wegen einer gesperrten Datei den ganzen Torrent löschen |
+| Blacklist Sync | Ein, stündlich; offizielle permissive Liste. Global für qBittorrent; Dateiausschlüsse dort aktivieren |
 | Download Cleaner | Aus; keine Seedratio- oder Dateibereinigung |
 | Seeker | Reaktive Ersatzsuchen alle 10 Minuten; proaktive Suche aus |
 
-Importmuster: `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing`, `Unable to parse`. Temporäre Entpack-, Speicherplatz- und Pfadprobleme sind nicht enthalten. Die globale Metadatenregel bleibt zum Schutz privater Torrents aus. qBittorrent-Ausschlüsse werden nicht außerhalb des Testmodus geändert.
+Importmuster: `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing`, `Unable to parse`. Temporäre Entpack-, Speicherplatz- und Pfadprobleme sind nicht enthalten. Die globale Metadatenregel bleibt zum Schutz privater Torrents aus. Nach der Einrichtung kann Cleanuparr qBittorrent-Ausschlüsse anwenden. Prowlarr verwaltet die öffentlichen Seed-Standardwerte: Ratio 1, Seed-Zeit 2880 Minuten und Pack-Seed-Zeit 10080 Minuten.
 
 Quellen: [Queue Cleaner](https://cleanuparr.github.io/docs/configuration/queue-cleaner/), [Malware Blocker](https://cleanuparr.github.io/docs/configuration/malware-blocker/), [General](https://cleanuparr.github.io/docs/configuration/general/), [Seeker](https://cleanuparr.github.io/docs/configuration/seeker/). API-Felder für Cleanuparr v2.11.0 geprüft; die Online-Dokumentation kann neuere Felder beschreiben.

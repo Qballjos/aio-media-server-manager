@@ -50,7 +50,7 @@ export function useHomeCalendar({ snapshot, calendarWide, calendarPhone = ref(fa
   }
 
   function selectCalDay(day) {
-    if (!day?.key) return
+    if (!day?.key || day.key > dayKey(lastCalendarDay())) return
     selectedDayKey.value = day.key
     if (calView.value === 'month' || calView.value === 'week') {
       const parts = day.key.split('-').map(Number)
@@ -251,9 +251,10 @@ export function useHomeCalendar({ snapshot, calendarWide, calendarPhone = ref(fa
         prev.count += 1
         prev.last = row
         prev.have = prev.have && row.item.has_file
+        for (const milestone of row.item.milestones || []) prev.milestones.add(milestone)
         continue
       }
-      out.push({ ...row, count: 1, last: row, have: row.item.has_file })
+      out.push({ ...row, count: 1, last: row, have: row.item.has_file, milestones: new Set(row.item.milestones) })
     }
     return out.map((row) => {
       if (row.count === 1) return row
@@ -261,6 +262,7 @@ export function useHomeCalendar({ snapshot, calendarWide, calendarPhone = ref(fa
       const span = code(row) && code(row.last) ? `${code(row)} – ${code(row.last)} · ` : ''
       // Downloaded only when every episode in the group is.
       const item = { ...row.item, detail: `${span}${t('{count} episodes', { count: row.count })}`, has_file: row.have }
+      if (row.milestones.size) item.milestones = [...row.milestones]
       // A run of episodes opens the series, not the first episode.
       if (row.have && item.series_play_url) item.play_url = item.series_play_url
       return { ...row, item }
@@ -274,13 +276,45 @@ export function useHomeCalendar({ snapshot, calendarWide, calendarPhone = ref(fa
     return dayKey(startOfWeek(calCursor.value)) === dayKey(startOfWeek(now))
   })
 
+  function lastCalendarDay() {
+    const today = new Date()
+    const last = new Date(today.getFullYear(), today.getMonth() + 4, 0)
+    last.setDate(Math.min(today.getDate(), last.getDate()))
+    return last
+  }
+
+  function pageStart(cursor = calCursor.value) {
+    if (calView.value === 'month') return new Date(cursor.getFullYear(), cursor.getMonth(), 1)
+    return calView.value === 'day' ? cursor : startOfWeek(cursor)
+  }
+
+  function adjacentPage(direction) {
+    const start = pageStart()
+    if (calView.value === 'month') return new Date(start.getFullYear(), start.getMonth() + direction, 1)
+    return addDays(start, direction * (calView.value === 'day' ? 1 : 7))
+  }
+
+  function calendarRange(cursor = calCursor.value) {
+    const first = pageStart(cursor)
+    const month = calView.value === 'month'
+    const start = month ? startOfWeek(first) : first
+    const end = month
+      ? addDays(startOfWeek(new Date(first.getFullYear(), first.getMonth() + 1, 0)), 6)
+      : addDays(start, calView.value === 'day' ? 0 : 6)
+    let days = 0
+    const limit = lastCalendarDay()
+    for (let day = start; day <= end && day <= limit; day = addDays(day, 1)) days++
+    return { start: dayKey(start), days }
+  }
+
+  function nextCalendarRange(direction = 1) {
+    const next = adjacentPage(direction)
+    return next <= lastCalendarDay() ? calendarRange(next) : null
+  }
+
   function shiftCalendar(direction) {
-    if (calView.value === 'month') {
-      calCursor.value = new Date(calCursor.value.getFullYear(), calCursor.value.getMonth() + direction, 1)
-      return
-    }
-    const step = calView.value === 'day' ? 1 : 7
-    calCursor.value = addDays(calView.value === 'week' ? startOfWeek(calCursor.value) : calCursor.value, direction * step)
+    const target = adjacentPage(direction)
+    if (target <= lastCalendarDay()) calCursor.value = target
   }
 
   function goToday() {
@@ -316,5 +350,5 @@ export function useHomeCalendar({ snapshot, calendarWide, calendarPhone = ref(fa
     }
   }, { immediate: true })
 
-  return { parseWhen, dayKey, formatEventTime, weekdayLabels, calViewPicked, calView, calFilter, selectedDayKey, calCursor, setCalView, selectCalDay, syncCalViewToViewport, eventKind, calendarTarget, calendarLinkTitle, openCalendarItem, calendarRangeLabel, calendarDays, calendarWeeks, calendarListInfo, calendarList, calOnToday, shiftCalendar, goToday, groupSameDay, startOfWeek }
+  return { parseWhen, dayKey, formatEventTime, weekdayLabels, calViewPicked, calView, calFilter, selectedDayKey, calCursor, setCalView, selectCalDay, syncCalViewToViewport, eventKind, calendarTarget, calendarLinkTitle, openCalendarItem, calendarRangeLabel, calendarDays, calendarWeeks, calendarListInfo, calendarList, calOnToday, shiftCalendar, goToday, groupSameDay, startOfWeek, calendarRange, nextCalendarRange }
 }

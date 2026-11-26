@@ -306,7 +306,7 @@ def save_visual_preferences(
     return visual_preferences()
 
 
-def save_avatar(data: bytes) -> dict[str, Any]:
+def validate_avatar(data: bytes | bytearray) -> tuple[str, str]:
     if not data:
         raise ValueError("Empty image upload.")
     if len(data) > MAX_BYTES:
@@ -314,13 +314,18 @@ def save_avatar(data: bytes) -> dict[str, Any]:
     detected = branding_mod._detect_image(data)
     if not detected:
         raise ValueError("Unsupported image type. Use PNG, JPEG, WebP, or GIF.")
-    ext, _mime = detected
+    ext, mime = detected
     if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
         raise ValueError("Use PNG, JPEG, WebP, or GIF for the profile image.")
     size = branding_mod._png_size(data)
     if size and (size[0] > 2048 or size[1] > 2048):
         raise ValueError("Image is too large (maximum 2048 × 2048 px).")
 
+    return ext, mime
+
+
+def save_avatar(data: bytes) -> dict[str, Any]:
+    ext, _ = validate_avatar(data)
     meta = _load_meta()
     basename = AVATAR_BASENAME + ext
     dest = profile_dir(create=True) / basename

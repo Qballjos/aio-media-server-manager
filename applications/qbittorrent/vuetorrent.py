@@ -87,21 +87,21 @@ def install_vuetorrent(config_dir: Path, *, app_settings=None) -> dict[str, Any]
     url = asset["browser_download_url"]
     name = str(asset.get("name") or "vuetorrent.zip")
 
-    cache_dir = Path(cfg.cache_dir) / "downloads"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = cache_dir / name
-    _download(url, archive_path, token=cfg.github_token)
+    from core.installer.download_cache import temporary_package
 
     target = vuetorrent_dir(config_dir)
-    staging = Path(tempfile.mkdtemp(prefix="amm-vuetorrent-"))
-    try:
-        ArchiveExtractor.extract(archive_path, staging, strip_single_wrapper=True)
-        root = _find_ui_root(staging)
-        if target.exists():
-            shutil.rmtree(target)
-        shutil.copytree(root, target)
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
+    with temporary_package(cfg.cache_dir, name) as archive_path:
+        _download(url, archive_path, token=cfg.github_token)
+
+        staging = Path(tempfile.mkdtemp(prefix="amm-vuetorrent-"))
+        try:
+            ArchiveExtractor.extract(archive_path, staging, strip_single_wrapper=True)
+            root = _find_ui_root(staging)
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(root, target)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
 
     if not (target / "public" / "index.html").is_file():
         raise RuntimeError(

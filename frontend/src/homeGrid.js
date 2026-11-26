@@ -21,6 +21,7 @@ export const WIDGETS = {
   calendar: { label: 'Calendar', min: [3, 3], max: [12, 8], size: { desktop: [12, 4], tablet: [8, 4], phone: [4, 5] }, presets: [[4, 4, 'Agenda'], [12, 4, 'Week'], [12, 6, 'Large']] },
   downloads: { label: 'Downloading', min: [2, 2], max: [12, 8], size: { desktop: [4, 4], tablet: [4, 4], phone: [4, 4] }, presets: [[2, 2, 'Counter'], [4, 4, 'List'], [6, 4, 'Wide']] },
   requests: { label: 'Requests', min: [3, 3], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [6, 3, 'Half'], [12, 3, 'Full']] },
+  approvals: { label: 'Pending requests', min: [3, 3], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [6, 3, 'Half'], [12, 3, 'Full']] },
   trending: { label: 'Trending', min: [3, 3], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [6, 3, 'Half'], [12, 3, 'Full']] },
   playing: { label: 'Now playing', min: [3, 2], max: [12, 6], size: { desktop: [6, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 2, 'Small'], [6, 3, 'List'], [12, 4, 'Large']] },
   storage: { label: 'Storage', min: [2, 2], max: [12, 4], size: { desktop: [4, 2], tablet: [4, 2], phone: [4, 2] }, presets: [[2, 2, 'Counter'], [4, 2, 'List'], [6, 3, 'Wide']] },
@@ -100,8 +101,8 @@ export function resolve(layout, id, rect, cols, origin = null) {
 }
 
 /** Keep a widget within its own minimum and maximum and inside the columns. */
-export function fitItem(item, cols) {
-  const spec = WIDGETS[item.id]
+export function fitItem(item, cols, specs = WIDGETS) {
+  const spec = specs[item.id]
   const [minW, minH] = spec ? spec.min : [1, 1]
   const [maxW, maxH] = spec ? spec.max : [cols, 12]
   const w = clamp(item.w, Math.min(minW, cols), Math.min(maxW, cols))
@@ -110,7 +111,7 @@ export function fitItem(item, cols) {
 }
 
 /** Saved data made safe: known widgets once each (the old greeting-and-search as two), whole numbers, inside the grid, nothing on top of anything else. */
-export function normalizeLayout(list, bp) {
+export function normalizeLayout(list, bp, specs = WIDGETS) {
   const cols = BREAKPOINTS[bp].cols
   const seen = new Set()
   const items = []
@@ -118,11 +119,11 @@ export function normalizeLayout(list, bp) {
     raw?.id === 'search' ? splitSearch({ x: Number(raw.x), y: Number(raw.y), w: Number(raw.w), h: Number(raw.h) }) : [raw],
   )
   for (const raw of saved) {
-    if (!raw || !WIDGETS[raw.id] || seen.has(raw.id)) continue
+    if (!raw || !Object.hasOwn(specs, raw.id) || seen.has(raw.id)) continue
     const [x, y, w, h] = ['x', 'y', 'w', 'h'].map((key) => Math.round(Number(raw[key])))
     if (![x, y, w, h].every(Number.isFinite)) continue
     seen.add(raw.id)
-    items.push(fitItem({ id: raw.id, x, y, w, h }, cols))
+    items.push(fitItem({ id: raw.id, x, y, w, h }, cols, specs))
   }
   items.sort((a, b) => a.y - b.y || a.x - b.x)
   const placed = []

@@ -48,6 +48,7 @@ class Upstream:
                               "errored": {}, "ignoredDownloads": [], "stallRules": [], "slowRules": []},
             "malware_blocker": {"enabled": False, "sonarr": {}, "radarr": {}, "lidarr": {}},
             "download_cleaner": {"enabled": False},
+            "blacklist_sync": {"enabled": False, "blacklistPath": None},
             "seeker": {"searchEnabled": True, "proactiveSearchEnabled": False, "searchInterval": 10},
         }
         self.stall_rules = []
@@ -137,17 +138,21 @@ def client(cfg, monkeypatch):
     return cleanuparr.CleanuparrClient(http=upstream), upstream
 
 
-def test_bootstrap_enables_dry_run_before_connections_and_keeps_it_after_retry(client):
+def test_bootstrap_finishes_live_and_preserves_operator_dry_run_on_retry(client):
     api, upstream = client
     api.ensure_admin("admin", "Password123!")
+    general_writes = [data for method, path, data in upstream.calls
+                      if method == "PUT" and path == "configuration/general"]
+    assert general_writes[0]["dryRun"] is True
+    assert general_writes[-1]["dryRun"] is False
     assert upstream.complete
-    assert upstream.general["dryRun"] is True
+    assert upstream.general["dryRun"] is False
     assert upstream.general["ignoredDownloads"] == ["keep-me"]
     assert api.api_key == "cleanuparr-key"
     assert not upstream.general["auth"]["disableAuthForLocalAddresses"]
-    upstream.general["dryRun"] = False
+    upstream.general["dryRun"] = True
     api.ensure_admin("admin", "Password123!")
-    assert upstream.general["dryRun"] is False
+    assert upstream.general["dryRun"] is True
     assert sum(path == "auth/setup/account" for _, path, _ in upstream.calls) == 1
 
 
@@ -169,7 +174,7 @@ def test_bootstrap_retries_after_general_settings_failure_before_wiring(client):
     assert "upstream-secret" not in str(error.value)
     upstream.reject = None
     api.ensure_admin("admin", "Password123!")
-    assert upstream.general["dryRun"] is True
+    assert upstream.general["dryRun"] is False
 
 
 def test_shared_admin_changes_use_the_previous_password(client):
@@ -208,7 +213,7 @@ def test_wiring_updates_managed_endpoints_without_duplicates_or_changing_rules(c
 def test_new_setup_gets_conservative_defaults_before_connections(client):
     api, upstream = client
     api.ensure_admin("admin", "Password123!")
-    assert upstream.general["dryRun"] is True
+    assert upstream.general["dryRun"] is False
     assert upstream.general["connectivityCheckEnabled"] is True
     assert upstream.general["httpCertificateValidation"] == "Enabled"
     assert upstream.general["connectivityCheckUrls"] == ["https://github.com", "https://www.cloudflare.com"]
@@ -234,6 +239,10 @@ def test_new_setup_gets_conservative_defaults_before_connections(client):
     assert malware["sonarr"]["blocklistPath"] == "https://cleanuparr.pages.dev/static/blacklist_permissive"
     assert malware["radarr"]["blocklistType"] == "Blacklist"
     assert malware["lidarr"].get("enabled", False) is False
+    assert upstream.configs["blacklist_sync"] == {
+        "enabled": True, "blacklistPath": "https://cleanuparr.pages.dev/static/blacklist_permissive",
+        "cronExpression": "0 0 * * * ?",
+    }
     assert upstream.configs["download_cleaner"]["enabled"] is False
     assert upstream.configs["seeker"]["searchEnabled"] is True
     assert upstream.configs["seeker"]["proactiveSearchEnabled"] is False
@@ -247,6 +256,7 @@ def test_default_profile_retries_without_duplicate_rules_and_preserves_later_cho
     upstream.reject = "configuration/malware_blocker"
     with pytest.raises(CleanuparrError):
         api.ensure_admin("admin", "Password123!")
+    assert upstream.general["dryRun"] is True
     upstream.reject = None
     api.ensure_admin("admin", "Password123!")
     assert len(upstream.stall_rules) == 1

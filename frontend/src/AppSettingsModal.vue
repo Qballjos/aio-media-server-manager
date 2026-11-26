@@ -330,7 +330,7 @@ watch(
         aria-labelledby="app-settings-title"
         tabindex="-1"
         @keydown="dialogKeydown"
-        class="settings-modal glass-card animate-scale"
+        class="settings-modal glass-dialog animate-scale"
         :class="{ 'settings-modal-wide': settingsApp.name === 'recyclarr' }"
       >
         <div class="modal-header">

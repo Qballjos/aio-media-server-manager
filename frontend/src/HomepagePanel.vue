@@ -1,14 +1,17 @@
 <script setup>
+import StreamingAvailability from './StreamingAvailability.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { appIconSrc } from './appIcons.js'
+import { youtubeIdFromUrl } from './trailer.js'
 import { apiError, apiRequest, readJson } from './api.js'
 import { appWebUrl } from './appWebUrl.js'
 import { homeSnapshotCache, partialRetryDelay } from './homeSnapshotCache.js'
 import { BP_ORDER, BREAKPOINTS, GRID_IDS, WIDGETS, collapseEmptyRows, dockHidden, firstFree, fitItem, homeEditing, homeGrid, homeGridSaves, layoutFor, resolve, restoreGrid, saveGridLayout, viewportBp } from './homeLayout.js'
 import UiSelect from './UiSelect.vue'
-import { useHomeCalendar } from './composables/useHomeCalendar.js'
+import CalendarFeed from './CalendarFeed.vue'
 import HomeEditBar from './HomeEditBar.vue'
+import HomeGreeting from './HomeGreeting.vue'
 import HomeGrid from './HomeGrid.vue'
 import HomePoster from './HomePoster.vue'
 import HomeGridSheet from './HomeGridSheet.vue'
@@ -113,10 +116,12 @@ const searchPlaceholder = computed(() => {
   return snapshot.value.seerr?.available ? t('Search movies and TV to request') : t('Search Sonarr and Radarr')
 })
 const downloadsFresh = ref(false)
+const otherDownloads = ref([])
 const downloadPause = ref({ paused: false, resume_at: null })
 const pauseFor = ref('60')
 const pauseBusy = ref(false)
 const SORT_KEY = 'amm-downloads-sort'
+const downloadFilter = ref('all')
 const downloadSort = ref((() => {
   try {
     return localStorage.getItem(SORT_KEY) || 'queue'
@@ -137,18 +142,22 @@ const STUCK_STATUSES = { Stalled: 'stalled', 'Missing files': 'missing files', P
 const movingDownloads = computed(() =>
   downloadPause.value.paused ? sortedDownloads.value : sortedDownloads.value.filter((item) => !(item.status in STUCK_STATUSES)),
 )
+const problemDownloads = computed(() =>
+  sortedDownloads.value.filter(item => item.status in STUCK_STATUSES && item.status !== 'Paused'),
+)
+const stuckItems = computed(() => {
+  if (downloadFilter.value === 'problems') return problemDownloads.value
+  if (downloadPause.value.paused) return []
+  return [...problemDownloads.value, ...sortedDownloads.value.filter(item => item.status === 'Paused')]
+})
 const stuckSummary = computed(() => {
-  if (downloadPause.value.paused) return ''
   const counts = {}
-  for (const item of snapshot.value.downloads) {
+  for (const item of stuckItems.value) {
     const label = STUCK_STATUSES[item.status]
-    if (label) counts[label] = (counts[label] || 0) + 1
+    counts[label] = (counts[label] || 0) + 1
   }
   return Object.entries(counts).map(([label, n]) => `${n} ${t(label)}`).join(' · ')
 })
-const stuckItems = computed(() =>
-  downloadPause.value.paused ? [] : snapshot.value.downloads.filter((item) => item.status in STUCK_STATUSES),
-)
 const removeBusy = ref(new Set())
 
 /** Sonarr/Radarr blocklist a removed download and search for another release; the rest leave the client. */
@@ -185,9 +194,75 @@ const pausedLabel = computed(() => {
   return t('Paused · resumes {time}', { time })
 })
 const requestsFilter = ref('all')
+const requestAvailability = ref('all')
+const pendingRequests = computed(() => snapshot.value.requests.filter(item => item.requestStatus === 1 && item.requestId))
+const reviewDialog = ref(null)
+const pendingReview = ref(null)
+const reviewBusy = ref(false)
+const reviewError = ref('')
+const reviewNotice = ref('')
+
+async function openRequestReview(item) {
+  pendingReview.value = item
+  reviewError.value = ''
+  reviewNotice.value = ''
+  await nextTick()
+  reviewDialog.value.showModal()
+}
+
+async function reviewRequest(action) {
+  const item = pendingReview.value
+  if (!item || reviewBusy.value) return
+  reviewBusy.value = true
+  reviewError.value = ''
+  try {
+    const res = await apiRequest(`/api/homepage/requests/${item.requestId}/${action}`, { method: 'POST' })
+    if (!res.ok) throw new Error()
+    const requestStatus = action === 'approve' ? 2 : 3
+    snapshot.value.requests = snapshot.value.requests.map(row =>
+      row.requestId === item.requestId ? { ...row, requestStatus } : row,
+    )
+    reviewNotice.value = t(action === 'approve' ? 'Request approved.' : 'Request declined.')
+    reviewDialog.value.close()
+    await loadSnapshot(true)
+  } catch (_) {
+    reviewError.value = t('Could not update the request.')
+  } finally {
+    reviewBusy.value = false
+  }
+}
+
 const requestsWindowStart = ref(0)
 const REQUESTS_WINDOW_SIZE = 20
 const trendingFilter = ref('all')
+const trendingFilterBusy = ref(false)
+const trendingFilterError = ref('')
+
+async function loadTrendingFilter() {
+  try {
+    const response = await apiRequest('/api/media-discovery/trending-filter')
+    if (!response.ok) return
+    const data = await readJson(response)
+    if (!trendingFilterBusy.value && ['all', 'movie', 'tv'].includes(data.filter)) trendingFilter.value = data.filter
+  } catch (_) {}
+}
+
+async function setTrendingFilter(filter) {
+  if (filter === trendingFilter.value || trendingFilterBusy.value) return
+  trendingFilterBusy.value = true
+  trendingFilterError.value = ''
+  try {
+    const response = await apiRequest('/api/media-discovery/trending-filter', {
+      method: 'PUT', body: JSON.stringify({ filter }),
+    })
+    if (!response.ok) throw new Error()
+    trendingFilter.value = filter
+  } catch (_) {
+    trendingFilterError.value = t('Could not save the shared Trending filter.')
+  } finally {
+    trendingFilterBusy.value = false
+  }
+}
 let poll = null
 let downloadsPoll = null
 let statusPoll = null
@@ -205,6 +280,7 @@ const hasWidgets = computed(
   () =>
     snapshot.value.calendar.length ||
     snapshot.value.downloads.length ||
+    otherDownloads.value.length ||
     snapshot.value.recent.length ||
     snapshot.value.requests.length ||
     snapshot.value.trending.length ||
@@ -216,12 +292,104 @@ const editing = homeEditing
 const dockElement = ref(null)
 const dockHeight = ref(72)
 let dockObserver = null
+let dockMotion
+let dockFrame = 0
+let dockLastFrame = 0
+let dockTiles = []
+let dockPointerX = null
+let dockVisualX = 0
+let dockStrength = 0
+
+function measureDock(row) {
+  dockTiles = Array.from(row.children, (app) => {
+    const { left, width } = app.getBoundingClientRect()
+    return { tile: app.firstElementChild, center: left + width / 2, width }
+  })
+}
+
+function magnifyDock(event) {
+  if (event.pointerType === 'touch') return
+  dockMotion ??= window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)')
+  if (!dockMotion.matches) return
+
+  const row = event.currentTarget
+  if (dockPointerX === null || dockTiles.length !== row.children.length) measureDock(row)
+  if (!dockStrength) dockVisualX = event.clientX
+  dockPointerX = event.clientX
+  queueDockFrame()
+}
+
+function queueDockFrame() {
+  if (!dockFrame) dockFrame = requestAnimationFrame(animateDock)
+}
+
+function animateDock(now) {
+  dockFrame = 0
+  if (!dockMotion?.matches) {
+    clearDockMagnification()
+    return
+  }
+  const blend = 1 - Math.exp(-(dockLastFrame ? Math.min(50, now - dockLastFrame) : 16) / 42)
+  dockLastFrame = now
+  const targetStrength = dockPointerX === null ? 0 : 1
+  const targetX = dockPointerX ?? dockVisualX
+  dockStrength += (targetStrength - dockStrength) * blend
+  dockVisualX += (targetX - dockVisualX) * blend
+  const settled = Math.abs(targetStrength - dockStrength) < 0.003 && Math.abs(targetX - dockVisualX) < 0.25
+  if (settled) {
+    dockStrength = targetStrength
+    dockVisualX = targetX
+    dockLastFrame = 0
+  }
+  if (!dockStrength) {
+    clearDockMagnification()
+    return
+  }
+
+  for (const { tile, center, width } of dockTiles) {
+    const distance = center - dockVisualX
+    const proximity = Math.max(0, 1 - Math.abs(distance) / (2.1 * width))
+    const lift = proximity * proximity * (3 - 2 * proximity) * dockStrength
+    const shift = Math.sign(distance) * proximity * (1 - proximity) * width * 0.58 * dockStrength
+    tile.style.setProperty('--dock-magnification', `translate3d(${shift}px, 0, 0) scale(${1 + 0.36 * lift})`)
+  }
+  if (!settled) queueDockFrame()
+}
+
+function releaseDock() {
+  dockPointerX = null
+  if (dockStrength) queueDockFrame()
+  else clearDockMagnification()
+}
+
+function onDockScroll(event) {
+  if (dockPointerX === null) return
+  measureDock(event.currentTarget)
+  queueDockFrame()
+}
+
+function clearDockMagnification() {
+  cancelAnimationFrame(dockFrame)
+  dockFrame = 0
+  dockLastFrame = 0
+  dockStrength = 0
+  dockPointerX = null
+  for (const { tile } of dockTiles) tile.style.removeProperty('--dock-magnification')
+  dockTiles = []
+}
+
 // Reserve the real dock height, including any installation or health notices.
 watch(dockElement, (element) => {
   dockObserver?.disconnect()
+  clearDockMagnification()
   if (!element) return
   dockObserver = new ResizeObserver(() => {
     dockHeight.value = element.getBoundingClientRect().height
+    const row = element.querySelector('.home-dock-row')
+    if (row && dockPointerX !== null) {
+      measureDock(row)
+      queueDockFrame()
+    }
   })
   dockObserver.observe(element)
 })
@@ -245,13 +413,14 @@ const widgetHasContent = computed(() => {
     recent: !!(s.recent.length || (hasMediaServer.value && isPending('recent'))),
     requests: !!(s.requests.length || (s.seerr.available && isPending('requests'))),
     trending: !!(s.trending.length || (s.seerr.available && isPending('trending'))),
-    calendar: !!(s.calendar.length || (hasCalendarSource.value && isPending('calendar'))),
+    calendar: hasCalendarSource.value,
+    approvals: pendingRequests.value.length > 0,
     downloads: !!(s.downloads.length || downloadPause.value.paused),
     playing: hasMediaServer.value,
     storage: true,
     server: true,
     attention: true,
-    other: true,
+    other: otherDownloads.value.length > 0,
   }
 })
 // Empty widgets leave Home outside edit mode, and the rows they had to themselves close up.
@@ -334,7 +503,7 @@ function resizeWidget(w, h) {
 function onArrangeKey(event) {
   if (event.key !== 'Escape' || event.defaultPrevented) return
   if (requestChoice.value) {
-    requestChoice.value = null
+    if (!requestBusy.value) requestChoice.value = null
     return
   }
   if (trailerPlayer.value) {
@@ -352,13 +521,6 @@ function onArrangeKey(event) {
   if (editing.value && !sheet.value) editing.value = false
 }
 
-const todayLabel = computed(() => new Date().toLocaleDateString(i18nLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))
-const greeting = computed(() => {
-  const hour = new Date().getHours()
-  const part = t(hour < 6 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening')
-  const who = props.firstName.trim() || props.username
-  return who ? `${part}, ${who}.` : `${part}.`
-})
 /** One line under the greeting: what is moving and what needs a look. */
 const heroSummary = computed(() => {
   const parts = []
@@ -392,7 +554,6 @@ const fullestFree = computed(() => (fullestVolume.value ? formatBytes(fullestVol
 const serverStatus = computed(() => (homeStatus.value.server ? serverMood(homeStatus.value.server) : null))
 const storageStatus = computed(() => (fullestVolume.value ? storageMood(fullestVolume.value.percent) : null))
 const attentionStatus = computed(() => attentionMood(homeStatus.value.attention))
-const nowItem = computed(() => homeStatus.value.playing[0] || null)
 // The last 30 polls (5 minutes) of network use, drawn in the Server widget; kept for the tab, like the snapshot.
 const netHistory = ref(homeSnapshotCache.netHistory || [])
 const netHoverIdx = ref(-1)
@@ -448,8 +609,7 @@ function onNetHover(event) {
   netHoverIdx.value = best
 }
 
-/** Other downloads: what the download clients got besides films and series, asked for only while the widget is on Home. */
-const otherDownloads = ref([])
+/** Poll other downloads only when the widget is in the saved layout. */
 const otherLoaded = ref(false)
 const otherWanted = computed(() => gridLayout.value.some((item) => item.id === 'other'))
 /** Per kind of download: its name and the outline icon it gets (24 × 24, stroked). */
@@ -516,12 +676,6 @@ const downloadsProgress = computed(() => {
   if (!list.length) return 0
   return Math.round(list.reduce((sum, item) => sum + (Number(item.progress) || 0), 0) / list.length)
 })
-function chipDay(dt) {
-  return dt.toLocaleDateString(i18nLocale(), { weekday: 'short' }).replace('.', '').toUpperCase()
-}
-function isToday(dt) {
-  return dayKey(dt) === dayKey(new Date())
-}
 const widgetNotes = computed(() => snapshot.value.widgets || [])
 const CATEGORY_LABELS = {
   media: 'Media',
@@ -586,7 +740,8 @@ const recentItems = computed(() => {
 })
 const requestItems = computed(() =>
   (snapshot.value.requests || [])
-    .filter((item) => mediaTypeMatches(item, requestsFilter.value))
+    .filter((item) => mediaTypeMatches(item, requestsFilter.value)
+      && (requestAvailability.value === 'all' || (item.requestStatus === 2 && item.status !== 'available')))
     .map((item) => withPublicUrls(item, 'seerr')),
 )
 const requestsWindowItems = computed(() => requestItems.value.slice(
@@ -615,7 +770,7 @@ async function scrollRequests() {
   rail.scrollLeft = left - shift * pitch
   shiftingRequests = false
 }
-watch(requestsFilter, async () => {
+watch([requestsFilter, requestAvailability], async () => {
   requestsWindowStart.value = 0
   await nextTick()
   if (requestsRail.value) requestsRail.value.scrollLeft = 0
@@ -657,6 +812,7 @@ function requestStatusDot(item) {
   const status = String(item?.status || 'missing')
   if (status === 'available') return { cls: 'is-available', label: t('Available') }
   if (status === 'partial') return { cls: 'is-partial', label: t('Partially available') }
+  if (item.requestStatus === 2) return { cls: 'is-requested', label: t('Approved') }
   if (status === 'requested' || status === 'monitored') return { cls: 'is-requested', label: t('Requested') }
   return { cls: 'is-missing', label: t('Not available') }
 }
@@ -696,7 +852,7 @@ function debugFlagFromRoute() {
 
 async function loadSnapshot(force = false) {
   try {
-    const res = await apiRequest(force ? '/api/homepage?refresh=1' : '/api/homepage')
+    const res = await apiRequest(force ? '/api/homepage?include_calendar=false&refresh=1' : '/api/homepage?include_calendar=false')
     if (res.ok) {
       const data = await readJson(res)
       snapshot.value = {
@@ -921,28 +1077,6 @@ function closeTrailer() {
   trailerPlayer.value = null
 }
 
-/** Pull a YouTube id from a watch/share/embed URL so the Trailer button can open an in-app player. */
-function youtubeIdFromUrl(url) {
-  const raw = String(url || '').trim()
-  if (!raw) return ''
-  try {
-    const parsed = new URL(raw)
-    const host = parsed.hostname.replace(/^www\./, '').toLowerCase()
-    let ident = ''
-    if (host === 'youtu.be') {
-      ident = parsed.pathname.replace(/^\/+/, '').split('/')[0] || ''
-    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
-      ident = parsed.searchParams.get('v') || ''
-      if (!ident && parsed.pathname.startsWith('/embed/')) {
-        ident = parsed.pathname.split('/').filter(Boolean)[1] || ''
-      }
-    }
-    return /^[A-Za-z0-9_-]{6,32}$/.test(ident) ? ident : ''
-  } catch {
-    return ''
-  }
-}
-
 function openTrailer(item) {
   const ident = youtubeIdFromUrl(item?.trailer || trendingDetail.value?.data?.trailer)
   if (!ident) return
@@ -1041,10 +1175,10 @@ function choiceFromServers(item, servers) {
   return {
     item,
     servers,
-    serverId: server.id,
-    profileId: preferredId(server.profiles, server.profileId),
-    rootFolder: preferredPath(server.folders, server.rootFolder),
-    languageProfileId: preferredId(server.languages, server.languageProfileId),
+    serverId: server?.id,
+    profileId: preferredId(server?.profiles, server?.profileId),
+    rootFolder: preferredPath(server?.folders, server?.rootFolder),
+    languageProfileId: preferredId(server?.languages, server?.languageProfileId),
   }
 }
 
@@ -1074,39 +1208,50 @@ async function requestTitle(item) {
     await downloadRelease(item)
     return
   }
-  const key = resultKey(item)
-  requestBusy.value = key
+  if (requestBusy.value) return
+  const choice = { ...choiceFromServers(item, []), loading: true, error: '', seasons: [], selected: [] }
+  requestChoice.value = choice
+  const current = requestChoice.value
   notice.value = ''
   try {
-    const opt = await apiRequest(`/api/homepage/request-options?mediaType=${encodeURIComponent(item.mediaType)}`)
-    if (opt.ok) {
-      const options = await readJson(opt)
-      if (options.needsChoice && options.servers?.length) {
-        requestChoice.value = choiceFromServers(item, options.servers)
-        requestBusy.value = ''
-        return
-      }
+    const query = new URLSearchParams({ mediaType: item.mediaType, mediaId: item.mediaId })
+    const response = await apiRequest(`/api/homepage/request-options?${query}`)
+    const options = await readJson(response)
+    if (requestChoice.value !== current) return
+    if (!response.ok || options.ok === false) {
+      current.error = apiError(options, t('Request failed.'))
+      return
     }
-    await submitRequest(item)
+    Object.assign(current, choiceFromServers(item, options.needsChoice ? options.servers || [] : []), {
+      seasons: options.seasons || [], ready: true,
+    })
   } catch (err) {
-    notice.value = err.message || t('Request failed.')
+    if (requestChoice.value === current) current.error = err.message || t('Request failed.')
   } finally {
-    if (!requestChoice.value) requestBusy.value = ''
+    current.loading = false
   }
 }
 
 async function confirmRequest() {
   const choice = requestChoice.value
   const server = choiceServer.value
-  if (!choice || !server) return
-  const extra = { serverId: choice.serverId }
-  if (choice.profileId != null && server.profiles?.length) extra.profileId = choice.profileId
-  if (choice.rootFolder && server.folders?.length) extra.rootFolder = choice.rootFolder
-  if (choice.languageProfileId != null && (server.languages?.length || 0) > 1) {
-    extra.languageProfileId = choice.languageProfileId
+  if (!choice?.ready || requestBusy.value) return
+  const extra = {}
+  if (choice.item.mediaType === 'tv') {
+    if (!choice.selected.length) return
+    extra.seasons = choice.selected
+  }
+  if (server) {
+    extra.serverId = choice.serverId
+    if (choice.profileId != null && server.profiles?.length) extra.profileId = choice.profileId
+    if (choice.rootFolder && server.folders?.length) extra.rootFolder = choice.rootFolder
+    if (choice.languageProfileId != null && (server.languages?.length || 0) > 1) {
+      extra.languageProfileId = choice.languageProfileId
+    }
   }
   const ok = await submitRequest(choice.item, extra)
   if (ok) requestChoice.value = null
+  else if (requestChoice.value) requestChoice.value.error = notice.value
 }
 
 async function submitRequest(item, extra = {}) {
@@ -1119,22 +1264,30 @@ async function submitRequest(item, extra = {}) {
       body: JSON.stringify({
         mediaType: item.mediaType,
         mediaId: item.mediaId,
-        seasons: item.mediaType === 'tv' ? 'all' : undefined,
         ...extra,
       }),
     })
     const data = await readJson(res)
     if (res.ok && data.ok !== false) {
       notice.value = data.detail || t('Request submitted.')
-      item.status = 'requested'
-      item.can_request = false
-      trendingMore.value = trendingMore.value.map((t) =>
-        resultKey(t) === key ? { ...t, status: 'requested', can_request: false } : t,
-      )
+      if (item.mediaType === 'movie') {
+        item.status = 'requested'
+        item.can_request = false
+        trendingMore.value = trendingMore.value.map((result) =>
+          resultKey(result) === key ? { ...result, status: 'requested', can_request: false } : result,
+        )
+      }
       loadSnapshot(true)
       return true
     }
-    notice.value = apiError(data, t('Request failed.'))
+    if (res.status === 409 && Array.isArray(data.detail?.seasons) && requestChoice.value?.item === item) {
+      const choice = requestChoice.value
+      choice.seasons = data.detail.seasons
+      choice.selected = choice.selected.filter(season => choice.seasons.includes(season))
+      notice.value = t('Some seasons can no longer be requested.')
+    } else {
+      notice.value = apiError(data, t('Request failed.'))
+    }
     return false
   } catch (err) {
     notice.value = err.message || t('Request failed.')
@@ -1179,29 +1332,6 @@ const calendarWide = computed(() => {
   const item = gridLayout.value.find((entry) => entry.id === 'calendar')
   return !!item && activeBp.value !== 'phone' && item.w * 12 >= 7 * BREAKPOINTS[activeBp.value].cols
 })
-const {
-  dayKey,
-  formatEventTime,
-  weekdayLabels,
-  calView,
-  calFilter,
-  selectedDayKey,
-  setCalView,
-  selectCalDay,
-  syncCalViewToViewport,
-  eventKind,
-  calendarTarget,
-  calendarLinkTitle,
-  openCalendarItem,
-  calendarRangeLabel,
-  calendarDays,
-  calendarWeeks,
-  calendarList,
-  calOnToday,
-  shiftCalendar,
-  goToday
-} = useHomeCalendar({ snapshot, calendarWide, calendarPhone })
-
 watch(statusWanted, (wanted) => {
   if (wanted) loadStatus()
 })
@@ -1237,14 +1367,6 @@ const vpnNotice = computed(() => {
     const error = vpn.last_error ? ` ${t('Last VPN error: {message}', { message: vpn.last_error })}` : ''
   return t('VPN is on but not connected yet. {names} will remain stopped until it connects.', { names: names.join(', ') }) + error
 })
-
-function scrollRail(which, direction) {
-  const node =
-    which === 'requests' ? requestsRail.value : which === 'trending' ? trendingRail.value : recentRail.value
-  if (!node) return
-  const step = Math.max(node.clientWidth * 0.72, 232)
-  node.scrollBy({ left: direction * step, behavior: 'smooth' })
-}
 
 // Seerr's trending and Jellyfin's titles come up to 500 pages at a time; fetch the next once the rail
 // is within a screen of its end. `shown` is the page the snapshot already covers.
@@ -1307,6 +1429,7 @@ function onWidgetDebugEvent(event) {
 }
 
 onMounted(() => {
+  loadTrendingFilter()
   try {
     const params = new URLSearchParams(window.location.search)
     widgetDebug.value =
@@ -1314,8 +1437,6 @@ onMounted(() => {
   } catch (_) {
     widgetDebug.value = debugFlagFromRoute() || readHomepageWidgetDebug()
   }
-  syncCalViewToViewport()
-  window.addEventListener('resize', syncCalViewToViewport)
   window.addEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.addEventListener('keydown', onArrangeKey)
   document.addEventListener('pointerdown', onSearchPointerDown)
@@ -1340,8 +1461,8 @@ watch(
 )
 onUnmounted(() => {
   homeEditing.value = false
+  clearDockMagnification()
   dockObserver?.disconnect()
-  window.removeEventListener('resize', syncCalViewToViewport)
   window.removeEventListener(HOMEPAGE_WIDGET_DEBUG_EVENT, onWidgetDebugEvent)
   window.removeEventListener('keydown', onArrangeKey)
   document.removeEventListener('pointerdown', onSearchPointerDown)
@@ -1385,8 +1506,9 @@ onUnmounted(() => {
 
     <template v-else-if="!loading">
       <Teleport to=".app-container" defer>
-      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating glass-pill" :aria-label="$t('Apps')">
-        <div class="home-dock-row">
+      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating" :aria-label="$t('Apps')">
+        <span class="home-dock-base glass-pill" aria-hidden="true"></span>
+        <div class="home-dock-row" @pointermove.passive="magnifyDock" @pointerleave="releaseDock" @pointercancel="releaseDock" @scroll.passive="onDockScroll">
           <component
             :is="launcherOpen(app) ? 'a' : 'span'"
             v-for="app in dockApps"
@@ -1398,8 +1520,10 @@ onUnmounted(() => {
             :aria-label="launcherTitle(app)"
             @click="launcherOpen(app) && openApp($event, app.name, app.url)"
           >
-            <img v-if="appIconSrc(app.name)" :src="appIconSrc(app.name)" alt="" class="home-app-icon" />
-            <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
+            <span class="home-app-tile" aria-hidden="true">
+              <img v-if="appIconSrc(app.name)" :src="appIconSrc(app.name)" alt="" class="home-app-icon" />
+              <span v-else class="home-app-fallback">{{ app.display_name.slice(0, 1) }}</span>
+            </span>
           </component>
         </div>
         <p v-if="dockNotes.length" class="home-dock-notes" aria-live="polite">{{ dockNotes.join(' · ') }}</p>
@@ -1419,15 +1543,11 @@ onUnmounted(() => {
         @open="openWidget"
       >
       <template #greeting>
-      <section class="home-hero glass-card">
-        <span class="home-hero-date">{{ todayLabel }}</span>
-        <h2 class="home-hero-title">{{ greeting }}</h2>
-        <p class="home-hero-sub">{{ heroSummary }}</p>
-      </section>
+        <HomeGreeting :name="firstName.trim() || username" :summary="heroSummary" />
       </template>
 
       <template #searchbar>
-      <section ref="searchRoot" class="home-search glass-card">
+      <section ref="searchRoot" class="home-search">
         <form class="home-search-pill glass-pill" role="search" @submit.prevent="runSearch">
           <label class="home-sr" for="home-search-provider">{{ $t('Search in') }}</label>
           <UiSelect
@@ -1470,7 +1590,7 @@ onUnmounted(() => {
             <span>{{ $t('Search') }}</span>
           </button>
         </form>
-        <div v-if="searchOpen" class="home-hero-results glass-card" :class="searchAnchor">
+        <div v-if="searchOpen" class="home-hero-results glass-popover" :class="searchAnchor">
           <div class="home-results-scroll">
             <p v-if="notice" class="home-notice">{{ notice }}</p>
             <p v-if="searchError" class="home-notice home-notice-error">{{ searchError }}</p>
@@ -1497,7 +1617,7 @@ onUnmounted(() => {
                   :disabled="requestBusy === resultKey(item)"
                   @click="requestTitle(item)"
                 >
-                  {{ requestBusy === resultKey(item) ? (item.source === 'prowlarr' ? $t('Sending…') : $t('Requesting…')) : (item.source === 'prowlarr' ? $t('Download') : $t('Get it now')) }}
+                  {{ requestBusy === resultKey(item) ? (item.source === 'prowlarr' ? $t('Sending…') : $t('Requesting…')) : (item.source === 'prowlarr' ? $t('Download') : $t(item.mediaType === 'tv' ? 'Request seasons' : 'Request')) }}
                 </button>
               </li>
             </ul>
@@ -1510,14 +1630,8 @@ onUnmounted(() => {
         <article class="home-card glass-card">
           <div class="home-rail-head">
             <h3>{{ $t('Recently added') }}</h3>
-            <div class="home-rail-tools">
-              <div v-if="snapshot.recent.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous recently added')" @click="scrollRail('recent', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next recently added')" @click="scrollRail('recent', 1)">›</button>
-              </div>
-            </div>
           </div>
-          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail" @scroll.passive="loadMoreRecent">
+          <div v-if="snapshot.recent.length" ref="recentRail" class="home-rail" tabindex="0" role="group" :aria-label="$t('Recently added')" @scroll.passive="loadMoreRecent">
             <a
               v-for="(item, idx) in recentItems"
               :key="idx"
@@ -1561,21 +1675,28 @@ onUnmounted(() => {
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'movie' }" @click="requestsFilter = 'movie'">{{ $t('Movies') }}</button>
                 <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': requestsFilter === 'tv' }" @click="requestsFilter = 'tv'">{{ $t('Series') }}</button>
               </div>
-              <div v-if="requestItems.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous requests')" @click="scrollRail('requests', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next requests')" @click="scrollRail('requests', 1)">›</button>
-              </div>
+              <UiSelect v-if="snapshot.requests.length" v-model="requestAvailability" variant="inline"
+                        :aria-label="$t('Filter request availability')"
+                        :options="[
+                          { value: 'all', label: $t('All statuses') },
+                          { value: 'waiting', label: $t('Approved, awaiting availability') },
+                        ]" />
             </div>
           </div>
-          <div v-if="requestItems.length" ref="requestsRail" class="home-rail home-requests-rail" @scroll.passive="scrollRequests">
-            <a
+          <p v-if="reviewNotice && !shownLayout.some(item => item.id === 'approvals')" class="home-muted" role="status">{{ reviewNotice }}</p>
+          <div v-if="requestItems.length" ref="requestsRail" class="home-rail home-requests-rail" tabindex="0" role="group" :aria-label="$t('Requests')" @scroll.passive="scrollRequests">
+            <component
+              :is="item.requestStatus === 1 && item.requestId ? 'button' : 'a'"
               v-for="(item, idx) in requestsWindowItems"
-              :key="`${requestsWindowStart + idx}-${item.mediaType}-${item.mediaId || item.title}`"
-              class="home-tile"
-              :href="item.url || seerrHomeUrl || undefined"
-              :target="item.url || seerrHomeUrl ? '_blank' : undefined"
+              :key="item.requestId || `${requestsWindowStart + idx}-${item.mediaType}-${item.mediaId || item.title}`"
+              class="home-tile home-request-tile"
+              :type="item.requestStatus === 1 && item.requestId ? 'button' : undefined"
+              :href="item.requestStatus === 1 && item.requestId ? undefined : item.url || seerrHomeUrl || undefined"
+              :target="item.requestStatus === 1 && item.requestId ? undefined : '_blank'"
               rel="noopener noreferrer"
-              @click="(item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
+              @click="item.requestStatus === 1 && item.requestId
+                ? openRequestReview(item)
+                : (item.url || seerrHomeUrl) && openApp($event, 'seerr', item.url || seerrHomeUrl)"
             >
               <span class="home-tile-art">
                 <HomePoster v-if="item.poster" :src="item.poster" class="home-tile-poster" />
@@ -1583,8 +1704,11 @@ onUnmounted(() => {
                 <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
               </span>
               <span class="home-tile-title">{{ item.title }}</span>
-              <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">{{ requestStatusDot(item).label }}</span>
-            </a>
+              <span class="home-tile-meta home-req-status" :class="requestStatusDot(item).cls">
+                {{ item.requestStatus === 1 && item.requestId ? $t('Review request')
+                  : item.requestStatus === 3 ? $t('Declined') : requestStatusDot(item).label }}
+              </span>
+            </component>
           </div>
           <template v-else-if="isPending('requests')">
             <div class="home-rail" aria-hidden="true">
@@ -1604,23 +1728,38 @@ onUnmounted(() => {
           </ul>
         </article>
       </template>
+      <template #approvals>
+        <article class="home-card glass-card" role="region" :aria-label="$t('Pending requests')">
+          <h3>{{ $t('Pending requests') }}</h3>
+          <p v-if="reviewNotice" class="home-muted" role="status">{{ reviewNotice }}</p>
+          <ul v-if="pendingRequests.length" class="home-approval-list">
+            <li v-for="item in pendingRequests" :key="item.requestId">
+              <div>
+                <strong>{{ item.title }}</strong>
+                <div v-if="item.detail" class="home-muted">{{ $t('Requested by {name}', { name: item.detail }) }}</div>
+              </div>
+              <button type="button" class="ui-btn ui-btn-ghost" :aria-label="$t('Review request') + ' · ' + item.title"
+                      @click="openRequestReview(item)">{{ $t('Review request') }}</button>
+            </li>
+          </ul>
+          <p v-else-if="isPending('requests')" class="home-muted" role="status">{{ $t('Loading requests…') }}</p>
+          <p v-else class="home-muted">{{ $t('No pending requests.') }}</p>
+        </article>
+      </template>
       <template #trending>
         <article class="home-card glass-card home-card-trending">
           <div class="home-rail-head home-trending-head">
             <h3>{{ $t('Trending') }}</h3>
             <div class="home-rail-tools home-trending-tools">
               <div v-if="snapshot.trending.length" class="home-type-filter" role="group" :aria-label="$t('Filter trending')">
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" @click="trendingFilter = 'all'">{{ $t('All') }}</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" @click="trendingFilter = 'movie'">{{ $t('Movies') }}</button>
-                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" @click="trendingFilter = 'tv'">{{ $t('Series') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'all' }" :disabled="trendingFilterBusy" :aria-pressed="trendingFilter === 'all'" @click="setTrendingFilter('all')">{{ $t('All') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'movie' }" :disabled="trendingFilterBusy" :aria-pressed="trendingFilter === 'movie'" @click="setTrendingFilter('movie')">{{ $t('Movies') }}</button>
+                <button type="button" class="ui-btn ui-btn-ghost" :class="{ 'is-active': trendingFilter === 'tv' }" :disabled="trendingFilterBusy" :aria-pressed="trendingFilter === 'tv'" @click="setTrendingFilter('tv')">{{ $t('Series') }}</button>
               </div>
-              <div v-if="trendingItems.length" class="home-rail-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Previous trending')" @click="scrollRail('trending', -1)">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" :aria-label="$t('Next trending')" @click="scrollRail('trending', 1)">›</button>
-              </div>
+              <p v-if="trendingFilterError" role="alert">{{ trendingFilterError }}</p>
             </div>
           </div>
-          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" @scroll.passive="loadMoreTrending">
+          <div v-if="trendingItems.length" ref="trendingRail" class="home-rail" tabindex="0" role="group" :aria-label="$t('Trending')" @scroll.passive="loadMoreTrending">
             <div v-for="(item, idx) in trendingItems" :key="idx" class="home-tile home-tile-trending">
               <button
                 type="button"
@@ -1642,8 +1781,7 @@ onUnmounted(() => {
                   <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
                 </span>
                 <span class="home-tile-title">{{ item.title }}</span>
-                <span v-if="item.detail" class="home-tile-meta">{{ item.detail }}</span>
-                <span v-if="statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
+                <span v-if="item.status !== 'missing' && statusLabel(item)" class="home-tile-meta">{{ statusLabel(item) }}</span>
               </button>
             </div>
           </div>
@@ -1666,141 +1804,28 @@ onUnmounted(() => {
         </article>
       </template>
       <template #calendar>
-        <article class="home-card glass-card home-card-calendar">
-          <div class="cal-head">
-            <h3>{{ calendarRangeLabel }}</h3>
-            <div class="cal-tools">
-              <button v-if="!calOnToday" type="button" class="ui-btn ui-btn-ghost" @click="goToday">{{ $t('Today') }}</button>
-              <UiSelect
-                v-model="calFilter"
-                class="cal-select"
-                variant="inline"
-                :aria-label="$t('Filter calendar')"
-                :options="[
-                  { value: 'all', label: $t('All') },
-                  { value: 'tv', label: $t('TV') },
-                  { value: 'movies', label: $t('Movies') },
-                  { value: 'missing', label: $t('Not downloaded') },
-                ]"
-              />
-              <UiSelect
-                :model-value="calView"
-                class="cal-select"
-                variant="inline"
-                :aria-label="$t('Calendar view')"
-                :options="[
-                  { value: 'list', label: $t('List') },
-                  { value: 'day', label: $t('Day') },
-                  { value: 'week', label: $t('Week') },
-                  { value: 'month', label: $t('Month') },
-                ]"
-                @update:model-value="setCalView"
-              />
-              <div class="cal-nav">
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(-1)" :aria-label="$t('Previous')">‹</button>
-                <button type="button" class="ui-btn ui-btn-ghost cal-nav-btn" @click="shiftCalendar(1)" :aria-label="$t('Next')">›</button>
-              </div>
-            </div>
-          </div>
-          <div class="home-card-body">
-          <div v-if="calView === 'list'" class="cal-list">
-            <div v-if="!calendarList.length && isPending('calendar')" aria-hidden="true">
-              <span v-for="n in 4" :key="n" class="home-skel home-skel-line"></span>
-            </div>
-            <p v-else-if="!calendarList.length" class="home-muted">{{ $t('Nothing in this range.') }}</p>
-            <ul v-else>
-              <li v-for="(row, idx) in calendarList" :key="idx" class="cal-row" :data-kind="eventKind(row.item)" :data-source="row.item.source" :class="{ 'is-have': row.item.has_file, 'is-today': isToday(row.dt) }">
-                <component
-                  :is="calendarTarget(row.item) ? 'a' : 'div'"
-                  class="cal-row-link"
-                  :href="calendarTarget(row.item)?.url"
-                  :target="calendarTarget(row.item) ? '_blank' : undefined"
-                  rel="noopener noreferrer"
-                  :title="calendarLinkTitle(row.item)"
-                  @click="openCalendarItem($event, row.item)"
-                >
-                  <span class="cal-chip" aria-hidden="true"><span>{{ chipDay(row.dt) }}</span><strong>{{ row.dt.getDate() }}</strong></span>
-                  <span class="cal-row-body">
-                    <span class="cal-row-title">
-                      <strong>{{ row.item.title }}</strong>
-                      <span v-if="mediaKind(row.item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(row.item)]) }}</span>
-                    </span>
-                    <span class="cal-row-meta">{{ [row.item.detail, formatEventTime(row.item.when)].filter(Boolean).join(' · ') }}</span>
-                  </span>
-                </component>
-              </li>
-            </ul>
-          </div>
-          <div v-else class="cal" :class="'cal-mode-' + calView" role="grid" :aria-label="$t('Upcoming releases calendar')">
-            <div v-if="calView === 'week'" class="cal-weekdays">
-              <span v-for="day in calendarDays" :key="day.key">{{ day.weekday }} {{ day.date }}-{{ day.month }}</span>
-            </div>
-            <div v-else-if="calView === 'month'" class="cal-weekdays">
-              <span v-for="label in weekdayLabels" :key="label">{{ label }}</span>
-            </div>
-            <div class="cal-weeks" :class="{ 'is-week': calView === 'week', 'is-day': calView === 'day' }">
-              <div
-                v-for="week in calendarWeeks"
-                :key="week.key"
-                class="cal-week"
-                :class="{ 'is-current': week.isCurrent, 'is-single': calView !== 'month' }"
-              >
-                <div
-                  v-for="day in week.days"
-                  :key="day.key"
-                  class="cal-day"
-                  :class="{
-                    'is-today': day.isToday,
-                    'is-selected': day.key === selectedDayKey,
-                    'is-outside': !day.inMonth,
-                  }"
-                  @click="selectCalDay(day)"
-                >
-                  <span class="cal-num">{{ calView === 'week' ? day.weekday + ' ' + day.date : day.date }}</span>
-                  <ul v-if="day.events.length" class="cal-events">
-                    <li v-for="(item, idx) in day.events" :key="idx">
-                      <component
-                        :is="calendarTarget(item) ? 'a' : 'div'"
-                        class="cal-event"
-                        :data-kind="eventKind(item)"
-                        :data-source="item.source"
-                        :class="{ 'is-have': item.has_file }"
-                        :href="calendarTarget(item)?.url"
-                        :target="calendarTarget(item) ? '_blank' : undefined"
-                        rel="noopener noreferrer"
-                        :title="calendarLinkTitle(item)"
-                        @click="openCalendarItem($event, item)"
-                      >
-                        <span class="cal-event-top">
-                          <span class="cal-event-time">{{ formatEventTime(item.when) }}</span>
-                          <span v-if="mediaKind(item)" class="media-badge">{{ $t(MEDIA_LABELS[mediaKind(item)]) }}</span>
-                        </span>
-                        <strong>{{ item.title }}</strong>
-                        <span v-if="item.detail" class="cal-event-detail">{{ item.detail }}</span>
-                      </component>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-          <p v-if="!snapshot.calendar.length && widgetDebug" class="home-muted">{{ $t('Nothing on the calendar.') }}</p>
-          <ul v-if="widgetDebug && notesFor('calendar').length" class="home-debug">
-            <li v-for="(note, idx) in notesFor('calendar')" :key="idx">
+        <CalendarFeed :wide="calendarWide" :phone="calendarPhone" v-slot="{ notes }">
+          <ul v-if="widgetDebug && notes.length" class="home-debug">
+            <li v-for="(note, idx) in notes" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
               <span>{{ note.source }} — {{ note.detail }}</span>
             </li>
           </ul>
-          </div>
-        </article>
+        </CalendarFeed>
       </template>
       <template #downloads>
         <article class="home-card glass-card home-card-downloads">
           <div class="home-widget-head">
             <h3>{{ $t('Downloading') }}</h3>
-            <span v-if="movingDownloads.length && !downloadPause.paused" class="home-card-stat">{{ movingDownloads.length }}<template v-if="totalSpeed"> · {{ totalSpeed }}</template></span>
+            <span v-if="downloadFilter === 'all' && movingDownloads.length && !downloadPause.paused" class="home-card-stat">{{ movingDownloads.length }}<template v-if="totalSpeed"> · {{ totalSpeed }}</template></span>
+            <UiSelect v-if="snapshot.downloads.length" v-model="downloadFilter" variant="inline"
+                      :aria-label="$t('Filter downloads')"
+                      :options="[
+                        { value: 'all', label: $t('All downloads') },
+                        { value: 'problems', label: $t('Problems') },
+                      ]" />
             <UiSelect
-              v-if="movingDownloads.length > 1"
+              v-if="(downloadFilter === 'problems' ? problemDownloads : movingDownloads).length > 1"
               v-model="downloadSort"
               class="home-sort"
               variant="inline"
@@ -1832,28 +1857,13 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
-          <div v-if="movingDownloads.length && !downloadPause.paused" class="home-dl-compact">
+          <div v-if="downloadFilter === 'all' && movingDownloads.length && !downloadPause.paused" class="home-dl-compact">
             <span class="home-dl-count">{{ movingDownloads.length }}<small>{{ $t('active') }}</small></span>
             <span class="home-muted home-dl-meta">{{ totalSpeed || $t('Waiting for speed') }}</span>
             <span class="home-bar"><span :style="{ width: `${downloadsProgress}%` }" /></span>
           </div>
           <div class="home-card-body">
-          <ul v-if="movingDownloads.length">
-            <li v-for="(item, idx) in movingDownloads" :key="idx">
-              <span class="home-dl-row">
-                <strong>{{ item.title }}</strong>
-                <span class="home-dl-pct font-mono">{{ item.progress }}%</span>
-              </span>
-              <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
-              <span class="home-muted home-dl-meta">
-                {{ item.source }} · {{ item.status }}
-                <span v-if="formatSpeed(item.speed_bps)" class="home-speed"> · {{ formatSpeed(item.speed_bps) }}</span>
-                <span v-if="item.eta"> · {{ item.eta }}</span>
-              </span>
-            </li>
-          </ul>
-          <p v-else class="home-muted">{{ $t('No active downloads.') }}</p>
-          <details v-if="stuckItems.length" class="home-stuck">
+          <details v-if="stuckItems.length" class="home-stuck" :open="downloadFilter === 'problems' || problemDownloads.length > 0">
             <summary class="home-muted">{{ $t('Not moving:') }} {{ stuckSummary }}</summary>
             <div class="home-stuck-head">
               <span class="home-muted">{{ $t('Removing blocklists the release; Sonarr and Radarr search for another.') }}</span>
@@ -1880,6 +1890,22 @@ onUnmounted(() => {
               </li>
             </ul>
           </details>
+          <ul v-if="downloadFilter === 'all' && movingDownloads.length">
+            <li v-for="(item, idx) in movingDownloads" :key="idx">
+              <span class="home-dl-row">
+                <strong>{{ item.title }}</strong>
+                <span class="home-dl-pct font-mono">{{ item.progress }}%</span>
+              </span>
+              <span class="home-bar"><span :style="{ width: `${item.progress}%` }" /></span>
+              <span class="home-muted home-dl-meta">
+                {{ item.source }} · {{ item.status }}
+                <span v-if="formatSpeed(item.speed_bps)" class="home-speed"> · {{ formatSpeed(item.speed_bps) }}</span>
+                <span v-if="item.eta"> · {{ item.eta }}</span>
+              </span>
+            </li>
+          </ul>
+          <p v-else-if="downloadFilter === 'all'" class="home-muted">{{ $t('No active downloads.') }}</p>
+          <p v-else-if="!stuckItems.length" class="home-muted">{{ $t('No download problems.') }}</p>
           <ul v-if="widgetDebug && notesFor('downloads').length" class="home-debug">
             <li v-for="(note, idx) in notesFor('downloads')" :key="idx">
               <span class="home-debug-state" :data-state="note.state">{{ note.state }}</span>
@@ -1890,32 +1916,43 @@ onUnmounted(() => {
         </article>
       </template>
       <template #playing>
-        <article class="home-card glass-card home-card-playing" :class="{ 'has-art': nowItem?.poster }">
-          <template v-if="nowItem">
-            <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" loading="lazy" decoding="async" alt="" aria-hidden="true" />
-            <span v-if="nowItem.poster" class="np-shade" aria-hidden="true"></span>
-            <div class="np-top">
-              <span class="gh-pill">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
-                {{ nowItem.device || (nowItem.source === 'plex' ? 'Plex' : 'Jellyfin') }}
-              </span>
-              <span v-if="homeStatus.playing.length > 1" class="gh-pill">+{{ homeStatus.playing.length - 1 }} {{ $t('watching') }}</span>
+        <article class="home-card glass-card home-card-playing">
+          <div
+            v-if="homeStatus.playing.length"
+            class="np-scroll"
+            :tabindex="homeStatus.playing.length > 1 ? 0 : undefined"
+            role="region"
+            :aria-label="$t('Now playing')"
+          >
+            <div v-for="(nowItem, index) in homeStatus.playing" :key="index" class="np-slide" :class="{ 'has-art': nowItem.poster }">
+              <img v-if="nowItem.poster" class="np-art" :src="nowItem.poster" loading="lazy" decoding="async" alt="" aria-hidden="true" />
+              <span v-if="nowItem.poster" class="np-shade" aria-hidden="true"></span>
+              <div class="np-top">
+                <span class="gh-pill">
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+                  {{ nowItem.device || (nowItem.source === 'plex' ? 'Plex' : 'Jellyfin') }}
+                </span>
+                <span v-if="homeStatus.playing.length > 1" class="gh-pill np-position" :aria-label="$t('Stream {current} of {total}', { current: index + 1, total: homeStatus.playing.length })">
+                  {{ index + 1 }}/{{ homeStatus.playing.length }}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path :d="index === homeStatus.playing.length - 1 ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'" /></svg>
+                </span>
+              </div>
+              <component
+                :is="nowItem.url ? 'a' : 'div'"
+                class="np-bottom"
+                v-bind="nowItem.url ? { href: nowItem.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
+                @click="nowItem.url && openApp($event, nowItem.source, nowItem.url)"
+              >
+                <strong class="np-title">{{ nowItem.title }}</strong>
+                <span v-if="nowItem.detail" class="np-sub">{{ nowItem.detail }}</span>
+                <span class="np-progress"><span :style="{ width: `${nowItem.progress}%` }" /></span>
+                <span class="np-foot">
+                  <span>{{ nowItem.user }}<template v-if="nowItem.paused"> {{ $t('· Paused') }}</template></span>
+                  <span>{{ nowItem.transcoding ? $t('Transcoding') : $t('Direct play') }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} {{ $t('min left') }}</template></span>
+                </span>
+              </component>
             </div>
-            <component
-              :is="nowItem.url ? 'a' : 'div'"
-              class="np-bottom"
-              v-bind="nowItem.url ? { href: nowItem.url, target: '_blank', rel: 'noopener noreferrer' } : {}"
-              @click="nowItem.url && openApp($event, nowItem.source, nowItem.url)"
-            >
-              <strong class="np-title">{{ nowItem.title }}</strong>
-              <span v-if="nowItem.detail" class="np-sub">{{ nowItem.detail }}</span>
-              <span class="np-progress"><span :style="{ width: `${nowItem.progress}%` }" /></span>
-              <span class="np-foot">
-                <span>{{ nowItem.user }}<template v-if="nowItem.paused"> {{ $t('· Paused') }}</template></span>
-                <span>{{ nowItem.transcoding ? $t('Transcoding') : $t('Direct play') }}<template v-if="nowItem.minutes_left != null"> · {{ nowItem.minutes_left }} {{ $t('min left') }}</template></span>
-              </span>
-            </component>
-          </template>
+          </div>
           <template v-else>
             <div class="gh-head">
               <h3>{{ $t('Now playing') }}</h3>
@@ -2109,10 +2146,23 @@ onUnmounted(() => {
       </ul>
       <p v-else class="home-muted">{{ $t('No widget sources reported yet. Reload Home.') }}</p>
     </article>
+    <dialog ref="reviewDialog" class="glass-dialog home-review-dialog" :aria-label="$t('Review request')"
+            @close="pendingReview = null" @cancel="reviewBusy && $event.preventDefault()">
+      <template v-if="pendingReview">
+        <h2>{{ pendingReview.title }}</h2>
+        <p v-if="pendingReview.detail">{{ $t('Requested by {name}', { name: pendingReview.detail }) }}</p>
+        <p v-if="reviewError" role="alert" class="ui-alert ui-alert-error">{{ reviewError }}</p>
+        <div class="home-review-actions">
+          <button type="button" class="ui-btn ui-btn-ghost" :disabled="reviewBusy" @click="reviewDialog.close()">{{ $t('Cancel') }}</button>
+          <button type="button" class="ui-btn ui-btn-ghost" :disabled="reviewBusy" @click="reviewRequest('decline')">{{ $t('Decline') }}</button>
+          <button type="button" class="ui-btn ui-btn-primary" :disabled="reviewBusy" @click="reviewRequest('approve')">{{ $t('Approve') }}</button>
+        </div>
+      </template>
+    </dialog>
     <Teleport to="body">
       <div v-if="trendingDetail" class="modal-backdrop" @click.self="closeTrending">
         <div
-          class="modal-content glass-popover home-title-dialog"
+          class="modal-content glass-dialog home-title-dialog"
           role="dialog"
           aria-modal="true"
           aria-labelledby="home-title-heading"
@@ -2139,7 +2189,9 @@ onUnmounted(() => {
               <p v-else-if="!trendingDetail.pending" class="home-muted">{{ $t('Seerr did not include ratings.') }}</p>
             </div>
           </div>
-          <div class="home-request-actions">
+          <StreamingAvailability :streaming="trendingDetail.data?.streaming" :series="mediaKind(trendingDetail.item) === 'tv'" @setup="closeTrending" />
+          <div v-if="youtubeIdFromUrl(trendingDetail.data?.trailer) || trendingDetail.item.can_request"
+               class="home-request-actions">
             <button
               v-if="trendingDetail.data?.trailer && youtubeIdFromUrl(trendingDetail.data.trailer)"
               type="button"
@@ -2152,19 +2204,13 @@ onUnmounted(() => {
               class="ui-btn"
               :disabled="requestBusy === resultKey(trendingDetail.item)"
               @click="requestTitle(trendingDetail.item)"
-            >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t('Request') }}</button>
-            <button
-              v-if="trendingDetail.data?.url"
-              type="button"
-              class="ui-btn ui-btn-ghost"
-              @click="openApp($event, 'seerr', trendingDetail.data.url)"
-            >{{ $t('Open in Seerr') }}</button>
+            >{{ requestBusy === resultKey(trendingDetail.item) ? $t('Requesting…') : $t(trendingDetail.item.mediaType === 'tv' ? 'Request seasons' : 'Request') }}</button>
           </div>
         </div>
       </div>
       <div v-if="trailerPlayer" class="modal-backdrop home-trailer-backdrop" @click.self="closeTrailer">
         <div
-          class="modal-content glass-popover home-trailer-dialog"
+          class="modal-content glass-dialog home-trailer-dialog"
           role="dialog"
           aria-modal="true"
           aria-labelledby="home-trailer-heading"
@@ -2184,10 +2230,22 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-      <div v-if="requestChoice && choiceServer" class="modal-backdrop" @click.self="requestChoice = null">
-        <form class="modal-content glass-popover home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
+      <div v-if="requestChoice" class="modal-backdrop" @click.self="!requestBusy && (requestChoice = null)">
+        <form class="modal-content glass-dialog home-request-dialog" role="dialog" aria-modal="true" aria-labelledby="home-request-title" @submit.prevent="confirmRequest">
           <h3 id="home-request-title">{{ $t('Request') }} {{ requestChoice.item.title }}</h3>
-          <p class="home-muted">{{ $t('Choose where Seerr should add it.') }}</p>
+          <p v-if="requestChoice.loading" role="status" class="home-muted">{{ $t('Loading request options…') }}</p>
+          <p v-if="requestChoice.error" role="alert" class="home-notice home-notice-error">{{ requestChoice.error }}</p>
+          <fieldset v-if="requestChoice.seasons.length" class="home-request-seasons" :disabled="!!requestBusy">
+            <legend>{{ $t('Select seasons') }}</legend>
+            <label v-for="season in requestChoice.seasons" :key="season">
+              <input v-model="requestChoice.selected" type="checkbox" :value="season">
+              {{ season === 0 ? $t('Specials') : $t('Season {number}', { number: season }) }}
+            </label>
+          </fieldset>
+          <p v-else-if="requestChoice.item.mediaType === 'tv' && !requestChoice.loading && !requestChoice.error" class="home-muted">
+            {{ $t('No seasons left to request.') }}
+          </p>
+          <p v-if="choiceServer" class="home-muted">{{ $t('Choose where Seerr should add it.') }}</p>
           <label v-if="requestChoice.servers.length > 1" class="home-request-field">
             {{ $t('Server') }}
             <UiSelect
@@ -2196,21 +2254,21 @@ onUnmounted(() => {
               @update:model-value="onRequestServer"
             />
           </label>
-          <label v-if="choiceServer.profiles.length > 1" class="home-request-field">
+          <label v-if="choiceServer?.profiles.length > 1" class="home-request-field">
             {{ $t('Quality profile') }}
             <UiSelect
               v-model="requestChoice.profileId"
               :options="choiceServer.profiles.map((profile) => ({ value: profile.id, label: profile.name }))"
             />
           </label>
-          <label v-if="choiceServer.folders.length > 1" class="home-request-field">
+          <label v-if="choiceServer?.folders.length > 1" class="home-request-field">
             {{ $t('Folder') }}
             <UiSelect
               v-model="requestChoice.rootFolder"
               :options="choiceServer.folders.map((folder) => ({ value: folder.path, label: folder.path }))"
             />
           </label>
-          <label v-if="choiceServer.languages.length > 1" class="home-request-field">
+          <label v-if="choiceServer?.languages.length > 1" class="home-request-field">
             {{ $t('Language profile') }}
             <UiSelect
               v-model="requestChoice.languageProfileId"
@@ -2218,8 +2276,8 @@ onUnmounted(() => {
             />
           </label>
           <div class="home-request-actions">
-            <button type="button" class="ui-btn" @click="requestChoice = null">{{ $t('Cancel') }}</button>
-            <button type="submit" class="ui-btn ui-btn-primary" :disabled="requestBusy === resultKey(requestChoice.item)">
+            <button type="button" class="ui-btn" :disabled="!!requestBusy" @click="requestChoice = null">{{ $t('Cancel') }}</button>
+            <button type="submit" class="ui-btn ui-btn-primary" :disabled="!requestChoice.ready || !!requestBusy || (requestChoice.item.mediaType === 'tv' && !requestChoice.selected.length)">
               {{ requestBusy === resultKey(requestChoice.item) ? $t('Requesting…') : $t('Request') }}
             </button>
           </div>

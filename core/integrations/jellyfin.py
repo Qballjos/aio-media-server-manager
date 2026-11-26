@@ -10,6 +10,7 @@ from typing import Any, Optional
 from pathlib import Path
 
 import requests
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +243,52 @@ class JellyfinClient:
         except Exception as exc:
             logger.debug("Jellyfin public users error: %s", exc)
             return []
+
+    def _member_quick_connect(self, method: str, path: str, device_id: str, **kwargs) -> dict:
+        headers = self._headers()
+        for name in ("Authorization", "X-Emby-Authorization"):
+            headers[name] = headers[name].replace('DeviceId="amm-jellyfin"', f'DeviceId="{device_id}"')
+        try:
+            response = requests.request(
+                method, f"{self.base_url}{path}", headers=headers,
+                timeout=8, allow_redirects=False, **kwargs,
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(409, "Jellyfin Quick Connect is disabled or the attempt is no longer valid.")
+            if response.status_code == 404 and path == "/QuickConnect/Connect":
+                raise HTTPException(404, "Jellyfin Quick Connect attempt expired.")
+            if response.status_code != 200:
+                raise ValueError("Unexpected Jellyfin response status")
+            result = response.json()
+            if isinstance(result, dict):
+                return result
+        except (requests.RequestException, ValueError) as exc:
+            raise HTTPException(502, "Jellyfin Quick Connect is unavailable.") from exc
+        raise HTTPException(502, "Jellyfin returned an invalid Quick Connect response.")
+
+    def begin_member_sign_in(self, device_id: str) -> tuple[str, str]:
+        result = self._member_quick_connect("POST", "/QuickConnect/Initiate", device_id)
+        code, secret = result.get("Code"), result.get("Secret")
+        if isinstance(code, str) and re.fullmatch(r"[0-9]{6}", code) and isinstance(secret, str) and secret:
+            return code, secret
+        raise HTTPException(502, "Jellyfin returned an invalid Quick Connect code.")
+
+    def finish_member_sign_in(self, device_id: str, secret: str) -> tuple[str, str, str] | None:
+        state = self._member_quick_connect("GET", "/QuickConnect/Connect", device_id, params={"Secret": secret})
+        if state.get("Authenticated") is False:
+            return None
+        if state.get("Authenticated") is not True:
+            raise HTTPException(502, "Jellyfin returned an invalid Quick Connect state.")
+        result = self._member_quick_connect(
+            "POST", "/Users/AuthenticateWithQuickConnect", device_id, json={"Secret": secret},
+        )
+        user = result.get("User")
+        account_id = user.get("Id") if isinstance(user, dict) else None
+        server_id = result.get("ServerId")
+        token = result.get("AccessToken")
+        if all(isinstance(value, str) and value for value in (server_id, account_id, token)):
+            return server_id, account_id, token
+        raise HTTPException(502, "Jellyfin did not verify the server and account.")
 
     def authorize_quick_connect(self, code: str) -> bool:
         """Approve a browser's Quick Connect request without exchanging its secret."""

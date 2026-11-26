@@ -1,5 +1,24 @@
 # Verification and browser journeys
 
+## Populated local preview
+
+For manual UI testing, start with:
+
+```sh
+npm --prefix frontend run preview
+```
+
+Open `http://127.0.0.1:4173` and sign in as `demo` with `LocalPreview123!`.
+The command builds the frontend, starts the browser fixture on loopback and
+seeds installed apps, local poster art, two playback sessions, downloads,
+requests and calendar entries. Its temporary state is discarded on exit.
+It uses `.venv/bin/python` unless `E2E_PYTHON` is set. Set `AIO_E2E_PORT`
+to use another port.
+
+The automated Chromium journeys still start with an empty fixture so they
+can exercise account creation, setup and installation. The WebKit layout
+suite continues to use its own synthetic responses and a static Vite preview.
+
 ## Local checks
 
 From the repository root:

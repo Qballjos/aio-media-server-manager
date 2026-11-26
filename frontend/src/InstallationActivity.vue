@@ -27,24 +27,31 @@ onUnmounted(() => clearInterval(timer))
   <button v-if="needsAttention || error" type="button" class="ui-btn ui-btn-ghost" @click="show">{{ $t('Installation activity') }}</button>
   <Teleport to="body">
     <div v-if="open" class="activity-backdrop" @click.self="open = false" @keydown.esc="open = false">
-      <section role="dialog" aria-modal="true" aria-labelledby="activity-title" ref="dialog" @keydown.tab="trapDialogTab($event, dialog)" class="glass-card activity-dialog" tabindex="-1">
+      <section role="dialog" aria-modal="true" aria-labelledby="activity-title" ref="dialog" @keydown.tab="trapDialogTab($event, dialog)" class="glass-dialog activity-dialog" tabindex="-1">
         <div class="share-row"><h2 id="activity-title">{{ $t('Installation activity') }}</h2><button autofocus class="ui-btn ui-btn-ghost" @click="open = false">{{ $t('Close') }}</button></div>
-        <p>{{ $t('You can close this window and reopen it while installation continues. History is kept until the manager restarts.') }}</p>
-        <p v-if="error" role="alert">{{ error }}</p>
-        <p v-if="!jobs.length">{{ $t('No installation activity yet.') }}</p>
-        <article v-for="job in jobs" :key="job.name">
-          <h3>{{ job.name }} — {{ job.status }}</h3><p aria-live="polite">{{ job.message }}</p>
-          <button class="ui-btn ui-btn-ghost" @click="open = false; $emit('logs', job)">{{ $t('View logs') }}</button>
-          <ol><li v-for="(event, index) in job.history || []" :key="index">{{ new Date(event.at * 1000).toLocaleTimeString() }} — {{ event.message || event.status }}</li></ol>
-          <button v-if="['failed', 'rollback_failed'].includes(job.status)" class="ui-btn ui-btn-ghost" @click="$emit('retry', job)">{{ $t('Try again') }}</button>
-        </article>
+        <div class="activity-body">
+          <p>{{ $t('You can close this window and reopen it while installation continues. History is kept until the manager restarts.') }}</p>
+          <p v-if="error" role="alert">{{ error }}</p>
+          <p v-if="!jobs.length">{{ $t('No installation activity yet.') }}</p>
+          <article v-for="job in jobs" :key="job.name">
+            <h3>{{ job.name }} — {{ job.status }}</h3><p aria-live="polite">{{ job.message }}</p>
+            <button class="ui-btn ui-btn-ghost" @click="open = false; $emit('logs', job)">{{ $t('View logs') }}</button>
+            <ol><li v-for="(event, index) in job.history || []" :key="index">{{ new Date(event.at * 1000).toLocaleTimeString() }} — {{ event.message || event.status }}</li></ol>
+            <button v-if="['failed', 'rollback_failed'].includes(job.status)" class="ui-btn ui-btn-ghost" @click="$emit('retry', job)">{{ $t('Try again') }}</button>
+          </article>
+        </div>
       </section>
     </div>
   </Teleport>
 </template>
 <style scoped>
-.activity-backdrop { position: fixed; inset: 0; z-index: 1000; background: #0008; display: grid; place-items: center; padding: 1rem; }
-.activity-dialog { width: min(48rem, 100%); max-height: 85dvh; overflow: auto; padding: 1.5rem; }
+.activity-backdrop { position: fixed; inset: 0; z-index: 1000; background: var(--modal-scrim); display: grid; place-items: center; padding: 1rem; }
+.activity-dialog { width: min(48rem, 100%); max-height: 85dvh; display: flex; flex-direction: column; overflow: hidden; padding: 1.5rem; }
+.activity-dialog .share-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-shrink: 0; }
+.activity-dialog h2 { min-width: 0; font-size: var(--text-strong); overflow-wrap: anywhere; }
+.activity-dialog .share-row button { flex-shrink: 0; }
+.activity-body { min-height: 0; overflow-y: auto; overflow-wrap: anywhere; }
+.activity-body ol { padding-inline-start: 0; list-style-position: inside; }
 .activity-dialog article { padding-block: 1rem; border-top: 1px solid var(--border-color, #8884); }
 .activity-dialog li { overflow-wrap: anywhere; }
 </style>

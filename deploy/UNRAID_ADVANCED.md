@@ -78,6 +78,22 @@ Without a pool, setup stops with instructions. For a deliberate HDD-only install
 
 After updating the image, recreate the container so added WebUI port mappings take effect.
 
+## Application ownership
+
+Keep `PUID=99` and `PGID=100` so managed applications create media as Unraid's
+`nobody:users`. The manager retains root for VPN setup and privileged helpers;
+do not set Docker's `--user` option on the whole appliance. WireGuard-isolated
+applications retain their dedicated VPN UID and share group `100` with the other
+applications. Catalog processes use umask `002` for group-writable new files.
+Existing application config, install, cache and log state is migrated to the
+configured identity at startup without recursively changing media libraries.
+
+Unraid's New Permissions tool repairs existing ownership only. If new imports
+become root-owned, check the actual application UID in `docker top
+aio-media-manager -eo pid,uid,gid,comm`; setting environment variables alone does
+not change a running process. Restart the container after updating to an image
+that applies `PUID`/`PGID` when launching applications.
+
 ??? note "For maintainers: publishing a template (not needed for installation)"
 
     ## Publish to Community Applications (public store)

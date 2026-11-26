@@ -20,6 +20,8 @@ Create the administrator account, then complete the wizard. For a small start, c
 
 Open **Catalog** at the top. The left sidebar helps you choose what to see; the apps appear on the right.
 
+When you have installed apps, Catalog opens on **My apps**. Search and sorting sit above the list. Choose **Discover** for featured apps and the full catalog.
+
 | Sidebar option | What you see |
 |---|---|
 | **Discover** | Featured apps and the complete catalog. |
@@ -36,7 +38,7 @@ Click an app’s name, icon or row to open its **app settings popup**. This does
 
 **Catalog app settings** change one app. The **Settings** page in the top navigation changes AIO itself: profile, appearance, connections, backups and updates.
 
-![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=app-store-20261102)
+![Catalog: sidebar, app rows and Open buttons](screenshots/light/catalog.png?v=liquid-glass-20261125)
 
 ## Find your way around Settings {#settings-menu}
 
@@ -44,7 +46,7 @@ The settings page uses the same sidebar-and-content layout as the catalog. On a 
 
 | What do you want to change? | Choose this page |
 |---|---|
-| Name, profile photo or password | Personal → **Profile** |
+| Name, profile photo, password or streaming subscriptions | Personal → **Profile** |
 | Language, theme or wallpaper | Personal → **Language and appearance** |
 | App dock or sign-in message | Dashboard → **Start page** |
 | Update an app | Maintenance → **Updates** |
@@ -54,7 +56,11 @@ The settings page uses the same sidebar-and-content layout as the catalog. On a 
 
 The sidebar only selects a page. Change a setting on the right and use that section’s **Save** button when shown. Arrange widgets directly on **Home**, using the four-block layout button; Start page settings control the dock and sign-in text.
 
-![Settings: grouped sidebar and search](screenshots/light/settings.png?v=app-store-20261102)
+In **Personal → Profile**, choose your streaming country and save the services you subscribe to. When a Trending title is included with one of those subscriptions in that country, its details show the matching services. Series availability can vary by season. The region and service lists come from Seerr.
+
+Open **Personal → Language and appearance** to preview the current background, theme and glass. Choose **Clear**, **Balanced** or **Tinted**. Open **Advanced** for manual glass controls and the accent for links and keyboard focus. To show a logo without a title, upload the **Logo** under **Brand name and icons**, enable **Show only the header logo**, and save. The separate **Header icon** is used next to a visible title.
+
+![Settings: grouped sidebar and search](screenshots/light/settings.png?v=liquid-glass-20261125)
 
 ## 3. Open your first app
 
@@ -96,6 +102,8 @@ For a series, use media/tv instead. After copying, open Jellyfin → Dashboard �
 [Arrange your Home widgets](index.md#app-preview){ .md-button .md-button--primary }
 
 These pictures explain the real controls. The website example uses sample data; it cannot change your actual dashboard.
+
+With multiple Jellyfin or Plex sessions, scroll or swipe sideways in **Now playing**. The calendar uses coloured markers for events. In search, choose **Request seasons** to select individual seasons. The administrator’s **Trending** filter is shared with media accounts.
 
 ### Why is a widget empty?
 

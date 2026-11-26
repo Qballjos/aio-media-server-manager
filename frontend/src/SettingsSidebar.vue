@@ -2,8 +2,12 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import UiSelect from './UiSelect.vue'
 import { filterSettingsGroups, SETTINGS_GROUPS } from './settingsNavigation.js'
-defineProps({ section: { type: String, required: true } })
+const props = defineProps({
+  section: { type: String, required: true },
+  navigation: { type: Array, default: () => SETTINGS_GROUPS },
+})
 const { t } = useI18n()
 const router = useRouter()
 const query = ref('')
@@ -18,7 +22,8 @@ onMounted(() => {
   headerObserver.observe(header)
 })
 onBeforeUnmount(() => headerObserver?.disconnect())
-const groups = computed(() => filterSettingsGroups(query.value, t))
+const groups = computed(() => filterSettingsGroups(query.value, t, props.navigation))
+const sectionOptions = computed(() => props.navigation.flatMap(group => group.items).map(item => ({ value: item.id, label: t(item.label) })))
 const paths = {
   user: 'M20 21v-2a7 7 0 0 0-14 0v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   palette: 'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7 1.5 1.5 0 0 1 1-2.8h2a4 4 0 0 0 4-4A9 9 0 0 0 12 3M7 10h.01M10 6h.01M15 6h.01M18 10h.01',
@@ -37,14 +42,16 @@ const paths = {
 </script>
 
 <template>
-  <aside class="settings-sidebar" :style="{ '--settings-header-height': `${headerHeight}px` }">
+  <aside class="settings-sidebar glass-chrome" :style="{ '--settings-header-height': `${headerHeight}px` }">
     <label class="settings-mobile-picker" for="settings-section-select">
         <span>{{ $t('Choose a settings section') }}</span>
-        <select id="settings-section-select" class="ui-input settings-mobile-select" :value="section" @change="router.push({ name: 'settings', params: { section: $event.target.value } })">
-          <optgroup v-for="group in SETTINGS_GROUPS" :key="group.label" :label="$t(group.label)">
-            <option v-for="item in group.items" :key="item.id" :value="item.id">{{ $t(item.label) }}</option>
-          </optgroup>
-        </select>
+        <UiSelect
+          id="settings-section-select"
+          :model-value="section"
+          :options="sectionOptions"
+          :aria-label="$t('Choose a settings section')"
+          @update:model-value="router.push({ name: 'settings', params: { section: $event } })"
+        />
     </label>
     <div id="settings-navigation" class="settings-navigation">
       <h2 class="settings-sidebar-title">{{ $t('Settings') }}</h2>
@@ -55,7 +62,7 @@ const paths = {
       <nav :aria-label="$t('Settings sections')">
         <div v-for="group in groups" :key="group.label" class="settings-nav-group">
           <h3>{{ $t(group.label) }}</h3>
-          <RouterLink v-for="item in group.items" :key="item.id" :to="{ name: 'settings', params: { section: item.id } }" class="settings-sidebar-link" :class="{ 'is-active': section === item.id }" :aria-current="section === item.id ? 'page' : undefined">
+          <RouterLink v-for="item in group.items" :key="item.id" :to="{ name: 'settings', params: { section: item.id } }" class="settings-sidebar-link" :class="{ 'material-selected': section === item.id }" :aria-current="section === item.id ? 'page' : undefined">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="paths[item.icon]" /></svg>
             <span>{{ $t(item.label) }}</span>
           </RouterLink>
@@ -67,7 +74,7 @@ const paths = {
 </template>
 
 <style scoped>
-.settings-sidebar { position:relative; min-width:0; padding:1.5rem .875rem; border-right:1px solid var(--border-subtle); border-radius:var(--radius-glass) 0 0 var(--radius-glass); background:var(--panel-shine); }
+.settings-sidebar { position:relative; min-width:0; padding:1.5rem .875rem; }
 .settings-navigation { position:sticky; top:calc(var(--settings-header-height, 0px) + 1rem); max-height:calc(100dvh - var(--settings-header-height, 0px) - 2rem); overscroll-behavior-y:contain; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; }
 .settings-sidebar-title { margin:0 .5rem 1rem; font-size:var(--text-title); font-weight:600; letter-spacing:-.04em; }
 .settings-search { display:flex; align-items:center; gap:.55rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:var(--radius-inset); background:var(--bg-input); color:var(--text-dim); margin-bottom:1rem; }
@@ -79,15 +86,15 @@ const paths = {
 .settings-nav-group h3 { margin:0 0 .35rem; padding:0 .65rem; color:var(--text-dim); font-size:var(--text-kicker); font-weight:400; }
 .settings-sidebar-link { display:flex; align-items:center; gap:.6rem; padding:.65rem; margin:.2rem 0; text-decoration:none; color:var(--text-muted); font-size:var(--text-body); border-radius:10px; border:1px solid transparent; transition:background .15s; }
 .settings-sidebar-link span { min-width:0; overflow-wrap:anywhere; }
-.settings-sidebar-link svg { width:1.1rem; height:1.1rem; flex-shrink:0; color:var(--color-primary-text); }
+.settings-sidebar-link svg { width:1.1rem; height:1.1rem; flex-shrink:0; color:var(--text-muted); }
 .settings-sidebar-link:hover { background:var(--bg-surface); }
-.settings-sidebar-link.is-active { background:var(--pill-active); color:var(--color-primary-text); font-weight:500; }
+.settings-sidebar-link.material-selected { font-weight:600; color:var(--text-heading); }
+.settings-sidebar-link.material-selected:hover { background:var(--material-selected); }
 .settings-search-empty { color:var(--text-muted); font-size:var(--text-body); padding:.65rem; }
 .settings-mobile-picker { display:none; }
 @media (max-width: 760px) {
-  .settings-sidebar { padding:.875rem 1rem; border-right:0; border-bottom:1px solid var(--border-subtle); border-radius:var(--radius-glass) var(--radius-glass) 0 0; }
+  .settings-sidebar { padding:.875rem 1rem; }
   .settings-mobile-picker { display:grid; gap:.5rem; color:var(--text-muted); font-size:var(--text-kicker); }
-  .settings-mobile-select { appearance:auto; min-height:44px; width:100%; border-color:var(--border-strong); border-radius:var(--radius-inset); color:var(--text-heading); }
   .settings-sidebar-title { display:none; }
   .settings-navigation { position:static; display:none; max-height:min(55dvh,28rem); margin-top:.75rem; padding: .75rem .15rem .15rem; border-top:1px solid var(--border-subtle); }
   .settings-sidebar-link, .settings-search { min-height:2.75rem; }

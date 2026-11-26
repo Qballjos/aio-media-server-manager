@@ -144,6 +144,7 @@ class GrimmoryApp(SimpleApplication):
                 "set -e",
                 f'MARIADB_DATA="{datadir}"',
                 f'MARIADB_SOCK="{socket}"',
+                f'MARIADB_PID="{self.data_dir / "mysql.pid"}"',
                 "MARIADB_PORT=3307",
                 f'JAR="{jar}"',
                 "JAVA_BIN=$(command -v java || true)",
@@ -165,9 +166,9 @@ class GrimmoryApp(SimpleApplication):
                 '    "$MYSQLD" --initialize-insecure --datadir="$MARIADB_DATA"',
                 "  fi",
                 "fi",
-                '_mariadb_up() { mariadb-admin --socket="$MARIADB_SOCK" ping >/dev/null 2>&1 || mysqladmin --socket="$MARIADB_SOCK" ping >/dev/null 2>&1; }',
+                '_mariadb_up() { mariadb-admin --user=root --socket="$MARIADB_SOCK" ping >/dev/null 2>&1 || mysqladmin --user=root --socket="$MARIADB_SOCK" ping >/dev/null 2>&1; }',
                 "if ! _mariadb_up; then",
-                '  "$MYSQLD" --user=root --datadir="$MARIADB_DATA" --socket="$MARIADB_SOCK" --port="$MARIADB_PORT" --bind-address=127.0.0.1 --expire-logs-days=0 --binlog-expire-logs-seconds=0 &',
+                '  "$MYSQLD" --datadir="$MARIADB_DATA" --socket="$MARIADB_SOCK" --pid-file="$MARIADB_PID" --port="$MARIADB_PORT" --bind-address=127.0.0.1 --expire-logs-days=0 --binlog-expire-logs-seconds=0 &',
                 "  MYSQLD_PID=$!",
                 "  trap 'kill $MYSQLD_PID 2>/dev/null || true' EXIT",
                 "  i=0",
@@ -177,7 +178,7 @@ class GrimmoryApp(SimpleApplication):
                 "    sleep 1",
                 "  done",
                 "fi",
-                'mariadb --socket="$MARIADB_SOCK" -e "CREATE DATABASE IF NOT EXISTS grimmory; CREATE USER IF NOT EXISTS \'grimmory\'@\'127.0.0.1\' IDENTIFIED BY \'grimmory\'; GRANT ALL ON grimmory.* TO \'grimmory\'@\'127.0.0.1\'; FLUSH PRIVILEGES;" >/dev/null 2>&1 || true',
+                'mariadb --user=root --socket="$MARIADB_SOCK" -e "CREATE DATABASE IF NOT EXISTS grimmory; CREATE USER IF NOT EXISTS \'grimmory\'@\'127.0.0.1\' IDENTIFIED BY \'grimmory\'; GRANT ALL ON grimmory.* TO \'grimmory\'@\'127.0.0.1\'; FLUSH PRIVILEGES;" >/dev/null 2>&1 || true',
                 'exec "$JAVA_BIN" --enable-preview --enable-native-access=ALL-UNNAMED -jar "$JAR"',
             ],
         )
@@ -201,53 +202,35 @@ class ShelfmarkApp(SimpleApplication):
     )
 
     def extra_env(self) -> dict[str, str]:
-        from applications.shelfmark_mirrors import shelfmark_download_client_env
-        from core.app_web_url import grimmory_browser_url
+        from applications.shelfmark_mirrors import _app_installed, _app_port, shelfmark_download_client_env
+        from core.vpn import TORRENT_BRIDGE_HOST, vpn_manager
 
         layout = LibraryLayout.from_settings(default_settings)
         # Ebooks and audiobooks share the same Grimmory bookdrop inbox.
         bookdrop = layout.bookdrop
         bookdrop.mkdir(parents=True, exist_ok=True)
         layout.books.mkdir(parents=True, exist_ok=True)
-        # BOOKLORE_HOST stays on loopback for Shelfmark→Grimmory API uploads.
-        # AUDIOBOOK_LIBRARY_URL is a browser nav link → prefer public Grimmory URL.
-        grimmory_port = 6060
-        try:
-            from applications.catalog import ApplicationCatalog
 
-            cat = ApplicationCatalog()
-            if cat.has("grimmory"):
-                grimmory_port = int(cat.get("grimmory").port or 6060)
-        except Exception:
-            grimmory_port = 6060
-        grimmory_lan = f"http://127.0.0.1:{grimmory_port}"
         env = {
             "FLASK_HOST": "0.0.0.0",
             "FLASK_PORT": str(self.port),
             "CONFIG_DIR": str(self.config_dir),
             "INGEST_DIR": str(bookdrop),
+            "LOG_ROOT": str(self.config_dir / "logs"),
             "DESTINATION": str(bookdrop),
             "TZ": "Etc/UTC",
-            "SEARCH_MODE": "universal",
-            "USING_EXTERNAL_BYPASSER": "true",
-            "EXT_BYPASSER_URL": "http://127.0.0.1:8191",
-            "EXT_BYPASSER_PATH": "/v1",
-            "PROWLARR_ENABLED": "true",
-            "PROWLARR_URL": "http://127.0.0.1:9696",
-            "BOOKLORE_HOST": grimmory_lan,
-            "AUDIOBOOK_LIBRARY_URL": grimmory_browser_url(port=grimmory_port),
             "PYTHONPATH": str(self.install_dir),
         }
         env.update(shelfmark_download_client_env())
-        try:
-            from core.integrations.credentials import get_application_api_key
-
-            key = get_application_api_key("prowlarr")
-            if key:
-                env["PROWLARR_API_KEY"] = key
-        except Exception:
-            pass
+        if _app_installed("grimmory"):
+            host = TORRENT_BRIDGE_HOST if vpn_manager.uses_netns_isolation() else "127.0.0.1"
+            env["BOOKLORE_HOST"] = f"http://{host}:{_app_port('grimmory', 6060)}"
         return env
+
+    def build_start_command(self, executable: Path) -> list[str]:
+        from core.vpn import vpn_manager
+
+        return vpn_manager.wrap_isolated_command(super().build_start_command(executable))
 
     def start_command(self) -> list[str]:
         ensure_shelfmark_venv(self.install_dir)

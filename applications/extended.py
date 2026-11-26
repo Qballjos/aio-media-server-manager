@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from applications.arr import ArrApplication
@@ -335,9 +336,18 @@ class NeutarrApp(SimpleApplication):
     )
 
     def extra_env(self) -> dict[str, str]:
+        stateful = self.config_dir / "stateful"
+        legacy = self.config_dir.parent / "stateful"
+        if legacy.is_dir() and not stateful.exists():
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix=".stateful-", dir=self.config_dir) as work:
+                staged = Path(work) / "stateful"
+                shutil.copytree(legacy, staged, symlinks=True)
+                staged.rename(stateful)
         return {
             "NEUTARR_CONFIG_DIR": str(self.config_dir),
             "CONFIG_DIR": str(self.config_dir),
+            "STATEFUL_DIR": str(stateful),
             "NEUTARR_PORT": str(self.port),
             "PORT": str(self.port),
             "FLASK_HOST": "0.0.0.0",

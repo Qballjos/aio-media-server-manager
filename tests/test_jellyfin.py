@@ -138,7 +138,9 @@ def test_dockerfile_installs_jellyfin_ffmpeg():
     text = dockerfile.read_text(encoding="utf-8")
     assert "jellyfin-ffmpeg7" in text
     assert "JELLYFIN_FFMPEG=/usr/lib/jellyfin-ffmpeg/ffmpeg" in text
-    assert "repo.jellyfin.org" in text
+    assert "URIs: https://repo.jellyfin.org/debian" in {
+        line.split("'")[1] for line in text.splitlines() if line.lstrip().startswith("'URIs:")
+    }
 
 
 def test_dockerfile_pins_cloudflared_version():

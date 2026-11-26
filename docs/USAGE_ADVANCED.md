@@ -22,7 +22,7 @@ Replace the IP (and port, if you changed it).
 
 1. Create the **admin** account when prompted (username, **email**, password).
 2. Finish the first-run wizard: the apps you want, a Usenet server if you use one, optional VPN, and an optional Cloudflare Tunnel. The wizard installs that selection. The tunnel and the VPN start as soon as it finishes, when you turned them on.
-3. After a container recreate, the dashboard answers while apps are still starting. With VPN on, qBittorrent, Prowlarr, and Flaresolverr wait until the WireGuard handshake is up (AIO retries the VPN if the first try fails). Cloudflare Tunnel starts last, after the apps answer, so cloudflared does not log connection refused against origins that are not listening yet.
+3. After a container recreate, the dashboard answers while apps are still starting. With VPN on, qBittorrent, Prowlarr, Flaresolverr, and Shelfmark wait until the WireGuard handshake is up (AIO retries the VPN if the first try fails). Cloudflare Tunnel starts last, after the apps answer, so cloudflared does not log connection refused against origins that are not listening yet.
 4. Wait until **Catalog** shows those apps as **running**. Use **Open** for anything that still has its own account (Plex, Jellyfin, NZBGet).
 5. Add more later from **Catalog**. You do not need every app.
 
@@ -65,9 +65,9 @@ Home is a grid. Phone, tablet, and desktop each keep their own layout (4, 8, and
 | Calendar | Upcoming episodes and movies. A season that lands on one day is one entry |
 | Downloading | Active downloads, with pause all / resume all. Stuck items can be removed |
 | Recently added | New shows and movies. Scrolling loads further Jellyfin pages. Plex stays on its latest 20 |
-| Requests | Seerr requests that are not finished, plus ones marked available or declined in the last 30 days |
-| Trending | Seerr's trending list. Scrolling keeps loading |
-| Now playing | Who is watching on Jellyfin or Plex, including direct play |
+| Requests | Seerr requests that are not finished, plus ones marked available or declined in the last 30 days. Open a pending request to approve or decline it |
+| Trending | Seerr's trending list. The administrator's All, Movies or Series selection is shared with media accounts. Scrolling keeps loading |
+| Now playing | Jellyfin and Plex sessions. Scroll or swipe sideways to see each stream |
 | Storage | Disk use for config, downloads, and media |
 | Server | CPU, memory, and network. With host `/sys` mounted at `/host/sys`, this is the server's network cards. Without that mount it is only this container's traffic |
 | Needs attention | The same checks as Settings → Notifications, with a link to fix each one |
@@ -133,6 +133,21 @@ If **Open** fails:
 
 ---
 
+## Set up Shelfmark after installation {#shelfmark-setup}
+
+1. In **Catalog**, click **Open** for Shelfmark. In Shelfmark's own **Settings**, check that the ebook destination points to the AIO downloads folder under `complete/books`. If you use Grimmory, this is its automatic import inbox. Keep it separate from the permanent books library.
+2. AIO fills in Universal Search with Open Library as the metadata provider. Check that the download source you want is available. If you use Prowlarr, test its connection and check which indexers are available. Check the selected torrent or Usenet client and its book category. AIO can prefill client settings for qBittorrent, SABnzbd or NZBGet when available.
+3. Enable authentication before sharing or publishing Shelfmark. If other users should request books for approval, configure their accounts and the request policy for each source. [Shelfmark authentication and user roles](https://github.com/calibrain/shelfmark#-authentication)
+4. Try a book you have permission to download. Check that Shelfmark finishes the download and, if using Grimmory, that the book appears in the library after import. Repeat with an audiobook if you use that workflow.
+
+### Direct downloads and mirrors
+
+AIO enables Direct Download and adds an Anna’s Archive mirror when those settings are missing. A saved choice to disable the source or leave the mirror list empty is preserved. Follow these steps if you want to use Direct Download in that case.
+
+1. In Shelfmark, open **Settings → Direct Download → Download Sources** and turn on **Enable Direct Download Source**.
+2. Open **Mirrors**, enter the base URL for your **Anna’s Archive** mirror, for example `https://annas-archive.gl`, and press Enter. Leave **Primary Mirror** set to **Auto**. With multiple mirrors, Shelfmark tries them in list order. Mirror addresses can change. [Shelfmark mirror settings](https://github.com/calibrain/shelfmark/blob/main/docs/environment-variables.md#direct-download-mirrors)
+3. Save and check that **Direct Download** appears as a source when searching for a book. Start with the default source order under **Download Sources**.
+
 ## Using the new catalog {#catalog-menu}
 
 Open **Catalog** at the top. The left sidebar helps you choose what to see; the apps appear on the right.
@@ -183,6 +198,24 @@ Current app interface with fictional example data. Light is on the left, dark on
 |---|---|
 | ![External access](screenshots/light/settings-remote.png?v=app-store-20261102) | ![External access](screenshots/dark/settings-remote.png?v=app-store-20261102) |
 
+### Users
+
+Open **Settings → Users** to select Jellyfin or Plex accounts from the server configured in Seerr. **Grant access** imports selected accounts that are new to Seerr and lets them sign in to AIO with their media account. **Revoke access** ends their AIO sessions and keeps their account and request history in Seerr.
+
+Media accounts can request films and individual series seasons from **Search** and **Trending**. Seerr applies the account's request permissions, quotas and auto-approval settings. Leave auto-approval off in Seerr for accounts whose requests should wait for review.
+
+**Newly available** uses the signed-in media account's library permissions in Jellyfin or Plex. Existing AIO media sessions created before this feature need a fresh media sign-in.
+
+**Trending** hides films and series the account can already watch in full. Pending and approved requests from any account also count. Open a series poster to request missing or incomplete seasons that have not been requested.
+
+Search and Trending show TV seasons with episodes visible to the signed-in media account. An approved series request shows as available once each requested season has a visible episode.
+
+**Calendar** shows releases already visible in the signed-in account’s Jellyfin or Plex library. It also shows upcoming Sonarr and Radarr releases when AIO can match the destination folder to a shared library and verify that no additional content restrictions apply.
+
+### Support
+
+Media accounts can file a report in **Settings → Support**, track its status and reply. The administrator’s inbox in the same section shows new reports and lets the administrator respond or mark a report in progress or resolved.
+
 ### App connections
 
 | Light | Dark |
@@ -197,15 +230,19 @@ Current app interface with fictional example data. Light is on the left, dark on
 
 ### Profile
 
+Under **Settings → Profile → Two-factor authentication**, enter your current password, scan the QR code with a TOTP authenticator (or enter the setup key), then confirm with a six-digit code. Store the one-time recovery codes somewhere safe. Subsequent manager logins require your password and an authenticator or recovery code. Enabling or disabling 2FA signs out other manager sessions. To disable it, provide your password and a valid second factor. Restoring a Manager backup also restores 2FA and recovery-code state as of the backup.
+
+To use Touch ID on a Mac, open the dashboard in Safari at its HTTPS address and go to **Settings → Profile → Passkey**. Confirm your current password and, if enabled, your second factor. Select **Add passkey** and follow the browser prompt. On the sign-in screen, choose **Sign in with a passkey**. The manager stores one passkey for that exact dashboard address. Keep your password and any 2FA recovery codes for fallback. If a reverse proxy terminates HTTPS, it must forward the public Host header.
+
 | Light | Dark |
 | --- | --- |
-| ![Settings account, light theme](screenshots/light/settings.png?v=app-store-20261102) | ![Settings account, dark theme](screenshots/dark/settings.png?v=app-store-20261102) |
+| ![Settings account, light theme](screenshots/light/settings.png?v=liquid-glass-20261125) | ![Settings account, dark theme](screenshots/dark/settings.png?v=liquid-glass-20261125) |
 
 ### Language and appearance
 
 | Light | Dark |
 | --- | --- |
-| ![Visuals, light theme](screenshots/light/settings-visuals.png?v=app-store-20261102) | ![Visuals, dark theme](screenshots/dark/settings-visuals.png?v=app-store-20261102) |
+| ![Visuals, light theme](screenshots/light/settings-visuals.png?v=liquid-glass-20261125) | ![Visuals, dark theme](screenshots/dark/settings-visuals.png?v=liquid-glass-20261125) |
 
 ### Server and storage
 
@@ -259,7 +296,7 @@ Current app interface with fictional example data. Light is on the left, dark on
 
 | Light | Dark |
 | --- | --- |
-| ![qBittorrent catalog settings, light theme](screenshots/light/catalog-settings.png?v=app-store-20261102) | ![qBittorrent catalog settings, dark theme](screenshots/dark/catalog-settings.png?v=app-store-20261102) |
+| ![qBittorrent catalog settings, light theme](screenshots/light/catalog-settings.png?v=liquid-glass-20261125) | ![qBittorrent catalog settings, dark theme](screenshots/dark/catalog-settings.png?v=liquid-glass-20261125) |
 
 ---
 
@@ -295,7 +332,7 @@ The image does not bump those apps on its own. Read release notes on GitHub if s
 | Server graph counts only this container | Mount host `/sys` read-only at `/host/sys` and recreate ([Docker](deploy/DOCKER.md)) |
 | Jellyfin recently added looks short | Scroll the rail — it loads further pages. If the rail stays empty, set a Jellyfin API key under **Settings → App connections** |
 | Plex recently added stops at 20 | That list is Plex's latest 20 |
-| qBittorrent / Prowlarr / Flaresolverr stay stopped after boot | VPN is on without a live handshake. Check **Settings → VPN**; AIO retries the tunnel and starts those apps when it is up. A manual VPN **Stop** cancels the retry |
+| qBittorrent / Prowlarr / Flaresolverr / Shelfmark stay stopped after boot | VPN is on without a live handshake. Check **Settings → VPN**; AIO retries the tunnel and starts those apps when it is up. A manual VPN **Stop** cancels the retry |
 | Prowlarr indexers unavailable / RSS failures | Often a DNS timeout through the VPN. After updating AIO, recreate the container, then **Test All** in Prowlarr (and re-test in Sonarr/Radarr) so the old failure backoff clears. A debug share shows VPN DNS cache hits and per-resolver failures |
 | cloudflared logs connection refused at boot | Expected on older images when the tunnel started before apps. Current images start Cloudflare last; recreate from a current `nightly` / `latest` |
 
@@ -311,7 +348,7 @@ The image does not bump those apps on its own. Read release notes on GitHub if s
 
 Install **Cleanuparr** from Catalog or select it in the optional wizard apps. AIO manages it as a process on Linux amd64/arm64, with port **11011** and persistent configuration under `/config/cleanuparr` (or `<AMM_CONFIG_DIR>/cleanuparr` on native Linux). Existing Compose installations must add `11011:11011` and recreate the AIO container. The test and GPU overlays inherit this mapping.
 
-Auto-Wire creates the AIO administrator in a fresh Cleanuparr installation and connects installed Sonarr, Radarr, Lidarr, qBittorrent and SABnzbd using their selected ports and credentials. NZBGet is not supported upstream. Repeated wiring updates the AIO-named connections and preserves other connections, disabled choices, cleanup rules and schedules. New setups start in **dry-run** before connections are added; AIO enables conservative Queue Cleaner and Malware Blocker checks in dry-run, but leaves completed-download cleanup and proactive searches off. Review the rules in Cleanuparr before allowing deletions, and avoid overlapping Seeker and NeutArr search schedules.
+Auto-Wire creates the AIO administrator in a fresh Cleanuparr installation and connects installed Sonarr, Radarr, Lidarr, qBittorrent and SABnzbd using their selected ports and credentials. NZBGet is not supported upstream. Repeated wiring updates the AIO-named connections and preserves other connections, disabled choices, cleanup rules and schedules. New setups use **dry-run during setup**, then disable it after all defaults are saved and verified. Queue Cleaner and Malware Blocker run live; completed-download cleanup and proactive searches stay off. Review the rules in Cleanuparr, and avoid overlapping Seeker and NeutArr search schedules.
 
 **Open UI** signs the shared administrator in on the same LAN host. Passwords and API keys remain server-side; transient login sessions are handed only to the opened Cleanuparr origin, without tokens in URLs. Public subdomains and accounts with 2FA keep their own sign-in. Authentication is never disabled. If Cleanuparr already uses a different account, complete its setup and save its API key in **Catalog → Cleanuparr → Settings**, then run Auto-Wire. AIO does not take over unrelated unfinished accounts.
 
@@ -323,7 +360,7 @@ These are conservative **AIO choices**, based on the upstream documentation, not
 
 | Setting | AIO default | Reason |
 | --- | --- | --- |
-| Dry-run | On | Review logs before allowing live changes |
+| Dry-run | Off after setup | Setup stays in dry-run until all defaults are saved and verified |
 | Internet connectivity check | On; HTTPS to GitHub and Cloudflare | Avoid queue strikes during an internet outage |
 | TLS certificate validation | Enabled | Keep HTTPS verification |
 | Queue Cleaner | Every 5 minutes | Regular checks with low overhead |
@@ -333,9 +370,10 @@ These are conservative **AIO choices**, based on the upstream documentation, not
 | Metadata / client-error / slow-download rules | Off | Avoid guessing acceptable speeds, tracker delays or disk failures |
 | Malware Blocker | Every minute; official permissive blacklist for Sonarr/Radarr | Block known unwanted patterns while allowing archives; do not apply a video list to music |
 | Malware deletion | Ignore private; do not delete a mixed torrent merely for one blocked file | Preserve tracker obligations and legitimate files |
+| Blacklist Sync | On, hourly; official permissive list | Global qBittorrent exclusions; enable “Excluded file names” in qBittorrent for filtering |
 | Download Cleaner | Off | Seeding ratios, orphaned files and deletion policies need individual choices |
 | Seeker | Reactive replacements every 10 minutes; proactive searching off | Replace removed downloads without duplicating NeutArr's library searches |
 
-Failed-import patterns: `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing`, `Unable to parse`. Temporary unpacking, disk-space and path-mapping errors are not included. The downloading-metadata rule is off because it is global rather than restricted by the public-only stall rule. No qBittorrent exclusions are changed outside Cleanuparr's dry-run control.
+Failed-import patterns: `title mismatch`, `not found in the grabbed release`, `was unexpected considering`, `No files found are eligible for import`, `not imported or missing`, `Unable to parse`. Temporary unpacking, disk-space and path-mapping errors are not included. The downloading-metadata rule is off because it is global rather than restricted by the public-only stall rule. Cleanuparr can apply qBittorrent exclusions once setup finishes. Public-tracker seeding defaults are managed through Prowlarr: ratio **1**, seed time **2880 minutes** (48 hours), pack seed time **10080 minutes** (7 days). Cleanuparr Download Cleaner stays off so it does not override that policy.
 
 Sources: [Queue Cleaner](https://cleanuparr.github.io/docs/configuration/queue-cleaner/), [Malware Blocker](https://cleanuparr.github.io/docs/configuration/malware-blocker/), [General](https://cleanuparr.github.io/docs/configuration/general/), [Seeker](https://cleanuparr.github.io/docs/configuration/seeker/). Verified API field compatibility against Cleanuparr v2.11.0; the live documentation can describe newer fields.

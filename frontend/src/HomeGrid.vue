@@ -5,10 +5,11 @@
  * resizes it and the keyboard does both. The parent saves what `change` hands it.
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { BREAKPOINTS, GRID_IDS, WIDGETS, resolve } from './homeGrid.js'
+import { BREAKPOINTS, WIDGETS, resolve } from './homeGrid.js'
 import { displayScale } from './displaySize.js'
 
 const props = defineProps({
+  widgetSpecs: { type: Object, default: () => WIDGETS },
   layout: { type: Array, required: true },
   bp: { type: String, required: true },
   editing: { type: Boolean, default: false },
@@ -40,14 +41,16 @@ const MAX_ROW = 104
 const rowCell = computed(() => Math.min(cell.value, MAX_ROW) * displayScale.value)
 const rowPitch = computed(() => rowCell.value + gap.value)
 // Render in a fixed order: a node Vue moves loses its running transition and keyboard focus.
-const shown = computed(() => [...(live.value || props.layout)].sort((a, b) => GRID_IDS.indexOf(a.id) - GRID_IDS.indexOf(b.id)))
+const widgetIds = computed(() => Object.keys(props.widgetSpecs))
+const shown = computed(() => [...(live.value || props.layout)].sort((a, b) =>
+  widgetIds.value.indexOf(a.id) - widgetIds.value.indexOf(b.id)))
 const rowCount = computed(() => shown.value.reduce((most, item) => Math.max(most, item.y + item.h), 0) + (props.editing ? 3 : 0))
 const height = computed(() => (rowCount.value ? rowCount.value * rowPitch.value - gap.value : 0))
 
 const span = (n) => n * cell.value + (n - 1) * gap.value
 const spanRows = (n) => n * rowCell.value + (n - 1) * gap.value
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value))
-const label = (id) => WIDGETS[id]?.label || id
+const label = (id) => props.widgetSpecs[id]?.label || id
 
 function box(item) {
   return { x: item.x * pitch.value, y: item.y * rowPitch.value, w: span(item.w), h: spanRows(item.h) }
@@ -174,7 +177,7 @@ function beginResize() {
 }
 
 function limits(id, x) {
-  const spec = WIDGETS[id]
+  const spec = props.widgetSpecs[id]
   const room = cols.value - x
   return {
     minW: Math.min(spec?.min[0] || 1, room),
@@ -422,7 +425,7 @@ function onKey(event, id) {
   flex-direction: column;
   min-width: 0;
   border-radius: var(--radius-glass);
-  transition: box-shadow var(--hg-duration) var(--hg-easing);
+  transition: translate var(--hg-duration) var(--hg-easing), box-shadow var(--hg-duration) var(--hg-easing);
 }
 .hg-body > :deep(*) {
   flex: 1 1 auto;
@@ -431,10 +434,22 @@ function onKey(event, id) {
 .hg.is-editing .hg-item {
   cursor: grab;
 }
-.hg.is-editing .hg-item:focus-visible {
-  outline: 2px solid var(--border-active);
-  outline-offset: 4px;
-  border-radius: var(--radius-glass);
+.hg.is-editing .hg-item:focus-visible,
+.hg-body :deep(:is(.home-rail, .np-scroll):focus-visible) {
+  outline: none;
+}
+.hg-item:focus-visible,
+.hg-item:has(:focus-visible),
+.hg-item.is-new {
+  z-index: 20;
+}
+.hg-item:focus-visible .hg-body,
+.hg-item:not([data-widget='searchbar']):has(:focus-visible) .hg-body,
+.hg-item.is-new .hg-body,
+.hg-item.is-lifted .hg-body,
+.hg-item.is-resizing .hg-body {
+  translate: 0 -3px;
+  box-shadow: 0 0 0 1px var(--glass-highlight), 0 8px 16px -8px rgb(0 0 0 / 0.45), var(--glass-shadow);
 }
 /* In edit mode a widget is something to arrange, not to use. */
 .hg.is-editing .hg-body {
@@ -452,30 +467,12 @@ function onKey(event, id) {
   z-index: 30;
   cursor: grabbing;
 }
-.hg-item.is-lifted .hg-body,
-.hg-item.is-resizing .hg-body {
-  border-radius: var(--radius-glass);
-  box-shadow: 0 0 0 1px rgba(var(--color-primary-rgb), 0.55), var(--glass-shadow);
-}
 .hg-item.is-lifted .hg-body::after,
 .hg-item.is-resizing .hg-body::after {
   background: transparent;
 }
 .hg-item.is-resizing {
   z-index: 30;
-}
-.hg-item.is-new .hg-body {
-  border-radius: var(--radius-glass);
-  animation: hg-new 1.8s ease-out;
-}
-@keyframes hg-new {
-  0%,
-  60% {
-    box-shadow: 0 0 0 2px var(--color-primary);
-  }
-  100% {
-    box-shadow: 0 0 0 2px transparent;
-  }
 }
 .hg-marker {
   position: absolute;
@@ -484,8 +481,8 @@ function onKey(event, id) {
   display: grid;
   place-items: center;
   border-radius: var(--radius-glass);
-  background: rgba(var(--color-primary-rgb), 0.08);
-  border: 1.5px solid rgba(var(--color-primary-rgb), 0.55);
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-strong);
   opacity: 0;
   pointer-events: none;
   transition: transform var(--hg-duration) var(--hg-easing), width var(--hg-duration) var(--hg-easing), height var(--hg-duration) var(--hg-easing), opacity var(--hg-duration) var(--hg-easing);
@@ -606,9 +603,6 @@ function onKey(event, id) {
   .hg-grip,
   .hg-rz {
     transition: none;
-  }
-  .hg-item.is-new .hg-body {
-    animation: none;
   }
 }
 </style>

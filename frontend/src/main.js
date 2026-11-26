@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import './style.css'
 import './dashboard.css'
+import './homeWidgets.css'
 import App from './App.vue'
 import { i18n, initLocale } from './i18n/index.js'
 import { router } from './router'

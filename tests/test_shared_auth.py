@@ -10,7 +10,6 @@ from core.integrations.local_auth import (
     patch_bazarr_auth_yaml,
     set_neutarr_login,
     set_servarr_forms_auth,
-    sha256_hex,
 )
 from core.shared_credentials import save_shared_admin_credentials, shared_admin_credentials
 from core.integrations.qbittorrent import apply_qbittorrent_webui_login, target_webui_credentials
@@ -89,7 +88,6 @@ def test_patch_bazarr_auth_yaml(tmp_path: Path):
     assert "type: form" in text
     assert "amm" in text
     assert bazarr_password_hash("SharedPass123!") in text
-    assert sha256_hex("SharedPass123!") not in text
     assert patch_bazarr_auth_yaml(config, "amm", "SharedPass123!") is False
 
 

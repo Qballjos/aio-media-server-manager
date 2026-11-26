@@ -172,7 +172,7 @@ def test_vpn_status_without_tunnel(tmp_path: Path, monkeypatch):
     status = mgr.status()
     assert status["enabled"] is True
     assert status["usenet_bypasses_vpn"] is True
-    assert status["tunneled_apps"] == ["flaresolverr", "prowlarr", "qbittorrent"]
+    assert status["tunneled_apps"] == ["flaresolverr", "prowlarr", "qbittorrent", "shelfmark"]
     assert status["unprotected_apps"] == []
     assert status["tunnel_up"] is False
     assert status["kill_switch"] is True
@@ -561,10 +561,12 @@ def test_vpn_wraps_openvpn_with_netns(tmp_path: Path, monkeypatch):
     )
     mgr = VpnManager(cfg)
     monkeypatch.setattr(mgr, "_is_linux", lambda: True)
-    monkeypatch.setattr("core.vpn.shutil.which", lambda name: "/sbin/ip" if name == "ip" else None)
+    monkeypatch.setattr("core.vpn.shutil.which", lambda name: f"/usr/bin/{name}")
     wrapped = mgr.wrap_isolated_command(["Prowlarr", "-nobrowser"])
     assert wrapped[:4] == ["ip", "netns", "exec", TORRENT_NETNS]
-    assert wrapped[-1] == "-nobrowser"
+    assert wrapped[4:] == [
+        "setpriv", "--reuid=1000", "--regid=1000", "--clear-groups", "--", "Prowlarr", "-nobrowser",
+    ]
 
 
 def test_vpn_kill_switch_blocks_tunneled_apps_when_vpn_is_on(tmp_path: Path, monkeypatch):
@@ -1049,7 +1051,7 @@ def test_vpn_webui_proxy_forwards_bytes():
     for _ in range(20):
         probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        probe.bind(("0.0.0.0", 0))
+        probe.bind(("127.0.0.1", 0))
         candidate = probe.getsockname()[1]
         probe.close()
         time.sleep(0.02)

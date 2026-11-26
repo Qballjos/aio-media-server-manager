@@ -158,7 +158,7 @@ RUN set -eux; \
 
 # Pinned so Dependabot-style bumps (see cloudflared-bump.yml) change the Dockerfile
 # digest and trigger Nightly / Docker rebuilds. Do not switch back to floating :latest.
-ARG CLOUDFLARED_VERSION=2026.11.0
+ARG CLOUDFLARED_VERSION=2026.11.2
 RUN set -eux; \
     case "${TARGETARCH:-amd64}" in \
       amd64) cfarch=amd64 ;; \

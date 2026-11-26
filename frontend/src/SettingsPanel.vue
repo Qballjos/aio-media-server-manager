@@ -1,4 +1,6 @@
 <script setup>
+import AppearancePreview from './settings/AppearancePreview.vue'
+import StreamingSettings from './settings/StreamingSettings.vue'
 import { useI18n } from 'vue-i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -6,7 +8,11 @@ import { resolveSettingsSection, SETTINGS_PAGES } from './settingsNavigation.js'
 import SettingsSidebar from './SettingsSidebar.vue'
 import IntegrationCheck from './IntegrationCheck.vue'
 import BackupSettings from './settings/BackupSettings.vue'
+import TwoFactorSettings from './settings/TwoFactorSettings.vue'
+import PasskeySettings from './settings/PasskeySettings.vue'
 import { useBackups } from './composables/useBackups.js'
+import SupportSettings from './settings/SupportSettings.vue'
+import MediaUsersSettings from './settings/MediaUsersSettings.vue'
 import NotificationSettings from './settings/NotificationSettings.vue'
 import PreflightReview from './PreflightReview.vue'
 const { t } = useI18n()
@@ -80,6 +86,7 @@ const errors = ref([])
 const copied = ref(false)
 const passwordForm = ref({ current_password: '', new_password: '', confirm_password: '' })
 const passwordSaving = ref(false)
+const passkeyRevision = ref(0)
 const form = ref({
   username: '',
   first_name: '',
@@ -113,6 +120,7 @@ const form = ref({
   update_weekday: 0,
   update_day_of_month: 1,
   brand_title: 'AIO Media Server Manager',
+  header_logo_only: false,
   accent_color: DEFAULT_ACCENT,
   login_message: '',
 })
@@ -262,17 +270,20 @@ const customArt = computed(() =>
 
 // Sliders: transparency is shown the way people think of it (more = clearer), stored as alpha.
 const GLASS_SLIDERS = [
-  { key: 'alpha', label: 'Transparency', hint: 'How much of the wallpaper shows through a panel.', min: 1 - GLASS_RANGES.alpha[1], max: 1 - GLASS_RANGES.alpha[0], step: 0.01, get: () => 1 - glass.value.alpha, set: (v) => ({ alpha: 1 - v }), fmt: (v) => `${Math.round(v * 100)}%` },
+  { key: 'alpha', label: 'Transparency', hint: 'How much of the wallpaper shows through the glass controls.', min: 1 - GLASS_RANGES.alpha[1], max: 1 - GLASS_RANGES.alpha[0], step: 0.01, get: () => 1 - glass.value.alpha, set: (v) => ({ alpha: 1 - v }), fmt: (v) => `${Math.round(v * 100)}%` },
   { key: 'blur', label: 'Blur', hint: 'How soft the wallpaper is behind the glass.', min: GLASS_RANGES.blur[0], max: GLASS_RANGES.blur[1], step: 1, get: () => glass.value.blur, set: (v) => ({ blur: v }), fmt: (v) => `${Math.round(v)} px` },
   { key: 'depth', label: 'Depth', hint: 'Parallax and shadow strength; 0 keeps the wallpaper still.', min: GLASS_RANGES.depth[0], max: GLASS_RANGES.depth[1], step: 0.05, get: () => glass.value.depth, set: (v) => ({ depth: v }), fmt: (v) => `${Number(v).toFixed(2)}×` },
   { key: 'wallpaperBlur', label: 'Wallpaper blur', hint: 'How much a photo wallpaper is softened; 0 shows it sharp. Drawn wallpapers stay crisp.', min: GLASS_RANGES.wallpaperBlur[0], max: GLASS_RANGES.wallpaperBlur[1], step: 1, get: () => glass.value.wallpaperBlur, set: (v) => ({ wallpaperBlur: v }), fmt: (v) => `${Math.round(v)} px` },
 ]
 let glassTimer = 0
 function tuneGlass(row, value) {
-  applyGlass(row.set(Number(value)))
+  chooseGlass(row.set(Number(value)))
+}
+function chooseGlass(values) {
+  applyGlass(values)
   clearTimeout(glassTimer)
   // The browser applies and remembers the values at once; the profile write is best-effort.
-  glassTimer = setTimeout(() => saveGlassToProfile(glass.value).catch(() => {}), 500)
+  glassTimer = setTimeout(() => saveGlassToProfile(glass.value).catch(() => { error.value = t('Could not save visual preferences.') }), 500)
 }
 function resetGlass() {
   clearTimeout(glassTimer)
@@ -321,6 +332,7 @@ function applyBrandingPayload(data) {
     slots: payload.slots || {},
   }
   form.value.brand_title = branding.value.title
+  form.value.header_logo_only = payload.header_logo_only === true
   form.value.accent_color = branding.value.accent_color
   form.value.login_message = payload.login_message || ''
   applyBranding(payload)
@@ -365,7 +377,7 @@ async function saveBrandTitle() {
   try {
     const res = await apiRequest('/api/branding', {
       method: 'PATCH',
-      body: JSON.stringify({ title: form.value.brand_title }),
+      body: JSON.stringify({ title: form.value.brand_title, header_logo_only: form.value.header_logo_only }),
     })
     const data = await readJson(res)
     if (!res.ok) {
@@ -1460,9 +1472,9 @@ onBeforeUnmount(() => {
 
 <template>
   <PreflightReview ref="preflightReview" />
-  <section class="settings-page glass-card animate-fade" :aria-label="$t('Settings')">
+  <section class="settings-page animate-fade" :aria-label="$t('Settings')">
     <SettingsSidebar :section="section" />
-    <div class="settings-content">
+    <div class="settings-content material-content">
       <header class="settings-header">
         <h2 class="section-title">{{ $t(currentPage.label) }}</h2>
         <p class="section-subtitle">{{ $t(currentPage.description) }}</p>
@@ -1473,6 +1485,27 @@ onBeforeUnmount(() => {
       </div>
 
     <template v-if="section === 'visuals'">
+      <AppearancePreview @select-glass="chooseGlass" />
+      <div class="glass-card settings-card">
+        <div class="settings-card-head">
+          <span class="accent-badge">{{ $t('THEME') }}</span>
+          <h3>{{ $t('Color mode') }}</h3>
+          <p>{{ $t('Dark, light, or follow the system preference. Saved on your profile for every browser on this appliance.') }}</p>
+        </div>
+        <div class="theme-picker" role="group" :aria-label="$t('Color theme')">
+          <button
+            v-for="item in THEME_OPTIONS"
+            :key="item[0]"
+            type="button"
+            class="theme-option"
+            :class="{ 'is-active': themePreference === item[0] }"
+            :aria-pressed="themePreference === item[0]"
+            @click="chooseTheme(item[0])"
+          >
+            {{ $t(item[1]) }}
+          </button>
+        </div>
+      </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <span class="accent-badge">{{ $t('LANGUAGE') }}</span>
@@ -1516,81 +1549,31 @@ onBeforeUnmount(() => {
               :aria-label="wallpaperImage ? $t('Use your own image') : $t('Upload your own image')"
               @click="wallpaperImage ? chooseWallpaper('personal') : wallpaperFileInput?.click()"
             >
-              <span v-if="!wallpaperImage" class="theme-card-empty">{{ $t('+ Upload an image') }}</span>
+              <span v-if="!wallpaperImage" class="theme-card-empty">{{ wallpaperBusy ? $t('Saving…') : $t('+ Upload an image') }}</span>
               <span v-else class="theme-card-dots" aria-hidden="true">
                 <span v-for="(dot, idx) in [form.accent_color, '#121628', '#ffffff', '#f59e0b']" :key="idx" :style="{ background: dot }"></span>
               </span>
             </button>
             <span class="theme-card-name">{{ $t('Your own') }}</span>
-            <span class="theme-card-actions">
-              <label class="ui-btn ui-btn-ghost wallpaper-file-btn" :aria-disabled="wallpaperBusy">
-                {{ wallpaperBusy ? $t('Saving…') : (wallpaperImage ? $t('Replace') : $t('Upload')) }}
-                <input
-                  ref="wallpaperFileInput"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  :disabled="wallpaperBusy"
-                  @change="onWallpaperFileChange"
-                />
-              </label>
-              <button v-if="wallpaperImage" type="button" class="ui-btn ui-btn-ghost" :disabled="wallpaperBusy" @click="removeWallpaperImage">{{ $t('Remove') }}</button>
+            <input
+              ref="wallpaperFileInput"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              :disabled="wallpaperBusy"
+              hidden
+              @change="onWallpaperFileChange"
+            />
+            <span v-if="wallpaperImage" class="theme-card-actions">
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="wallpaperBusy" @click="wallpaperFileInput?.click()">
+                {{ wallpaperBusy ? $t('Saving…') : $t('Replace') }}
+              </button>
+              <button type="button" class="ui-btn ui-btn-ghost" :disabled="wallpaperBusy" @click="removeWallpaperImage">{{ $t('Remove') }}</button>
             </span>
           </div>
         </div>
         <button type="button" class="ui-btn ui-btn-ghost theme-gallery-more" :aria-expanded="themesExpanded" @click="themesExpanded = !themesExpanded">
           {{ themesExpanded ? $t('Show fewer themes') : $t('Show all {count} themes', { count: THEMES.length }) }}
         </button>
-        <div class="theme-accent">
-          <div class="theme-accent-copy">
-            <strong>{{ $t('Accent colour') }}</strong>
-            <span>{{ $t('Buttons, switches and active states — part of your own theme, saved for every browser on this appliance.') }}</span>
-          </div>
-          <div class="accent-presets" role="group" :aria-label="$t('Accent presets')">
-            <button
-              v-for="item in ACCENT_PRESETS"
-              :key="item[0]"
-              type="button"
-              class="accent-preset"
-              :class="{ 'is-active': form.accent_color === item[0] }"
-              :style="{ '--preset': item[0] }"
-              :title="$t(item[1])"
-              :aria-label="$t(item[1])"
-              @click="saveAccentColor(item[0])"
-            ></button>
-          </div>
-          <div class="accent-picker">
-            <label class="accent-swatch-input" :title="$t('Pick a color')">
-              <input v-model="form.accent_color" type="color" @change="saveAccentColor(form.accent_color)" />
-            </label>
-            <label class="ui-field accent-hex-field">Hex
-              <input v-model="form.accent_color" class="ui-input font-mono" maxlength="7" placeholder="#0a6cff" @change="saveAccentColor(form.accent_color)" />
-            </label>
-            <button type="button" class="ui-btn ui-btn-primary" :disabled="saving" @click="saveAccentColor(form.accent_color)">
-              {{ saving ? $t('Saving…') : $t('Save accent') }}
-            </button>
-            <button v-if="branding.accent_custom" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="resetAccentColor">{{ $t('Reset') }}</button>
-          </div>
-        </div>
-      </div>
-      <div class="glass-card settings-card">
-        <div class="settings-card-head">
-          <span class="accent-badge">{{ $t('THEME') }}</span>
-          <h3>{{ $t('Color mode') }}</h3>
-          <p>{{ $t('Dark, light, or follow the system preference. Saved on your profile for every browser on this appliance.') }}</p>
-        </div>
-        <div class="theme-picker" role="group" :aria-label="$t('Color theme')">
-          <button
-            v-for="item in THEME_OPTIONS"
-            :key="item[0]"
-            type="button"
-            class="theme-option"
-            :class="{ 'is-active': themePreference === item[0] }"
-            :aria-pressed="themePreference === item[0]"
-            @click="chooseTheme(item[0])"
-          >
-            {{ $t(item[1]) }}
-          </button>
-        </div>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
@@ -1614,26 +1597,61 @@ onBeforeUnmount(() => {
           <h3>{{ $t('Background and transparency') }}</h3>
           <p>{{ $t('How clear, how soft and how deep the panels feel. Changes show as you drag and are saved on your profile.') }}</p>
         </div>
-        <div class="glass-sliders">
-          <label v-for="row in GLASS_SLIDERS" :key="row.key" class="glass-slider">
-            <span class="glass-slider-head">
-              <span>{{ $t(row.label) }}</span>
-              <output class="font-mono">{{ row.fmt(row.get()) }}</output>
-            </span>
-            <input
-              type="range"
-              :min="row.min"
-              :max="row.max"
-              :step="row.step"
-              :value="row.get()"
-              @input="tuneGlass(row, $event.target.value)"
-            />
-            <span class="glass-slider-hint">{{ $t(row.hint) }}</span>
-          </label>
-        </div>
-        <div class="wallpaper-personal-actions">
-          <button type="button" class="ui-btn ui-btn-ghost" @click="resetGlass">{{ $t('Reset to defaults') }}</button>
-        </div>
+        <details>
+          <summary>{{ $t('Advanced') }}</summary>
+          <div class="glass-sliders">
+            <label v-for="row in GLASS_SLIDERS" :key="row.key" class="glass-slider">
+              <span class="glass-slider-head">
+                <span>{{ $t(row.label) }}</span>
+                <output class="font-mono">{{ row.fmt(row.get()) }}</output>
+              </span>
+              <input
+                type="range"
+                :min="row.min"
+                :max="row.max"
+                :step="row.step"
+                :value="row.get()"
+                @input="tuneGlass(row, $event.target.value)"
+              />
+              <span class="glass-slider-hint">{{ $t(row.hint) }}</span>
+            </label>
+          </div>
+          <div class="wallpaper-personal-actions">
+            <button type="button" class="ui-btn ui-btn-ghost" @click="resetGlass">{{ $t('Reset to defaults') }}</button>
+          </div>
+          <div class="theme-accent">
+            <div class="theme-accent-copy">
+              <strong>{{ $t('Accent colour') }}</strong>
+              <span>{{ $t('Used for links and keyboard focus.') }}</span>
+            </div>
+            <div class="accent-presets" role="group" :aria-label="$t('Accent presets')">
+              <button
+                v-for="item in ACCENT_PRESETS"
+                :key="item[0]"
+                type="button"
+                class="accent-preset"
+                :class="{ 'is-active': form.accent_color === item[0] }"
+                :style="{ '--preset': item[0] }"
+                :aria-pressed="form.accent_color === item[0]"
+                :title="$t(item[1])"
+                :aria-label="$t(item[1])"
+                @click="saveAccentColor(item[0])"
+              ></button>
+            </div>
+            <div class="accent-picker">
+              <label class="accent-swatch-input" :title="$t('Pick a color')">
+                <input v-model="form.accent_color" type="color" @change="saveAccentColor(form.accent_color)" />
+              </label>
+              <label class="ui-field accent-hex-field">Hex
+                <input v-model="form.accent_color" class="ui-input font-mono" maxlength="7" placeholder="#0a6cff" @change="saveAccentColor(form.accent_color)" />
+              </label>
+              <button type="button" class="ui-btn ui-btn-primary" :disabled="saving" @click="saveAccentColor(form.accent_color)">
+                {{ saving ? $t('Saving…') : $t('Save accent') }}
+              </button>
+              <button v-if="branding.accent_custom" type="button" class="ui-btn ui-btn-ghost" :disabled="saving" @click="resetAccentColor">{{ $t('Reset') }}</button>
+            </div>
+          </div>
+        </details>
       </div>
       <div class="glass-card settings-card">
         <div class="settings-card-head">
@@ -1651,8 +1669,18 @@ onBeforeUnmount(() => {
               placeholder="AIO Media Server Manager"
             />
           </label>
+          <div class="ui-switch-row">
+            <div class="ui-switch-copy">
+              <strong id="header-logo-only-label">{{ $t('Show only the header logo') }}</strong>
+              <span id="header-logo-only-help">{{ $t('Uses the image uploaded under Logo.') }}</span>
+            </div>
+            <button type="button" class="ui-switch" role="switch" aria-labelledby="header-logo-only-label" aria-describedby="header-logo-only-help"
+              :aria-checked="form.header_logo_only" @click="form.header_logo_only = !form.header_logo_only">
+              <span class="ui-switch-thumb"></span>
+            </button>
+          </div>
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="saving">
-            {{ saving ? $t('Saving…') : $t('Save title') }}
+            {{ saving ? $t('Saving…') : $t('Save header') }}
           </button>
         </form>
         <div class="brand-asset-list">
@@ -1777,6 +1805,9 @@ onBeforeUnmount(() => {
           <button type="submit" class="ui-btn ui-btn-primary" :disabled="passwordSaving">{{ passwordSaving ? $t('Saving…') : $t('Change password') }}</button>
         </form>
       </div>
+      <StreamingSettings scope="admin" />
+      <TwoFactorSettings @changed="passkeyRevision++" />
+      <PasskeySettings :key="passkeyRevision" />
     </template>
 
     <template v-else-if="section === 'system'">
@@ -2021,7 +2052,7 @@ onBeforeUnmount(() => {
       <div class="glass-card settings-card">
         <div class="settings-card-head">
           <h3>{{ $t('VPN') }}</h3>
-          <p>{{ $t('qBittorrent, Prowlarr, and Flaresolverr. Usenet always bypasses the tunnel.') }}</p>
+          <p>{{ $t('qBittorrent, Prowlarr, Flaresolverr, and Shelfmark. Usenet always bypasses the tunnel.') }}</p>
         </div>
         <p class="share-meta">{{ vpnLive.enabled ? $t("VPN is on") : $t("VPN is off") }}{{ vpnLive.provider ? ` · ${vpnLive.provider}` : '' }}{{ vpnLive.protocol ? ` · ${vpnLive.protocol}` : '' }}</p>
         <div class="setting-status">
@@ -2054,7 +2085,7 @@ onBeforeUnmount(() => {
           <div class="ui-switch-row">
             <div class="ui-switch-copy">
               <strong>{{ $t('Enable VPN') }}</strong>
-              <span>{{ $t('On: kill switch — qBittorrent, Prowlarr, and Flaresolverr only run when the tunnel is up. Off: those apps can start on the house network. Use Start / Stop / Restart for the tunnel.') }}</span>
+              <span>{{ $t('On: kill switch — qBittorrent, Prowlarr, Flaresolverr, and Shelfmark only run when the tunnel is up. Off: those apps can start on the house network. Use Start / Stop / Restart for the tunnel.') }}</span>
             </div>
             <button
               type="button"
@@ -2313,6 +2344,10 @@ onBeforeUnmount(() => {
         </form>
       </div>
     </template>
+
+    <SupportSettings v-else-if="section === 'support'" administrator />
+
+    <MediaUsersSettings v-else-if="section === 'users'" />
 
     <NotificationSettings v-else-if="section === 'notifications'" />
 

@@ -103,7 +103,10 @@ export async function apiRequest(endpoint, options = {}) {
     credentials: 'include',
   })
 
-  if (response.status === 401 && onUnauthorized) onUnauthorized()
+  // A request sent before credential rotation may finish after a new session starts.
+  if (response.status === 401 && onUnauthorized && token === getAuthToken() && csrf === getCsrfToken()) {
+    onUnauthorized()
+  }
   return response
 }
 

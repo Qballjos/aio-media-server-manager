@@ -102,14 +102,14 @@ Als `/dev/dri` bestaat, voeg dit blok toe onder `aio-media-manager` in het proje
 ls -l /dev/dri
 ```
 
-## VPN (qBittorrent, Prowlarr, Flaresolverr)
+## VPN (qBittorrent, Prowlarr, Flaresolverr, Shelfmark)
 
 ```bash
 sudo mkdir -p /volume1/docker/aio-media-manager/config/vpn
 # scp wg0.conf into that directory
 ```
 
-Zet `AMM_VPN_ENABLED=true` in het project-compose en start het project opnieuw. Zolang de VPN aan staat, kunnen Prowlarr, qBittorrent en Flaresolverr het huis-WAN niet gebruiken: ze gaan alleen via de tunnel naar buiten. Is de tunnel bij boot down, dan wachten ze; AIO probeert de VPN opnieuw en start ze als de handshake terug is. Een lokale DNS-cache voor die apps (gebonden aan de tunnel) vermindert indexer-fouten door korte DNS-timeouts. De kernel van Synology heeft vaak geen WireGuard-module; de appliance-image bevat **wireguard-go** als terugval en maakt `/dev/net/tun` aan als die ontbreekt. Dat werkt alleen als het project `privileged: true` blijft (het installatiescript zet dat). Maak de container opnieuw aan nadat je een actuele image hebt opgehaald, en sla de VPN daarna op bij **Instellingen → VPN**. OpenVPN gebruikt dezelfde device-node en heeft ook privileged mode nodig. Op DSM kan Synology-ACL de VPN-app-uid (910) na `chown` blokkeren; als die apps hun configmap niet kunnen schrijven, wis de ACL op het hostpad zoals de logs beschrijven.
+Zet `AMM_VPN_ENABLED=true` in het project-compose en start het project opnieuw. Zolang de VPN aan staat, kunnen Prowlarr, qBittorrent, Flaresolverr en Shelfmark het huis-WAN niet gebruiken: ze gaan alleen via de tunnel naar buiten. Is de tunnel bij boot down, dan wachten ze; AIO probeert de VPN opnieuw en start ze als de handshake terug is. Een lokale DNS-cache voor die apps (gebonden aan de tunnel) vermindert indexer-fouten door korte DNS-timeouts. De kernel van Synology heeft vaak geen WireGuard-module; de appliance-image bevat **wireguard-go** als terugval en maakt `/dev/net/tun` aan als die ontbreekt. Dat werkt alleen als het project `privileged: true` blijft (het installatiescript zet dat). Maak de container opnieuw aan nadat je een actuele image hebt opgehaald, en sla de VPN daarna op bij **Instellingen → VPN**. OpenVPN gebruikt dezelfde device-node en heeft ook privileged mode nodig. Op DSM kan Synology-ACL de VPN-app-uid (910) na `chown` blokkeren; als die apps hun configmap niet kunnen schrijven, wis de ACL op het hostpad zoals de logs beschrijven.
 
 ## Cloudflare Tunnel
 

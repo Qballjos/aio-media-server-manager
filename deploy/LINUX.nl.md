@@ -89,7 +89,7 @@ Installeer alleen wat je gaat draaien. Op ARM64 sla je Chromium over — Flareso
 | Node.js 22 | Seerr |
 | JRE 25, `mariadb-server` | Grimmory |
 | `chromium`, `xvfb`, `fonts-liberation` | Flaresolverr (alleen x86_64) |
-| `iproute2`, `openvpn`, `wireguard-tools` | Optionele VPN (qBittorrent, Prowlarr, Flaresolverr) |
+| `iproute2`, `openvpn`, `wireguard-tools` | Optionele VPN (qBittorrent, Prowlarr, Flaresolverr, Shelfmark) |
 
 ## Servicebestand
 

@@ -25,9 +25,14 @@ from api.routers import health as health_router
 from api.routers import homepage as homepage_router
 from api.routers import integrations as integrations_router
 from api.routers import logs as logs_router
+from api.routers import media_discovery as media_discovery_router
+from api.routers import streaming as streaming_router
+from api.routers import media_login as media_login_router
+from api.routers import media_users as media_users_router
 from api.routers import notifications as notifications_router
 from api.routers import recyclarr as recyclarr_router
 from api.routers import settings as settings_router
+from api.routers import support as support_router
 from api.routers import system as system_router
 from api.routers import updates as updates_router
 from api.routers import usenet as usenet_router
@@ -235,6 +240,11 @@ def create_app() -> FastAPI:
     app.include_router(logs_router.router)
     app.include_router(system_router.router)
     app.include_router(settings_router.router)
+    app.include_router(support_router.router)
+    app.include_router(media_users_router.router)
+    app.include_router(media_login_router.router)
+    app.include_router(media_discovery_router.router)
+    app.include_router(streaming_router.router)
     app.include_router(branding_router.router)
     app.include_router(updates_router.router)
     app.include_router(usenet_router.router)
