@@ -193,7 +193,7 @@ class DiagnosticsStore:
             "process_logs": logs,
             "storage": settings.as_serialisable_dict(),
             "library": LibraryLayout.from_settings(settings).as_dict(),
-            "errors": self.recent_errors(100),
+            "errors": [{key: value for key, value in item.items() if key != "traceback"} for item in self.recent_errors(100)],
             "recyclarr": self._recyclarr_debug(),
             "vpn": self._vpn_debug(),
         }
@@ -252,8 +252,6 @@ class DiagnosticsStore:
         error_blocks = []
         for item in errors[-40:]:
             body = f"{item.get('timestamp')}  {item.get('level')}  {item.get('source')}\n{item.get('message')}"
-            if item.get("traceback"):
-                body += "\n" + item["traceback"]
             error_blocks.append(_pre(body))
 
         app_rows = "".join(

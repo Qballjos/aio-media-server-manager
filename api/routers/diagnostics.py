@@ -67,6 +67,7 @@ async def public_debug_report(
     if not diagnostics.validate_token(token):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown or expired debug link.")
     report = diagnostics.build_report()
+    headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
     if (format or "").lower() == "json":
-        return JSONResponse(report)
-    return HTMLResponse(diagnostics.render_html(report))
+        return JSONResponse(report, headers=headers)
+    return HTMLResponse(diagnostics.render_html(report), headers=headers)

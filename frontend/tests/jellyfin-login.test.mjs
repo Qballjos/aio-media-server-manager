@@ -70,7 +70,7 @@ test('Jellyfin helper keeps secrets local, validates its opener and preserves ot
   assert.equal(servers[0].AccessToken, 'keep')
   assert.equal(servers[1].AccessToken, 'browser-only-token')
   assert.equal(servers[1].ManualAddress, 'http://localhost:8096')
-  assert.equal(env.redirect, 'index.html')
+  assert.equal(env.redirect, 'http://localhost:8096/web/index.html')
   assert.equal(env.window.opener, null)
   assert.equal(env.listeners.size, 0)
   assert.equal(env.timers.size, 0)
@@ -151,14 +151,14 @@ async function signIn(options) {
 
 test('Jellyfin helper returns to the requested Jellyfin page after sign-in', async () => {
   const { env } = await signIn({ next: '/web/#/details?id=abc' })
-  assert.equal(env.redirect, '/web/#/details?id=abc')
+  assert.equal(env.redirect, 'http://localhost:8096/web/#/details?id=abc')
   assert.equal(env.clearedPath, '/web/aio-login.html')
 })
 
 test('Jellyfin helper ignores a next target outside its own web app', async () => {
-  for (const next of ['https://evil.test/x', '//evil.test/x', '/other/page', 'index.html']) {
+  for (const next of ['https://evil.test/x', '//evil.test/x', '/other/page', '/web/../other/page', 'index.html']) {
     const { env } = await signIn({ next })
-    assert.equal(env.redirect, 'index.html', next)
+    assert.equal(env.redirect, 'http://localhost:8096/web/index.html', next)
   }
 })
 

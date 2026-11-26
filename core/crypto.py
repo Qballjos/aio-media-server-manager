@@ -180,7 +180,7 @@ class SecretStore:
             data = self._load_raw()
             data[name] = encrypted_val
             self._save_raw(data)
-        logger.debug("Saved encrypted secret '%s'", name)
+        logger.debug("Saved an encrypted secret")
 
     def get_secret(self, name: str, default: Optional[str] = None) -> Optional[str]:
         """Retrieve and decrypt a named secret."""

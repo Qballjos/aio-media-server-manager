@@ -43,7 +43,7 @@ def test_debug_share_url_is_token_gated(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(settings, "media_dir", tmp_path / "media")
     monkeypatch.setattr(settings, "cache_dir", tmp_path / "cache")
     diagnostics.revoke_share()
-    diagnostics.record_error("unit", "example failure for debug share")
+    diagnostics.record_error("unit", "example failure for debug share", traceback_text="internal stack frame")
     client = TestClient(create_app())
 
     missing = client.get("/debug/not-a-real-token")
@@ -60,12 +60,17 @@ def test_debug_share_url_is_token_gated(tmp_path: Path, monkeypatch):
     assert html.status_code == 200
     assert b"example failure for debug share" in html.content
     assert b"AIO Media Manager debug report" in html.content
+    assert b"internal stack frame" not in html.content
+    assert "no-store" in html.headers["cache-control"]
+    assert html.headers["referrer-policy"] == "no-referrer"
 
     as_json = client.get(f"/debug/{token}", params={"format": "json"})
     assert as_json.status_code == 200
     body = as_json.json()
     assert body["catalog"]["counts"]["catalog"] >= 7
     assert any("example failure" in item["message"] for item in body["errors"])
+    assert all("traceback" not in item for item in body["errors"])
+    assert "no-store" in as_json.headers["cache-control"]
     assert "recyclarr" in body
     assert body["recyclarr"].get("daemon") is False
     assert "vpn" in body

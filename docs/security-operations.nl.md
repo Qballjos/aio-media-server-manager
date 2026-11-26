@@ -42,8 +42,9 @@ manager ze opnieuw configureert. De inhoud wordt hiermee niet versleuteld.
 Bescherm ook het configuratievolume en de back-ups daarvan.
 
 Bij fouten in back-ups en applicatie-instellingen geeft de API veilige uitleg
-in plaats van ongecontroleerde foutdetails. Bewuste debugrapporten achter een
-toegangstoken behouden hun eigen diagnose- en afschermingsgedrag.
+in plaats van ongecontroleerde foutdetails. Debugrapporten achter een toegangstoken bevatten afgeschermde
+foutmeldingen. Stacktraces blijven buiten het gedeelde rapport. De browser krijgt
+de instructie om het rapport niet te cachen en de URL niet als referrer te sturen.
 
 ## Back-ups herstellen zonder werkend account
 

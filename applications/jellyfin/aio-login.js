@@ -1,9 +1,17 @@
 (async () => {
   const opener = window.opener
   const originFragment = location.hash.slice(1)
-  // Where to land after sign-in: only a page inside this web app, never another site.
+  const webRoot = new URL('./', location.href)
   const requested = new URL(location.href).searchParams.get('next') || ''
-  const next = /^\/web\//.test(requested) && !/^\/\//.test(requested) ? requested : 'index.html'
+  let destination = new URL('index.html', webRoot)
+  if (requested.startsWith(webRoot.pathname)) {
+    try {
+      const target = new URL(requested, webRoot)
+      if (target.origin === webRoot.origin && target.pathname.startsWith(webRoot.pathname)) destination = target
+    } catch (_) {
+      // Malformed destinations use Jellyfin's start page.
+    }
+  }
   history.replaceState(null, '', location.pathname)
   const server = new URL('../', location.href)
   let managerOrigin
@@ -65,7 +73,7 @@
       localStorage.setItem('jellyfin_credentials', JSON.stringify(credentials))
       localStorage.setItem('enableAutoLogin', 'true')
       cleanup()
-      location.replace(next)
+      location.replace(destination.href)
     } catch (_) {
       fail('Automatic sign-in failed. Continue to Jellyfin to sign in manually.')
     }
