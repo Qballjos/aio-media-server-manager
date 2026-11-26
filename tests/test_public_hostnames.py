@@ -133,9 +133,7 @@ def test_merge_ingress_keeps_unrelated():
         managed_hostnames={"sonarr.example.com", "tv.example.com"},
     )
     hosts = [r.get("hostname") for r in merged if r.get("hostname")]
-    assert "other.example.com" in hosts
-    assert "tv.example.com" in hosts
-    assert "sonarr.example.com" not in hosts
+    assert hosts == ["other.example.com", "tv.example.com"]
     assert merged[-1]["service"] == "http_status:404"
 
 
@@ -162,10 +160,7 @@ def test_managed_hostnames_do_not_claim_never_published_defaults():
         "radarr": {"subdomain": "radarr", "enabled": False},
     }
     managed = managed_hostnames_for_publish(routes, stored=stored)
-    assert "tv.example.com" in managed
-    assert "sonarr.example.com" in managed  # rename cleanup
-    assert "media.example.com" not in managed
-    assert "radarr.example.com" not in managed
+    assert managed == {"tv.example.com", "sonarr.example.com"}  # Includes the old name for rename cleanup.
 
 
 def test_mark_published_and_preserve_on_save(tmp_path: Path):

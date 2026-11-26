@@ -524,6 +524,23 @@ def test_support_reports_are_private_and_reach_admin(client):
     assert thread["replies"][0]["message"] == "Please retry."
 
 
+def test_cloudflare_hostname_status_uses_safe_tunnel_error(client, monkeypatch):
+    from api.routers import cloudflare_hostnames
+
+    def invalid_token():
+        raise cloudflare_hostnames.CloudflareApiError("internal connector decoding detail")
+
+    auth_manager.create_admin("admin", "StrongPassword123!")
+    headers = {"Authorization": f"Bearer {auth_manager.issue_token('admin')}"}
+    monkeypatch.setattr(cloudflare_hostnames, "decode_tunnel_token", invalid_token)
+
+    response = client.get("/api/cloudflare/hostnames", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["tunnel_decode_error"] == "Save a valid Cloudflare Tunnel connector token to load tunnel details."
+    assert "internal connector decoding detail" not in response.text
+
+
 def test_member_discovery_uses_shared_filter_and_hides_library_status(client, monkeypatch):
     from api.routers import media_discovery
 

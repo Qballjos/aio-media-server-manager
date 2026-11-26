@@ -22,7 +22,12 @@ Uploaded and pasted VPN profiles may only be written inside `AMM_CONFIG_DIR/vpn`
 Absolute paths outside that directory, parent traversal and symlink escapes are
 rejected before filesystem changes. Profiles are replaced atomically using private
 files with mode `0600`. Existing external profiles can still be selected using
-`AMM_VPN_CONFIG` or the Settings path field, but uploads cannot overwrite them.
+`AMM_VPN_CONFIG` or the Settings path field, but uploads cannot overwrite them. The path setting is an administrator control.
+Keep local writes to the configuration volume restricted to trusted operators.
+
+The VPN WebUI proxy listens on the container's interfaces so published app ports
+work on Docker and NAS deployments. Published ports and host firewall rules
+determine who can reach those interfaces.
 
 ## Child-application credential files
 
@@ -31,7 +36,9 @@ applications. Manager writes use private temporary files and atomic replacement
 with mode `0600`, preserving existing file ownership. SABnzbd startup retains
 PUID/PGID ownership and owner-only file access. Existing files are tightened when
 the manager next configures them; this does not encrypt credentials inside those
-child-application files. Keep the configuration volume and its backups private.
+child-application files. Keep the configuration volume and its backups private. Bazarr requires its
+upstream MD5 password representation. The manager writes that configuration
+with the same private and atomic file handling.
 
 Backup failures and application-settings failures return safe guidance rather
 than uncontrolled exception text. Only an authenticated administrator can create or revoke a shared debug link. Token-protected reports include redacted error summaries. Stack traces

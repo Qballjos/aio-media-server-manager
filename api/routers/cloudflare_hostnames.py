@@ -111,8 +111,8 @@ async def list_hostnames(request: Request) -> dict[str, Any]:
     tunnel_decode_error = ""
     try:
         tunnel_ids = decode_tunnel_token()
-    except CloudflareApiError as exc:
-        tunnel_decode_error = str(exc)
+    except CloudflareApiError:
+        tunnel_decode_error = "Save a valid Cloudflare Tunnel connector token to load tunnel details."
     tunnel_status = cloudflare_tunnel.status()
     return {
         "public_app_base_domain": settings.public_app_base_domain,

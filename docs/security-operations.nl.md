@@ -31,6 +31,11 @@ Vervanging gebeurt atomisch met een privébestand met rechten `0600`.
 Externe profielen blijven selecteerbaar via `AMM_VPN_CONFIG` of het padveld in
 Instellingen, maar kunnen niet via uploaden worden overschreven.
 
+Alleen beheerders stellen het profielpad in. Beperk lokale schrijftoegang
+tot het configuratievolume tot vertrouwde beheerders. De VPN-WebUI-proxy
+luistert op de containerinterfaces voor gepubliceerde app-poorten. De
+poortconfiguratie en hostfirewall bepalen wie erbij kan.
+
 ## Bestanden met inloggegevens van applicaties
 
 De INI van SABnzbd en de YAML van Recyclarr bevatten leesbare inloggegevens die
@@ -39,7 +44,9 @@ de configuratie atomisch met rechten `0600`, met behoud van de bestaande eigenaa
 Bij het starten houdt SABnzbd PUID/PGID als eigenaar en krijgt alleen de eigenaar
 toegang tot het bestand. Bestaande bestanden krijgen deze rechten wanneer de
 manager ze opnieuw configureert. De inhoud wordt hiermee niet versleuteld.
-Bescherm ook het configuratievolume en de back-ups daarvan.
+Bescherm ook het configuratievolume en de back-ups daarvan. Bazarr vereist
+zijn eigen MD5-wachtwoordformaat. De manager schrijft de configuratie met
+dezelfde afgeschermde, atomische bestandsopslag.
 
 Bij fouten in back-ups en applicatie-instellingen geeft de API veilige uitleg
 in plaats van ongecontroleerde foutdetails. Alleen een aangemelde beheerder kan een gedeelde debuglink maken of intrekken. Debugrapporten achter een toegangstoken bevatten afgeschermde
