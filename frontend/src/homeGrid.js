@@ -27,7 +27,7 @@ export const WIDGETS = {
   storage: { label: 'Storage', min: [2, 2], max: [12, 4], size: { desktop: [4, 2], tablet: [4, 2], phone: [4, 2] }, presets: [[2, 2, 'Counter'], [4, 2, 'List'], [6, 3, 'Wide']] },
   server: { label: 'Server', min: [2, 2], max: [8, 4], size: { desktop: [4, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[2, 2, 'Counter'], [4, 3, 'Standard'], [8, 3, 'Wide']] },
   attention: { label: 'Needs attention', min: [3, 2], max: [12, 6], size: { desktop: [4, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[3, 2, 'Small'], [4, 3, 'List'], [8, 3, 'Wide']] },
-  assistant: { label: 'AI assistant', min: [4, 2], max: [8, 4], size: { desktop: [4, 2], tablet: [4, 2], phone: [4, 2] }, presets: [[4, 2, 'Small'], [8, 2, 'Wide']] },
+  assistant: { label: 'AI assistant', min: [4, 3], max: [8, 4], size: { desktop: [4, 3], tablet: [4, 3], phone: [4, 3] }, presets: [[4, 3, 'Small'], [8, 3, 'Wide']] },
   other: { label: 'Other downloads', min: [3, 2], max: [12, 6], size: { desktop: [4, 4], tablet: [4, 4], phone: [4, 4] }, presets: [[4, 3, 'Small'], [4, 4, 'List'], [8, 4, 'Wide']] },
 }
 export const GRID_IDS = Object.keys(WIDGETS)
