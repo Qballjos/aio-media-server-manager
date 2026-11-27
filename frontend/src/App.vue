@@ -19,6 +19,7 @@ import {
   readJson,
   setUnauthorizedHandler,
 } from './api.js'
+import { externalChatUrl, loadExternalChatUrl, setExternalChatUrl } from './externalAssistant.js'
 import { useToasts } from './useToasts.js'
 import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInstall.js'
 import { brandTitle, brandHeaderUrl, brandHeaderLogoOnly, brandLogoUrl, loadBranding } from './branding.js'
@@ -43,6 +44,22 @@ const authStatus = ref({
   avatar_url: null,
 })
 const isMember = computed(() => authStatus.value.authenticated && authStatus.value.role === 'member')
+const assistantDialog = ref(null)
+const assistantOpen = ref(false)
+const assistantNeedsNewTab = computed(() => (
+  window.location.protocol === 'https:' && externalChatUrl.value.startsWith('http:')
+))
+
+watch([() => authStatus.value.authenticated, isMember], ([authenticated, member]) => {
+  if (authenticated && !member) void loadExternalChatUrl()
+  else setExternalChatUrl('')
+})
+watch(externalChatUrl, () => assistantDialog.value?.close())
+
+function openAssistant() {
+  assistantOpen.value = true
+  assistantDialog.value?.showModal()
+}
 const catalogApps = ref([])
 const UPDATE_TOAST_KEY = 'amm-update-notice'
 const updateStatus = ref({
@@ -512,6 +529,19 @@ onUnmounted(() => {
           </button>
         </div>
 
+        <button
+          v-if="externalChatUrl && authStatus.authenticated && !isMember && wizardCompleted"
+          class="metric-pill metric-pill-action external-ai-button"
+          type="button"
+          :aria-label="$t('Open AI chat')"
+          :title="$t('Open AI chat')"
+          @click="openAssistant"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+            <path d="M12 2c0 5.5 4.5 10 10 10-5.5 0-10 4.5-10 10 0-5.5-4.5-10-10-10 5.5 0 10-4.5 10-10Z" />
+          </svg>
+        </button>
+
         <details v-if="authStatus.authenticated" class="nav-account" @keydown.esc="$event.currentTarget.removeAttribute('open')">
           <summary class="glass-pill" :aria-label="`${authStatus.username} account. ${!isMember && wizardCompleted ? statusChips.map(chip => chip.title).join('. ') : ''}`">
             <span v-if="!isMember && wizardCompleted && accountStatus" class="nav-account-status">
@@ -626,6 +656,24 @@ onUnmounted(() => {
       </div>
     </main>
 
+    <dialog ref="assistantDialog" class="glass-dialog external-ai-dialog" aria-labelledby="external-ai-title" @close="assistantOpen = false">
+      <header>
+        <h2 id="external-ai-title">{{ $t('AI chat') }}</h2>
+        <a v-if="externalChatUrl" :href="externalChatUrl" target="_blank" rel="noopener noreferrer">{{ $t('Open in new tab') }}</a>
+        <button type="button" class="ui-btn ui-btn-ghost" @click="assistantDialog?.close()">{{ $t('Close') }}</button>
+      </header>
+      <p v-if="assistantNeedsNewTab && assistantOpen">
+        {{ $t('Use an HTTPS chat URL to open it inside this window, or open the HTTP chat in a new tab.') }}
+      </p>
+      <iframe
+        v-if="assistantOpen && externalChatUrl && !assistantNeedsNewTab"
+        :src="externalChatUrl"
+        :title="$t('AI chat')"
+        referrerpolicy="no-referrer"
+        sandbox="allow-forms allow-scripts allow-same-origin"
+      />
+    </dialog>
+
     <LogsModal v-if="logApp" :app="logApp" @close="logApp = null" />
     <HealthModal
       v-if="showHealthModal"
@@ -654,3 +702,13 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+
+<style scoped>
+.external-ai-button { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
+.external-ai-dialog { width: min(56rem, calc(100% - 1.5rem)); padding: 0.75rem; }
+.external-ai-dialog header { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
+.external-ai-dialog h2 { margin: 0 auto 0 0; }
+.external-ai-dialog iframe { display: block; width: 100%; height: min(70dvh, 46rem); border: 0; margin-top: 0.75rem; }
+.external-ai-dialog::backdrop { background: rgb(0 0 0 / 0.5); }
+</style>

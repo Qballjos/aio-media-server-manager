@@ -6,7 +6,7 @@ test('legacy links retain their destination and new sections are reachable', () 
   for (const [old, current] of Object.entries({ network: 'vpn', remote: 'remote', integrations: 'integrations', general: 'system', theming: 'visuals', debug: 'diagnostics' })) {
     assert.equal(nav.resolveSettingsSection(old), current)
   }
-  for (const id of ['account', 'visuals', 'homepage', 'vpn', 'remote', 'users', 'integrations', 'support', 'usenet', 'updates', 'backups', 'notifications', 'system', 'diagnostics', 'about']) {
+  for (const id of ['account', 'visuals', 'homepage', 'vpn', 'remote', 'users', 'integrations', 'support', 'usenet', 'updates', 'backups', 'notifications', 'system', 'ai-assistant', 'diagnostics', 'about']) {
     assert.equal(nav.resolveSettingsSection(id), id)
   }
   assert.equal(nav.resolveSettingsSection('__proto__'), 'account')
@@ -20,5 +20,5 @@ test('search uses translated labels and keywords and handles empty results', () 
   assert.deepEqual(ids('app-koppelingen'), ['integrations'])
   assert.ok(ids('verbindingen').includes('vpn'))
   assert.deepEqual(ids('no-such-setting'), [])
-  assert.equal(ids('   ').length, 15)
+  assert.equal(ids('   ').length, 16)
 })

@@ -21,6 +21,7 @@ export const SETTINGS_GROUPS = [
   ] },
   { label: 'System', items: [
     { id: 'system', label: 'Server and storage', icon: 'server', description: 'Manage your server, file permissions and storage.', keywords: 'puid pgid timezone logs permissions storage tijdzone rechten opslag' },
+    { id: 'ai-assistant', label: 'External AI', icon: 'link', description: 'Connect to a local arr-mcp service.', keywords: 'ai assistant diagnose openai claude gemini support' },
     { id: 'support', label: 'Support', icon: 'help', description: 'Read and respond to user reports.', keywords: 'support reports tickets meldingen problemen' },
     { id: 'diagnostics', label: 'Help and diagnostics', icon: 'help', description: 'Find problems and share diagnostics with support.', keywords: 'debug errors support widgets help fouten diagnose' },
     { id: 'about', label: 'About this app', icon: 'info', description: 'Install the manager on your device and support the project.', keywords: 'pwa install donate paypal ko-fi installeren doneren' },

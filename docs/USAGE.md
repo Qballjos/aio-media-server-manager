@@ -2,6 +2,12 @@
 
 Start here once you can open AIO in your browser. First get one app working; add more when you need them.
 
+## External AI
+
+Run the AI service separately and configure its providers there. As an AIO administrator, open **Settings → External AI** and save its local web chat URL. Use a different origin from AIO. Optionally save a local arr-mcp `/mcp` address reachable by AIO and a read token for the connection check. Configure the AI service's own MCP client in that service.
+
+The AI button opens the external chat in an AIO dialog. The chat service must allow embedding from your AIO origin. If AIO uses HTTPS, use an HTTPS chat URL for the embedded view. Use **Open in new tab** if embedding is unavailable.
+
 ## 1. Finish your first setup
 
 Create the administrator account, then complete the wizard. For a small start, choose Jellyfin to play media you already own. Leave VPN and access from outside your home off until everything works locally. Wait until the chosen app says Running in Catalog.

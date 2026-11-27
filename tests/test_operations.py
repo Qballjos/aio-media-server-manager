@@ -274,3 +274,39 @@ def test_retry_setup_connects_installed_app_without_reinstalling(cfg, monkeypatc
     app_plugin.install.assert_not_called()
     assert get_job("sonarr")["status"] == "started"
     clear_jobs()
+
+
+def test_external_ai_settings_keep_mcp_token_private(monkeypatch, tmp_path):
+    from unittest.mock import AsyncMock
+
+    from fastapi.testclient import TestClient
+    from api.app import create_app
+    from api.routers import ai_assistant
+    from core.crypto import SecretStore
+
+    client = TestClient(create_app())
+    prefix = "/api/ai-assistant/arr-mcp"
+    assert client.get(prefix + "/settings").status_code == 401
+
+    def authenticate(request):
+        request.state.manager_session_id = "fixture"
+        return "admin"
+
+    monkeypatch.setattr(ai_assistant.auth_manager, "authenticate_request", authenticate)
+    monkeypatch.setattr(ai_assistant, "secret_store", SecretStore(
+        key_path=tmp_path / "key", storage_path=tmp_path / "secrets",
+    ))
+    check = AsyncMock()
+    monkeypatch.setattr(ai_assistant, "check_connection", check)
+    chat = "http://192.168.1.10:8081"
+    mcp = "http://192.168.1.10:6060/mcp"
+    token = "fixture-read-token"
+    assert client.put(prefix + "/settings", json={"chat_url": "https://example.com"}).status_code == 422
+    assert client.put(prefix + "/settings", json={"chat_url": chat}).json() == {"chat_url": chat, "endpoint": None}
+    response = client.put(prefix + "/settings", json={"chat_url": chat, "endpoint": mcp, "token": token})
+    assert response.json() == {"chat_url": chat, "endpoint": mcp}
+    assert token not in client.get(prefix + "/settings").text
+    assert client.post(prefix + "/check").json() == {"connected": True}
+    check.assert_awaited_once_with(mcp, token)
+    assert client.delete(prefix + "/settings").status_code == 204
+    assert client.get(prefix + "/settings").json()["chat_url"] is None

@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from api.routers import applications as applications_router
+from api.routers import ai_assistant as ai_assistant_router
 from api.routers import auth as auth_router
 from api.routers import tv as tv_router
 from api.routers import homey as homey_router
@@ -231,6 +232,7 @@ def create_app() -> FastAPI:
     app.include_router(homepage_router.router)
     app.include_router(downloads_router.router)
     app.include_router(auth_router.router)
+    app.include_router(ai_assistant_router.router)
     app.include_router(tv_router.router)
     app.include_router(homey_router.router)
     app.include_router(catalog_router.router)

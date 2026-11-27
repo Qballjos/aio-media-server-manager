@@ -16,6 +16,12 @@ Maak het beheerdersaccount en doorloop de wizard. Begin bijvoorbeeld met Jellyfi
 
 **Header:** Start, Catalogus en Instellingen blijven gecentreerd over de volledige header. Op smalle schermen krijgen ze een eigen gecentreerde rij. De header scrollt mee met de pagina. Op Start staat de knop met vier blokjes rechts, naast je account. Alle app-pagina’s, bedieningselementen en labels gebruiken Figtree; als dat weblettertype niet kan laden, gebruikt de app overal dezelfde systeemlettertypen als terugval.
 
+## Externe AI
+
+Draai de AI-dienst apart en stel de providers daar in. Open als AIO-beheerder **Instellingen → Externe AI** en sla de lokale URL van het chatvenster op. Gebruik een andere origin dan AIO. Voeg eventueel het lokale arr-mcp-adres met `/mcp` en een leestoken toe voor de verbindingscontrole vanuit AIO. De MCP-client van de AI-dienst stel je in die dienst in.
+
+De AI-knop opent het externe chatvenster in AIO. De chatdienst moet insluiten vanaf je AIO-origin toestaan. Gebruik een HTTPS-chatadres als AIO via HTTPS draait. Via **Openen in nieuw tabblad** blijft de chat bereikbaar als insluiten wordt geblokkeerd.
+
 ## De nieuwe catalogus gebruiken {#catalog-menu}
 
 Open bovenaan **Catalogus**. Links kies je wat je wilt zien; rechts verschijnen de apps.
