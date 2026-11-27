@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from ipaddress import ip_address, ip_network
 from urllib.parse import urlsplit
 
@@ -42,18 +43,43 @@ def local_endpoint(value: str, *, mcp: bool = True) -> str:
 
 
 async def check_connection(endpoint: str, token: str) -> None:
+    await _request(endpoint, token, {"method": "ping"}, timeout=5)
+
+
+async def stack_health(endpoint: str, token: str) -> str:
+    result = await _request(endpoint, token, {
+        "method": "tools/call", "params": {"name": "get_stack_health", "arguments": {"detail": "minimal"}},
+    }, timeout=20)
+    if result.get("isError"):
+        raise ArrMcpError("Could not read the local stack status.")
+    structured = result.get("structuredContent")
+    services = structured.get("services") if isinstance(structured, dict) else None
+    if not isinstance(services, list):
+        raise ArrMcpError("Could not read the local stack status.")
+    # Share status only. Tool text can include paths, URLs or messages from app logs.
+    status = [
+        {"service": row["service"], "ok": row["ok"]}
+        for row in services if isinstance(row, dict)
+        and isinstance(row.get("service"), str)
+        and re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", row["service"])
+        and isinstance(row.get("ok"), bool)
+    ]
+    return json.dumps(status)
+
+
+async def _request(endpoint: str, token: str, request: dict, *, timeout: int) -> dict:
     endpoint = local_endpoint(endpoint)
     try:
         async with (
-            asyncio.timeout(5),
-            httpx.AsyncClient(timeout=4, follow_redirects=False, trust_env=False) as client,
+            asyncio.timeout(timeout),
+            httpx.AsyncClient(timeout=timeout - 1, follow_redirects=False, trust_env=False) as client,
         ):
             async with client.stream(
                 "POST", endpoint,
                 headers={
                     "Authorization": f"Bearer {token}", "Accept": "application/json", "Accept-Encoding": "identity",
                 },
-                json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+                json={"jsonrpc": "2.0", "id": 1, **request},
             ) as response:
                 response.raise_for_status()
                 if response.headers.get("content-encoding", "identity").lower() != "identity":
@@ -69,5 +95,6 @@ async def check_connection(endpoint: str, token: str) -> None:
             or "error" in result or not isinstance(result.get("result"), dict)
         ):
             raise ValueError
+        return result["result"]
     except (httpx.HTTPError, ValueError, TimeoutError, AttributeError, RecursionError):
         raise ArrMcpError("Could not verify the local arr-mcp connection.") from None

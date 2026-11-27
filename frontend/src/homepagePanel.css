@@ -1149,3 +1149,9 @@ button.home-request-tile {
   inline-size: 1rem;
   block-size: 1rem;
 }
+
+.home-assistant { display: grid; align-content: start; gap: 0.4rem; overflow: auto; }
+.home-assistant-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; }
+.home-assistant-form input { min-width: 0; }
+.home-assistant-prompts { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.home-assistant-prompts button { min-height: 44px; text-align: start; }

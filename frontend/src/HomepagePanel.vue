@@ -32,7 +32,15 @@ const props = defineProps({
   username: { type: String, default: '' },
   firstName: { type: String, default: '' },
 })
-const emit = defineEmits(['manage'])
+const emit = defineEmits(['manage', 'open-assistant'])
+const assistantQuestion = ref('')
+
+function askAssistant(question) {
+  const text = question.trim()
+  if (!text) return
+  emit('open-assistant', text)
+  assistantQuestion.value = ''
+}
 const route = useRoute()
 
 function subdomainFor(appName) {
@@ -393,7 +401,7 @@ watch(dockElement, (element) => {
   })
   dockObserver.observe(element)
 })
-const showWidgets = computed(() => hasWidgets.value || widgetDebug.value || editing.value)
+const showWidgets = computed(() => hasWidgets.value || widgetDebug.value || editing.value || assistantOnHome.value)
 
 /** Edit mode can show a smaller screen's layout on this one; outside it Home follows the window. */
 const previewBp = ref('')
@@ -403,6 +411,7 @@ const previewing = computed(() => activeBp.value !== viewportBp.value)
 /** A widget just added lights up for a moment. */
 const highlight = ref('')
 const gridLayout = computed(() => layoutFor(activeBp.value))
+const assistantOnHome = computed(() => gridLayout.value.some((item) => item.id === 'assistant'))
 
 /** Outside edit mode a widget shows when there is something in it, or it is still loading. */
 const widgetHasContent = computed(() => {
@@ -420,6 +429,7 @@ const widgetHasContent = computed(() => {
     storage: true,
     server: true,
     attention: true,
+    assistant: true,
     other: otherDownloads.value.length > 0,
   }
 })
@@ -1504,9 +1514,9 @@ onUnmounted(() => {
       <button type="button" class="ui-btn ui-btn-primary" @click="emit('manage')">{{ $t('Go to Catalog') }}</button>
     </div>
 
-    <template v-else-if="!loading">
+    <template v-if="!loading && (snapshot.apps.length || assistantOnHome || editing)">
       <Teleport to=".app-container" defer>
-      <nav v-if="!dockHidden" ref="dockElement" class="home-dock is-floating" :aria-label="$t('Apps')">
+      <nav v-if="!dockHidden && dockApps.length" ref="dockElement" class="home-dock is-floating" :aria-label="$t('Apps')">
         <span class="home-dock-base glass-pill" aria-hidden="true"></span>
         <div class="home-dock-row" @pointermove.passive="magnifyDock" @pointerleave="releaseDock" @pointercancel="releaseDock" @scroll.passive="onDockScroll">
           <component
@@ -2070,6 +2080,29 @@ onUnmounted(() => {
             <div v-else-if="statusLoaded" class="gh-empty">
               <span class="gh-big">{{ $t('All clear') }}</span>
               <span class="gh-label">{{ $t('Apps, VPN, tunnel, updates and disks look fine.') }}</span>
+            </div>
+          </div>
+        </article>
+      </template>
+      <template #assistant>
+        <article class="home-card glass-card">
+          <div class="home-widget-head">
+            <h3>{{ $t('AI assistant') }}</h3>
+          </div>
+          <div class="home-card-body home-assistant">
+            <form class="home-assistant-form" @submit.prevent="askAssistant(assistantQuestion)">
+              <label class="home-sr" for="home-assistant-question">{{ $t('Ask the AI assistant') }}</label>
+              <input id="home-assistant-question" v-model="assistantQuestion" class="ui-input"
+                :placeholder="$t('Ask the AI assistant')" maxlength="4000" required />
+              <button class="ui-btn ui-btn-primary" :disabled="!assistantQuestion.trim()">{{ $t('Ask') }}</button>
+            </form>
+            <div class="home-assistant-prompts">
+              <button type="button" class="ui-btn ui-btn-ghost" @click="askAssistant($t('Which apps are not responding?'))">
+                {{ $t('Which apps are not responding?') }}
+              </button>
+              <button type="button" class="ui-btn ui-btn-ghost" @click="askAssistant($t('How can I free up disk space?'))">
+                {{ $t('How can I free up disk space?') }}
+              </button>
             </div>
           </div>
         </article>

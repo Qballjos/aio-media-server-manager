@@ -19,7 +19,7 @@ import {
   readJson,
   setUnauthorizedHandler,
 } from './api.js'
-import { externalChatUrl, loadExternalChatUrl, setExternalChatUrl } from './externalAssistant.js'
+import AiChat from './AiChat.vue'
 import { useToasts } from './useToasts.js'
 import { canPromptInstall, promptInstall, subscribePwaInstall } from './pwaInstall.js'
 import { brandTitle, brandHeaderUrl, brandHeaderLogoOnly, brandLogoUrl, loadBranding } from './branding.js'
@@ -46,17 +46,19 @@ const authStatus = ref({
 const isMember = computed(() => authStatus.value.authenticated && authStatus.value.role === 'member')
 const assistantDialog = ref(null)
 const assistantOpen = ref(false)
-const assistantNeedsNewTab = computed(() => (
-  window.location.protocol === 'https:' && externalChatUrl.value.startsWith('http:')
-))
-
+const assistantStarted = ref(false)
+const assistantPrompt = ref(null)
 watch([() => authStatus.value.authenticated, isMember], ([authenticated, member]) => {
-  if (authenticated && !member) void loadExternalChatUrl()
-  else setExternalChatUrl('')
+  if (!authenticated || member) {
+    assistantStarted.value = false
+    assistantPrompt.value = null
+    assistantDialog.value?.close()
+  }
 })
-watch(externalChatUrl, () => assistantDialog.value?.close())
 
-function openAssistant() {
+function openAssistant(question) {
+  if (typeof question === 'string') assistantPrompt.value = { question }
+  assistantStarted.value = true
   assistantOpen.value = true
   assistantDialog.value?.showModal()
 }
@@ -530,8 +532,8 @@ onUnmounted(() => {
         </div>
 
         <button
-          v-if="externalChatUrl && authStatus.authenticated && !isMember && wizardCompleted"
-          class="metric-pill metric-pill-action external-ai-button"
+          v-if="authStatus.authenticated && !isMember && wizardCompleted"
+          class="metric-pill metric-pill-action ai-button"
           type="button"
           :aria-label="$t('Open AI chat')"
           :title="$t('Open AI chat')"
@@ -637,6 +639,7 @@ onUnmounted(() => {
           :username="authStatus.username || ''"
           :first-name="authStatus.first_name || ''"
           @manage="openCatalog"
+          @open-assistant="openAssistant"
         />
         <CatalogView
           v-else
@@ -656,22 +659,12 @@ onUnmounted(() => {
       </div>
     </main>
 
-    <dialog ref="assistantDialog" class="glass-dialog external-ai-dialog" aria-labelledby="external-ai-title" @close="assistantOpen = false">
+    <dialog ref="assistantDialog" class="glass-dialog ai-dialog" aria-labelledby="ai-title" @close="assistantOpen = false">
       <header>
-        <h2 id="external-ai-title">{{ $t('AI chat') }}</h2>
-        <a v-if="externalChatUrl" :href="externalChatUrl" target="_blank" rel="noopener noreferrer">{{ $t('Open in new tab') }}</a>
+        <h2 id="ai-title">{{ $t('AI chat') }}</h2>
         <button type="button" class="ui-btn ui-btn-ghost" @click="assistantDialog?.close()">{{ $t('Close') }}</button>
       </header>
-      <p v-if="assistantNeedsNewTab && assistantOpen">
-        {{ $t('Use an HTTPS chat URL to open it inside this window, or open the HTTP chat in a new tab.') }}
-      </p>
-      <iframe
-        v-if="assistantOpen && externalChatUrl && !assistantNeedsNewTab"
-        :src="externalChatUrl"
-        :title="$t('AI chat')"
-        referrerpolicy="no-referrer"
-        sandbox="allow-forms allow-scripts allow-same-origin"
-      />
+      <AiChat v-if="assistantStarted" :active="assistantOpen" :prompt="assistantPrompt" @close="assistantDialog?.close()" />
     </dialog>
 
     <LogsModal v-if="logApp" :app="logApp" @close="logApp = null" />
@@ -705,10 +698,9 @@ onUnmounted(() => {
 
 
 <style scoped>
-.external-ai-button { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
-.external-ai-dialog { width: min(56rem, calc(100% - 1.5rem)); padding: 0.75rem; }
-.external-ai-dialog header { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
-.external-ai-dialog h2 { margin: 0 auto 0 0; }
-.external-ai-dialog iframe { display: block; width: 100%; height: min(70dvh, 46rem); border: 0; margin-top: 0.75rem; }
-.external-ai-dialog::backdrop { background: rgb(0 0 0 / 0.5); }
+.ai-button { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
+.ai-dialog { width: min(56rem, calc(100% - 1.5rem)); padding: 0.75rem; }
+.ai-dialog header { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
+.ai-dialog h2 { margin: 0 auto 0 0; }
+.ai-dialog::backdrop { background: rgb(0 0 0 / 0.5); }
 </style>

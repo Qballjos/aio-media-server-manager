@@ -1,10 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { apiJson } from '../api.js'
-import { setExternalChatUrl } from '../externalAssistant.js'
+import AiProvidersSettings from './AiProvidersSettings.vue'
 
 const endpoint = ref('')
-const chatUrl = ref('')
 const savedEndpoint = ref('')
 const token = ref('')
 const busy = ref(false)
@@ -31,8 +30,6 @@ async function run(action) {
 }
 
 function applySettings(data) {
-  chatUrl.value = data.chat_url || ''
-  setExternalChatUrl(chatUrl.value)
   savedEndpoint.value = data.endpoint || ''
   endpoint.value = savedEndpoint.value
   token.value = ''
@@ -42,11 +39,7 @@ onMounted(() => run(async () => applySettings(await request('settings'))))
 
 function save() {
   return run(async () => {
-    if (new URL(chatUrl.value.trim()).origin === window.location.origin) {
-      status.value = 'same-origin'
-      return
-    }
-    applySettings(await request('settings', 'PUT', { chat_url: chatUrl.value.trim(), endpoint: endpoint.value.trim() || null, token: token.value || null }))
+    applySettings(await request('settings', 'PUT', { endpoint: endpoint.value.trim() || null, token: token.value || null }))
     status.value = 'saved'
   })
 }
@@ -67,13 +60,10 @@ function disconnect() {
 </script>
 
 <template>
+  <AiProvidersSettings />
   <section class="glass-card connection-card" :aria-busy="busy">
-    <p>{{ $t('AIO opens the external assistant in a chat window. The MCP address is optional.') }}</p>
+    <h3>arr-mcp</h3>
     <form class="connection-card connection-form" @submit.prevent="save">
-      <label>
-        {{ $t('External chat URL') }}
-        <input v-model="chatUrl" class="ui-input" type="url" maxlength="256" required :disabled="busy" placeholder="http://192.168.1.10:8081" />
-      </label>
       <label>
         {{ $t('arr-mcp address') }}
         <input v-model="endpoint" class="ui-input" maxlength="128" :disabled="busy" placeholder="http://192.168.1.10:6060/mcp" />
@@ -87,15 +77,14 @@ function disconnect() {
         <button v-if="savedEndpoint" type="button" class="ui-btn" :disabled="busy || endpoint.trim() !== savedEndpoint || !!token" @click="check">
           {{ $t('Check connection') }}
         </button>
-        <button v-if="chatUrl || savedEndpoint" type="button" class="ui-btn ui-btn-ghost" :disabled="busy" @click="disconnect">
+        <button v-if="savedEndpoint" type="button" class="ui-btn ui-btn-ghost" :disabled="busy" @click="disconnect">
           {{ $t('Remove connection') }}
         </button>
       </div>
     </form>
     <p v-if="status === 'saved'" role="status">{{ $t('Connection settings saved.') }}</p>
     <p v-if="status === 'connected'" role="status">{{ $t('arr-mcp connection verified.') }}</p>
-    <p v-if="status === 'same-origin'" role="alert">{{ $t('Enter a chat URL on a different host, port or scheme from AIO.') }}</p>
-    <p v-if="status === 'error'" role="alert">{{ $t('Check the chat URL, MCP address and read token.') }}</p>
+    <p v-if="status === 'error'" role="alert">{{ $t('Check the MCP address and read token.') }}</p>
   </section>
 </template>
 

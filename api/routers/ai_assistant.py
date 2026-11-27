@@ -1,14 +1,16 @@
-"""Administrator settings for an external, local arr-mcp service."""
+"""Administrator-only AI chat and local arr-mcp settings."""
 
 from __future__ import annotations
 
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, SecretStr
 
 from api.routers.auth import AuthRoute
-from core.ai_arr_mcp import ArrMcpError, check_connection, local_endpoint
+from core.ai_arr_mcp import ArrMcpError, check_connection, local_endpoint, stack_health
+from core.ai_chat import AiChatError, complete
 from core.auth import auth_manager
 from core.crypto import secret_store
 
@@ -22,13 +24,13 @@ def _require_manager(request: Request) -> None:
 
 
 router = APIRouter(
-    prefix="/api/ai-assistant", tags=["External AI connection"],
+    prefix="/api/ai-assistant", tags=["AI assistant"],
     dependencies=[Depends(_require_manager)], route_class=AuthRoute,
 )
 
 
 class ArrMcpConfiguration(BaseModel):
-    chat_url: str = Field(min_length=1, max_length=256)
+    chat_url: str | None = Field(default=None, min_length=1, max_length=256)
     endpoint: str | None = Field(default=None, max_length=128)
     token: SecretStr | None = None
 
@@ -47,7 +49,7 @@ def arr_mcp_settings() -> dict:
 @router.put("/arr-mcp/settings")
 def save_arr_mcp_settings(body: ArrMcpConfiguration) -> dict:
     try:
-        chat_url = local_endpoint(body.chat_url.strip(), mcp=False)
+        chat_url = local_endpoint(body.chat_url.strip(), mcp=False) if body.chat_url else None
         endpoint = local_endpoint(body.endpoint.strip()) if body.endpoint and body.endpoint.strip() else None
     except ArrMcpError as exc:
         raise HTTPException(422, str(exc)) from None
@@ -81,3 +83,85 @@ async def check_arr_mcp() -> dict:
     except ArrMcpError as exc:
         raise HTTPException(502, str(exc)) from None
     return {"connected": True}
+
+
+Provider = Literal["openai", "claude", "gemini"]
+
+
+class ProviderConfiguration(BaseModel):
+    model: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+    api_key: SecretStr | None = None
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=16000)
+
+
+class ChatRequest(BaseModel):
+    provider: Provider
+    messages: list[ChatMessage] = Field(min_length=1, max_length=9)
+    include_health: bool = False
+
+
+def _provider_config(provider: Provider) -> dict | None:
+    config = secret_store.get_secret(f"ai_chat_{provider}")
+    return json.loads(config) if config else None
+
+
+@router.get("/providers")
+def list_providers() -> dict:
+    providers = {}
+    for provider in ("openai", "claude", "gemini"):
+        if config := _provider_config(provider):
+            providers[provider] = config["model"]
+    return providers
+
+
+@router.put("/providers/{provider}")
+def save_provider(provider: Provider, body: ProviderConfiguration) -> dict:
+    if body.api_key is None:
+        key = (_provider_config(provider) or {}).get("key", "")
+    else:
+        key = body.api_key.get_secret_value().strip()
+    if not key or len(key) > 2048 or not all(33 <= ord(character) <= 126 for character in key):
+        raise HTTPException(422, "Enter a valid provider API key.")
+    secret_store.save_secret(f"ai_chat_{provider}", json.dumps({"model": body.model, "key": key}))
+    return {"model": body.model}
+
+
+@router.delete("/providers/{provider}", status_code=204)
+def remove_provider(provider: Provider) -> Response:
+    secret_store.delete_secret(f"ai_chat_{provider}")
+    return Response(status_code=204)
+
+
+@router.post("/chat")
+async def send_chat(body: ChatRequest) -> dict:
+    config = _provider_config(body.provider)
+    if not config:
+        raise HTTPException(409, "Configure this AI provider first.")
+    if (
+        len(body.messages) % 2 != 1
+        or any(message.role != ("assistant" if i % 2 else "user") for i, message in enumerate(body.messages))
+        or not body.messages[-1].content.strip()
+        or sum(len(message.content) for message in body.messages) > 24000
+    ):
+        raise HTTPException(422, "The chat history is invalid or too long. Start a new chat.")
+    health = ""
+    if body.include_health:
+        mcp = _arr_mcp_configuration()
+        if not mcp or not mcp.get("endpoint"):
+            raise HTTPException(409, "Configure arr-mcp first.")
+        try:
+            health = await stack_health(mcp["endpoint"], mcp["token"])
+        except ArrMcpError:
+            raise HTTPException(502, "Could not read the local stack status.") from None
+    try:
+        reply = await complete(
+            body.provider, config["key"], config["model"],
+            [message.model_dump() for message in body.messages], health,
+        )
+    except AiChatError as exc:
+        raise HTTPException(502, str(exc)) from None
+    return {"reply": reply}

@@ -2,11 +2,11 @@
 
 Start here once you can open AIO in your browser. First get one app working; add more when you need them.
 
-## External AI
+## AI assistant
 
-Run the AI service separately and configure its providers there. As an AIO administrator, open **Settings → External AI** and save its local web chat URL. Use a different origin from AIO. Optionally save a local arr-mcp `/mcp` address reachable by AIO and a read token for the connection check. Configure the AI service's own MCP client in that service.
+As an AIO administrator, open **Settings → AI assistant**. Select OpenAI (GPT), Anthropic Claude or Google Gemini and save a provider API key and model ID. Open the AI icon to pick any configured provider. The chat runs in AIO and sends messages to the selected provider. On Home, use **Edit Home layout → Add widget → AI assistant** to add a question field and quick prompts that open the same chat.
 
-The AI button opens the external chat in an AIO dialog. The chat service must allow embedding from your AIO origin. If AIO uses HTTPS, use an HTTPS chat URL for the embedded view. Use **Open in new tab** if embedding is unavailable.
+To include current app status in a question, configure the local arr-mcp `/mcp` address and a read token in the same settings page. Select **Include live app status from arr-mcp** in the chat to share the status with the provider.
 
 ## 1. Finish your first setup
 
