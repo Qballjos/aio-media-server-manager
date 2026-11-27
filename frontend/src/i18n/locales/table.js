@@ -4,7 +4,6 @@ export const TABLE = {
   "Ask the AI assistant": ["Stel de AI-assistent een vraag", "Frage den KI-Assistenten", "Interroger l’assistant IA"],
   "Which apps are not responding?": ["Welke apps reageren niet?", "Welche Apps reagieren nicht?", "Quelles applications ne répondent pas ?"],
   "How can I free up disk space?": ["Hoe maak ik schijfruimte vrij?", "Wie kann ich Speicherplatz freigeben?", "Comment libérer de l’espace disque ?"],
-  "Sending…": ["Versturen…", "Wird gesendet…", "Envoi…"],
   "Message": ["Bericht", "Nachricht", "Message"],
   "Configured": ["Ingesteld", "Konfiguriert", "Configuré"],
   "AI assistant": ["AI-assistent", "KI-Assistent", "Assistant IA"],
