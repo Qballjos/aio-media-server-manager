@@ -67,6 +67,37 @@ async def stack_health(endpoint: str, token: str) -> str:
     return json.dumps(status)
 
 
+async def change_downloads(endpoint: str, token: str, service: str, action: str, confirm: str | None) -> dict:
+    arguments = {"service": service, "action": action}
+    if confirm:
+        arguments["confirm"] = confirm
+    result = await _request(endpoint, token, {
+        "method": "tools/call", "params": {"name": "pause_downloads", "arguments": arguments},
+    }, timeout=20)
+    data = result.get("structuredContent")
+    if result.get("isError") or not isinstance(data, dict):
+        raise ArrMcpError("arr-mcp refused the download action. Check the client and write permissions.")
+    permission = data.get("permission")
+    if isinstance(permission, dict) and permission.get("allowed") is False:
+        raise ArrMcpError("Allow safe writes for this client and use an arr-mcp write token.")
+    summary = data.get("summary")
+    if not isinstance(summary, str) or not summary:
+        raise ArrMcpError("arr-mcp returned no action summary.")
+    applied = data.get("applied") is True
+    if confirm and not applied and data.get("noop") is not True:
+        raise ArrMcpError("The preview expired or the queue changed. Request a new preview.")
+    confirmation = data.get("confirm_token")
+    if not isinstance(confirmation, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,256}", confirmation):
+        confirmation = None
+    if confirmation:
+        summary = summary.replace(confirmation, "")
+    return {
+        "summary": summary[:2000],
+        "confirm": confirmation if not confirm and not applied else None,
+        "applied": applied,
+    }
+
+
 async def _request(endpoint: str, token: str, request: dict, *, timeout: int) -> dict:
     endpoint = local_endpoint(endpoint)
     try:

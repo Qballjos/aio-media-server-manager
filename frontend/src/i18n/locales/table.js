@@ -1,5 +1,15 @@
 /** English source text → [Nederlands, Deutsch, Français]. */
 export const TABLE = {
+  "Download actions": ["Downloadacties", "Download-Aktionen", "Actions de téléchargement"],
+  "Download client": ["Downloadclient", "Download-Client", "Client de téléchargement"],
+  "Action": ["Actie", "Aktion", "Action"],
+  "Pause downloads": ["Downloads pauzeren", "Downloads pausieren", "Mettre les téléchargements en pause"],
+  "Resume downloads": ["Downloads hervatten", "Downloads fortsetzen", "Reprendre les téléchargements"],
+  "Preview change": ["Wijziging bekijken", "Änderung ansehen", "Prévisualiser la modification"],
+  "Confirm change": ["Wijziging bevestigen", "Änderung bestätigen", "Confirmer la modification"],
+  "arr-mcp access token": ["arr-mcp-toegangstoken", "arr-mcp-Zugriffstoken", "Jeton d’accès arr-mcp"],
+  "Check the MCP address and access token.": ["Controleer het MCP-adres en het toegangstoken.", "Prüfe die MCP-Adresse und das Zugriffstoken.", "Vérifiez l’adresse MCP et le jeton d’accès."],
+  "For download actions, use a write token and allow safe writes on the download client in arr-mcp.": ["Gebruik voor downloadacties een schrijftoken en sta veilige schrijfacties toe voor de downloadclient in arr-mcp.", "Verwende ein Schreibtoken und erlaube sichere Schreibaktionen für den Download-Client in arr-mcp.", "Utilisez un jeton d’écriture et autorisez les écritures sûres pour le client de téléchargement dans arr-mcp."],
   "Ask": ["Vragen", "Fragen", "Demander"],
   "Ask the AI assistant": ["Stel de AI-assistent een vraag", "Frage den KI-Assistenten", "Interroger l’assistant IA"],
   "Which apps are not responding?": ["Welke apps reageren niet?", "Welche Apps reagieren nicht?", "Quelles applications ne répondent pas ?"],

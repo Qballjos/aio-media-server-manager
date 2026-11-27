@@ -69,9 +69,10 @@ function disconnect() {
         <input v-model="endpoint" class="ui-input" maxlength="128" :disabled="busy" placeholder="http://192.168.1.10:6060/mcp" />
       </label>
       <label>
-        {{ $t('arr-mcp read token') }}
+        {{ $t('arr-mcp access token') }}
         <input v-model="token" class="ui-input" type="password" autocomplete="off" maxlength="2048" :required="!!endpoint.trim() && endpoint.trim() !== savedEndpoint" :disabled="busy" />
       </label>
+      <p>{{ $t('For download actions, use a write token and allow safe writes on the download client in arr-mcp.') }}</p>
       <div class="connection-actions">
         <button class="ui-btn ui-btn-primary" :disabled="busy">{{ $t('Save') }}</button>
         <button v-if="savedEndpoint" type="button" class="ui-btn" :disabled="busy || endpoint.trim() !== savedEndpoint || !!token" @click="check">
@@ -84,7 +85,7 @@ function disconnect() {
     </form>
     <p v-if="status === 'saved'" role="status">{{ $t('Connection settings saved.') }}</p>
     <p v-if="status === 'connected'" role="status">{{ $t('arr-mcp connection verified.') }}</p>
-    <p v-if="status === 'error'" role="alert">{{ $t('Check the MCP address and read token.') }}</p>
+    <p v-if="status === 'error'" role="alert">{{ $t('Check the MCP address and access token.') }}</p>
   </section>
 </template>
 

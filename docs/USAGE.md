@@ -8,6 +8,8 @@ As an AIO administrator, open **Settings → AI assistant**. Select OpenAI (GPT)
 
 To include current app status in a question, configure the local arr-mcp `/mcp` address and a read token in the same settings page. Select **Include live app status from arr-mcp** in the chat to share the status with the provider.
 
+To test a write, create an arr-mcp token with the **write** tier, allow safe writes for the target download client in arr-mcp and save that token in AIO. In the chat open **Download actions**, select a client, preview a pause or resume, then confirm.
+
 ## 1. Finish your first setup
 
 Create the administrator account, then complete the wizard. For a small start, choose Jellyfin to play media you already own. Leave VPN and access from outside your home off until everything works locally. Wait until the chosen app says Running in Catalog.

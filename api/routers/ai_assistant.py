@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, SecretStr
 
 from api.routers.auth import AuthRoute
-from core.ai_arr_mcp import ArrMcpError, check_connection, local_endpoint, stack_health
+from core.ai_arr_mcp import ArrMcpError, change_downloads, check_connection, local_endpoint, stack_health
 from core.ai_chat import AiChatError, complete
 from core.auth import auth_manager
 from core.crypto import secret_store
@@ -60,7 +60,7 @@ def save_arr_mcp_settings(body: ArrMcpConfiguration) -> dict:
     if endpoint and (not token or len(token) > 2048 or not token.isascii() or not all(
         character.isprintable() and not character.isspace() for character in token
     )):
-        raise HTTPException(422, "Enter a valid arr-mcp read token.")
+        raise HTTPException(422, "Enter a valid arr-mcp token.")
     secret_store.save_secret(_ARR_MCP_SECRET, json.dumps({
         "chat_url": chat_url, "endpoint": endpoint, "token": token if endpoint else "",
     }))
@@ -165,3 +165,22 @@ async def send_chat(body: ChatRequest) -> dict:
     except AiChatError as exc:
         raise HTTPException(502, str(exc)) from None
     return {"reply": reply}
+
+class DownloadAction(BaseModel):
+    service: Literal["qbittorrent", "sabnzbd", "nzbget", "transmission"]
+    action: Literal["pause", "resume"]
+    confirm: SecretStr | None = None
+
+
+@router.post("/arr-mcp/downloads")
+async def change_mcp_downloads(body: DownloadAction) -> dict:
+    config = _arr_mcp_configuration()
+    if not config or not config.get("endpoint"):
+        raise HTTPException(409, "Configure arr-mcp first.")
+    confirm = body.confirm.get_secret_value() if body.confirm else None
+    if confirm is not None and (not confirm or len(confirm) > 256):
+        raise HTTPException(422, "Request a new preview.")
+    try:
+        return await change_downloads(config["endpoint"], config["token"], body.service, body.action, confirm)
+    except ArrMcpError as exc:
+        raise HTTPException(502, str(exc)) from None

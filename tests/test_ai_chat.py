@@ -69,3 +69,21 @@ async def test_provider_request(monkeypatch, provider, url, response):
         lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
     )
     assert await ai_chat.complete(provider, "fixture-key", "fixture-model", [{"role": "user", "content": "Hello"}]) == "OK"
+
+
+@pytest.mark.asyncio
+async def test_download_action_requires_preview_confirmation(monkeypatch):
+    from core import ai_arr_mcp
+
+    request = AsyncMock(side_effect=[
+        {"structuredContent": {"summary": "Pause downloads", "applied": False, "confirm_token": "v2.fixture"}},
+        {"structuredContent": {"summary": "Downloads paused", "applied": True}},
+    ])
+    monkeypatch.setattr(ai_arr_mcp, "_request", request)
+    endpoint = "http://192.168.2.82:6060/mcp"
+    preview = await ai_arr_mcp.change_downloads(endpoint, "mcp-token", "qbittorrent", "pause", None)
+    assert preview == {"summary": "Pause downloads", "confirm": "v2.fixture", "applied": False}
+    assert request.await_args.args[2]["params"]["arguments"] == {"action": "pause", "service": "qbittorrent"}
+    result = await ai_arr_mcp.change_downloads(endpoint, "mcp-token", "qbittorrent", "pause", preview["confirm"])
+    assert result == {"summary": "Downloads paused", "confirm": None, "applied": True}
+    assert request.await_args.args[2]["params"]["arguments"]["confirm"] == "v2.fixture"

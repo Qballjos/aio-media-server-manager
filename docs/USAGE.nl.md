@@ -22,6 +22,8 @@ Open als AIO-beheerder **Instellingen → AI-assistent**. Kies OpenAI (GPT), Ant
 
 Stel op dezelfde instellingenpagina het lokale arr-mcp-adres met `/mcp` en een leestoken in om actuele appstatus te gebruiken. Vink **Actuele appstatus uit arr-mcp meesturen** aan om die gegevens met de provider te delen.
 
+Maak voor een schrijftest een arr-mcp-token met niveau **write**, schakel veilige schrijfacties in voor de gekozen downloadclient in arr-mcp en sla het token op in AIO. Open in de chat **Downloadacties**, kies een downloadclient, bekijk het voorstel om te pauzeren of hervatten en bevestig daarna.
+
 ## De nieuwe catalogus gebruiken {#catalog-menu}
 
 Open bovenaan **Catalogus**. Links kies je wat je wilt zien; rechts verschijnen de apps.

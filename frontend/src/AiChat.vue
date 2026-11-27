@@ -1,5 +1,6 @@
 <script setup>
 import { nextTick, onUnmounted, ref, watch } from 'vue'
+import AiDownloadActions from './AiDownloadActions.vue'
 import { RouterLink } from 'vue-router'
 import { assistantRequest, providers } from './aiAssistant.js'
 
@@ -119,6 +120,7 @@ async function send() {
       </button>
     </form>
   </section>
+  <AiDownloadActions v-if="mcpConnected && !loading" />
 </template>
 
 <style scoped>
