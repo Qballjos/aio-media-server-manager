@@ -45,6 +45,8 @@ async def complete(provider: str, key: str, model: str, messages: list[dict], he
                     raise AiChatError("The provider rejected the API key.")
                 if response.status_code == 429:
                     raise AiChatError("The provider rate limit or quota was reached.")
+                if response.status_code == 503:
+                    raise AiChatError("The AI provider is temporarily unavailable. Try again in a moment.")
                 response.raise_for_status()
                 if response.headers.get("content-encoding", "identity").lower() != "identity":
                     raise ValueError
@@ -63,5 +65,7 @@ async def complete(provider: str, key: str, model: str, messages: list[dict], he
         return reply
     except AiChatError:
         raise
-    except (httpx.HTTPError, TimeoutError, ValueError, KeyError, IndexError, TypeError, RecursionError):
+    except (httpx.TimeoutException, TimeoutError):
+        raise AiChatError("The AI provider did not respond in time. Try again in a moment.") from None
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, RecursionError):
         raise AiChatError("The provider returned no chat response. Check the model and try again.") from None

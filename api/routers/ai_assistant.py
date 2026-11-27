@@ -15,6 +15,7 @@ from core.auth import auth_manager
 from core.crypto import secret_store
 
 _ARR_MCP_SECRET = "ai_arr_mcp_settings"
+_CHAT_PREFERENCES = "ai_chat_preferences"
 
 
 def _require_manager(request: Request) -> None:
@@ -99,9 +100,7 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    provider: Provider
     messages: list[ChatMessage] = Field(min_length=1, max_length=9)
-    include_health: bool = False
 
 
 def _provider_config(provider: Provider) -> dict | None:
@@ -116,6 +115,31 @@ def list_providers() -> dict:
         if config := _provider_config(provider):
             providers[provider] = config["model"]
     return providers
+
+
+class ChatPreferences(BaseModel):
+    provider: Provider | None = None
+    share_local_status: bool = False
+
+
+@router.get("/preferences")
+def chat_preferences() -> ChatPreferences:
+    raw = secret_store.get_secret(_CHAT_PREFERENCES)
+    if raw:
+        preferences = ChatPreferences.model_validate_json(raw)
+        if preferences.provider and not _provider_config(preferences.provider):
+            return ChatPreferences()
+        return preferences
+    configured = list(list_providers())
+    return ChatPreferences(provider=configured[0] if len(configured) == 1 else None)
+
+
+@router.put("/preferences")
+def save_chat_preferences(body: ChatPreferences) -> ChatPreferences:
+    if body.provider and not _provider_config(body.provider):
+        raise HTTPException(409, "Configure this AI provider first.")
+    secret_store.save_secret(_CHAT_PREFERENCES, body.model_dump_json())
+    return body
 
 
 @router.put("/providers/{provider}")
@@ -138,7 +162,9 @@ def remove_provider(provider: Provider) -> Response:
 
 @router.post("/chat")
 async def send_chat(body: ChatRequest) -> dict:
-    config = _provider_config(body.provider)
+    preferences = chat_preferences()
+    provider = preferences.provider
+    config = _provider_config(provider) if provider else None
     if not config:
         raise HTTPException(409, "Configure this AI provider first.")
     if (
@@ -149,17 +175,16 @@ async def send_chat(body: ChatRequest) -> dict:
     ):
         raise HTTPException(422, "The chat history is invalid or too long. Start a new chat.")
     health = ""
-    if body.include_health:
+    if preferences.share_local_status:
         mcp = _arr_mcp_configuration()
-        if not mcp or not mcp.get("endpoint"):
-            raise HTTPException(409, "Configure arr-mcp first.")
-        try:
-            health = await stack_health(mcp["endpoint"], mcp["token"])
-        except ArrMcpError:
-            raise HTTPException(502, "Could not read the local stack status.") from None
+        if mcp and mcp.get("endpoint"):
+            try:
+                health = await stack_health(mcp["endpoint"], mcp["token"])
+            except ArrMcpError:
+                health = ""
     try:
         reply = await complete(
-            body.provider, config["key"], config["model"],
+            provider, config["key"], config["model"],
             [message.model_dump() for message in body.messages], health,
         )
     except AiChatError as exc:

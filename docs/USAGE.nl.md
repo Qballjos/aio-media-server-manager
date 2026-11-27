@@ -18,11 +18,11 @@ Maak het beheerdersaccount en doorloop de wizard. Begin bijvoorbeeld met Jellyfi
 
 ## AI-assistent
 
-Open als AIO-beheerder **Instellingen → AI-assistent**. Kies OpenAI (GPT), Anthropic Claude of Google Gemini en sla een API-sleutel en model-ID op. Open het AI-icoon en kies een ingestelde provider. De chat draait in AIO en stuurt berichten naar de gekozen provider. Gebruik op Start **Indeling van Start wijzigen → Widget toevoegen → AI-assistent** voor een vraagveld en startvragen die hetzelfde gesprek openen.
+Open als AIO-beheerder **Instellingen → AI-assistent**. Kies ChatGPT, Claude of Gemini, open de pagina met API-sleutels van de provider en plak een sleutel in AIO. AIO kiest standaard een model. Onder **Geavanceerde modelinstellingen** kies je een ander model of voer je een eigen ID in. Opslaan activeert die provider voor de ingebouwde chat. Berichten gaan naar de actieve provider. Gebruik op Start **Indeling van Start wijzigen → Widget toevoegen → AI-assistent** om direct vanaf Start te chatten. Het AI-icoon opent hetzelfde gesprek in een compact venster.
 
-Stel op dezelfde instellingenpagina het lokale arr-mcp-adres met `/mcp` en een leestoken in om actuele appstatus te gebruiken. Vink **Actuele appstatus uit arr-mcp meesturen** aan om die gegevens met de provider te delen.
+Stel op dezelfde instellingenpagina het lokale arr-mcp-adres met `/mcp` en een leestoken in om actuele appstatus te gebruiken. Schakel in Instellingen **Lokale appstatus delen met de actieve AI** in om te delen welke gekoppelde apps bereikbaar zijn. Zonder toestemming kan de AI algemene vragen beantwoorden.
 
-Maak voor een schrijftest een arr-mcp-token met niveau **write**, schakel veilige schrijfacties in voor de gekozen downloadclient in arr-mcp en sla het token op in AIO. Open in de chat **Downloadacties**, kies een downloadclient, bekijk het voorstel om te pauzeren of hervatten en bevestig daarna.
+Maak voor een schrijftest een arr-mcp-token met niveau **write**, schakel veilige schrijfacties in voor de gekozen downloadclient in arr-mcp en sla het token op in AIO. Open in de AI-instellingen **arr-mcp-koppeling → Downloadacties**, kies een downloadclient, bekijk het voorstel om te pauzeren of hervatten en bevestig daarna.
 
 ## De nieuwe catalogus gebruiken {#catalog-menu}
 

@@ -47,17 +47,20 @@ const isMember = computed(() => authStatus.value.authenticated && authStatus.val
 const assistantDialog = ref(null)
 const assistantOpen = ref(false)
 const assistantStarted = ref(false)
-const assistantPrompt = ref(null)
+const assistantWidget = ref(null)
 watch([() => authStatus.value.authenticated, isMember], ([authenticated, member]) => {
   if (!authenticated || member) {
     assistantStarted.value = false
-    assistantPrompt.value = null
     assistantDialog.value?.close()
   }
 })
 
-function openAssistant(question) {
-  if (typeof question === 'string') assistantPrompt.value = { question }
+function setAssistantWidget(element) {
+  assistantWidget.value = element
+  if (element) assistantStarted.value = true
+}
+
+function openAssistant() {
   assistantStarted.value = true
   assistantOpen.value = true
   assistantDialog.value?.showModal()
@@ -639,7 +642,7 @@ onUnmounted(() => {
           :username="authStatus.username || ''"
           :first-name="authStatus.first_name || ''"
           @manage="openCatalog"
-          @open-assistant="openAssistant"
+          @assistant-widget="setAssistantWidget"
         />
         <CatalogView
           v-else
@@ -664,8 +667,15 @@ onUnmounted(() => {
         <h2 id="ai-title">{{ $t('AI chat') }}</h2>
         <button type="button" class="ui-btn ui-btn-ghost" @click="assistantDialog?.close()">{{ $t('Close') }}</button>
       </header>
-      <AiChat v-if="assistantStarted" :active="assistantOpen" :prompt="assistantPrompt" @close="assistantDialog?.close()" />
+      <div id="aio-ai-chat-panel" class="ai-dialog-content"></div>
     </dialog>
+
+    <Teleport
+      v-if="authStatus.authenticated && !isMember && assistantStarted"
+      :to="assistantOpen || !assistantWidget ? '#aio-ai-chat-panel' : assistantWidget"
+    >
+      <AiChat :active="assistantOpen || !!assistantWidget" @close="assistantDialog?.close()" />
+    </Teleport>
 
     <LogsModal v-if="logApp" :app="logApp" @close="logApp = null" />
     <HealthModal
@@ -699,7 +709,8 @@ onUnmounted(() => {
 
 <style scoped>
 .ai-button { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
-.ai-dialog { width: min(56rem, calc(100% - 1.5rem)); padding: 0.75rem; }
+.ai-dialog { width: min(34rem, calc(100% - 1.5rem)); padding: 0.75rem; }
+.ai-dialog-content { height: min(65dvh, 36rem); min-height: 0; }
 .ai-dialog header { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
 .ai-dialog h2 { margin: 0 auto 0 0; }
 .ai-dialog::backdrop { background: rgb(0 0 0 / 0.5); }

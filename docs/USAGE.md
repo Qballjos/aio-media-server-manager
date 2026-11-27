@@ -4,11 +4,11 @@ Start here once you can open AIO in your browser. First get one app working; add
 
 ## AI assistant
 
-As an AIO administrator, open **Settings → AI assistant**. Select OpenAI (GPT), Anthropic Claude or Google Gemini and save a provider API key and model ID. Open the AI icon to pick any configured provider. The chat runs in AIO and sends messages to the selected provider. On Home, use **Edit Home layout → Add widget → AI assistant** to add a question field and quick prompts that open the same chat.
+As an AIO administrator, open **Settings → AI assistant**. Choose ChatGPT, Claude or Gemini, open the provider’s API key page and paste a key into AIO. AIO selects a model by default. **Advanced model settings** lets you pick another model or enter its ID. Saving activates that provider for the built-in chat. Messages go to the active provider. On Home, use **Edit Home layout → Add widget → AI assistant** to chat directly from the dashboard. The AI icon opens the same conversation in a compact window.
 
-To include current app status in a question, configure the local arr-mcp `/mcp` address and a read token in the same settings page. Select **Include live app status from arr-mcp** in the chat to share the status with the provider.
+To include current app status in a question, configure the local arr-mcp `/mcp` address and a read token in the same settings page. Enable **Share local app status with the active AI** in settings to let the provider see which linked apps are reachable. Without permission the AI can answer general questions.
 
-To test a write, create an arr-mcp token with the **write** tier, allow safe writes for the target download client in arr-mcp and save that token in AIO. In the chat open **Download actions**, select a client, preview a pause or resume, then confirm.
+To test a write, create an arr-mcp token with the **write** tier, allow safe writes for the target download client in arr-mcp and save that token in AIO. In AI settings open **arr-mcp connection → Download actions**, select a client, preview a pause or resume, then confirm.
 
 ## 1. Finish your first setup
 

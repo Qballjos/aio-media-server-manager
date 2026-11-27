@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { apiJson } from '../api.js'
+import AiDownloadActions from '../AiDownloadActions.vue'
 import AiProvidersSettings from './AiProvidersSettings.vue'
 
 const endpoint = ref('')
@@ -61,8 +62,8 @@ function disconnect() {
 
 <template>
   <AiProvidersSettings />
-  <section class="glass-card connection-card" :aria-busy="busy">
-    <h3>arr-mcp</h3>
+  <details class="glass-card connection-card" :aria-busy="busy">
+    <summary>{{ $t('arr-mcp connection') }}</summary>
     <form class="connection-card connection-form" @submit.prevent="save">
       <label>
         {{ $t('arr-mcp address') }}
@@ -83,15 +84,17 @@ function disconnect() {
         </button>
       </div>
     </form>
+    <AiDownloadActions v-if="savedEndpoint" />
     <p v-if="status === 'saved'" role="status">{{ $t('Connection settings saved.') }}</p>
     <p v-if="status === 'connected'" role="status">{{ $t('arr-mcp connection verified.') }}</p>
     <p v-if="status === 'error'" role="alert">{{ $t('Check the MCP address and access token.') }}</p>
-  </section>
+  </details>
 </template>
 
 <style scoped>
 .connection-card, label { display: grid; gap: 0.75rem; min-width: 0; }
 .connection-card { padding: 1rem; }
-.connection-form { padding: 0; }
+.connection-form { padding: 0; margin-top: 0.75rem; }
+summary { min-height: 44px; align-content: center; cursor: pointer; }
 .connection-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 </style>

@@ -33,10 +33,16 @@ def test_provider_key_and_optional_live_status(monkeypatch, tmp_path):
     assert response.json() == {"model": "claude-test"}
     assert client.get(path + "/providers").json() == {"claude": "claude-test"}
     messages = [{"role": "user", "content": "Is Sonarr up?"}]
-    assert client.post(path + "/chat", json={"provider": "claude", "messages": messages}).json() == {"reply": "OK"}
+    # A legacy request cannot override the configured provider or bypass saved consent.
+    assert client.post(path + "/chat", json={
+        "provider": "gemini", "messages": messages, "include_health": True,
+    }).json() == {"reply": "OK"}
     health.assert_not_awaited()
     complete.assert_awaited_once_with("claude", "a-secret", "claude-test", messages, "")
-    response = client.post(path + "/chat", json={"provider": "claude", "messages": messages, "include_health": True})
+    assert client.put(path + "/preferences", json={
+        "provider": "claude", "share_local_status": True,
+    }).json() == {"provider": "claude", "share_local_status": True}
+    response = client.post(path + "/chat", json={"messages": messages})
     assert response.json() == {"reply": "OK"}
     health.assert_awaited_once_with(endpoint, "read-token")
     assert complete.await_args.args[-1] == health.return_value

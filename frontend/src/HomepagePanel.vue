@@ -32,15 +32,10 @@ const props = defineProps({
   username: { type: String, default: '' },
   firstName: { type: String, default: '' },
 })
-const emit = defineEmits(['manage', 'open-assistant'])
-const assistantQuestion = ref('')
-
-function askAssistant(question) {
-  const text = question.trim()
-  if (!text) return
-  emit('open-assistant', text)
-  assistantQuestion.value = ''
-}
+const emit = defineEmits(['manage', 'assistant-widget'])
+const assistantWidget = ref(null)
+watch(assistantWidget, (element) => emit('assistant-widget', element), { flush: 'post' })
+onUnmounted(() => emit('assistant-widget', null))
 const route = useRoute()
 
 function subdomainFor(appName) {
@@ -2085,26 +2080,11 @@ onUnmounted(() => {
         </article>
       </template>
       <template #assistant>
-        <article class="home-card glass-card">
+        <article class="home-card glass-card home-assistant-card">
           <div class="home-widget-head">
             <h3>{{ $t('AI assistant') }}</h3>
           </div>
-          <div class="home-card-body home-assistant">
-            <form class="home-assistant-form" @submit.prevent="askAssistant(assistantQuestion)">
-              <label class="home-sr" for="home-assistant-question">{{ $t('Ask the AI assistant') }}</label>
-              <input id="home-assistant-question" v-model="assistantQuestion" class="ui-input"
-                :placeholder="$t('Ask the AI assistant')" maxlength="4000" required />
-              <button class="ui-btn ui-btn-primary" :disabled="!assistantQuestion.trim()">{{ $t('Ask') }}</button>
-            </form>
-            <div class="home-assistant-prompts">
-              <button type="button" class="ui-btn ui-btn-ghost" @click="askAssistant($t('Which apps are not responding?'))">
-                {{ $t('Which apps are not responding?') }}
-              </button>
-              <button type="button" class="ui-btn ui-btn-ghost" @click="askAssistant($t('How can I free up disk space?'))">
-                {{ $t('How can I free up disk space?') }}
-              </button>
-            </div>
-          </div>
+          <div v-if="!editing" ref="assistantWidget" class="home-card-body home-assistant-chat"></div>
         </article>
       </template>
       <template #other>
